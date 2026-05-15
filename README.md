@@ -1,6 +1,7 @@
 # Wikifier v0.3
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://img.shields.io/pypi/v/wikifier.svg)](https://pypi.org/project/wikifier/)
 [![GitHub Stars](https://img.shields.io/github/stars/IronAdamant/wikifier?style=social)](https://github.com/IronAdamant/wikifier/stargazers)
 
 **Agent-first • Zero-dependency • LLM-operated codebase wiki**
@@ -8,32 +9,35 @@
 Wikifier turns any codebase (tiny scripts → large monorepos) into a living, token-efficient map that LLMs/agents operate autonomously.
 
 > **GitHub**: https://github.com/IronAdamant/wikifier  
-> **PyPI**: `pip install wikifier` (coming very soon)
+> **PyPI**: https://pypi.org/project/wikifier/
 
 ---
 
-## 🚀 Get Started in 30 Seconds
+## 🚀 Installation
 
-### Option 1: Via pip (Recommended)
+**Recommended — via pip:**
 
 ```bash
 pip install wikifier
+```
 
-# Then run
+Then run:
+
+```bash
 wikifier init
 wikifier check-changes
 ```
 
-### Option 2: From source
+Then open `index.html` in your browser for the live dashboard.
+
+---
+
+**Alternative — from source:**
 
 ```bash
 git clone https://github.com/IronAdamant/wikifier.git
 cd wikifier
 chmod +x wikifier.sh
-
-# Point it at your codebase
-nano monitored_paths.txt
-
 ./wikifier.sh init
 ./wikifier.sh check-changes
 ```
