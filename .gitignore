@@ -1,0 +1,23 @@
+# Wikifier v0.3 - Runtime / generated state (not committed)
+.wikifier_staging/
+.wikifier_last_check
+
+# Large or frequently updated journal entries (the system creates these automatically)
+# We keep the initial bootstrap journal as an example, but you may want to .gitignore
+# journal/*/*/*.md in very active projects and treat journals as local-only.
+# For this template we commit the structure + one example.
+
+# Optional: ignore everything in journal/ except the directory structure
+# journal/*/*/*.md
+
+# Same for Logged_issues if they grow huge
+# Logged_issues/*/*/*.md
+
+# Common editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+*.log

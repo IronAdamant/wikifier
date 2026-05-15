@@ -1,0 +1,10 @@
+# monitored_paths.txt — Paths Wikifier will watch for changes
+# One path per line. Can be relative or absolute.
+# Default "." means "the directory containing this wikifier project".
+
+.
+
+# Example for documenting another project:
+# ../my-main-application/src
+# ../my-main-application/tests
+# ../my-main-application/docs

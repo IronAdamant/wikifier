@@ -1,0 +1,23 @@
+# exclude_patterns.txt — Glob-style patterns to ignore during scans
+# These are matched against the full path.
+
+node_modules
+.git
+build
+dist
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+.env
+*.egg-info
+target
+out
+.next
+.idea
+.vscode
+*.log
+wikifier/.wikifier_staging
+journal
+Logged_issues

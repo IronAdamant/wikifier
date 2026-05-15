@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wikifier v0.3 — Live Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --font-sans: 'Inter', system_ui, sans-serif;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, -apple-system, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', sans-serif;
+            font-weight: 600;
+        }
+
+        .health-green { color: #10b981; }
+        .health-yellow { color: #eab308; }
+        .health-red { color: #ef4444; }
+
+        .matrix-table {
+            font-size: 0.875rem;
+        }
+
+        .status-pill {
+            font-size: 0.75rem;
+            padding: 1px 9px;
+            border-radius: 9999px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        pre {
+            font-size: 0.75rem;
+        }
+
+        .command-btn {
+            transition: all 0.1s ease;
+        }
+        .command-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .wikifier-header {
+            background: linear-gradient(90deg, #0f172a 0%, #1e2937 100%);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="wikifier-header border-b border-slate-800 px-8 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-x-3">
+                <div class="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center">
+                    <span class="text-slate-950 font-bold text-2xl tracking-tighter">W</span>
+                </div>
+                <div>
+                    <span class="font-display text-3xl font-semibold tracking-tighter">Wikifier</span>
+                    <span class="text-emerald-400 font-mono text-sm ml-1.5 align-super">v0.3</span>
+                </div>
+                <div class="px-3 py-1 bg-slate-900 border border-slate-700 rounded-full text-xs text-emerald-400 font-medium flex items-center gap-x-1.5">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    AGENT-FIRST
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-x-2 text-sm">
+                <div class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-400 font-mono text-xs">
+                    ZERO DEP • PURE SHELL
+                </div>
+                <button onclick="window.location.reload()" 
+                        class="px-4 py-1.5 text-sm rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors flex items-center gap-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.058 11H1M12 3v2m0 16v2m9-9H15m-6 0a8 8 0 01-.938-1.5" />
+                    </svg>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="px-8 py-8">
+            <!-- Status Bar -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="font-display text-4xl tracking-tighter font-semibold">Documentation Health</h1>
+                    <p class="text-slate-400 mt-1">Live view of your codebase wiki • Updated by agents &amp; heartbeat</p>
+                </div>
+                
+                <div id="health-summary" 
+                     class="flex items-center gap-x-3 bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 text-sm">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Main Grid -->
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                
+                <!-- Health Matrix -->
+                <div class="xl:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="section-header">Documentation Health Matrix</div>
+                        <button onclick="runCommand('check-changes')" 
+                                class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800 transition-colors flex items-center gap-x-1.5">
+                            <span>RUN CHECK-CHANGES</span>
+                        </button>
+                    </div>
+                    
+                    <div id="health-table-container" class="overflow-auto max-h-[420px] rounded-2xl border border-slate-800 bg-slate-950">
+                        <table class="w-full matrix-table">
+                            <thead class="sticky top-0 bg-slate-900 z-10">
+                                <tr class="border-b border-slate-800 text-left text-slate-400">
+                                    <th class="px-5 py-3 font-medium">File</th>
+                                    <th class="px-5 py-3 font-medium w-28">Status</th>
+                                    <th class="px-5 py-3 font-medium">Last Updated</th>
+                                    <th class="px-5 py-3 font-medium">Reason / Intent</th>
+                                </tr>
+                            </thead>
+                            <tbody id="health-table-body" class="divide-y divide-slate-800 text-sm">
+                                <!-- Populated dynamically via fetch + marked parsing -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3 text-[10px] text-slate-500 font-mono px-1">
+                        Data source: <span class="font-semibold text-slate-400">file_health.md</span> — updated by wikifier CLI &amp; LLMs
+                    </div>
+                </div>
+
+                <!-- Pending + Quick Actions -->
+                <div class="xl:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col">
+                    <div class="section-header mb-4">Pending Actions</div>
+                    
+                    <div id="pending-content" 
+                         class="flex-1 bg-slate-950 border border-slate-800 rounded-2xl p-5 text-sm font-mono overflow-auto max-h-[260px]">
+                        <!-- JS injected -->
+                    </div>
+
+                    <div class="mt-4">
+                        <div class="section-header mb-2">Quick Commands (for agents &amp; humans)</div>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <button onclick="runCommand('check-changes')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">check-changes</button>
+                            <button onclick="runCommand('update-maps')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">update-maps</button>
+                            <button onclick="runCommand('health')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">health</button>
+                            <button onclick="runCommand('validate')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">validate</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mermaid Library Map -->
+                <div class="xl:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="section-header">Import / Dependency Map</div>
+                        <button onclick="runCommand('update-maps')" class="text-emerald-400 hover:text-emerald-300 text-xs underline">refresh library.md</button>
+                    </div>
+                    <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-4 min-h-[220px]">
+                        <div class="text-xs text-slate-400 mb-2">Loading Mermaid diagram from library.md...</div>
+                        <div id="mermaid-diagram"></div>
+                    </div>
+                </div>
+
+                <!-- Journal + Tips -->
+                <div class="xl:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                    <div class="section-header mb-3">Recent Journal Activity</div>
+                    <div id="journal-preview" class="text-xs bg-slate-950 border border-slate-800 rounded-2xl p-4 font-mono max-h-[190px] overflow-auto leading-relaxed">
+                        <!-- Populated by JS -->
+                    </div>
+                    
+                    <div class="mt-5 text-[10px] leading-tight text-slate-400 border-t border-slate-800 pt-4">
+                        <strong class="text-slate-300">Agent Rule:</strong> Every edit → <span class="font-semibold text-amber-400">record-change</span> → update wiki MD → <span class="font-semibold text-emerald-400">mark-green</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer bar -->
+            <div class="mt-8 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-5">
+                <div>
+                    Run <span class="font-mono bg-slate-900 px-1.5 py-px rounded">./wikifier.sh monitor &amp;</span> in a terminal for continuous background heartbeat.
+                </div>
+                <div class="flex gap-x-4">
+                    <a href="skills/run.md" class="hover:text-slate-200">skills/run.md</a>
+                    <a href="spec.md" class="hover:text-slate-200">spec.md</a>
+                    <a href="Basis-v0.3.md" class="hover:text-slate-200">Basis-v0.3.md</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#10b981');
+        }
+
+        // Fetch and render health matrix
+        async function loadHealthMatrix() {
+            const tbody = document.getElementById('health-table-body');
+            const summary = document.getElementById('health-summary');
+            
+            tbody.innerHTML = `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-500 text-xs">Loading file_health.md...</td></tr>`;
+            
+            try {
+                const res = await fetch('file_health.md');
+                if (!res.ok) throw new Error('file not found');
+                const md = await res.text();
+                
+                // Very simple MD table parser for our known format
+                const rows = [];
+                const lines = md.split('\n');
+                let inTable = false;
+                
+                for (const line of lines) {
+                    if (line.includes('| File | Status')) { inTable = true; continue; }
+                    if (inTable && line.startsWith('|') && !line.includes('---')) {
+                        const parts = line.split('|').map(p => p.trim()).filter(Boolean);
+                        if (parts.length >= 4) {
+                            rows.push({
+                                file: parts[0],
+                                status: parts[1],
+                                updated: parts[2],
+                                reason: parts[3] || ''
+                            });
+                        }
+                    }
+                }
+                
+                tbody.innerHTML = '';
+                
+                let green = 0, yellow = 0, red = 0;
+                
+                rows.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-900/60';
+                    
+                    let statusHTML = '';
+                    if (r.status.includes('Green')) {
+                        statusHTML = `<span class="status-pill bg-emerald-900/40 text-emerald-400">🟢 Green</span>`;
+                        green++;
+                    } else if (r.status.includes('Yellow')) {
+                        statusHTML = `<span class="status-pill bg-yellow-900/40 text-yellow-400">🟡 Yellow</span>`;
+                        yellow++;
+                    } else {
+                        statusHTML = `<span class="status-pill bg-red-900/40 text-red-400">🔴 Red</span>`;
+                        red++;
+                    }
+                    
+                    tr.innerHTML = `
+                        <td class="px-5 py-3 font-medium text-slate-200">${r.file}</td>
+                        <td class="px-5 py-3">${statusHTML}</td>
+                        <td class="px-5 py-3 text-slate-400 font-mono text-[10px]">${r.updated}</td>
+                        <td class="px-5 py-3 text-slate-300 max-w-[340px] truncate">${r.reason}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+                // Summary pills
+                summary.innerHTML = `
+                    <div class="flex items-center gap-x-2">
+                        <div class="px-3 py-1 rounded-2xl bg-emerald-900/30 text-emerald-400 flex items-center gap-x-1.5">
+                            <span>🟢</span> <span class="font-semibold">${green}</span>
+                        </div>
+                        <div class="px-3 py-1 rounded-2xl bg-yellow-900/30 text-yellow-400 flex items-center gap-x-1.5">
+                            <span>🟡</span> <span class="font-semibold">${yellow}</span>
+                        </div>
+                        <div class="px-3 py-1 rounded-2xl bg-red-900/30 text-red-400 flex items-center gap-x-1.5">
+                            <span>🔴</span> <span class="font-semibold">${red}</span>
+                        </div>
+                    </div>
+                `;
+                
+            } catch (e) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-6 py-8 text-center">
+                            <div class="text-red-400 text-sm">Could not load file_health.md</div>
+                            <div class="text-[10px] text-slate-400 mt-1">Run <span class="font-mono">./wikifier.sh check-changes</span> first</div>
+                        </td>
+                    </tr>`;
+                summary.innerHTML = `<div class="text-red-400">Matrix unavailable</div>`;
+            }
+        }
+
+        // Pending updates
+        async function loadPending() {
+            const container = document.getElementById('pending-content');
+            try {
+                const res = await fetch('pending_updates.md');
+                const md = await res.text();
+                container.innerHTML = `<pre class="whitespace-pre-wrap text-emerald-300">${md}</pre>`;
+            } catch {
+                container.innerHTML = `<div class="text-slate-400 text-xs">No pending_updates.md found. Run check-changes.</div>`;
+            }
+        }
+
+        // Journal preview
+        async function loadJournal() {
+            const container = document.getElementById('journal-preview');
+            try {
+                const today = new Date();
+                const path = `journal/${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}.md`;
+                const res = await fetch(path);
+                const md = await res.text();
+                container.innerHTML = md.split('\n').slice(0, 9).join('\n') || 'No entries today yet.';
+            } catch {
+                container.innerHTML = `No journal entry for today.<br><span class="text-emerald-400">Use record-change to start the log.</span>`;
+            }
+        }
+
+        // Mermaid diagram
+        async function loadMermaid() {
+            const container = document.getElementById('mermaid-diagram');
+            
+            try {
+                const res = await fetch('library.md');
+                const md = await res.text();
+                
+                // Extract first ```mermaid block
+                const match = md.match(/```mermaid\n([\s\S]*?)```/);
+                if (match && match[1]) {
+                    container.innerHTML = `<pre class="mermaid">${match[1]}</pre>`;
+                    // Render with mermaid
+                    if (window.mermaid) {
+                        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+                        await mermaid.run({ nodes: [container.querySelector('.mermaid')] });
+                    }
+                } else {
+                    container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid diagram found in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span>.</div>`;
+                }
+            } catch {
+                container.innerHTML = `<div class="text-xs text-amber-400 p-4">library.md not found or empty. Run update-maps from the CLI.</div>`;
+            }
+        }
+
+        // Simulate running a command (educational)
+        function runCommand(cmd) {
+            const msg = document.createElement('div');
+            msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-4 py-2 rounded-2xl shadow-xl text-sm flex items-center gap-x-3 z-50`;
+            msg.innerHTML = `
+                <span>Run in terminal:</span> 
+                <code class="font-mono bg-slate-900 px-2 py-px rounded">./wikifier.sh ${cmd}</code>
+            `;
+            
+            document.body.appendChild(msg);
+            
+            setTimeout(() => {
+                msg.style.transition = 'all 0.2s';
+                msg.style.opacity = '0';
+                setTimeout(() => msg.remove(), 200);
+            }, 2600);
+            
+            // Also attempt to refresh relevant parts of the UI
+            if (cmd === 'check-changes' || cmd === 'health') {
+                setTimeout(loadHealthMatrix, 800);
+            }
+            if (cmd === 'update-maps') {
+                setTimeout(loadMermaid, 800);
+            }
+        }
+
+        // Boot everything
+        function boot() {
+            initTailwind();
+            
+            loadHealthMatrix();
+            loadPending();
+            loadJournal();
+            loadMermaid();
+            
+            // Auto-refresh health every 35 seconds (mimics monitor loop)
+            setInterval(() => {
+                loadHealthMatrix();
+                loadPending();
+            }, 35000);
+            
+            // Keyboard hint
+            console.log('%c[Wikifier] Dashboard ready. Press R to refresh health.', 'color:#475569');
+            
+            document.addEventListener('keydown', function(e) {
+                if (e.key.toLowerCase() === 'r') {
+                    loadHealthMatrix();
+                    loadPending();
+                }
+            });
+            
+            // Easter egg
+            console.log('%c[Wikifier v0.3] Agent-first. Zero dep. Ready for Grok Build + MCP.', 'color:#166534');
+        }
+
+        window.onload = boot;
+    </script>
+</body>
+</html>
