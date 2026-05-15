@@ -1,0 +1,26 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Documentation & Spec
+    url: https://github.com/IronAdamant/wikifier/blob/main/spec.md
+    about: Read the immutable project requirements
+  - name: 🛠️ Skills & Agent Contract
+    url: https://github.com/IronAdamant/wikifier/blob/main/skills/run.md
+    about: Mandatory rules for LLMs and MCP agents
+
+issue_template:
+  - name: 🐛 Bug Report
+    about: Report a problem with Wikifier itself
+    filename: bug_report.md
+    labels: ["bug"]
+  - name: ✨ Feature Request
+    about: Suggest a new feature or improvement
+    filename: feature_request.md
+    labels: ["enhancement"]
+  - name: 📋 Documentation / Wiki Health Issue
+    about: Issues with file summaries, health matrix, or missing wiki coverage
+    filename: wiki_health.md
+    labels: ["documentation", "wiki-health"]
+  - name: 🤖 Agent / LLM Finding
+    about: Issue discovered by an LLM agent while using Wikifier
+    filename: agent_finding.md
+    labels: ["agent-found", "needs-triage"]
