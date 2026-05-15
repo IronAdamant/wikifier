@@ -22,6 +22,9 @@ Thumbs.db
 .vscode/
 *.log
 
+# Local MCP / analysis tools
+.chisel/
+
 # Python packaging / build artifacts
 build/
 dist/
