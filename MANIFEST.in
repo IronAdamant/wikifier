@@ -1,0 +1,16 @@
+include wikifier/scripts/*
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+include spec.md
+include Basis-v0.3.md
+include TRADEOFFS.md
+include skills/run.md
+include index.html
+global-exclude *.pyc
+global-exclude __pycache__
+prune .github
+prune journal
+prune Logged_issues
+prune .wikifier_staging
+prune .chisel

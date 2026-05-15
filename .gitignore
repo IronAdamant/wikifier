@@ -21,3 +21,19 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Python packaging / build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg
+pip-wheel-metadata/
+*.whl
+*.tar.gz
+twine.log
+.pypirc
+
