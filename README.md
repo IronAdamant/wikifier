@@ -42,8 +42,6 @@ chmod +x wikifier.sh
 ./wikifier.sh check-changes
 ```
 
-Then open `index.html` in your browser for the live dashboard.
-
 ### Mandatory Rule for Every LLM / Grok Build Session
 
 Copy this into the **start of every new prompt** when working in a Wikifier-managed project:
