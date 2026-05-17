@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased / Next] - 2026-05-18
+## [0.3.3] - 2026-05-18
 
 ### Summary – Gap #1 Reliability & Scale Wave + Strong Daemon (R1–R8)
 
