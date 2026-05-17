@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wikifier"
-version = "0.3.0"
+version = "0.3.1"
 description = "Agent-first, zero-dependency, self-maintaining codebase documentation & change tracking system"
 readme = "README.md"
 license = {text = "MIT"}
@@ -35,7 +35,7 @@ classifiers = [
     "Topic :: Text Processing :: Markup :: Markdown",
 ]
 
-dependencies = []
+dependencies = []  # Zero-dependency by default. MCP support is optional.
 
 [project.urls]
 Homepage = "https://github.com/IronAdamant/wikifier"
@@ -43,8 +43,12 @@ Repository = "https://github.com/IronAdamant/wikifier"
 Documentation = "https://github.com/IronAdamant/wikifier#readme"
 "Bug Tracker" = "https://github.com/IronAdamant/wikifier/issues"
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.0.0"]
+
 [project.scripts]
 wikifier = "wikifier.cli:main"
+wikifier-mcp = "wikifier.mcp.server:main"
 
 [tool.setuptools]
 package-dir = {"" = "."}

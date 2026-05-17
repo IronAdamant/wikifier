@@ -1,9 +1,16 @@
 """
-Wikifier - Agent-first, zero-dependency, self-maintaining codebase documentation system.
+Wikifier Python Package
 
-This package provides cross-platform access to the Wikifier tool.
+Provides the core Python components for Wikifier, including:
+- Import parsers (Python + JavaScript/TypeScript)
+- MCP Server
+- Health Matrix (scalable implementation)
 """
 
-__version__ = "0.3.0"
-__author__ = "Aron Amos"
-__license__ = "MIT"
+from . import parsers
+from . import mcp
+from . import health
+from . import locking
+from . import import_cache
+
+__version__ = "0.3.1"
