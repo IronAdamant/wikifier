@@ -8,30 +8,31 @@
 
 Wikifier turns any codebase (tiny scripts → large monorepos) into a living, token-efficient map that LLMs/agents operate autonomously.
 
-### What's New in v0.3.2
+### Current Status (as of May 2026)
 
-**Gap #1 (Dependency Intelligence Quality) is now substantially closed (~94–96%)**
+**Gap #1 (Dependency Intelligence Quality) is now operationally closed at ~89–93%**
 
-This release completes the major M2-Rem-08 deep closure work on dependency intelligence:
+After multiple focused agent waves (8-agent implementation + 7-agent polish + 7-agent R1–R7 Reliability & Scale + R8 final validation), Gap #1 has moved from being the biggest blocker to a solid, protected, production-usable state on real large messy monorepos.
 
-- **Major Barrel Intelligence Improvements** (6 parallel specialized agents):
-  - Barrel following depth increased (2 → 3)
-  - Much smarter barrel detection (now catches real-world import-style index barrels)
-  - Full `barrel_chain` tracking and visibility across the system
-  - Modern `package.json` `"exports"` map support for resolution and barrel following
-  - Significant performance improvements for barrel probing
-  - Conditional context now properly propagates through barrel chains
+Key achievements:
+- Full 4-phase architecture delivered (Resolution, Barrels/BREE, CDIA, Cycles + CIABRE)
+- Rich metadata (`cdia_v1`, `barrel_v2`, `res_meta_v1`) now flows end-to-end in most paths
+- Strong regression protection via the Gap #1 validation harness (`--gap1-health`)
+- Real-world dogfooding on ConsistencyHub (~577 files) and RecipeLab_alt
+- Major external monorepo UX improvements (R6)
+- Significant first-pass performance gains (R7)
 
-- **Cycle Detection (Complete Stack)**
-  - Full cycle detection with DFS + deduplication
-  - Exposed via `wikifier cycles`, `get_cycles()` MCP tool, "Circular Dependencies" section in `library.md`, and visual warnings in Mermaid graphs
+**New: Strong Background Daemon**
+- `wikifier daemon start/stop/status/logs/install-service`
+- Survives terminal close and (with systemd user service) laptop sleep/lid close
+- Resume awareness + proper logging and PID management
 
-- **Overall**
-  - Rich dependency metadata now flows reliably everywhere
-  - `get_dependencies()` and `get_dependents()` are dramatically more trustworthy
-  - Dependency intelligence is no longer the primary blocker for autonomous agents
+**Current Practical Reality**
+- Dependency intelligence is now reliable enough for serious autonomous work on most projects.
+- The main remaining blocker for very large monorepos is **`update-maps` performance and UX at scale**.
+- Full "set and forget" on the hardest 5k–20k+ file creative monorepos is estimated at 95%+ (small final hardening wave remaining).
 
-This is a significant patch release that brings the dependency layer to a production-useful level for most real-world projects. The main remaining practical challenge is now `update-maps` performance at very large scale.
+See `Findings/gap1_final_r8_closure_report.md` and `Findings/m2_rem_08_combined_dogfood_findings_open.md` for detailed status.
 
 **Other highlights carried from v0.3.1**:
 - Health Matrix Auto-Healing (`heal-stubs`, `healing-stats`, etc.)
@@ -108,21 +109,21 @@ Wikifier is a **general-purpose** agent memory system. After `pip install wikifi
   - Clone the repo, `chmod +x wikifier.sh`, and invoke `./wikifier.sh ...` or the scripts directly.
   - Useful when you are actively modifying Wikifier itself.
 
-**First-time setup on a new external codebase after pip install** (canonical flow):
+**First-time setup on a new external codebase after pip install** (canonical flow, R6 improved):
 ```bash
-# 1. Point at the target project
-export WIKIFIER_PROJECT_ROOT=/path/to/your/actual/codebase
+# 1. Bootstrap directly into the target (auto-creates .wikifier/ marker, state files; CLI copies launcher if possible)
+wikifier init --target /absolute/path/to/your/actual/monorepo-or-project
 
-# 2. Bootstrap (creates monitored_paths.txt, file_health.md, etc.)
-wikifier init --target "$WIKIFIER_PROJECT_ROOT"
-
-# 3. Optional but recommended: edit monitored_paths.txt to focus on src/, app/, packages/ etc.
-# 4. Run the mandatory workflow
+# 2. Optional but recommended: edit monitored_paths.txt to focus on src/, packages/, app/ etc. for large monorepos
+# 3. Run the mandatory workflow (CLI auto-propagates project root from --target or env)
 wikifier check-changes
 
-# 5. For agent work, start the MCP server with the same root
-WIKIFIER_PROJECT_ROOT="$WIKIFIER_PROJECT_ROOT" wikifier-mcp
+# 4. For agent work / MCP (now robust, no sh-not-found even on pure pip installs)
+WIKIFIER_PROJECT_ROOT=/absolute/path/to/your/actual/monorepo wikifier-mcp
+# or pass project_root on individual tool calls
 ```
+
+The R6 Monorepo & External UX wave made `init --target` fully functional (state in target, launcher copy, .wikifier marker), made CLI/MCP/sh consistently honor WIKIFIER_PROJECT_ROOT, and hardened pnpm/yarn/symlink/TS-ref edge cases in resolution. Much less manual setup for real-world large external codebases.
 
 #### How Root Targeting Works (Decision Order for Agents)
 
