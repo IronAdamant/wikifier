@@ -13,4 +13,4 @@ from . import health
 from . import locking
 from . import import_cache
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
