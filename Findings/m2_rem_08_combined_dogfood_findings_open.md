@@ -2,7 +2,7 @@
 
 **File Type**: Living `_open` report  
 **Date Created**: 2026-05-16  
-**Last Updated**: 2026-05-18 (post R1–R7 Reliability & Scale wave + R8 final validation + strong daemon implementation)  
+**Last Updated**: 2026-05-17 (post Gap #1 deep closure work: parser phases, data pipeline, cycle detection full stack, deeper barrel support)  
 **Dogfood Targets**:
 - Wikifier codebase (self-dogfood, recent thorough pass)
 - RecipeLab_alt (external non-trivial JS codebase, heavy autonomous stress testing)

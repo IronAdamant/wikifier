@@ -27,6 +27,8 @@ JSON Schema (v1):
 """
 
 import json
+import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -39,6 +41,7 @@ except ImportError:
 
 HEALTH_JSON = "file_health.json"
 HEALTH_MD = "file_health.md"
+PENDING_MD = "pending_updates.md"
 
 
 def _get_health_path(root: Path) -> Path:
@@ -174,6 +177,240 @@ def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> No
         "reason": reason
     }
     _do_save_health(root, health)
+
+
+# ----------------------------- Pending Updates Helpers (locked, idempotent) -----------------------------
+# These ensure pending_updates.md mutations are atomic with health under the project lock
+# (per locking.py contract). Eliminates races/duplicates with add_pending from shell/monitor.
+
+def _get_pending_path(root: Path) -> Path:
+    return root / PENDING_MD
+
+
+def _read_pending_lines(root: Path) -> List[str]:
+    """Read pending file as list of lines; return sensible default header if missing."""
+    p = _get_pending_path(root)
+    if not p.exists():
+        return [
+            "# Pending Updates",
+            "",
+            "(no pending items — run check-changes after making edits)"
+        ]
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return f.read().splitlines(keepends=False)
+    except Exception:
+        # On read error, conservative: return current content best effort or default
+        return ["# Pending Updates", "", "(no pending items — run check-changes after making edits)"]
+
+
+def _write_pending_lines(root: Path, lines: List[str]) -> None:
+    """Atomic-ish write of pending (tmp + mv for safety on most FS)."""
+    p = _get_pending_path(root)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp, p)  # atomic rename on POSIX
+    except Exception:
+        # Fallback direct write
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+
+
+def _do_remove_from_pending(root: Path, file: str) -> int:
+    """Internal: idempotent remove of any lines containing file (fixed-string, like grep -vF)."""
+    lines = _read_pending_lines(root)
+    new_lines = [ln for ln in lines if file not in ln]
+    removed = len(lines) - len(new_lines)
+    if removed > 0:
+        _write_pending_lines(root, new_lines)
+    return removed
+
+
+def remove_from_pending(root: Path, file: str) -> int:
+    """Public: remove references to file from pending_updates.md. Idempotent. Under lock."""
+    if locking:
+        with locking.file_lock(root):
+            return _do_remove_from_pending(root, file)
+    else:
+        return _do_remove_from_pending(root, file)
+
+
+def _do_add_to_pending(root: Path, file: str, msg: str) -> None:
+    """Internal add (idempotent: no exact dup entry)."""
+    lines = _read_pending_lines(root)
+    entry = f"- {file}: {msg}"
+    if entry not in lines:
+        lines.append(entry)
+        _write_pending_lines(root, lines)
+
+
+def add_to_pending(root: Path, file: str, msg: str) -> None:
+    """Public: append to pending (idempotent). Under lock."""
+    if locking:
+        with locking.file_lock(root):
+            _do_add_to_pending(root, file, msg)
+    else:
+        _do_add_to_pending(root, file, msg)
+
+
+def _do_mark_green(root: Path, file: str, reason: str = "") -> None:
+    """Internal combined op (health + pending) without re-acquiring lock."""
+    effective_reason = reason or "Wiki summary verified accurate after change."
+    _do_upsert_entry(root, file, "🟢 Green", effective_reason)
+    _do_remove_from_pending(root, file)
+
+
+def mark_green(root: Path, file: str, reason: str = "") -> None:
+    """
+    Mark file Green + atomically clear any pending entries for it.
+    Single lock acquisition for the combined mutation. Fully idempotent.
+    This is the reliable helper that shell (and MCP via sh) should call.
+    """
+    if locking:
+        with locking.file_lock(root):
+            _do_mark_green(root, file, reason)
+    else:
+        _do_mark_green(root, file, reason)
+
+
+# ----------------------------- Validate (reliable Python, no subshell bugs) -----------------------------
+def _build_simple_exclude_set(root: Path) -> set:
+    """Parse exclude_patterns.txt into simple basenames/globs for filtering (best-effort)."""
+    exc = set()
+    ep = root / "exclude_patterns.txt"
+    if ep.exists():
+        try:
+            for line in ep.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    # take basename or last segment for simple contains check
+                    exc.add(line.rstrip("/*").split("/")[-1])
+        except Exception:
+            pass
+    return exc
+
+
+def validate_health(root: Path) -> Dict[str, Any]:
+    """
+    Reliable, subshell-free implementation of 'validate'.
+    Scans monitored paths (respecting excludes + internal skips), reports files
+    missing from the health matrix (JSON or migrated MD).
+    Returns structured result for shell/Python/MCP callers.
+    Always succeeds (exit code driven by caller); never mutates state.
+    """
+    health = load_health(root)
+    entries = health.get("entries", {})
+    known = set(entries.keys())
+
+    monitored_file = root / "monitored_paths.txt"
+    if monitored_file.exists():
+        try:
+            monitored_roots = [ln.strip() for ln in monitored_file.read_text(encoding="utf-8").splitlines()
+                               if ln.strip() and not ln.strip().startswith("#")]
+        except Exception:
+            monitored_roots = ["."]
+    else:
+        monitored_roots = ["."]
+
+    excludes = _build_simple_exclude_set(root)
+    internal_skips = {".git", ".wikifier_staging", "journal", "Logged_issues"}
+
+    missing: List[str] = []
+    total_scanned = 0
+
+    for r in monitored_roots:
+        if not r:
+            continue
+        base = (root / r).resolve()
+        if not base.exists():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            # prune internal dirs
+            dirnames[:] = [d for d in dirnames if d not in internal_skips]
+            for fname in filenames:
+                fpath = Path(dirpath) / fname
+                total_scanned += 1
+                try:
+                    rel = str(fpath.relative_to(root))
+                except Exception:
+                    rel = str(fpath)
+                # skip if any exclude component matches
+                parts = Path(rel).parts
+                if any(p in excludes or p in internal_skips for p in parts):
+                    continue
+                if rel not in known:
+                    missing.append(rel)
+
+    missing = sorted(set(missing))  # dedup + stable
+    return {
+        "missing_count": len(missing),
+        "missing": missing,
+        "total_scanned": total_scanned,
+        "health_entries": len(known),
+        "root": str(root)
+    }
+
+
+# ----------------------------- apply_barrel... (continues) -----------------------------
+
+def apply_barrel_invalidation_reports(
+    root: Path, reports: List[Dict[str, Any]]
+) -> int:
+    """Apply structured BRC invalidation reports to the health matrix.
+
+    Marks (or updates) each affected importer as 🟡 Yellow with a precise explanation
+    containing the triggering barrel(s), chain_ids, reason, detector, partial flag.
+    This is the key wiring that lets `check-changes` (and therefore the daemon monitor)
+    surface barrel-driven staleness automatically, even when the importer file's own mtime
+    is unchanged.
+
+    Idempotent / safe; uses the existing upsert_entry (locked + json+md).
+    Returns number of importers that received a (new or updated) Yellow barrel note.
+    Zero-dep, scalable (reports are small).
+    """
+    if not reports:
+        return 0
+    updated = 0
+    for r in reports:
+        try:
+            if isinstance(r, dict):
+                imp = r.get("importer")
+                trig = r.get("triggering_barrels") or []
+                cids = r.get("chain_ids") or []
+                reason = r.get("reason") or "barrel staleness"
+                det = r.get("detector_used") or "bree"
+                part = r.get("is_partial", False)
+            else:
+                # dataclass or object
+                imp = getattr(r, "importer", None)
+                trig = getattr(r, "triggering_barrels", []) or []
+                cids = getattr(r, "chain_ids", []) or []
+                reason = getattr(r, "reason", "barrel staleness")
+                det = getattr(r, "detector_used", "bree")
+                part = getattr(r, "is_partial", False)
+            if not imp:
+                continue
+            trig_str = ", ".join(sorted(set(str(t) for t in trig if t))) or "unknown barrel"
+            cid_str = ", ".join(sorted(set(str(c) for c in cids if c)))[:80]
+            part_str = " (partial)" if part else ""
+            expl = (
+                f"stale via barrel re-export from {trig_str}{part_str} "
+                f"(detector={det}, chains={cid_str or 'n/a'}): {reason}"
+            )
+            upsert_entry(root, str(imp), "🟡 Yellow", expl)
+            updated += 1
+        except Exception:
+            # never let one bad report kill the batch
+            continue
+    return updated
 
 
 def get_summary(root: Path, directory: Optional[str] = None) -> Dict[str, Any]:
@@ -547,6 +784,11 @@ if __name__ == "__main__":
         print("  heal-stubs [--dry-run]   Auto-heal outdated 'Initial stub' entries")
         print("  healable-stubs [dir]     List entries that can be auto-healed")
         print("  healing-stats            Show stub pollution + healing opportunities")
+        print("  prune-barrels [max_days] [ --dry-run ]   Lightweight age-based BRC pruning (default 90d)")
+        print("  mark-green <file> [reason]   Idempotent Green + clear pending (locked)")
+        print("  remove-pending <file>        Idempotent remove from pending_updates (locked)")
+        print("  add-pending <file> <msg>     Idempotent add to pending (locked)")
+        print("  validate                     Report files missing health entries (no subshell)")
         sys.exit(1)
 
     root = Path(".")
@@ -615,6 +857,91 @@ if __name__ == "__main__":
         print(f"  → Low quality:                {stats['healable_stubs']['low_quality']}")
         print(f"Stub pollution ratio:          {stats['stub_pollution_ratio']:.1%}")
         print(f"\nRecommendation: {stats['recommendation']}")
+
+    elif cmd in ("prune-barrels", "prune-brc", "gc-barrels"):
+        max_days = 90.0
+        dry = False
+        for a in sys.argv[2:]:
+            if a == "--dry-run":
+                dry = True
+            else:
+                try:
+                    max_days = float(a)
+                except Exception:
+                    pass
+        try:
+            from . import import_cache as _ic
+            root_for_prune = Path(".")
+            # respect WIKIFIER_PROJECT_ROOT if present (for daemon / packaged runs)
+            proj = os.environ.get("WIKIFIER_PROJECT_ROOT")
+            if proj:
+                root_for_prune = Path(proj).expanduser().resolve()
+            res = _ic.prune_barrel_resolutions(root_for_prune, max_age_days=max_days, dry_run=dry)
+            p = res.get("pruned", 0)
+            if dry:
+                print(f"Prune dry-run (max_age={max_days}d): would prune {p} aged BRC chains.")
+            else:
+                print(f"Pruned {p} aged BRC chains (max_age={max_days}d). saved={res.get('saved', False)}")
+            if "error" in res:
+                print(f"  (note: {res['error']})")
+        except Exception as ex:
+            print(f"Prune-barrels error: {ex}")
+
+    elif cmd == "mark-green":
+        if len(sys.argv) < 3:
+            print("Usage: python -m wikifier.health mark-green <file> [reason]")
+            sys.exit(1)
+        file = sys.argv[2]
+        reason = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else ""
+        try:
+            mark_green(root, file, reason)
+            print(f"🟢 Marked Green (and pending cleared if present): {file}")
+        except Exception as e:
+            print(f"mark-green error: {e}")
+            sys.exit(1)
+
+    elif cmd == "remove-pending":
+        if len(sys.argv) < 3:
+            print("Usage: python -m wikifier.health remove-pending <file>")
+            sys.exit(1)
+        file = sys.argv[2]
+        try:
+            n = remove_from_pending(root, file)
+            print(f"Removed {n} pending line(s) for: {file}")
+        except Exception as e:
+            print(f"remove-pending error: {e}")
+            sys.exit(1)
+
+    elif cmd == "add-pending":
+        if len(sys.argv) < 4:
+            print("Usage: python -m wikifier.health add-pending <file> <msg>")
+            sys.exit(1)
+        file = sys.argv[2]
+        msg = " ".join(sys.argv[3:])
+        try:
+            add_to_pending(root, file, msg)
+            print(f"Added to pending: {file}")
+        except Exception as e:
+            print(f"add-pending error: {e}")
+            sys.exit(1)
+
+    elif cmd == "validate":
+        # Always exit 0 (informational); use the returned count for logic if calling directly
+        try:
+            res = validate_health(root)
+            if res["missing_count"] == 0:
+                print("✅ All monitored files have health entries.")
+            else:
+                print(f"⚠️  {res['missing_count']} file(s) lack wiki/health entries (scanned {res['total_scanned']}):")
+                for m in res["missing"][:50]:  # bound output
+                    print(f"  🔴 MISSING: {m}")
+                if len(res["missing"]) > 50:
+                    print(f"  ... and {len(res['missing'])-50} more")
+            # Structured for callers: print JSON-ish last line for easy parse if needed
+            print(f"VALIDATE_RESULT missing={res['missing_count']} scanned={res['total_scanned']}")
+        except Exception as e:
+            print(f"validate error: {e}")
+            sys.exit(1)
 
     else:
         print(f"Unknown command: {cmd}")
