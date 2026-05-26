@@ -55,3 +55,48 @@
 - src/internal/wikifier-stress/synthetic-dep-graph/churnB.js: LLM/agent edit — Heavy churn test file 1
 - src/internal/wikifier-stress/synthetic-dep-graph/churnC.js: LLM/agent edit — Heavy churn test file 2
 - wikifier.sh: LLM/agent edit — Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling.
+<<<<<<< HEAD
+=======
+- skills/run.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/m2-full-closure-longterm-scalable-plan.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/m2_rem_08_combined_dogfood_findings_open.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/v1_visual_layer_architecture.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/r3_large_scale_dogfooding_report.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/p6_real_world_validation_report.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/m2_rem_08_dogfood_gaps_closed.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/gap1_polish_hardening_wave_closure_report.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/gap1_final_r8_closure_report.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/v1_visual_layer_wave_closure_report.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/gap1_deep_barrel_invalidation_longterm_strategy.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/gap1_prewave0_shared_contracts_open.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/gap1_dependency_intelligence_4phase_roadmap_open.md: Auto-detected modification — review and run mark-green after wiki update
+- Findings/m2_rem_08_and_v0.4_progress_tracker.md: Auto-detected modification — review and run mark-green after wiki update
+- index.html: Auto-detected modification — review and run mark-green after wiki update
+- .mcp.json: Auto-detected modification — review and run mark-green after wiki update
+- test-js-flat/utils/helpers.js: Auto-detected modification — review and run mark-green after wiki update
+- test-js-flat/services/mealPlannerService.js: Auto-detected modification — review and run mark-green after wiki update
+- test-js-flat/src/main.js: Auto-detected modification — review and run mark-green after wiki update
+- test-js-flat/test_end_to_end_confidence.sh: Auto-detected modification — review and run mark-green after wiki update
+- test-js-flat/monitored_paths.txt: Auto-detected modification — review and run mark-green after wiki update
+- wikifier.ps1: Auto-detected modification — review and run mark-green after wiki update
+- RELEASE_NOTES.md: Auto-detected modification — review and run mark-green after wiki update
+- file_health.md: Auto-detected modification — review and run mark-green after wiki update
+- v0.4-Execution-Plan.md: Auto-detected modification — review and run mark-green after wiki update
+- v0.4-execution-plan.md: Auto-detected modification — review and run mark-green after wiki update
+- CONTRIBUTING.md: Auto-detected modification — review and run mark-green after wiki update
+- .github/ISSUE_TEMPLATE/feature_request.md: Auto-detected modification — review and run mark-green after wiki update
+- .github/ISSUE_TEMPLATE/wiki_health.md: Auto-detected modification — review and run mark-green after wiki update
+- .github/ISSUE_TEMPLATE/agent_finding.md: Auto-detected modification — review and run mark-green after wiki update
+- .github/ISSUE_TEMPLATE/bug_report.md: Auto-detected modification — review and run mark-green after wiki update
+- .github/ISSUE_TEMPLATE/config.yml: Auto-detected modification — review and run mark-green after wiki update
+- .github/workflows/publish.yml: Auto-detected modification — review and run mark-green after wiki update
+- TRADEOFFS.md: Auto-detected modification — review and run mark-green after wiki update
+- .gitignore: Auto-detected modification — review and run mark-green after wiki update
+- wikifier.sh: Auto-detected modification — review and run mark-green after wiki update
+- scripts/publish.sh: Auto-detected modification — review and run mark-green after wiki update
+- .stele-context/stele_context.db-shm: Auto-detected modification — review and run mark-green after wiki update
+- .stele-context/stele_context.db-wal: Auto-detected modification — review and run mark-green after wiki update
+- .stele-context/indices/hnsw_index.json.zlib: Auto-detected modification — review and run mark-green after wiki update
+- .stele-context/indices/hnsw_index.json.zlib.lock: Auto-detected modification — review and run mark-green after wiki update
+- .stele-context/stele_context.db: Auto-detected modification — review and run mark-green after wiki update
+>>>>>>> agent-3-health-reliability

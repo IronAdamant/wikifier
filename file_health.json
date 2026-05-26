@@ -1,6 +1,10 @@
 {
   "version": 1,
+<<<<<<< HEAD
   "last_updated": "2026-05-17 08:42:00",
+=======
+  "last_updated": "2026-05-27 08:41:36",
+>>>>>>> agent-3-health-reliability
   "entries": {
     "pyproject.toml": {
       "status": "🟢 Green",
@@ -13,9 +17,15 @@
       "reason": "Wiki summary verified accurate after change."
     },
     ".github/workflows/publish.yml": {
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-15 21:39:44 AEST",
       "reason": "Wiki summary verified accurate after change."
+=======
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:23",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "MANIFEST.in": {
       "status": "🟢 Green",
@@ -79,8 +89,13 @@
     },
     "v0.4-execution-plan.md": {
       "status": "🟡 Yellow",
+<<<<<<< HEAD
       "last_updated": "2026-05-16 11:37:03 AEST",
       "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
+=======
+      "last_updated": "2026-05-27 08:41:13",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "Logged_issues/v0.4-roadmap.md": {
       "status": "🟡 Yellow",
@@ -99,8 +114,13 @@
     },
     "v0.4-Execution-Plan.md": {
       "status": "🟡 Yellow",
+<<<<<<< HEAD
       "last_updated": "2026-05-16 12:42:09 AEST",
       "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
+=======
+      "last_updated": "2026-05-27 08:41:12",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
@@ -123,9 +143,15 @@
       "reason": "Regenerated after including wikifier/mcp/ in monitored paths. MCP server files now appear in dependency graph and reverse dependencies."
     },
     "skills/run.md": {
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-16 23:35:55",
       "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
+=======
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:38",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "recipe-lab-dogfood/src/models/Recipe.js": {
       "status": "🔴 Red",
@@ -214,8 +240,13 @@
     },
     "wikifier.sh": {
       "status": "🟡 Yellow",
+<<<<<<< HEAD
       "last_updated": "2026-05-17 08:42:00",
       "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
+=======
+      "last_updated": "2026-05-27 08:41:28",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
@@ -268,9 +299,15 @@
       "reason": "Wiki summary refreshed after MCP final robustness improvements."
     },
     "Findings/m2_rem_08_dogfood_gaps_closed.md": {
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-16 23:23:42",
       "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
+=======
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:46",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "wikifier/parsers/python.py.wiki.md": {
       "status": "🟢 Green",
@@ -283,14 +320,208 @@
       "reason": "Wiki summary is complete and accurate. Part of thorough M2-Rem-08 dogfood."
     },
     "Findings/m2_rem_08_combined_dogfood_findings_open.md": {
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-17 00:29:11",
       "reason": "Investigation officially initiated. Dedicated log created and first analysis steps begun."
+=======
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:41",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     },
     "Logged_issues/high/import/m2-gap-closure-dependency-intelligence.md": {
       "status": "🟢 Green",
       "last_updated": "2026-05-17 08:36:54",
       "reason": "Profiling harness work started."
+<<<<<<< HEAD
+=======
+    },
+    "test/dogfood-health-reliability-$$.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-27 08:39:55",
+      "reason": "Reliability dogfood test - second"
+    },
+    "test/dogfood-sh-3498391.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-27 08:39:56",
+      "reason": "sh delegation dogfood"
+    },
+    "Findings/m2-full-closure-longterm-scalable-plan.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:39",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/v1_visual_layer_architecture.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:42",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/r3_large_scale_dogfooding_report.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:43",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/p6_real_world_validation_report.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:45",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/gap1_polish_hardening_wave_closure_report.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:48",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/gap1_final_r8_closure_report.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:49",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/v1_visual_layer_wave_closure_report.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:50",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/gap1_deep_barrel_invalidation_longterm_strategy.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:52",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/gap1_prewave0_shared_contracts_open.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:53",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/gap1_dependency_intelligence_4phase_roadmap_open.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:55",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "Findings/m2_rem_08_and_v0.4_progress_tracker.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:56",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "index.html": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:58",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".mcp.json": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:40:59",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "test-js-flat/utils/helpers.js": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:00",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "test-js-flat/services/mealPlannerService.js": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:02",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "test-js-flat/src/main.js": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:03",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "test-js-flat/test_end_to_end_confidence.sh": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:05",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "test-js-flat/monitored_paths.txt": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:06",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "wikifier.ps1": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:07",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "RELEASE_NOTES.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:09",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "file_health.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:10",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "CONTRIBUTING.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:15",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".github/ISSUE_TEMPLATE/feature_request.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:16",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".github/ISSUE_TEMPLATE/wiki_health.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:18",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".github/ISSUE_TEMPLATE/agent_finding.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:19",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".github/ISSUE_TEMPLATE/bug_report.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:20",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".github/ISSUE_TEMPLATE/config.yml": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:22",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "TRADEOFFS.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:25",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".gitignore": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:26",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    "scripts/publish.sh": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:29",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".stele-context/stele_context.db-shm": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:30",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".stele-context/stele_context.db-wal": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:32",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".stele-context/indices/hnsw_index.json.zlib": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:33",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".stele-context/indices/hnsw_index.json.zlib.lock": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:35",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+    },
+    ".stele-context/stele_context.db": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-27 08:41:36",
+      "reason": "mtime changed since last check-changes (auto-detected)"
+>>>>>>> agent-3-health-reliability
     }
   }
 }
