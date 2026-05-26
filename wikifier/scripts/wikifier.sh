@@ -89,7 +89,7 @@ PENDING_UPDATES="$PROJECT_ROOT/pending_updates.md"
 LIBRARY_MD="$PROJECT_ROOT/library.md"
 POLL_INTERVAL="${WIKIFIER_POLL_INTERVAL:-30}"
 
-mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
+mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT" "$STAGING_DIR/journal/v1"
 
 # ----------------------------- Helper Functions -----------------------------
 
@@ -192,7 +192,10 @@ add_pending() {
     echo "- $file: $msg" >> "$PENDING_UPDATES"
 }
 
-# Write a journal entry
+# Write a journal entry (dual-write for M2 Workstream C)
+# MD projection (human daily) format is 100% unchanged for backward compat.
+# Structured v1 JSONL is additionally emitted to .wikifier_staging/journal/v1/events.jsonl
+# via the health.py + contracts.py emitter (actor/session/provenance/ACS links/significance).
 write_journal() {
     local action="$1"   # "record-change", "record-deletion", "auto-detected", etc.
     local file="$2"
@@ -203,12 +206,38 @@ write_journal() {
     mkdir -p "$day_dir"
     local journal_file="$day_dir/$(date +%d).md"
 
+    # Existing human-readable daily MD projection (exact, untouched)
     cat >> "$journal_file" << EOM
 ## [$(timestamp)] $action
 **File:** $file
 **Reason:** $reason
 
 EOM
+
+    # Dual-write: structured event (primary durable log). Best-effort, never breaks MD path.
+    # Uses python path for typed JournalEventV1 emission + locking + provenance capture.
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c '
+import os, sys
+from pathlib import Path
+try:
+    from wikifier.health import emit_journal_event
+    root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT") or ".").resolve()
+    sess = os.environ.get("WIKIFIER_SESSION_ID")
+    res = emit_journal_event(
+        root,
+        event_type="'"$action"'",
+        file="'"$file"'",
+        reason="'"$reason"'",
+        session_id=sess,
+    )
+    if not res.get("success"):
+        print("[journal] structured dual-write warning:", res.get("error"), file=sys.stderr)
+except Exception as ex:
+    # Never fail the human path on structured issues (transition safety)
+    print("[journal] structured dual-write best-effort skipped:", ex, file=sys.stderr)
+' 2>/dev/null || true
+    fi
 }
 
 # Simple cross-language import discovery (extendable)
@@ -2043,12 +2072,15 @@ if n > 0:
 ' 2>/dev/null || true
     fi
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
     # Explicit success for consistent exit codes (fixes flakiness where check-changes would exit non-zero on benign conditions)
     set -e
     return 0
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
 }
 
 cmd_health() {
@@ -2287,6 +2319,7 @@ print("\n> Machine-readable: `wikifier cycles`, MCP `get_cycles(format=\"json\",
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     # M2 Workstream D Resolution Transparency (parser parity + import_cache helpers): first-class unresolved/low-conf in library.md
     # Makes failure modes (no resolved_path, low conf, diagnostics with agent suggestions) visible without grepping cache or MCP.
@@ -2322,6 +2355,8 @@ if unres or lowc or diag.get("low_or_unresolved_count", 0) > 0:
 >>>>>>> agent-5-transparency
 =======
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
     ( python3 -c '
 from pathlib import Path
 import wikifier.import_cache as ic
@@ -2498,7 +2533,11 @@ cmd_init() {
     FILE_HEALTH="$PROJECT_ROOT/file_health.md"
     PENDING_UPDATES="$PROJECT_ROOT/pending_updates.md"
     LIBRARY_MD="$PROJECT_ROOT/library.md"
+<<<<<<< HEAD
     mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
+=======
+    mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT" "$STAGING_DIR/journal/v1"
+>>>>>>> agent-4-journal
 
     [[ ! -f "$MONITORED_PATHS_FILE" ]] && echo "." > "$MONITORED_PATHS_FILE"
     [[ ! -f "$EXCLUDE_PATTERNS_FILE" ]] && cat > "$EXCLUDE_PATTERNS_FILE" << 'EOT'
@@ -2533,16 +2572,22 @@ EOT
     mkdir -p "$PROJECT_ROOT/.wikifier"
     echo "project_root=$PROJECT_ROOT" > "$PROJECT_ROOT/.wikifier/config" 2>/dev/null || true
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> agent-4-journal
 
     # Seed a first health entry for the tool itself
     upsert_health "wikifier.sh" "🟢 Green" "Core CLI implemented and documented."
 
+<<<<<<< HEAD
 =======
 
     # Seed a first health entry for the tool itself — via reliable Python (creates JSON + MD, locked, idempotent)
     python3 -m wikifier.health upsert "wikifier.sh" "🟢 Green" "Core CLI implemented and documented." 2>/dev/null || true
 
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
     # R6 UX: auto-copy launcher wikifier.sh into target (full-featured copy when running from source)
     if [[ "$do_copy" == true ]]; then
         local self_script="${BASH_SOURCE[0]:-$0}"

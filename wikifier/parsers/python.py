@@ -27,11 +27,14 @@ Known Limitations (v0.4):
 - Relative import resolution is best-effort and may not always resolve
   correctly in exotic package layouts (namespace packages, editable installs, etc.).
 <<<<<<< HEAD
+<<<<<<< HEAD
   (M2 Workstream D: static *relative* imports now emit resolved_path + rich diagnostic + per-edge
   provenance/strategy/metadata for parity with JS; bare absolute and some exotic layouts remain
   lower-fidelity by design. See contracts, diagnostics, import_cache surfaces.)
 =======
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
 
 Performance Notes:
 - Designed for typical project sizes (hundreds to low thousands of files).
@@ -88,6 +91,7 @@ def _resolve_relative_import(
     raw_module: str, 
     level: int
 <<<<<<< HEAD
+<<<<<<< HEAD
 ) -> tuple[str, str, Optional[str]]:
     """
     Best-effort resolution of relative imports. (M2 Resolution Transparency parity)
@@ -106,6 +110,8 @@ def _resolve_relative_import(
     if level == 0 or not raw_module.startswith('.'):
         return raw_module, "medium", None
 =======
+=======
+>>>>>>> agent-4-journal
 ) -> tuple[str, str]:
     """
     Best-effort resolution of relative imports.
@@ -116,7 +122,10 @@ def _resolve_relative_import(
     """
     if level == 0 or not raw_module.startswith('.'):
         return raw_module, "medium"
+<<<<<<< HEAD
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
 
     parent = current_file.parent
 
@@ -153,6 +162,7 @@ def _resolve_relative_import(
     else:
         resolved = cleaned
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     # --- NEW: compute actual FS target for resolved_path fidelity (parity) ---
     resolved_path: Optional[str] = None
@@ -209,6 +219,11 @@ def _resolve_relative_import(
     confidence = "high" if package_hierarchy else "medium"
     return resolved, confidence
 >>>>>>> agent-3-health-reliability
+=======
+    # If we successfully walked a package hierarchy, give high confidence
+    confidence = "high" if package_hierarchy else "medium"
+    return resolved, confidence
+>>>>>>> agent-4-journal
 
 
 # ---------------------------------------------------------------------
@@ -293,6 +308,7 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         - original_statement: The full original import line(s)
         - statement_type: One of "import", "import_as", "from_import", "from_import_as", "dynamic_import_module", ...
 <<<<<<< HEAD
+<<<<<<< HEAD
         - resolved_path: Absolute FS path to target .py (or package __init__.py) when successfully resolved for relatives; None otherwise (M2 parity with JS)
         - resolution_confidence: "high" | "medium" | "low" | "unresolved" (legacy string; high now requires FS target for relatives)
         - confidence_score: 0.0–1.0 (ACS Limitation #2)
@@ -301,11 +317,16 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         - diagnostic: structured failure/low-conf info (category, reason, severity, suggestion_for_agent, details) — now for static relatives too (parity; see diagnostics.py)
         - parser, resolution_strategy, resolution_metadata: per-edge provenance (stored in cache resolved_pairs; enables first-class unresolved/low-conf surfaces)
 =======
+=======
+>>>>>>> agent-4-journal
         - resolution_confidence: "high" | "medium" | "low" (legacy string)
         - confidence_score: 0.0–1.0 (ACS Limitation #2)
         - confidence_reasons: list[str] explainers (ACS)
         - diagnostic: optional structured failure info (new Limitation #5)
+<<<<<<< HEAD
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
         - is_dynamic / dynamic_type / expr_raw / dynamic_candidates / analysis_notes / cdia / dynamic_analysis / conditional_analysis: full creative/dynamic parity (LDSI 3.5 + CDIA)
     """
     path = Path(filepath).resolve()
@@ -486,6 +507,7 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
                     "conditional_context": conditional_context,
                     "diagnostic": None,
 <<<<<<< HEAD
+<<<<<<< HEAD
                     # Per-edge provenance for full parser parity (dynamic creative paths now also carry it)
                     "parser": "python",
                     "resolution_strategy": "python-dynamic-creative",
@@ -496,6 +518,8 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
                     },
 =======
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
                 }
                 # creative diag dispatch parity (uses same factory as JS)
                 try:
@@ -556,6 +580,7 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         level = len(re.match(r'\.+', raw_module).group()) if is_relative else 0
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
 
         # ACS (Lim #2 + F2) Python parity - now passes real resolved_path when available
@@ -564,12 +589,18 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
 
         # ACS (Lim #2 + F2) Python parity
 >>>>>>> agent-3-health-reliability
+=======
+        resolved_module, confidence = _resolve_relative_import(path, raw_module, level)
+
+        # ACS (Lim #2 + F2) Python parity
+>>>>>>> agent-4-journal
         conf_score, conf_reasons, conf_explanation = _compute_confidence_score_and_reasons(
             confidence,
             is_dynamic=False,
             is_conditional=False,
             barrel_depth=None,
             via_barrel=False,
+<<<<<<< HEAD
 <<<<<<< HEAD
             resolved_path=resolved_path,
         )
@@ -617,6 +648,11 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         )
 
 >>>>>>> agent-3-health-reliability
+=======
+            resolved_path=None,  # Python resolve doesn't populate resolved_path yet
+        )
+
+>>>>>>> agent-4-journal
         imports.append({
             "module": resolved_module,
             "raw_module": raw_module,
@@ -627,19 +663,26 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             "original_statement": original,
             "statement_type": "import_as" if alias else "import",
 <<<<<<< HEAD
+<<<<<<< HEAD
             "resolved_path": resolved_path,
 =======
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
             "resolution_confidence": confidence,
             "confidence_score": conf_score,
             "confidence_reasons": conf_reasons,
             "confidence_explanation": conf_explanation,
+<<<<<<< HEAD
 <<<<<<< HEAD
             "diagnostic": diag,
             **provenance,
 =======
             "diagnostic": None
 >>>>>>> agent-3-health-reliability
+=======
+            "diagnostic": None
+>>>>>>> agent-4-journal
         })
 
     # Process "from ... import ..." statements
@@ -652,6 +695,7 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         level = len(re.match(r'\.+', raw_module).group()) if is_relative else 0
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
 
         # ACS (Lim #2 + F2) Python parity - now passes real resolved_path when available
@@ -660,6 +704,11 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
 
         # ACS (Lim #2 + F2) Python parity
 >>>>>>> agent-3-health-reliability
+=======
+        resolved_module, confidence = _resolve_relative_import(path, raw_module, level)
+
+        # ACS (Lim #2 + F2) Python parity
+>>>>>>> agent-4-journal
         conf_score, conf_reasons, conf_explanation = _compute_confidence_score_and_reasons(
             confidence,
             is_dynamic=False,
@@ -667,10 +716,14 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             barrel_depth=None,
             via_barrel=False,
 <<<<<<< HEAD
+<<<<<<< HEAD
             resolved_path=resolved_path,
 =======
             resolved_path=None,
 >>>>>>> agent-3-health-reliability
+=======
+            resolved_path=None,
+>>>>>>> agent-4-journal
         )
 
         # Clean up parentheses and inline comments from multi-line imports
@@ -697,6 +750,7 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             else:
                 imported_names.append(part)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         # Rich diagnostic for low/unresolved static cases (parity)
         diag = None
@@ -737,6 +791,8 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
 
 =======
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
         imports.append({
             "module": resolved_module,
             "raw_module": raw_module,
@@ -747,19 +803,26 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             "original_statement": original,
             "statement_type": statement_type,
 <<<<<<< HEAD
+<<<<<<< HEAD
             "resolved_path": resolved_path,
 =======
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
             "resolution_confidence": confidence,
             "confidence_score": conf_score,
             "confidence_reasons": conf_reasons,
             "confidence_explanation": conf_explanation,
+<<<<<<< HEAD
 <<<<<<< HEAD
             "diagnostic": diag,
             **provenance,
 =======
             "diagnostic": None
 >>>>>>> agent-3-health-reliability
+=======
+            "diagnostic": None
+>>>>>>> agent-4-journal
         })
 
     # Final cleanup: remove __future__ imports (they are not real module dependencies)

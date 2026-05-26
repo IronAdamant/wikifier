@@ -619,8 +619,13 @@ def synthesize_dynamic_from_legacy(
 # =============================================================================
 
 def get_contracts_info() -> Dict[str, Any]:
+<<<<<<< HEAD
     """For health, MCP diagnostics, and agent introspection."""
     return {
+=======
+    """For health, MCP diagnostics, and agent introspection. Extended additively for journal_event_v1 (M2 Workstream C)."""
+    base = {
+>>>>>>> agent-4-journal
         "contracts_version": __contracts_version__,
         "frozen_date": FROZEN_DATE,
         "status": STATUS,
@@ -630,6 +635,11 @@ def get_contracts_info() -> Dict[str, Any]:
         "num_conditional_tags": len(CONDITIONAL_SEMANTIC_TAGS),
         "num_dynamic_tags": len(DYNAMIC_SEMANTIC_TAGS),
     }
+<<<<<<< HEAD
+=======
+    base["journal"] = get_journal_event_info()
+    return base
+>>>>>>> agent-4-journal
 
 
 def enrich_diagnostic_with_analysis(
@@ -999,6 +1009,291 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
 
 
 # =============================================================================
+<<<<<<< HEAD
+=======
+# 9. Structured Journal & Durable Intent Log (Workstream C - M2 Full Closure start)
+# =============================================================================
+#
+# journal_event_v1 (and evolution path) per M2 long-term scalable plan.
+# Typed events for semantic intent recording: record-change, record-deletion,
+# auto-detected changes, future rationale attachments, etc.
+#
+# Core requirements (long-term durability for years on large repos):
+# - Actor (type + identifier for agents/humans/daemons/swarms) + session_id
+#   for correlating activity across concurrent or long-running agent sessions.
+# - Full provenance (source, wikifier ver, host/pid, git context) for audit.
+# - Explicit links to ACS (confidence snapshots, explanations, low-conf edges
+#   involved in the change) + rationale wiki/library.md anchors + related events.
+# - Semantic action types (extensible append-only vocabulary).
+# - Significance scoring (0-1) + semantic tags for time+impact based compaction.
+# - Bounded, self-describing, JSONL friendly. Defensive from_dict everywhere.
+# - Event IDs stable for cross-refs and compaction manifests.
+#
+# Storage (implemented in health.py + wikifier.sh dual-write):
+#   Primary (durable): $ROOT/.wikifier_staging/journal/v1/events.jsonl  (append-only)
+#   Projection (human): $ROOT/journal/YYYY/MM/DD.md  (existing format, untouched)
+#
+# Evolution rules (binding, like other contracts):
+# - v1 is frozen after this slice. Additive fields only (new optional keys OK).
+# - v2 will introduce JournalEventV2 + migrate_v1_to_v2 helper + dual read.
+# - from_dict always tolerates missing/extra keys, future versions, corrupt data.
+# - Consumers check .get("version") or "schema_version".
+# - Dual emission/compat for >=2 releases.
+# - All new shapes registered here; update get_contracts_info + smoke.
+#
+# This survives: 100k+ events/year, monorepo refactors, agent swarm activity,
+# project moves, without O(n) scans or unbounded MD bloat. Queries later use
+# streaming + same graph techniques as BRC/cycles.
+#
+# Zero new deps. Pure stdlib + existing patterns.
+
+JOURNAL_SCHEMA_VERSION = "v1"
+
+JOURNAL_SEMANTIC_ACTIONS: Tuple[str, ...] = (
+    "record-change",
+    "record-deletion",
+    "auto-detected",
+    # Future (append-only): "mark-green", "heal-stub", "rationale-attach",
+    # "intent-update", "compaction-summary", "session-start", ...
+)
+
+@dataclass(frozen=True)
+class ActorV1:
+    """
+    Who originated the intent record.
+    Supports human edits, single agents, daemons, and multi-agent swarms.
+    Identifier examples: "claude-3-5-sonnet-1234", "human:aron", "daemon:monitor",
+    "swarm:gap1-wave@host-42".
+    """
+    type: Literal["human", "agent", "system", "daemon", "swarm"] = "agent"
+    identifier: str = "unknown"
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ActorV1":
+        if not isinstance(d, dict):
+            d = {}
+        return cls(
+            type=str(d.get("type", "agent"))[:30],
+            identifier=str(d.get("identifier", "unknown"))[:200],
+            metadata=dict(d.get("metadata") or {}),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ProvenanceV1:
+    """
+    Complete machine + process + version provenance for the emission.
+    Enables years-later debugging of "why did this event appear" under
+    concurrent agents, daemon runs, or packaged installs.
+    """
+    source: str = "unknown"  # e.g. "mcp:record_change", "sh:cmd_record_change", "python:health.emit_journal_event"
+    wikifier_version: str = ""
+    timestamp_local: str = ""
+    host: Optional[str] = None
+    pid: Optional[int] = None
+    git_commit: Optional[str] = None
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ProvenanceV1":
+        if not isinstance(d, dict):
+            d = {}
+        pid = d.get("pid")
+        return cls(
+            source=str(d.get("source", "unknown"))[:100],
+            wikifier_version=str(d.get("wikifier_version", ""))[:50],
+            timestamp_local=str(d.get("timestamp_local", ""))[:40],
+            host=(str(d.get("host"))[:100] if d.get("host") else None),
+            pid=int(pid) if isinstance(pid, (int, float, str)) and str(pid).isdigit() else None,
+            git_commit=(str(d.get("git_commit"))[:40] if d.get("git_commit") else None),
+            extra=dict(d.get("extra") or {}),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class JournalEventV1:
+    """
+    Canonical v1 typed journal event.
+
+    Primary on-disk form (JSONL line): compact, one event per line.
+    Every field clamped + defensive for 10-year log hygiene on busy repos.
+
+    Links:
+    - acs_links: list of dicts capturing ACS snapshot at time of change
+      (e.g. [{"target": "foo.js:bar", "confidence": 0.72, "explanation": "...", "rationale_ref": "library.md#sec-3"}])
+    - rationale_links: wiki summaries, library sections, prior event_ids that
+      provide the "why" for this change.
+    - session_id: correlates all events from one logical agent session / task.
+
+    significance: drives safe compaction (high = keep longer or forever).
+    """
+    version: str = JOURNAL_SCHEMA_VERSION
+    event_id: str = ""
+    ts: str = ""  # ISO-8601 UTC preferred
+    event_type: str = "unknown"
+    actor: Dict[str, Any] = field(default_factory=dict)
+    session_id: Optional[str] = None
+    file: str = ""
+    reason: str = ""
+    provenance: Dict[str, Any] = field(default_factory=dict)
+    acs_links: List[Dict[str, Any]] = field(default_factory=list)
+    rationale_links: List[str] = field(default_factory=list)
+    semantic_tags: List[str] = field(default_factory=list)
+    significance: float = 0.5
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "JournalEventV1":
+        """Extremely defensive loader. Tolerates v0 (pre), v1, future v2+ fields, garbage."""
+        if not isinstance(d, dict):
+            d = {}
+        actor_d = d.get("actor") or {}
+        prov_d = d.get("provenance") or {}
+        # support legacy "action" key from early sh
+        et = d.get("event_type") or d.get("action") or "unknown"
+        return cls(
+            version=str(d.get("version", d.get("schema_version", "v1")))[:10],
+            event_id=str(d.get("event_id", ""))[:128],
+            ts=str(d.get("ts", d.get("timestamp", "")))[:40],
+            event_type=str(et)[:50],
+            actor=ActorV1.from_dict(actor_d).to_dict(),
+            session_id=(str(d.get("session_id"))[:100] if d.get("session_id") else None),
+            file=str(d.get("file", ""))[:500],
+            reason=str(d.get("reason", ""))[:2048],
+            provenance=ProvenanceV1.from_dict(prov_d).to_dict(),
+            acs_links=[dict(x) for x in (d.get("acs_links") or []) if isinstance(x, dict)][:20],
+            rationale_links=[str(x)[:400] for x in (d.get("rationale_links") or []) if x][:30],
+            semantic_tags=[str(x)[:40] for x in (d.get("semantic_tags") or []) if x][:20],
+            significance=max(0.0, min(1.0, float(d.get("significance", 0.5) or 0.5))),
+            extra=dict(d.get("extra") or {}),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        # ensure sub-structures are normalized dicts
+        if isinstance(self.actor, ActorV1):
+            d["actor"] = self.actor.to_dict()
+        if isinstance(self.provenance, ProvenanceV1):
+            d["provenance"] = self.provenance.to_dict()
+        return d
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
+
+    def to_jsonl_line(self) -> str:
+        """One-line compact form for append-only JSONL log."""
+        return self.to_json()
+
+
+def make_journal_event(
+    *,
+    event_type: str,
+    file: str,
+    reason: str,
+    actor: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
+    acs_links: Optional[List[Dict[str, Any]]] = None,
+    rationale_links: Optional[List[str]] = None,
+    semantic_tags: Optional[List[str]] = None,
+    significance: Optional[float] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> JournalEventV1:
+    """
+    Ergonomic factory for emitting v1 events. Auto-generates stable event_id,
+    ISO ts, sensible defaults + best-effort provenance capture (git, host, pid).
+    Boosts significance for high-impact actions (deletions, breaking changes).
+    Never raises; always returns a valid event (degraded fields on capture fail).
+    """
+    import uuid
+    import datetime
+    import socket
+    import os
+
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    eid = str(uuid.uuid4())
+
+    if actor is None:
+        actor = {
+            "type": "agent",
+            "identifier": os.environ.get("WIKIFIER_ACTOR", os.environ.get("USER", "unknown-agent")),
+            "metadata": {"via": "make_journal_event"},
+        }
+
+    if provenance is None:
+        prov: Dict[str, Any] = {
+            "source": "python:make_journal_event",
+            "wikifier_version": __contracts_version__,
+            "timestamp_local": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "host": socket.gethostname() if "socket" in dir() else None,
+            "pid": os.getpid(),
+        }
+        # best-effort git (no hard dep, silent fail)
+        try:
+            import subprocess
+            root = os.environ.get("WIKIFIER_PROJECT_ROOT", ".")
+            res = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if res.returncode == 0:
+                prov["git_commit"] = res.stdout.strip()[:12]
+        except Exception:
+            pass
+        provenance = prov
+
+    # significance policy (skeleton; health compaction will use + allow override)
+    sig = significance if significance is not None else 0.5
+    et_lower = event_type.lower()
+    if et_lower == "record-deletion":
+        sig = max(sig, 0.85)
+    if any(kw in reason.lower() for kw in ("breaking", "contract", "security", "api change", "core delete", "refactor critical")):
+        sig = max(sig, 0.9)
+    if et_lower in ("record-change", "auto-detected") and any(kw in reason.lower() for kw in ("add", "new feature", "introduce")):
+        sig = max(sig, 0.65)
+
+    ev = JournalEventV1(
+        event_id=eid,
+        ts=ts,
+        event_type=event_type,
+        actor=actor,
+        session_id=session_id,
+        file=file,
+        reason=reason,
+        provenance=provenance or {},
+        acs_links=acs_links or [],
+        rationale_links=rationale_links or [],
+        semantic_tags=semantic_tags or [],
+        significance=round(sig, 3),
+        extra=extra or {},
+    )
+    return ev
+
+
+def get_journal_event_info() -> Dict[str, Any]:
+    """For health/MCP diagnostics and contracts introspection."""
+    return {
+        "journal_schema_version": JOURNAL_SCHEMA_VERSION,
+        "semantic_actions": list(JOURNAL_SEMANTIC_ACTIONS),
+        "event_class": "JournalEventV1",
+        "primary_storage": ".wikifier_staging/journal/v1/events.jsonl (JSONL)",
+        "projection": "journal/YYYY/MM/DD.md (human MD, dual-written)",
+        "compaction": "time + significance (skeleton in health.py)",
+    }
+
+
+# =============================================================================
+>>>>>>> agent-4-journal
 # Self-test / smoke (run as python -m wikifier.contracts)
 # =============================================================================
 
@@ -1073,6 +1368,47 @@ if __name__ == "__main__":
     assert "strong strategy 'ts-paths:src'" in e4 or "strong resolution" in e4.lower()
     assert "High-fidelity" in e4 or "Safe for automated" in e4  # decision language
 
+<<<<<<< HEAD
+=======
+    # === JournalEventV1 (M2 Workstream C) smoke ===
+    ev1 = make_journal_event(
+        event_type="record-change",
+        file="src/foo.py",
+        reason="Refactor for M2 durable journal foundation. Links to ACS and prior rationale.",
+        session_id="sess-smoke-42",
+        semantic_tags=["refactor", "foundation"],
+        significance=0.75,
+    )
+    assert ev1.version == "v1"
+    assert ev1.event_type == "record-change"
+    assert ev1.file == "src/foo.py"
+    assert 0.7 <= ev1.significance <= 0.8
+    assert ev1.session_id == "sess-smoke-42"
+    assert "python:make_journal_event" in str(ev1.provenance)
+    assert ev1.event_id and len(ev1.event_id) > 10
+
+    d = ev1.to_dict()
+    assert d["version"] == "v1"
+    loaded = JournalEventV1.from_dict(d)
+    assert loaded.event_id == ev1.event_id
+    assert loaded.significance == ev1.significance
+
+    # from_dict tolerance (legacy / future fields)
+    legacyish = {"action": "auto-detected", "file": "bar.js", "reason": "mtime", "extra_future": {"x":1}}
+    loaded2 = JournalEventV1.from_dict(legacyish)
+    assert loaded2.event_type == "auto-detected"
+    assert loaded2.file == "bar.js"
+
+    # deletion boosts significance
+    ev_del = make_journal_event(event_type="record-deletion", file="core/api.py", reason="Remove deprecated")
+    assert ev_del.significance >= 0.85
+
+    info = get_journal_event_info()
+    assert info["journal_schema_version"] == "v1"
+    assert "record-deletion" in info["semantic_actions"]
+    assert "JSONL" in info["primary_storage"]
+
+>>>>>>> agent-4-journal
     print("All smoke tests passed. Contracts are stable and defensive.")
     print(json.dumps(get_contracts_info(), indent=2))
     sys.exit(0)

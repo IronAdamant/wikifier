@@ -1,10 +1,14 @@
 {
   "version": 1,
 <<<<<<< HEAD
+<<<<<<< HEAD
   "last_updated": "2026-05-17 08:42:00",
 =======
   "last_updated": "2026-05-27 08:41:36",
 >>>>>>> agent-3-health-reliability
+=======
+  "last_updated": "2026-05-17 08:42:00",
+>>>>>>> agent-4-journal
   "entries": {
     "pyproject.toml": {
       "status": "🟢 Green",
@@ -18,6 +22,7 @@
     },
     ".github/workflows/publish.yml": {
 <<<<<<< HEAD
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-15 21:39:44 AEST",
       "reason": "Wiki summary verified accurate after change."
@@ -26,6 +31,11 @@
       "last_updated": "2026-05-27 08:41:23",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:39:44 AEST",
+      "reason": "Wiki summary verified accurate after change."
+>>>>>>> agent-4-journal
     },
     "MANIFEST.in": {
       "status": "🟢 Green",
@@ -90,12 +100,17 @@
     "v0.4-execution-plan.md": {
       "status": "🟡 Yellow",
 <<<<<<< HEAD
+<<<<<<< HEAD
       "last_updated": "2026-05-16 11:37:03 AEST",
       "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
 =======
       "last_updated": "2026-05-27 08:41:13",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "last_updated": "2026-05-16 11:37:03 AEST",
+      "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
+>>>>>>> agent-4-journal
     },
     "Logged_issues/v0.4-roadmap.md": {
       "status": "🟡 Yellow",
@@ -115,12 +130,17 @@
     "v0.4-Execution-Plan.md": {
       "status": "🟡 Yellow",
 <<<<<<< HEAD
+<<<<<<< HEAD
       "last_updated": "2026-05-16 12:42:09 AEST",
       "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
 =======
       "last_updated": "2026-05-27 08:41:12",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "last_updated": "2026-05-16 12:42:09 AEST",
+      "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
+>>>>>>> agent-4-journal
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
@@ -144,6 +164,7 @@
     },
     "skills/run.md": {
 <<<<<<< HEAD
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-16 23:35:55",
       "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
@@ -152,6 +173,11 @@
       "last_updated": "2026-05-27 08:40:38",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:35:55",
+      "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
+>>>>>>> agent-4-journal
     },
     "recipe-lab-dogfood/src/models/Recipe.js": {
       "status": "🔴 Red",
@@ -241,12 +267,17 @@
     "wikifier.sh": {
       "status": "🟡 Yellow",
 <<<<<<< HEAD
+<<<<<<< HEAD
       "last_updated": "2026-05-17 08:42:00",
       "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
 =======
       "last_updated": "2026-05-27 08:41:28",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "last_updated": "2026-05-17 08:42:00",
+      "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
+>>>>>>> agent-4-journal
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
@@ -300,6 +331,7 @@
     },
     "Findings/m2_rem_08_dogfood_gaps_closed.md": {
 <<<<<<< HEAD
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-16 23:23:42",
       "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
@@ -308,6 +340,11 @@
       "last_updated": "2026-05-27 08:40:46",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:23:42",
+      "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
+>>>>>>> agent-4-journal
     },
     "wikifier/parsers/python.py.wiki.md": {
       "status": "🟢 Green",
@@ -321,6 +358,7 @@
     },
     "Findings/m2_rem_08_combined_dogfood_findings_open.md": {
 <<<<<<< HEAD
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-17 00:29:11",
       "reason": "Investigation officially initiated. Dedicated log created and first analysis steps begun."
@@ -329,11 +367,17 @@
       "last_updated": "2026-05-27 08:40:41",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 00:29:11",
+      "reason": "Investigation officially initiated. Dedicated log created and first analysis steps begun."
+>>>>>>> agent-4-journal
     },
     "Logged_issues/high/import/m2-gap-closure-dependency-intelligence.md": {
       "status": "🟢 Green",
       "last_updated": "2026-05-17 08:36:54",
       "reason": "Profiling harness work started."
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
     },
@@ -522,6 +566,8 @@
       "last_updated": "2026-05-27 08:41:36",
       "reason": "mtime changed since last check-changes (auto-detected)"
 >>>>>>> agent-3-health-reliability
+=======
+>>>>>>> agent-4-journal
     }
   }
 }

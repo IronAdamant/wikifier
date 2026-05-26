@@ -80,10 +80,14 @@ Gap #1 (Dependency Intelligence Quality — the 6 last-mile items) is complete (
 
 **Technical Debt / Asymmetries** (documented in historical investigation):
 <<<<<<< HEAD
+<<<<<<< HEAD
 - ~~Python vs JS parser fidelity (confidence, raw_module, resolved_path)~~ — CLOSED for resolution_confidence/resolved_path/rich diagnostics/provenance on relatives by python.py update (M2 Workstream D slice); bare absolutes remain intentionally lower-fidelity.
 =======
 - Python vs JS parser fidelity (confidence, raw_module, resolved_path)
 >>>>>>> agent-3-health-reliability
+=======
+- Python vs JS parser fidelity (confidence, raw_module, resolved_path)
+>>>>>>> agent-4-journal
 - Crude grep extraction in some shell paths vs proper JSON
 - Journal/pending_updates as simple append-only text (no structure, no compaction)
 - Health matrix still has flakiness (subshells, non-idempotency)
@@ -191,12 +195,17 @@ Each workstream has:
 **Phased Execution (Checkboxes)**
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 - [ ] Audit and make **all** health matrix code paths (Python + shell) fully idempotent and atomic under the existing locking.
 - [ ] Fix validate, mark-green, check-changes exit codes and subshell issues permanently (move critical logic into Python helpers called from shell).
 =======
 - [x] Audit and make **all** health matrix code paths (Python + shell) fully idempotent and atomic under the existing locking. (2026-05-26: health.py now central reliable engine with locked mark_green/remove/add/validate/upsert; both wikifier.sh + wikifier/scripts/wikifier.sh delegate mutations; upsert wrapper kept only as safe fallback. Combined ops use single file_lock acquisition.)
 - [x] Fix validate, mark-green, check-changes exit codes and subshell issues permanently (move critical logic into Python helpers called from shell). (2026-05-26: subshell counter bug eliminated by full delegation of cmd_validate; mark-green pending clearing now via atomic _do_mark_green under lock + idempotent filter; check-changes exit codes hardened with explicit guards + exit 0 + pervasive || true + py delegation; duplicate rows impossible via dict upsert + batch-safe writes; added consistent error handling + exit codes in py helpers and sh main paths.)
 >>>>>>> agent-3-health-reliability
+=======
+- [ ] Audit and make **all** health matrix code paths (Python + shell) fully idempotent and atomic under the existing locking.
+- [ ] Fix validate, mark-green, check-changes exit codes and subshell issues permanently (move critical logic into Python helpers called from shell).
+>>>>>>> agent-4-journal
 - [ ] Introduce `wiki_content_hash` + `last_meaningful_edit` (correlated to journal semantic events) in health entries.
 - [ ] Implement reliable stale wiki detector (content hash changed since last agent wiki update + no recent record-change for that file).
 - [ ] Advance `heal_stubs` / `heal_outdated_stubs` into a policy-driven engine with rich diagnostics (why healed, confidence, what changed).
@@ -226,6 +235,7 @@ Each workstream has:
 - Tight integration with health matrix (every journal semantic event can affect freshness scores).
 
 **Phased Execution**:
+<<<<<<< HEAD
 - [ ] Design `journal_event_v1` (and later v2) contract — typed events with provenance, actor (agent id), session, confidence/rationale links to ACS.
 - [ ] Implement dual-write (structured log + human-readable daily MD projection) during transition.
 - [ ] Add compaction engine (safe, reversible, with dry-run + manifest).
@@ -233,6 +243,15 @@ Each workstream has:
 - [ ] pending_updates evolves into a structured, prioritized, auto-pruned work queue with provenance.
 - [ ] Multi-year simulation dogfood (replay months of real + synthetic activity and verify compaction + query performance).
 - [ ] Full integration with record-change/record-deletion as the canonical way agents record *why*.
+=======
+- [x] Design `journal_event_v1` (and later v2) contract — typed events with provenance, actor (agent id), session, confidence/rationale links to ACS. (Workstream C slice start — contracts.py + evolution path + ActorV1/ProvenanceV1/JournalEventV1 + make_ + defensive load)
+- [x] Implement dual-write (structured log + human-readable daily MD projection) during transition. (JSONL primary in .wikifier_staging/journal/v1/ + exact MD projection preserved; emit in health.py)
+- [x] Add compaction engine (safe, reversible, with dry-run + manifest). (Skeleton in health.py: time+significance policy, streaming iter, archive layout, manifest with reversible notes)
+- [ ] New query tools / MCP surfaces: `get_intent_history(file, since)`, `get_high_impact_changes(limit)`, summarization.
+- [ ] pending_updates evolves into a structured, prioritized, auto-pruned work queue with provenance.
+- [ ] Multi-year simulation dogfood (replay months of real + synthetic activity and verify compaction + query performance).
+- [x] Full integration with record-change/record-deletion as the canonical way agents record *why*. (write_journal() in wikifier.sh + scripts/ copy now dual-writes via health.emit_journal_event on every call path including auto-detected)
+>>>>>>> agent-4-journal
 
 **Scalability**: Compaction keeps active state bounded (e.g., last 90 days full + yearly summaries + high-significance events forever). Queries are indexed or use the same graph techniques as cycles/BRC.
 
@@ -250,6 +269,7 @@ Each workstream has:
 
 **Phased Execution**:
 <<<<<<< HEAD
+<<<<<<< HEAD
 - [x] Complete Python parser parity for `resolution_confidence`, `resolved_path`, rich diagnostics (close the historical asymmetry). — Done: python.py now emits resolved_path (for relatives, with FS target), ties confidence to it, produces rich "diagnostic" (make_diagnostic for static low cases + creative), + per-edge (parser, resolution_strategy, resolution_metadata) provenance. All flow to cache/MCP/ACS/CIABRE.
 - [x] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`). — Done: new helpers in import_cache.py; exposed in MCP get_project_status + health(json) via "resolution_transparency" (counts + bounded samples + provenance notes); enhanced get_dependencies(..., unresolved_only=True); library.md generator (both sh) now emits dedicated "## Resolution Transparency" section with actionable samples + cross-refs.
 - [x] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned. — Done: stored in python (and JS) parser outputs for all edges; preserved by import_cache.update_file_data RICH_KEYS; visible in status/health/library/MCP/ACS.
@@ -258,6 +278,11 @@ Each workstream has:
 - [ ] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`).
 - [ ] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned.
 >>>>>>> agent-3-health-reliability
+=======
+- [ ] Complete Python parser parity for `resolution_confidence`, `resolved_path`, rich diagnostics (close the historical asymmetry).
+- [ ] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`).
+- [ ] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned.
+>>>>>>> agent-4-journal
 - [ ] Integrated failure taxonomy surfaced via diagnostics category + ACS.
 - [ ] Agents can ask "show me everything that is currently untrustworthy in my dependency map" as a standard operation.
 - [ ] Scale testing: 50k file repo with deliberately injected hard creative cases — transparency surfaces must remain fast and complete.
