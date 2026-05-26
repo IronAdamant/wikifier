@@ -657,6 +657,21 @@ def health(
                         "cycles_reuse": cycles_reuse,
                         "sample_barrel_reports": sample_barrel_reports,  # basic observability in health(json)
                     }
+                # M2 Workstream D: same resolution transparency in health(json) for consistency (unresolved/low-conf now first-class alongside ACS/barrel)
+                try:
+                    unresolved_samples = ic.get_unresolved_imports(cache, max_results=5) or []
+                    lowc_samples = ic.get_low_confidence_edges(cache, max_results=5) or []
+                    diag_sum = ic.ensure_diagnostics_aggregate(cache) or {}
+                    if unresolved_samples or lowc_samples or diag_sum.get("low_or_unresolved_count"):
+                        dep_intel["resolution_transparency"] = {
+                            "low_or_unresolved_count": diag_sum.get("low_or_unresolved_count", 0),
+                            "by_category": diag_sum.get("by_category", {}),
+                            "sample_unresolved_or_low_conf": unresolved_samples or lowc_samples or diag_sum.get("samples", [])[:5],
+                            "helpers": "import_cache.get_unresolved_imports / get_low_confidence_edges + get_dependencies(..., unresolved_only=True)",
+                            "parser_parity_note": "python vs JS asymmetry closed for resolved_path / diagnostics / provenance on relatives (Workstream D)",
+                        }
+                except Exception:
+                    pass
             except Exception:
                 pass
             return {
@@ -839,7 +854,7 @@ def issues(severity: str = "all", project_root: Optional[str] = None, format: Li
 # =============================================================================
 
 @mcp.tool()
-def get_dependencies(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None, low_confidence_only: bool = False) -> str | dict:
+def get_dependencies(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None, low_confidence_only: bool = False, unresolved_only: bool = False) -> str | dict:
     """
     Get what a file imports (forward dependencies).
     Returns either human-readable text or structured JSON.
@@ -857,6 +872,7 @@ def get_dependencies(file: str, format: Literal["text", "json"] = "text", projec
       * JSON: filter confidence_score < 0.65 or high-sev reasons; read full explanation + traces + analysis.
       * Text: "why:" lines contain ready-to-quote Recommendation (full action sentence preserved).
     - low_confidence_only=True: server-side ACS filter (post-enrich) to return only low-trust edges (score<0.65 or low/unresolved) for direct risky-dep focus (Gap #1 surfacing polish).
+    - unresolved_only=True (M2 Workstream D Resolution Transparency): further filter to edges that are unresolved / lack resolved_path / carry diagnostic (first-class failure visibility). Combines with low_conf filter. New helpers in import_cache power this + get_project_status/ health / library.md.
     Scalable, precomputed, trustworthy for autonomous use across all codebase sizes.
     """
     root = _get_effective_root(project_root)
@@ -933,6 +949,15 @@ def get_dependencies(file: str, format: Literal["text", "json"] = "text", projec
                 it for it in cached
                 if (it.get("confidence_score") or 1.0) < 0.65
                 or str(it.get("confidence") or "").lower() in ("low", "unresolved")
+            ]
+
+        # M2 Workstream D: unresolved/low-conf transparency filter (additive, uses new import_cache helpers spirit + direct)
+        if unresolved_only:
+            cached = [
+                it for it in cached
+                if str(it.get("confidence") or it.get("resolution_confidence") or "").lower() in ("low", "unresolved")
+                or not it.get("resolved_path")
+                or bool(it.get("diagnostic"))
             ]
 
         if format == "json":
@@ -1620,6 +1645,24 @@ def get_project_status(
                     # A1: first-class reverse dependency index now uniformly surfaced on project_status/health (MCP primary surfaces)
                     "reverse_dependency_index": ic.get_reverse_dependency_stats(cache),
                 }
+            # M2 Workstream D Resolution Transparency (parser parity + new import_cache helpers):
+            # first-class unresolved/low-conf surfaces now in primary status (visible failure modes + provenance).
+            # Agents can now ask "what in my dep map is untrustworthy?" directly. Ties to ACS (low conf) + CIABRE (weak links) + diagnostics aggregates.
+            try:
+                unresolved_samples = ic.get_unresolved_imports(cache, max_results=5) or []
+                lowc_samples = ic.get_low_confidence_edges(cache, max_results=5) or []
+                # reuse existing diagnostics aggregate (has low_or_unresolved_count + by_cat + samples)
+                diag_sum = ic.ensure_diagnostics_aggregate(cache) or {}
+                if unresolved_samples or lowc_samples or diag_sum.get("low_or_unresolved_count"):
+                    dep_intel["resolution_transparency"] = {
+                        "low_or_unresolved_count": diag_sum.get("low_or_unresolved_count", 0),
+                        "by_category": diag_sum.get("by_category", {}),
+                        "sample_unresolved_or_low_conf": unresolved_samples or lowc_samples or diag_sum.get("samples", [])[:5],
+                        "helpers": "import_cache.get_unresolved_imports / get_low_confidence_edges; MCP get_dependencies(..., unresolved_only=True); get_resolution_diagnostics()",
+                        "parser_parity_note": "python.py now emits resolved_path + diagnostic + (parser, strategy, resolution_metadata) for relatives (matches JS fidelity)",
+                    }
+            except Exception:
+                pass
         except Exception:
             pass
 

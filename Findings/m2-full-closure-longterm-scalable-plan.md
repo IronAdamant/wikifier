@@ -79,7 +79,7 @@ Gap #1 (Dependency Intelligence Quality — the 6 last-mile items) is complete (
 - BRC + graph_signature + reuse patterns as models for other caches
 
 **Technical Debt / Asymmetries** (documented in historical investigation):
-- Python vs JS parser fidelity (confidence, raw_module, resolved_path)
+- ~~Python vs JS parser fidelity (confidence, raw_module, resolved_path)~~ — CLOSED for resolution_confidence/resolved_path/rich diagnostics/provenance on relatives by python.py update (M2 Workstream D slice); bare absolutes remain intentionally lower-fidelity.
 - Crude grep extraction in some shell paths vs proper JSON
 - Journal/pending_updates as simple append-only text (no structure, no compaction)
 - Health matrix still has flakiness (subshells, non-idempotency)
@@ -132,10 +132,10 @@ Each workstream has:
 - [ ] Extend harness with "M2 Scale Harness" (synthetic 5k/10k/25k/50k graphs + creative patterns + timing + memory guards).
 
 ### Phase A1 — Reverse Dependencies as First-Class Citizen
-- [x] Persist and maintain a reverse dependency index (parallel to forward graph + BRC) with its own signature for delta detection. (Workstream A1 slice complete: _reverse_dependencies + new _reverse_signature under RESERVED, in import_cache.json; zero-dep additive.)
-- [x] `get_dependents` and new `get_reverse_dependencies` (or unified) use the index directly (O(1) or O(k) for k dependents). (Core fns + incremental maintain_ + rebuild_ + get_*_stats + sig in import_cache; exposed+enhanced in CLI run_full_update result, MCP get_dependents (json now carries signature+stats), health/project_status surfaces. Direct dict for O(1)/O(k).)
-- [ ] Wire into health, ACS (low-conf reverse edges), library.md (new "Who depends on me" sections), MCP. (Partial: MCP + health surfaces + project_status + diagnostics via get_reverse_dependency_stats + sig; cycle blast already integrated (no change); ACS/barrel layers compatible by design (unchanged consumers); library.md sections out of assigned slice scope.)
-- [ ] Full dogfood + harness asserts on reverse accuracy at scale (including after renames/deletes via record-deletion). (Out of assigned A1 slice; design supports via maintain on record_deletion paths + O(changed) scaling proven in unit exec.)
+- [ ] Persist and maintain a reverse dependency index (parallel to forward graph + BRC) with its own signature for delta detection.
+- [ ] `get_dependents` and new `get_reverse_dependencies` (or unified) use the index directly (O(1) or O(k) for k dependents).
+- [ ] Wire into health, ACS (low-conf reverse edges), library.md (new "Who depends on me" sections), MCP.
+- [ ] Full dogfood + harness asserts on reverse accuracy at scale (including after renames/deletes via record-deletion).
 
 ### Phase A2 — Streaming / Resumable / Partial UX (Core Deliverable)
 - [ ] Implement resumable `run_update_stream(...)` (or generator) in Python-primary path that yields progress events + partial resolved pairs / cycles / ACS.
@@ -240,9 +240,9 @@ Each workstream has:
 - Need to make them **complete, always-on, and queryable at scale** (not just samples).
 
 **Phased Execution**:
-- [ ] Complete Python parser parity for `resolution_confidence`, `resolved_path`, rich diagnostics (close the historical asymmetry).
-- [ ] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`).
-- [ ] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned.
+- [x] Complete Python parser parity for `resolution_confidence`, `resolved_path`, rich diagnostics (close the historical asymmetry). — Done: python.py now emits resolved_path (for relatives, with FS target), ties confidence to it, produces rich "diagnostic" (make_diagnostic for static low cases + creative), + per-edge (parser, resolution_strategy, resolution_metadata) provenance. All flow to cache/MCP/ACS/CIABRE.
+- [x] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`). — Done: new helpers in import_cache.py; exposed in MCP get_project_status + health(json) via "resolution_transparency" (counts + bounded samples + provenance notes); enhanced get_dependencies(..., unresolved_only=True); library.md generator (both sh) now emits dedicated "## Resolution Transparency" section with actionable samples + cross-refs.
+- [x] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned. — Done: stored in python (and JS) parser outputs for all edges; preserved by import_cache.update_file_data RICH_KEYS; visible in status/health/library/MCP/ACS.
 - [ ] Integrated failure taxonomy surfaced via diagnostics category + ACS.
 - [ ] Agents can ask "show me everything that is currently untrustworthy in my dependency map" as a standard operation.
 - [ ] Scale testing: 50k file repo with deliberately injected hard creative cases — transparency surfaces must remain fast and complete.

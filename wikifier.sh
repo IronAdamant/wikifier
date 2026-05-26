@@ -2263,6 +2263,40 @@ if acs.get("total_scored_edges"):
 print("\n> Machine-readable: `wikifier cycles`, MCP `get_cycles(format=\"json\", analysis=True)`. CIABRE v1.3 (R5 + registry ext): severity+blast+weakest + ranked practical recs (full rationale/hint/safety, ACS refs) from dogfood-tuned rules. ACS summary + samples in _acs_summary. Full in cache.\n")
 ' 2>/dev/null || echo "\n## Circular Dependencies\n(Requires update-maps run to populate cache.)\n" ) >> "$LIBRARY_MD"
 
+<<<<<<< HEAD
+=======
+    # M2 Workstream D Resolution Transparency (parser parity + import_cache helpers): first-class unresolved/low-conf in library.md
+    # Makes failure modes (no resolved_path, low conf, diagnostics with agent suggestions) visible without grepping cache or MCP.
+    # Uses new get_unresolved_imports / get_low_confidence_edges + existing diagnostics aggregate. Bounded samples. Ties to ACS/CIABRE.
+    ( python3 -c '
+from pathlib import Path
+import wikifier.import_cache as ic
+root = Path(".")
+cache = ic.load_cache(root)
+unres = ic.get_unresolved_imports(cache, max_results=8) or []
+lowc = ic.get_low_confidence_edges(cache, max_results=8) or []
+diag = ic.ensure_diagnostics_aggregate(cache) or {}
+if unres or lowc or diag.get("low_or_unresolved_count", 0) > 0:
+    print("\n## Resolution Transparency (Unresolved / Low-Confidence Imports)")
+    print(f"**Low or unresolved count**: {diag.get(\"low_or_unresolved_count\", 0)} (see get_resolution_diagnostics for by_category + full samples)")
+    print(f"**Sample unresolved/low-conf edges** (src | raw -> resolved | conf | has_path | has_diag):")
+    seen = set()
+    for e in (unres + lowc)[:8]:
+        src = e.get("src", "?")
+        raw = (e.get("raw") or e.get("raw_module") or "?")[:40]
+        res = (e.get("resolved") or e.get("module") or "?")[:40]
+        conf = e.get("confidence") or e.get("resolution_confidence") or "?"
+        has_p = "yes" if e.get("resolved_path") else "no"
+        has_d = "yes" if e.get("diagnostic") else "no"
+        key = (src, raw)
+        if key in seen: continue
+        seen.add(key)
+        print(f"  - {src}: {raw} -> {res} | conf={conf} | path={has_p} | diag={has_d}")
+    print("> Actionable: use `get_dependencies(..., unresolved_only=True, format=\"json\")` or MCP `get_unresolved_imports` equivalent for full list + suggestions. Python/JS parser parity now provides resolved_path + per-edge (parser/strategy/resolution_metadata) + rich diagnostics for these edges.")
+    print("> Ties into ACS (low<0.65 hotspots) + CIABRE weakest links. No important resolution limitation is hidden.\n")
+' 2>/dev/null || echo "\n## Resolution Transparency\n(Requires update-maps + cache population for unresolved/low-conf surfaces.)\n" ) >> "$LIBRARY_MD"
+
+>>>>>>> agent-5-transparency
     ( python3 -c '
 from pathlib import Path
 import wikifier.import_cache as ic

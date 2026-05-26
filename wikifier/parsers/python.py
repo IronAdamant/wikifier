@@ -26,6 +26,9 @@ Known Limitations (v0.4):
   (mirrors JS; includes Layer 3.5 deeper aliases/CFG, creative CDIA detectors, diagnostics).
 - Relative import resolution is best-effort and may not always resolve
   correctly in exotic package layouts (namespace packages, editable installs, etc.).
+  (M2 Workstream D: static *relative* imports now emit resolved_path + rich diagnostic + per-edge
+  provenance/strategy/metadata for parity with JS; bare absolute and some exotic layouts remain
+  lower-fidelity by design. See contracts, diagnostics, import_cache surfaces.)
 
 Performance Notes:
 - Designed for typical project sizes (hundreds to low thousands of files).
@@ -81,16 +84,23 @@ def _resolve_relative_import(
     current_file: Path, 
     raw_module: str, 
     level: int
-) -> tuple[str, str]:
+) -> tuple[str, str, Optional[str]]:
     """
-    Best-effort resolution of relative imports.
+    Best-effort resolution of relative imports. (M2 Resolution Transparency parity)
 
-    Returns (resolved_module, confidence).
-    Confidence is currently "high" for successful package hierarchy resolution.
-    (ACS Limitation #2 callers will derive score + reasons from this.)
+    Returns (resolved_module, confidence, resolved_path_or_None).
+    Now populates resolved_path (actual .py or package __init__.py on disk) for
+    relatives when the target exists under the package hierarchy walk. This
+    closes the historical asymmetry with javascript.py for intra-project
+    relative imports.
+
+    Confidence: "high" only when FS target successfully located (matches JS
+    fidelity for relatives); otherwise "medium"/"low" with graceful degradation.
+    (ACS callers receive the resolved_path and adjust "no_resolved_path" penalty.)
+    Per-edge provenance (strategy + minimal metadata) is attached by callers.
     """
     if level == 0 or not raw_module.startswith('.'):
-        return raw_module, "medium"
+        return raw_module, "medium", None
 
     parent = current_file.parent
 
@@ -127,9 +137,56 @@ def _resolve_relative_import(
     else:
         resolved = cleaned
 
-    # If we successfully walked a package hierarchy, give high confidence
-    confidence = "high" if package_hierarchy else "medium"
-    return resolved, confidence
+    # --- NEW: compute actual FS target for resolved_path fidelity (parity) ---
+    resolved_path: Optional[str] = None
+    try:
+        # Start from the directory implied by the package hierarchy + level
+        # Re-walk to find the base dir for the import target (robust to namespace quirks)
+        base = current_file.parent
+        # pop level-1 parents (same as resolved_parts construction)
+        for _ in range(level - 1):
+            if base.parent != base:
+                base = base.parent
+            else:
+                break
+        # Now append the cleaned dotted path segments as dirs, last as .py or package
+        if cleaned:
+            segs = [s for s in cleaned.split('.') if s]
+            target_dir = base
+            for seg in segs[:-1]:
+                target_dir = target_dir / seg
+            if segs:
+                last = segs[-1]
+                # Candidate 1: direct module file
+                cand_py = target_dir / f"{last}.py"
+                if cand_py.exists() and cand_py.is_file():
+                    resolved_path = str(cand_py.resolve())
+                else:
+                    # Candidate 2: package dir with __init__.py
+                    cand_init = target_dir / last / "__init__.py"
+                    if cand_init.exists() and cand_init.is_file():
+                        resolved_path = str(cand_init.resolve())
+                    else:
+                        # Fallback: if no subsegs, try sibling to current
+                        if not segs[1:]:
+                            sib = current_file.parent / f"{last}.py"
+                            if sib.exists() and sib.is_file():
+                                resolved_path = str(sib.resolve())
+                            else:
+                                sib_init = current_file.parent / last / "__init__.py"
+                                if sib_init.exists() and sib_init.is_file():
+                                    resolved_path = str(sib_init.resolve())
+    except Exception:
+        resolved_path = None
+
+    # Fidelity parity: high confidence requires actual FS target (like JS relatives)
+    if resolved_path:
+        confidence = "high"
+    elif package_hierarchy:
+        confidence = "medium"
+    else:
+        confidence = "low"
+    return resolved, confidence, resolved_path
 
 
 # ---------------------------------------------------------------------
@@ -213,10 +270,13 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         - imported_names: List of imported names (for 'from' style imports)
         - original_statement: The full original import line(s)
         - statement_type: One of "import", "import_as", "from_import", "from_import_as", "dynamic_import_module", ...
-        - resolution_confidence: "high" | "medium" | "low" (legacy string)
+        - resolved_path: Absolute FS path to target .py (or package __init__.py) when successfully resolved for relatives; None otherwise (M2 parity with JS)
+        - resolution_confidence: "high" | "medium" | "low" | "unresolved" (legacy string; high now requires FS target for relatives)
         - confidence_score: 0.0–1.0 (ACS Limitation #2)
         - confidence_reasons: list[str] explainers (ACS)
-        - diagnostic: optional structured failure info (new Limitation #5)
+        - confidence_explanation: full prescriptive Recommendation string (R2 ACS)
+        - diagnostic: structured failure/low-conf info (category, reason, severity, suggestion_for_agent, details) — now for static relatives too (parity; see diagnostics.py)
+        - parser, resolution_strategy, resolution_metadata: per-edge provenance (stored in cache resolved_pairs; enables first-class unresolved/low-conf surfaces)
         - is_dynamic / dynamic_type / expr_raw / dynamic_candidates / analysis_notes / cdia / dynamic_analysis / conditional_analysis: full creative/dynamic parity (LDSI 3.5 + CDIA)
     """
     path = Path(filepath).resolve()
@@ -396,6 +456,14 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
                     "is_conditional": is_conditional,
                     "conditional_context": conditional_context,
                     "diagnostic": None,
+                    # Per-edge provenance for full parser parity (dynamic creative paths now also carry it)
+                    "parser": "python",
+                    "resolution_strategy": "python-dynamic-creative",
+                    "resolution_metadata": {
+                        "strategy": "python-dynamic-creative",
+                        "via_ldsi_cdia_registry": True,
+                        "target_on_disk": False,  # dynamics remain speculative
+                    },
                 }
                 # creative diag dispatch parity (uses same factory as JS)
                 try:
@@ -455,17 +523,55 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         is_relative = raw_module.startswith('.')
         level = len(re.match(r'\.+', raw_module).group()) if is_relative else 0
 
-        resolved_module, confidence = _resolve_relative_import(path, raw_module, level)
+        resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
 
-        # ACS (Lim #2 + F2) Python parity
+        # ACS (Lim #2 + F2) Python parity - now passes real resolved_path when available
         conf_score, conf_reasons, conf_explanation = _compute_confidence_score_and_reasons(
             confidence,
             is_dynamic=False,
             is_conditional=False,
             barrel_depth=None,
             via_barrel=False,
-            resolved_path=None,  # Python resolve doesn't populate resolved_path yet
+            resolved_path=resolved_path,
         )
+
+        # Rich diagnostic for low/unresolved static cases (parity with JS _make_diag_for_js + diagnostics layer)
+        # Makes failure modes (missing target, relative misresolve) visible + actionable.
+        diag = None
+        if (confidence or "").lower() in ("low", "unresolved") or not resolved_path:
+            try:
+                if hasattr(diagnostics, "make_diagnostic"):
+                    cat = "relative_misresolve" if is_relative and level > 0 else ("no_fs_match" if is_relative else "external_or_bare")
+                    reason = (
+                        f"Python relative import '{raw_module}' resolved to '{resolved_module}' "
+                        "but no on-disk .py / __init__.py target located via package hierarchy."
+                        if is_relative else
+                        f"Absolute/bare Python import '{raw_module}' (stdlib, third-party, or intra-project bare module not resolvable by static walk)."
+                    )
+                    diag = diagnostics.make_diagnostic(
+                        cat,
+                        reason[:280],
+                        severity="info" if not is_relative else "warn",
+                        suggestion_for_agent=(
+                            "For project-internal deps, use explicit relative imports (from .foo import) with matching files on disk. "
+                            "Externals/bare are expected; safe to ignore or pin via comments for graph completeness."
+                        ),
+                        details={"raw_module": raw_module, "level": level, "resolved_module": resolved_module, "has_resolved_path": bool(resolved_path)},
+                    )
+            except Exception:
+                diag = None
+
+        # Per-edge provenance (closes asymmetry; flows to resolved_pairs/cache/MCP/ACS/CIABRE automatically via update_file_data RICH preservation)
+        provenance = {
+            "parser": "python",
+            "resolution_strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
+            "resolution_metadata": {
+                "strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
+                "package_hierarchy_walk": is_relative,
+                "target_on_disk": bool(resolved_path),
+                "relative_level": level,
+            },
+        }
 
         imports.append({
             "module": resolved_module,
@@ -476,11 +582,13 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             "imported_names": [],
             "original_statement": original,
             "statement_type": "import_as" if alias else "import",
+            "resolved_path": resolved_path,
             "resolution_confidence": confidence,
             "confidence_score": conf_score,
             "confidence_reasons": conf_reasons,
             "confidence_explanation": conf_explanation,
-            "diagnostic": None
+            "diagnostic": diag,
+            **provenance,
         })
 
     # Process "from ... import ..." statements
@@ -492,16 +600,16 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         is_relative = raw_module.startswith('.')
         level = len(re.match(r'\.+', raw_module).group()) if is_relative else 0
 
-        resolved_module, confidence = _resolve_relative_import(path, raw_module, level)
+        resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
 
-        # ACS (Lim #2 + F2) Python parity
+        # ACS (Lim #2 + F2) Python parity - now passes real resolved_path when available
         conf_score, conf_reasons, conf_explanation = _compute_confidence_score_and_reasons(
             confidence,
             is_dynamic=False,
             is_conditional=False,
             barrel_depth=None,
             via_barrel=False,
-            resolved_path=None,
+            resolved_path=resolved_path,
         )
 
         # Clean up parentheses and inline comments from multi-line imports
@@ -528,6 +636,43 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             else:
                 imported_names.append(part)
 
+        # Rich diagnostic for low/unresolved static cases (parity)
+        diag = None
+        if (confidence or "").lower() in ("low", "unresolved") or not resolved_path:
+            try:
+                if hasattr(diagnostics, "make_diagnostic"):
+                    cat = "relative_misresolve" if is_relative and level > 0 else ("no_fs_match" if is_relative else "external_or_bare")
+                    reason = (
+                        f"Python relative import '{raw_module}' resolved to '{resolved_module}' "
+                        "but no on-disk .py / __init__.py target located via package hierarchy."
+                        if is_relative else
+                        f"Absolute/bare Python import '{raw_module}' (stdlib, third-party, or intra-project bare module not resolvable by static walk)."
+                    )
+                    diag = diagnostics.make_diagnostic(
+                        cat,
+                        reason[:280],
+                        severity="info" if not is_relative else "warn",
+                        suggestion_for_agent=(
+                            "For project-internal deps, use explicit relative imports (from .foo import) with matching files on disk. "
+                            "Externals/bare are expected; safe to ignore or pin via comments for graph completeness."
+                        ),
+                        details={"raw_module": raw_module, "level": level, "resolved_module": resolved_module, "has_resolved_path": bool(resolved_path)},
+                    )
+            except Exception:
+                diag = None
+
+        # Per-edge provenance (additive, stored in cache resolved_pairs)
+        provenance = {
+            "parser": "python",
+            "resolution_strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
+            "resolution_metadata": {
+                "strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
+                "package_hierarchy_walk": True,  # from the walk in resolver
+                "target_on_disk": bool(resolved_path),
+                "relative_level": level,
+            },
+        }
+
         imports.append({
             "module": resolved_module,
             "raw_module": raw_module,
@@ -537,11 +682,13 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
             "imported_names": imported_names,
             "original_statement": original,
             "statement_type": statement_type,
+            "resolved_path": resolved_path,
             "resolution_confidence": confidence,
             "confidence_score": conf_score,
             "confidence_reasons": conf_reasons,
             "confidence_explanation": conf_explanation,
-            "diagnostic": None
+            "diagnostic": diag,
+            **provenance,
         })
 
     # Final cleanup: remove __future__ imports (they are not real module dependencies)
