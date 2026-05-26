@@ -1045,9 +1045,14 @@ def get_dependents(file: str, format: Literal["text", "json"] = "text", project_
     Get files that import this file (reverse dependencies).
     One of the most valuable tools for understanding impact.
     Now includes cache fallback (Fix 6) for resilience when the main table is sparse.
+
+    A1: Enhanced to surface first-class reverse dependency index details (signature for
+    delta detection, stats) when using the persisted _reverse_dependencies path.
+    The index is maintained incrementally (O(changed)) with its own signature parallel
+    to graph_signature. JSON responses now include "reverse_signature" + "reverse_index_stats".
     """
     root = _get_effective_root(project_root)
-    # Preferred fast path: use the persisted _reverse_dependencies structure (new in M2-Rem-08)
+    # Preferred fast path: use the persisted _reverse_dependencies structure (A1 first-class)
     try:
         import wikifier.import_cache as import_cache
         cache = import_cache.load_cache(root)
@@ -1055,11 +1060,15 @@ def get_dependents(file: str, format: Literal["text", "json"] = "text", project_
         if file in reverse_map:
             dependents = reverse_map[file]
             if format == "json":
+                rev_sig = import_cache.get_reverse_signature(cache)
+                rev_stats = import_cache.get_reverse_dependency_stats(cache)
                 return {
                     "file": file,
                     "dependents": dependents,
                     "count": len(dependents),
-                    "source": "reverse_cache"
+                    "source": "reverse_cache_first_class_a1",
+                    "reverse_signature": rev_sig,
+                    "reverse_index_stats": rev_stats,
                 }
             return f"Files that import {file} ({len(dependents)}):\n" + "\n".join(f"- {d}" for d in dependents)
     except Exception:
@@ -1086,11 +1095,23 @@ def get_dependents(file: str, format: Literal["text", "json"] = "text", project_
             pass
 
     if format == "json":
+        # Even on fallback, try to surface the (possibly present) A1 index signature/stats
+        rev_sig = None
+        rev_stats = {}
+        try:
+            import wikifier.import_cache as import_cache
+            c = import_cache.load_cache(root)
+            rev_sig = import_cache.get_reverse_signature(c)
+            rev_stats = import_cache.get_reverse_dependency_stats(c)
+        except Exception:
+            pass
         return {
             "file": file,
             "dependents": dependents,
             "count": len(dependents),
-            "source": "table" if reverse_map.get(file) else "cache_fallback"
+            "source": "table" if reverse_map.get(file) else "cache_fallback",
+            "reverse_signature": rev_sig,
+            "reverse_index_stats": rev_stats,
         }
 
     if not dependents:
@@ -1596,6 +1617,8 @@ def get_project_status(
                     "acs_version": acs.get("acs_version"),
                     "barrel_invalidation_summary": barrel,  # Wave 2: num_chains, v1 coverage, partials, indexed barrels (for "why" via get_barrel_invalidation_reports when dirty)
                     "sample_barrel_reports": sample_barrel_reports,  # basic observability added (get_project_status + health)
+                    # A1: first-class reverse dependency index now uniformly surfaced on project_status/health (MCP primary surfaces)
+                    "reverse_dependency_index": ic.get_reverse_dependency_stats(cache),
                 }
         except Exception:
             pass

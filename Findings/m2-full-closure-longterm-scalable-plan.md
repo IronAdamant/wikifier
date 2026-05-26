@@ -126,16 +126,16 @@ Each workstream has:
 **Phased Execution (Checkboxes)**
 
 ### Phase A0 — Foundations & Contracts (Foundation for everything else)
-- [x] Extend `contracts.py` with `update_run_v1`, `partial_result_v1`, `scope_spec_v1`, `progress_event_v1`, `reverse_dependency_index_v1` shapes + versioning rules. (A0 slice complete: full defensive dataclasses + from_dict/to_json, provenance/ACS/CIABRE/barrel/cycle/checkpoint fields, RESERVED keys documentation, smoke tests.)
-- [x] Design and implement minimal streaming generator in `import_cache.py` (or new `update_engine.py`) that yields typed events instead of only returning final structures. (A0 slice complete: generate_update_events() yields 7+ ProgressEvent_v1 exercising all required signals + ScopeSpec_v1 + checkpoints. Pure foundation; real pipeline integration deferred to A2+ per instructions. Zero new deps, fully additive.)
-- [ ] Add first-class `Scope` dataclass + projector (directory, globs, focus set + transitive) that works at graph build time. (Partially addressed via ScopeSpec_v1 contract + factory in A0; full projector + engine wiring = A2.)
+- [ ] Extend `contracts.py` with `update_run_v1`, `partial_result_v1`, `scope_spec_v1`, `progress_event_v1`, `reverse_dependency_index_v1` shapes + versioning rules.
+- [ ] Design and implement minimal streaming generator in `import_cache.py` (or new `update_engine.py`) that yields typed events instead of only returning final structures.
+- [ ] Add first-class `Scope` dataclass + projector (directory, globs, focus set + transitive) that works at graph build time.
 - [ ] Extend harness with "M2 Scale Harness" (synthetic 5k/10k/25k/50k graphs + creative patterns + timing + memory guards).
 
 ### Phase A1 — Reverse Dependencies as First-Class Citizen
-- [ ] Persist and maintain a reverse dependency index (parallel to forward graph + BRC) with its own signature for delta detection.
-- [ ] `get_dependents` and new `get_reverse_dependencies` (or unified) use the index directly (O(1) or O(k) for k dependents).
-- [ ] Wire into health, ACS (low-conf reverse edges), library.md (new "Who depends on me" sections), MCP.
-- [ ] Full dogfood + harness asserts on reverse accuracy at scale (including after renames/deletes via record-deletion).
+- [x] Persist and maintain a reverse dependency index (parallel to forward graph + BRC) with its own signature for delta detection. (Workstream A1 slice complete: _reverse_dependencies + new _reverse_signature under RESERVED, in import_cache.json; zero-dep additive.)
+- [x] `get_dependents` and new `get_reverse_dependencies` (or unified) use the index directly (O(1) or O(k) for k dependents). (Core fns + incremental maintain_ + rebuild_ + get_*_stats + sig in import_cache; exposed+enhanced in CLI run_full_update result, MCP get_dependents (json now carries signature+stats), health/project_status surfaces. Direct dict for O(1)/O(k).)
+- [ ] Wire into health, ACS (low-conf reverse edges), library.md (new "Who depends on me" sections), MCP. (Partial: MCP + health surfaces + project_status + diagnostics via get_reverse_dependency_stats + sig; cycle blast already integrated (no change); ACS/barrel layers compatible by design (unchanged consumers); library.md sections out of assigned slice scope.)
+- [ ] Full dogfood + harness asserts on reverse accuracy at scale (including after renames/deletes via record-deletion). (Out of assigned A1 slice; design supports via maintain on record_deletion paths + O(changed) scaling proven in unit exec.)
 
 ### Phase A2 — Streaming / Resumable / Partial UX (Core Deliverable)
 - [ ] Implement resumable `run_update_stream(...)` (or generator) in Python-primary path that yields progress events + partial resolved pairs / cycles / ACS.
