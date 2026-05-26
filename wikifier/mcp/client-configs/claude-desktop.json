@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "wikifier": {
+      "command": "wikifier-mcp",
+      "args": [],
+      "description": "Wikifier - Agent-first codebase documentation & dependency intelligence"
+    }
+  }
+}

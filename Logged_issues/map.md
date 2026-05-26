@@ -28,3 +28,25 @@ This directory organises all issues reported by humans and LLMs using Wikifier.
 **Current open issues:** (auto-populated by agents running `wikifier issues`)
 
 See the individual severity folders for concrete items.
+
+---
+
+## v0.4 Roadmap
+
+A dedicated roadmap is tracked here:
+
+→ [`v0.4-roadmap.md`](v0.4-roadmap.md)
+
+**Focus**: Agent-to-Agent Codebase Memory System  
+**Success Markers**: Defined in the roadmap file (7 markers)
+
+All v0.4-related issues are tagged with `v0.4` in their filename or content and are primarily filed under:
+
+- `moderate/backend/`
+- `high/backend/`
+- `moderate/import/`
+- `high/import/`
+- `moderate/other/`
+- `high/other/`
+
+The roadmap is currently in early execution phase. See `v0.4-roadmap.md` for detailed milestones and current status.

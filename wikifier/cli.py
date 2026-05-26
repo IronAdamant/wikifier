@@ -430,6 +430,24 @@ def run_full_update(
             if verbose:
                 print(f"[run_full_update] persist pipeline exercise skipped (non-fatal): {ex}")
 
+        # A1: Surface first-class reverse dependency index (always, even on partial pure-path exercise).
+        # This exercises the new get_reverse_dependency_stats + ensures the persisted reverse + its
+        # signature are visible to callers of run_full_update (MCP, daemon, CLI --python-primary).
+        reverse_index_info: Dict[str, Any] = {}
+        try:
+            from . import import_cache as ic_for_rev
+            cache_for_rev = ic_for_rev.load_cache(root)
+            reverse_index_info = ic_for_rev.get_reverse_dependency_stats(cache_for_rev)
+            # Lightweight bootstrap/demo of A1 maintenance in pure primary (if no index yet, rebuild once
+            # from whatever resolved data the skeleton populated; harmless and shows the path works).
+            if not reverse_index_info.get("has_index") and any(not k.startswith("_") for k in cache_for_rev.keys()):
+                rebuilt_rev = ic_for_rev.rebuild_reverse_dependencies(cache_for_rev)
+                ic_for_rev.set_reverse_dependencies(cache_for_rev, rebuilt_rev)
+                ic_for_rev.save_cache(root, cache_for_rev)
+                reverse_index_info = ic_for_rev.get_reverse_dependency_stats(cache_for_rev)
+        except Exception:
+            reverse_index_info = {"error": "reverse_index_unavailable_in_skeleton", "target_count": 0}
+
         result.update({
             "success": True,
             "files_to_reparse": len(dirty or []),
@@ -441,9 +459,11 @@ def run_full_update(
             "barrel_creative_tied_in_pure_path": barrel_creative_tied,
             "use_canonical": use_canonical,
             "use_python_primary": use_python_primary,
+            "reverse_dependency_index": reverse_index_info,  # A1 first-class exposure
             "note": "Wave 5: dirty+parser(deep 20)+persist(extracted helper) + barrel_v2/creative_v1 tie-in now deeper in pure Python. "
                     "Direct daemon/MCP/CLI --python-primary calls without sh. Discovery+env robust for external. "
-                    "Full ACS/CIABRE/cycles still sh for fidelity (progressive Phase 4).",
+                    "Full ACS/CIABRE/cycles still sh for fidelity (progressive Phase 4). "
+                    "A1: reverse_dependency_index (with signature + incremental maintain path) now surfaced.",
         })
     except Exception as ex:
         if verbose:
