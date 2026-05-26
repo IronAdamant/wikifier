@@ -5,6 +5,12 @@ Stores parsed import information per file so that only changed files
 need to be re-parsed on subsequent update-maps runs.
 
 This design is intended to scale from small projects to massive monorepos.
+
+M2 A0/A2: Now also hosts the minimal streaming generator skeleton
+(generate_update_events) that yields ProgressEvent_v1 (with full provenance,
+ACS/CIABRE hooks, barrel/cycle signals, ScopeSpec_v1, checkpoint/resumption).
+The real pipeline integration is future work (A2+); this is the clean contract
+foundation only. All changes additive + backward compatible.
 """
 
 import json
@@ -1506,3 +1512,258 @@ def prune_barrel_resolutions(
 if __name__ == "__main__":
     import sys
     print("Wikifier Import Cache module. Import it from Python or use via shell helpers.")
+
+
+# =============================================================================
+# M2 A0 + early A2: Minimal Streaming Skeleton (generator foundation)
+# =============================================================================
+#
+# Purpose (per long-term plan):
+# - Provide a *clean, typed, versioned event-yielding generator* that later waves
+#   (A2 full streaming UX, CLI --resume, MCP partials, scoped subtree) can build on
+#   without re-architecting.
+# - Events are *always* ProgressEvent_v1 shaped (via contracts.create_progress_event
+#   or direct dataclass) and carry:
+#     * Provenance (actor, session, intent, parent)
+#     * ACS + CIABRE hooks (partials, refs, low_conf deltas)
+#     * Barrel + cycle signals (depth, via, scc, severity)
+#     * ScopeSpec_v1 (directory/globs/focus + budgets)
+#     * Checkpoint tokens + resumable hints (for pause/resume on massive repos)
+# - Zero new dependencies. Uses only stdlib + existing wikifier.* (contracts,
+#   locking patterns, compute_* helpers).
+# - **NOT a full implementation**: No real dirty detection, parsing, cycles, ACS,
+#   CIABRE, or persist yet inside the generator. Synthetic milestone events only,
+#   to prove the shape + consumption contract. Real wiring = A2+.
+# - Backward compatible: new function only. Existing callers of load/save/compute_*
+#   unaffected.
+# - Future: this generator will become the heart of run_full_update streaming mode,
+#   daemon background updates, etc.
+#
+# Usage skeleton (for consumers written in A2+):
+#   from wikifier.import_cache import generate_update_events
+#   for event in generate_update_events(root, scope={"directory": "src/"}, run_id="..."):
+#       if event["event_type"] == "partial_ready":
+#           ... act on PartialResult ...
+#       if event.get("checkpoint_token"):
+#           save_checkpoint(...)
+# =============================================================================
+
+def generate_update_events(
+    root: Optional[Path] = None,
+    scope: Optional[Union[Dict[str, Any], "ScopeSpec_v1"]] = None,
+    force_full: bool = False,
+    run_id: Optional[str] = None,
+    verbose: bool = False,
+    **kwargs: Any,
+) -> Iterable[Dict[str, Any]]:
+    """
+    Minimal generator yielding structured ProgressEvent_v1 dicts.
+
+    This is the A0 foundation only. It:
+    - Normalizes scope to ScopeSpec_v1
+    - Emits a start event with full provenance scaffolding
+    - Emits a scope_applied event (with resource hints)
+    - Emits a handful of representative milestone events exercising
+      barrel/cycle/ACS/CIABRE hook fields + checkpoint example
+    - Yields a synthetic partial_result + complete (with next_checkpoint_hint)
+    - Never raises on best-effort paths; always produces usable events.
+
+    Later A2 waves will replace the body with real incremental pipeline:
+        for changed in dirty:
+            yield parsed event
+            for edge in resolve(...):
+                yield edge_resolved (with acs computed inline)
+            ...
+            if budget_exhausted:
+                yield partial_ready with PartialResult_v1 + checkpoint
+        yield ciabre / reverse_index updates
+        yield complete
+
+    Checkpoint/resumption contract (future-proofed here):
+    - Each event may carry "checkpoint_token" (opaque string)
+    - Consumer can pass last_token on resume; generator will (in future)
+      fast-forward using it + Scope.
+
+    Locking: generator itself does not acquire locks (caller responsibility,
+    same as today for run_full_update). Long-running consumers should hold
+    project lock for the whole stream if mutating state.
+
+    All events use contracts.create_progress_event for consistency.
+    """
+    # Defensive root
+    if root is None:
+        try:
+            from .cli import discover_project_root
+            root = discover_project_root()
+        except Exception:
+            root = Path(".").resolve()
+
+    try:
+        root = Path(root).resolve()
+    except Exception:
+        root = Path(".")
+
+    # Normalize scope (supports raw dict or dataclass)
+    try:
+        from .contracts import (
+            ScopeSpec_v1,
+            create_progress_event,
+            M2_CONTRACTS_VERSION,
+        )
+    except Exception:
+        # ultra-defensive fallback (should never happen post A0)
+        ScopeSpec_v1 = None  # type: ignore
+        create_progress_event = None  # type: ignore
+        M2_CONTRACTS_VERSION = "0.0-fallback"
+
+    if ScopeSpec_v1 is not None:
+        if isinstance(scope, ScopeSpec_v1):
+            sc = scope
+        elif isinstance(scope, dict):
+            sc = ScopeSpec_v1.from_dict(scope)
+        else:
+            sc = ScopeSpec_v1()
+    else:
+        sc = type("obj", (object,), {"to_dict": lambda s: {"directory": None}})()  # type: ignore
+
+    if not run_id:
+        run_id = f"run-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{id(root) % 100000:05d}"
+
+    actor = kwargs.get("actor", "import_cache.skeleton")
+    session = kwargs.get("session_id", f"sess-{run_id[-6:]}")
+
+    # 1. Start event (provenance + initial scope + hook scaffolding)
+    start_ev = None
+    if create_progress_event:
+        start_ev = create_progress_event(
+            "start",
+            run_id,
+            scope=sc,
+            provenance={
+                "actor": actor,
+                "session_id": session,
+                "intent_ref": kwargs.get("intent_ref", "update-maps:skeleton"),
+                "parent_checkpoint": kwargs.get("resume_from"),
+            },
+            payload={
+                "force_full": bool(force_full),
+                "m2_foundation": True,
+                "contracts_version": M2_CONTRACTS_VERSION,
+            },
+            diagnostics={"note": "A0 minimal skeleton - real pipeline in A2+"},
+        )
+    else:
+        start_ev = {
+            "event_type": "start",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "run_id": run_id,
+            "scope": (sc.to_dict() if hasattr(sc, "to_dict") else {}),
+            "provenance": {"actor": actor, "session_id": session},
+            "version": "1.0",
+        }
+    yield start_ev
+
+    # 2. Scope applied (early projection point for future real scoping)
+    scope_ev = None
+    if create_progress_event:
+        scope_ev = create_progress_event(
+            "scope_applied",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={
+                "effective_directory": sc.directory if hasattr(sc, "directory") else None,
+                "focus_count": len(getattr(sc, "focus_files", []) or []),
+                "transitive": getattr(sc, "transitive_closure", True),
+            },
+            resource_hints=getattr(sc, "resource_hints", {}) if hasattr(sc, "resource_hints") else {},
+        )
+    else:
+        scope_ev = {"event_type": "scope_applied", "run_id": run_id, "scope": {}, "version": "1.0"}
+    yield scope_ev
+
+    # 3-5. Representative milestone events exercising all required signal channels
+    # (barrel, cycle, ACS, checkpoint). These prove the long-term shape.
+    if create_progress_event:
+        yield create_progress_event(
+            "file_parsed",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={"file": "src/example.ts", "mtime": int(time.time())},
+            barrel_signals={"via_barrel": True, "depth": 2, "detector": "bree"},
+        )
+        yield create_progress_event(
+            "edge_resolved",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={"raw": "./utils", "resolved": "src/utils.ts", "confidence": "high"},
+            acs_hook={
+                "confidence_score": 0.87,
+                "reasons": ["base:high", "strong_resolution_strategy"],
+                "explanation": "High-fidelity ... Recommendation: Safe for automated...",
+            },
+            cycle_signals={"in_cycle": False},
+        )
+        yield create_progress_event(
+            "cycle_detected",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            cycle_signals={"scc_id": "scc-001", "size": 3, "severity": "medium", "ciabre_version": "1.3"},
+            acs_hook={"blast_radius_hint": 12},
+            checkpoint_token=f"after:cycle:scc-001:{run_id[-4:]}",
+        )
+    else:
+        yield {"event_type": "file_parsed", "run_id": run_id, "version": "1.0"}
+        yield {"event_type": "edge_resolved", "run_id": run_id, "acs_hook": {}, "version": "1.0"}
+        yield {"event_type": "cycle_detected", "run_id": run_id, "cycle_signals": {}, "checkpoint_token": "synthetic", "version": "1.0"}
+
+    # 6. Partial ready (early result contract for A2+ agents on budgets)
+    if create_progress_event:
+        partial = {
+            "run_id": run_id,
+            "yielded_at": datetime.now(timezone.utc).isoformat(),
+            "scope_applied": (sc.to_dict() if hasattr(sc, "to_dict") else {}),
+            "files_processed": 1,
+            "edges_resolved": 2,
+            "cycles_found": 1,
+            "acs_partial": {"avg_confidence": 0.71, "low_conf_edges": 0},
+            "next_checkpoint_hint": f"after:partial:{run_id[-4:]}",
+            "version": "1.0",
+        }
+        yield create_progress_event(
+            "partial_ready",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={"partial_result": partial},
+            partial_result=partial,  # convenience for consumers
+            checkpoint_token=partial["next_checkpoint_hint"],
+        )
+    else:
+        yield {"event_type": "partial_ready", "run_id": run_id, "checkpoint_token": "synthetic-partial", "version": "1.0"}
+
+    # 7. Complete (with final checkpoint + summary hooks)
+    if create_progress_event:
+        yield create_progress_event(
+            "complete",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session, "completed": True},
+            payload={
+                "success": True,
+                "note": "A0 skeleton complete. Full engine integration in A2+ waves.",
+                "m2_foundation": True,
+            },
+            acs_hook={"final_summary_ref": "_acs_summary"},
+            cycle_signals={"ciabre_ref": "_cycle_analyses"},
+            checkpoint_token=f"final:{run_id}",
+            resumable=False,  # stream ended
+        )
+    else:
+        yield {"event_type": "complete", "run_id": run_id, "version": "1.0"}
+
+    # Generator exhausted cleanly. Real impl will also yield barrel_expanded,
+    # ciabre_updated, reverse_index_updated, error, etc.
