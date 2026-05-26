@@ -27,6 +27,7 @@ JSON Schema (v1):
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -174,6 +175,58 @@ def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> No
         "reason": reason
     }
     _do_save_health(root, health)
+
+
+def apply_barrel_invalidation_reports(
+    root: Path, reports: List[Dict[str, Any]]
+) -> int:
+    """Apply structured BRC invalidation reports to the health matrix.
+
+    Marks (or updates) each affected importer as 🟡 Yellow with a precise explanation
+    containing the triggering barrel(s), chain_ids, reason, detector, partial flag.
+    This is the key wiring that lets `check-changes` (and therefore the daemon monitor)
+    surface barrel-driven staleness automatically, even when the importer file's own mtime
+    is unchanged.
+
+    Idempotent / safe; uses the existing upsert_entry (locked + json+md).
+    Returns number of importers that received a (new or updated) Yellow barrel note.
+    Zero-dep, scalable (reports are small).
+    """
+    if not reports:
+        return 0
+    updated = 0
+    for r in reports:
+        try:
+            if isinstance(r, dict):
+                imp = r.get("importer")
+                trig = r.get("triggering_barrels") or []
+                cids = r.get("chain_ids") or []
+                reason = r.get("reason") or "barrel staleness"
+                det = r.get("detector_used") or "bree"
+                part = r.get("is_partial", False)
+            else:
+                # dataclass or object
+                imp = getattr(r, "importer", None)
+                trig = getattr(r, "triggering_barrels", []) or []
+                cids = getattr(r, "chain_ids", []) or []
+                reason = getattr(r, "reason", "barrel staleness")
+                det = getattr(r, "detector_used", "bree")
+                part = getattr(r, "is_partial", False)
+            if not imp:
+                continue
+            trig_str = ", ".join(sorted(set(str(t) for t in trig if t))) or "unknown barrel"
+            cid_str = ", ".join(sorted(set(str(c) for c in cids if c)))[:80]
+            part_str = " (partial)" if part else ""
+            expl = (
+                f"stale via barrel re-export from {trig_str}{part_str} "
+                f"(detector={det}, chains={cid_str or 'n/a'}): {reason}"
+            )
+            upsert_entry(root, str(imp), "🟡 Yellow", expl)
+            updated += 1
+        except Exception:
+            # never let one bad report kill the batch
+            continue
+    return updated
 
 
 def get_summary(root: Path, directory: Optional[str] = None) -> Dict[str, Any]:
@@ -547,6 +600,7 @@ if __name__ == "__main__":
         print("  heal-stubs [--dry-run]   Auto-heal outdated 'Initial stub' entries")
         print("  healable-stubs [dir]     List entries that can be auto-healed")
         print("  healing-stats            Show stub pollution + healing opportunities")
+        print("  prune-barrels [max_days] [ --dry-run ]   Lightweight age-based BRC pruning (default 90d)")
         sys.exit(1)
 
     root = Path(".")
@@ -615,6 +669,35 @@ if __name__ == "__main__":
         print(f"  → Low quality:                {stats['healable_stubs']['low_quality']}")
         print(f"Stub pollution ratio:          {stats['stub_pollution_ratio']:.1%}")
         print(f"\nRecommendation: {stats['recommendation']}")
+
+    elif cmd in ("prune-barrels", "prune-brc", "gc-barrels"):
+        max_days = 90.0
+        dry = False
+        for a in sys.argv[2:]:
+            if a == "--dry-run":
+                dry = True
+            else:
+                try:
+                    max_days = float(a)
+                except Exception:
+                    pass
+        try:
+            from . import import_cache as _ic
+            root_for_prune = Path(".")
+            # respect WIKIFIER_PROJECT_ROOT if present (for daemon / packaged runs)
+            proj = os.environ.get("WIKIFIER_PROJECT_ROOT")
+            if proj:
+                root_for_prune = Path(proj).expanduser().resolve()
+            res = _ic.prune_barrel_resolutions(root_for_prune, max_age_days=max_days, dry_run=dry)
+            p = res.get("pruned", 0)
+            if dry:
+                print(f"Prune dry-run (max_age={max_days}d): would prune {p} aged BRC chains.")
+            else:
+                print(f"Pruned {p} aged BRC chains (max_age={max_days}d). saved={res.get('saved', False)}")
+            if "error" in res:
+                print(f"  (note: {res['error']})")
+        except Exception as ex:
+            print(f"Prune-barrels error: {ex}")
 
     else:
         print(f"Unknown command: {cmd}")

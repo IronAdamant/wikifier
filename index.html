@@ -63,6 +63,20 @@
         .wikifier-header {
             background: linear-gradient(90deg, #0f172a 0%, #1e2937 100%);
         }
+
+        .intel-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            transition: transform 0.1s ease, border-color 0.1s ease;
+        }
+        .intel-card:hover {
+            border-color: #475569;
+            transform: translateY(-1px);
+        }
+        .intel-severity-critical { color: #f87171; font-weight: 600; }
+        .intel-severity-high { color: #fb923c; font-weight: 600; }
+        .intel-severity-medium { color: #fbbf24; font-weight: 600; }
+        .intel-severity-low { color: #4ade80; font-weight: 600; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200">
@@ -81,12 +95,19 @@
                     <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
                     AGENT-FIRST
                 </div>
+                <div class="px-3 py-1 bg-indigo-900/40 border border-indigo-700 rounded-full text-xs text-indigo-300 font-medium flex items-center gap-x-1.5">
+                    <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                    GAP #1 RICH
+                </div>
             </div>
             
             <div class="flex items-center gap-x-2 text-sm">
                 <div class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-400 font-mono text-xs">
                     ZERO DEP • PURE SHELL
                 </div>
+                <a href="skills/run.md" class="text-[10px] px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300 hover:text-emerald-300" title="Full agent protocol &amp; mandatory workflow">Protocol</a>
+                <a href="wikifier/mcp/README.md" class="text-[10px] px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300 hover:text-indigo-300" title="MCP tools surface + setup">MCP</a>
+                <a href="diagnostics.html" class="text-[10px] px-2 py-1 bg-amber-900/60 border border-amber-700 rounded hover:text-amber-300 font-medium" title="Deep diagnostics, Command Implementation Map, Architecture at a Glance, Porting Checklist &amp; Key Files for human refactors/porters">Diagnostics (Refactors &amp; Porters)</a>
                 <button onclick="window.location.reload()" 
                         class="px-4 py-1.5 text-sm rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors flex items-center gap-x-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -109,6 +130,11 @@
                      class="flex items-center gap-x-3 bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3 text-sm">
                     <!-- Populated by JS -->
                 </div>
+                <div id="monitor-status" 
+                     class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2 text-xs text-slate-400 font-mono cursor-pointer"
+                     onclick="loadMonitorStatus(true)" title="Click to refresh monitor heartbeat status">
+                    <!-- Populated by JS: last_check age + monitor hint -->
+                </div>
             </div>
 
             <!-- Main Grid -->
@@ -118,11 +144,19 @@
                 <div class="xl:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6">
                     <div class="flex justify-between items-center mb-4">
                         <div class="section-header">Documentation Health Matrix</div>
-                        <button onclick="runCommand('check-changes')" 
-                                class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800 transition-colors flex items-center gap-x-1.5">
-                            <span>RUN CHECK-CHANGES</span>
-                        </button>
+                        <div class="flex items-center gap-x-2">
+                            <input id="health-dir-filter" type="text" placeholder="dir filter e.g. wikifier/ or parsers/" 
+                                   class="text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-1 w-48 font-mono"
+                                   oninput="filterHealthTable()" onkeydown="if(event.key==='Enter')filterHealthTable()">
+                            <button onclick="filterHealthTable()" 
+                                    class="text-xs px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700">Filter</button>
+                            <button onclick="runCommand('check-changes')" 
+                                    class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800 transition-colors flex items-center gap-x-1.5">
+                                <span>RUN CHECK-CHANGES</span>
+                            </button>
+                        </div>
                     </div>
+                    <div id="health-scale-note" class="hidden text-[10px] mb-2 px-2 py-1 bg-amber-900/20 text-amber-300 border border-amber-800 rounded"></div>
                     
                     <div id="health-table-container" class="overflow-auto max-h-[420px] rounded-2xl border border-slate-800 bg-slate-950">
                         <table class="w-full matrix-table">
@@ -139,8 +173,15 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="wiki-purpose-pane" class="hidden mt-3 p-3 bg-slate-950 border border-indigo-800/50 rounded-2xl text-xs max-h-[120px] overflow-auto">
+                        <div class="flex justify-between mb-1">
+                            <span class="font-semibold text-indigo-300">Wiki Purpose (from *.wiki.md or get_file_wiki)</span>
+                            <button onclick="document.getElementById('wiki-purpose-pane').classList.add('hidden')" class="text-[10px] text-slate-500">✕</button>
+                        </div>
+                        <div id="wiki-purpose-content" class="text-slate-300 whitespace-pre-wrap font-mono text-[10px]"></div>
+                    </div>
                     <div class="mt-3 text-[10px] text-slate-500 font-mono px-1">
-                        Data source: <span class="font-semibold text-slate-400">file_health.md</span> — updated by wikifier CLI &amp; LLMs
+                        Data source: <span class="font-semibold text-slate-400">file_health.{json,md}</span> — directory filter + caps client-side (R1 scale aware) • Click row for wiki purpose
                     </div>
                 </div>
 
@@ -154,23 +195,26 @@
                     </div>
 
                     <div class="mt-4">
-                        <div class="section-header mb-2">Quick Commands (for agents &amp; humans)</div>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <button onclick="runCommand('check-changes')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">check-changes</button>
-                            <button onclick="runCommand('update-maps')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">update-maps</button>
-                            <button onclick="runCommand('health')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">health</button>
-                            <button onclick="runCommand('validate')" class="command-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-left">validate</button>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <div class="section-header">Command Surface (shell+MCP • copyable • R1-aware • refactor/port notes)</div>
+                            <input id="cmd-filter" type="text" placeholder="filter: health|record|intel" 
+                                   class="text-[9px] bg-slate-950 border border-slate-700 rounded px-2 py-0.5 w-36 font-mono"
+                                   oninput="filterCommandGrid()" onkeydown="if(event.key==='Escape'){this.value='';filterCommandGrid()}">
                         </div>
+                        <div id="command-grid" class="grid grid-cols-2 md:grid-cols-4 gap-1 text-[9px]">
+                            <!-- Populated by loadCommandSurface() -->
+                        </div>
+                        <div class="mt-1 text-[8px] text-slate-500">Light surface for fast dashboard. Full rich reference + refactor/port notes → diagnostics.html (P6 trim). [V1-P2 verified & closed by main agent]</div>
                     </div>
                 </div>
 
                 <!-- Mermaid Library Map -->
                 <div class="xl:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-6">
                     <div class="flex justify-between items-center mb-3">
-                        <div class="section-header">Import / Dependency Map</div>
+                        <div class="section-header">Import / Dependency Map <span class="text-[10px] text-indigo-400">(Gap #1 enriched)</span></div>
                         <button onclick="runCommand('update-maps')" class="text-emerald-400 hover:text-emerald-300 text-xs underline">refresh library.md</button>
                     </div>
-                    <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-4 min-h-[220px]">
+                    <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-4 min-h-[260px]">
                         <div class="text-xs text-slate-400 mb-2">Loading Mermaid diagram from library.md...</div>
                         <div id="mermaid-diagram"></div>
                     </div>
@@ -183,10 +227,57 @@
                         <!-- Populated by JS -->
                     </div>
                     
-                    <div class="mt-5 text-[10px] leading-tight text-slate-400 border-t border-slate-800 pt-4">
-                        <strong class="text-slate-300">Agent Rule:</strong> Every edit → <span class="font-semibold text-amber-400">record-change</span> → update wiki MD → <span class="font-semibold text-emerald-400">mark-green</span>
+                    <div class="mt-5 text-[9px] leading-tight text-slate-400 border-t border-slate-800 pt-4">
+                        <strong class="text-emerald-300">AGENT CONTRACT (read on landing):</strong> MCP connected? Prefer <span class="font-semibold text-emerald-400">get_project_status()</span> / <span class="font-semibold text-emerald-400">suggest_next_actions()</span> / check_changes. Else: <code class="bg-slate-900 px-0.5">wikifier check-changes</code>. Read <code class="bg-slate-900 px-0.5">file_health.md</code> + <code class="bg-slate-900 px-0.5">pending_updates.md</code>. Prioritize 🔴→🟡. <strong>First 5 min:</strong> status→health scan→(edit: record-change "why")→update wiki→mark-green→re-validate. <strong>Scale (R1 5k+):</strong> MCP dir-filters + per-file get_* / summaries (NEVER default --full update-maps). See README scaling table + <a href="skills/run.md" class="text-emerald-300 hover:underline">skills/run.md</a> for exact flow.
                     </div>
                 </div>
+            </div>
+
+            <!-- Dependency Intelligence (Gap #1) -->
+            <div class="mt-6">
+
+            <!-- Compact Core File Map (for quick human orientation on fast dashboard) -->
+            <div class="mt-2 mb-6 px-1">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span class="section-header text-[10px]">Core Architecture Map (quick visual)</span>
+                    <a href="diagnostics.html" class="text-[9px] text-amber-400 hover:underline">Full map + purposes → diagnostics.html</a>
+                </div>
+                <div class="bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-[10px] leading-[1.3] text-slate-300">
+wikifier/<br>
+├── <span class="text-amber-300">contracts.py</span> — frozen shared contracts (Gap #1)<br>
+├── <span class="text-emerald-300">health.py</span> — health matrix + auto-healing (SSOT)<br>
+├── <span class="text-emerald-300">import_cache.py</span> — rich cache + cycles + barrels<br>
+├── <span class="text-sky-300">resolution.py</span> — central resolution engine<br>
+├── parsers/ (python + javascript + bree + cdia) — rich import intelligence<br>
+└── mcp/server.py — 22-tool MCP surface for agents
+                </div>
+            </div>
+
+                <div class="flex items-center justify-between mb-4 px-1">
+                    <div>
+                        <span class="section-header">Dependency Intelligence</span>
+                        <span class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-indigo-900/30 text-indigo-300 border border-indigo-800">M2 Rich Analysis</span>
+                    </div>
+                    <button onclick="loadDependencyIntelligence()" 
+                            class="text-xs px-3 py-1.5 rounded-xl bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-800 transition-colors flex items-center gap-x-1.5">
+                        <span>REFRESH INTELLIGENCE</span>
+                    </button>
+                </div>
+
+                <div id="intel-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="mt-2 text-[10px] text-slate-500 font-mono px-1">
+                    Data sourced from <span class="text-slate-400">library.md</span> + cache (cycles, barrels, conditional, confidence)
+                </div>
+            </div>
+
+            <!-- P4 Human Developer Experience callout (lightweight, links to full experience in diagnostics) -->
+            <div class="mt-4 p-3 bg-slate-900 border border-amber-800/50 rounded-2xl text-xs flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span class="font-semibold text-amber-300">🛠 For Human Refactors &amp; Porters:</span>
+                <a href="diagnostics.html" class="underline text-amber-400 hover:text-amber-300 font-medium">Open diagnostics.html</a>
+                <span class="text-slate-300">— Architecture at a Glance • Full Command Map (shell ↔ MCP ↔ source:line + *.wiki.md) • Porting Checklist • Key Files (contracts.py frozen, health.py.wiki.md, parsers/python.py.wiki.md + javascript.py.wiki.md, locking.py, resolution.py, server.py.wiki.md + more) • Explicit 5k–15k monorepo realities &amp; resilience notes.</span>
+                <span class="text-[9px] text-slate-500">(Lightweight static; see P1 frozen arch for budget)</span>
             </div>
 
             <!-- Footer bar -->
@@ -209,68 +300,110 @@
             document.documentElement.style.setProperty('--accent', '#10b981');
         }
 
-        // Fetch and render health matrix
-        async function loadHealthMatrix() {
+        // ==================== V1-P7 DATA & INTEGRATION WIRING (production-grade, defensive, scale-aware) ====================
+        // All vanilla JS. Zero new runtime deps. Consumes generated artifacts primarily.
+        // window.healthData, window.scaleMode etc exposed for other agents / future diagnostics.html
+        window.healthData = [];
+        window.libraryMdCache = '';
+        window.scaleMode = false;
+        const HEALTH_RENDER_CAP = 180; // R1 scale: never flood DOM; filter narrows first
+
+        // Defensive fetch helper (timeout-ish via AbortController if supported)
+        async function safeFetch(path, fallbackText = '') {
+            try {
+                const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+                const timer = ctrl ? setTimeout(() => ctrl.abort(), 12000) : null;
+                const res = await fetch(path, ctrl ? {signal: ctrl.signal} : {});
+                if (timer) clearTimeout(timer);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return await res.text();
+            } catch (e) {
+                console.warn('[Wikifier wiring] fetch failed for', path, e.message);
+                return fallbackText;
+            }
+        }
+
+        // Robust health row parser (supports both .md table and will use JSON structure)
+        function parseHealthMd(md) {
+            const rows = [];
+            const lines = md.split('\n');
+            let inTable = false;
+            for (let line of lines) {
+                line = line.trim();
+                if (line.includes('| File | Status') || line.includes('|File|Status')) { inTable = true; continue; }
+                if (!inTable) continue;
+                if (line.startsWith('|---') || line.startsWith('| ---')) continue;
+                if (!line.startsWith('|')) { inTable = false; continue; }
+                // Split on | but tolerate escaped or extra
+                const parts = line.split('|').map(p => p.trim()).filter(Boolean);
+                if (parts.length >= 4) {
+                    rows.push({
+                        file: parts[0] || '',
+                        status: parts[1] || '🟡 Yellow',
+                        updated: parts[2] || '',
+                        reason: (parts[3] || '') + (parts[4] ? ' | ' + parts[4] : '')
+                    });
+                }
+            }
+            return rows;
+        }
+
+        // Core: loadHealthMatrix - prefers JSON (structured + fast for scale), falls back to MD
+        // Applies client subtree filter support + render cap from day one.
+        async function loadHealthMatrix(dirFilter = '') {
             const tbody = document.getElementById('health-table-body');
             const summary = document.getElementById('health-summary');
+            const scaleNote = document.getElementById('health-scale-note');
             
-            tbody.innerHTML = `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-500 text-xs">Loading file_health.md...</td></tr>`;
-            
+            tbody.innerHTML = `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-500 text-xs">Loading health matrix (JSON preferred for scale)...</td></tr>`;
+            if (scaleNote) scaleNote.classList.add('hidden');
+
+            let rows = [];
+            let usedJson = false;
+
+            // 1. Prefer file_health.json (Python health module primary truth, fast dict, directory filter friendly)
             try {
-                const res = await fetch('file_health.md');
-                if (!res.ok) throw new Error('file not found');
-                const md = await res.text();
-                
-                // Very simple MD table parser for our known format
-                const rows = [];
-                const lines = md.split('\n');
-                let inTable = false;
-                
-                for (const line of lines) {
-                    if (line.includes('| File | Status')) { inTable = true; continue; }
-                    if (inTable && line.startsWith('|') && !line.includes('---')) {
-                        const parts = line.split('|').map(p => p.trim()).filter(Boolean);
-                        if (parts.length >= 4) {
-                            rows.push({
-                                file: parts[0],
-                                status: parts[1],
-                                updated: parts[2],
-                                reason: parts[3] || ''
-                            });
-                        }
+                const jsonText = await safeFetch('file_health.json');
+                if (jsonText && jsonText.trim().startsWith('{')) {
+                    const data = JSON.parse(jsonText);
+                    const entries = (data && data.entries) || {};
+                    for (const [file, entry] of Object.entries(entries)) {
+                        rows.push({
+                            file,
+                            status: entry.status || '🟡 Yellow',
+                            updated: entry.last_updated || '',
+                            reason: entry.reason || ''
+                        });
                     }
+                    usedJson = true;
                 }
-                
-                tbody.innerHTML = '';
-                
-                let green = 0, yellow = 0, red = 0;
-                
-                rows.forEach(r => {
-                    const tr = document.createElement('tr');
-                    tr.className = 'hover:bg-slate-900/60';
-                    
-                    let statusHTML = '';
-                    if (r.status.includes('Green')) {
-                        statusHTML = `<span class="status-pill bg-emerald-900/40 text-emerald-400">🟢 Green</span>`;
-                        green++;
-                    } else if (r.status.includes('Yellow')) {
-                        statusHTML = `<span class="status-pill bg-yellow-900/40 text-yellow-400">🟡 Yellow</span>`;
-                        yellow++;
-                    } else {
-                        statusHTML = `<span class="status-pill bg-red-900/40 text-red-400">🔴 Red</span>`;
-                        red++;
-                    }
-                    
-                    tr.innerHTML = `
-                        <td class="px-5 py-3 font-medium text-slate-200">${r.file}</td>
-                        <td class="px-5 py-3">${statusHTML}</td>
-                        <td class="px-5 py-3 text-slate-400 font-mono text-[10px]">${r.updated}</td>
-                        <td class="px-5 py-3 text-slate-300 max-w-[340px] truncate">${r.reason}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-                
-                // Summary pills
+            } catch (e) { /* fallthrough to md */ }
+
+            // 2. Fallback to MD parse (defensive, tolerates legacy + extra cols)
+            if (rows.length === 0) {
+                const md = await safeFetch('file_health.md', '# Documentation Health Matrix\n\n| File | Status | ...');
+                rows = parseHealthMd(md);
+            }
+
+            // Store for filters / other agents
+            window.healthData = rows;
+
+            // Detect R1 scale signals from library (populated later) or size
+            if (rows.length > 300) {
+                window.scaleMode = true;
+            }
+
+            // Render (will be re-called by filter)
+            renderHealthTable(rows, dirFilter || (document.getElementById('health-dir-filter')?.value || ''));
+            
+            // Summary from data (or could call health summary but static)
+            let green = 0, yellow = 0, red = 0;
+            rows.forEach(r => {
+                if (r.status.includes('Green') || r.status.includes('🟢')) green++;
+                else if (r.status.includes('Yellow') || r.status.includes('🟡')) yellow++;
+                else red++;
+            });
+            if (summary) {
                 summary.innerHTML = `
                     <div class="flex items-center gap-x-2">
                         <div class="px-3 py-1 rounded-2xl bg-emerald-900/30 text-emerald-400 flex items-center gap-x-1.5">
@@ -282,128 +415,405 @@
                         <div class="px-3 py-1 rounded-2xl bg-red-900/30 text-red-400 flex items-center gap-x-1.5">
                             <span>🔴</span> <span class="font-semibold">${red}</span>
                         </div>
-                    </div>
-                `;
-                
-            } catch (e) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="px-6 py-8 text-center">
-                            <div class="text-red-400 text-sm">Could not load file_health.md</div>
-                            <div class="text-[10px] text-slate-400 mt-1">Run <span class="font-mono">./wikifier.sh check-changes</span> first</div>
-                        </td>
-                    </tr>`;
-                summary.innerHTML = `<div class="text-red-400">Matrix unavailable</div>`;
+                        <div class="text-[10px] text-slate-400 ml-1">${rows.length} files ${usedJson ? '(JSON)' : '(MD)'} ${window.scaleMode ? '• R1-capped view' : ''}</div>
+                    </div>`;
             }
         }
 
-        // Pending updates
+        function renderHealthTable(rows, dirFilter = '') {
+            const tbody = document.getElementById('health-table-body');
+            const scaleNote = document.getElementById('health-scale-note');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            let filtered = rows;
+            const f = (dirFilter || '').trim().toLowerCase();
+            if (f) {
+                filtered = rows.filter(r => r.file.toLowerCase().includes(f) || r.file.toLowerCase().startsWith(f));
+            }
+
+            const toRender = filtered.slice(0, HEALTH_RENDER_CAP);
+            const omitted = filtered.length - toRender.length;
+
+            toRender.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/60 cursor-pointer';
+                tr.onclick = () => showWikiPurpose(r.file);  // V1 wiring: wiki purpose consumption on click
+
+                let statusHTML = '';
+                if (r.status.includes('Green') || r.status.includes('🟢')) {
+                    statusHTML = `<span class="status-pill bg-emerald-900/40 text-emerald-400">🟢 Green</span>`;
+                } else if (r.status.includes('Yellow') || r.status.includes('🟡')) {
+                    statusHTML = `<span class="status-pill bg-yellow-900/40 text-yellow-400">🟡 Yellow</span>`;
+                } else {
+                    statusHTML = `<span class="status-pill bg-red-900/40 text-red-400">🔴 Red</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="px-5 py-3 font-medium text-slate-200 font-mono text-xs">${r.file}</td>
+                    <td class="px-5 py-3">${statusHTML}</td>
+                    <td class="px-5 py-3 text-slate-400 font-mono text-[10px]">${r.updated}</td>
+                    <td class="px-5 py-3 text-slate-300 max-w-[340px] truncate" title="${r.reason}">${r.reason}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (omitted > 0) {
+                const note = document.createElement('tr');
+                note.innerHTML = `<td colspan="4" class="px-5 py-2 text-center text-[10px] text-amber-400 bg-amber-900/10">Showing ${toRender.length} of ${filtered.length} (R1 cap ${HEALTH_RENDER_CAP}). Use dir-filter or run <code>health --dir ${f||'SUBDIR'}</code> / MCP health(dir=...,format=json) for smaller payload.</td>`;
+                tbody.appendChild(note);
+            }
+            if (filtered.length === 0 && f) {
+                tbody.innerHTML = `<tr><td colspan="4" class="px-5 py-3 text-xs text-slate-400">No matches for subtree filter "${f}". Clear or try broader.</td></tr>`;
+            }
+
+            // Scale note if needed
+            if (scaleNote && (window.scaleMode || rows.length > 250)) {
+                scaleNote.classList.remove('hidden');
+                scaleNote.innerHTML = `⚠ R1 Scale mode detected or large matrix (${rows.length} entries). Full data in file_health.json + Python health.get_* (dir filter supported server-side). Dashboard uses client caps + filters.`;
+            }
+        }
+
+        function filterHealthTable() {
+            const filterInput = document.getElementById('health-dir-filter');
+            const val = filterInput ? filterInput.value : '';
+            if (window.healthData && window.healthData.length) {
+                renderHealthTable(window.healthData, val);
+            } else {
+                loadHealthMatrix(val);
+            }
+        }
+
+        // Wiki purpose consumption: defensive candidate search mirroring Python get_file_wiki (priority order)
+        // Loads *.wiki.md or fallback .md next to file / in common wiki dirs. Shows in pane.
+        // On failure, instructs use of MCP get_file_wiki for complex layouts.
+        async function showWikiPurpose(file) {
+            const pane = document.getElementById('wiki-purpose-pane');
+            const content = document.getElementById('wiki-purpose-content');
+            if (!pane || !content) { console.log('Wiki pane missing; would load for', file); return; }
+
+            content.innerHTML = `Loading wiki purpose for <span class="font-bold">${file}</span>...`;
+            pane.classList.remove('hidden');
+
+            const base = file.replace(/^\.\//, '');
+            const noExt = base.replace(/\.[^/.]+$/, '');
+            const dir = base.includes('/') ? base.substring(0, base.lastIndexOf('/')) : '';
+            const baseName = base.includes('/') ? base.substring(base.lastIndexOf('/')+1) : base;
+
+            // Candidate list (defensive, mirrors server.py get_file_wiki priority + common patterns)
+            const candidates = [
+                `${base}.wiki.md`, `${base}.md`,
+                `${noExt}.wiki.md`, `${noExt}.md`,
+                dir ? `${dir}/${baseName}.wiki.md` : '', dir ? `${dir}/${baseName}.md` : '',
+                dir ? `${dir}/${noExt}.wiki.md` : '', dir ? `${dir}/${noExt}.md` : '',
+                `wikifier/${base}.wiki.md`, // common in this project
+                `${noExt}.wiki.md`, // root level
+                `docs/wiki/${baseName}.wiki.md`, `wiki/${baseName}.wiki.md`, `.wiki/${baseName}.wiki.md`
+            ].filter(Boolean);
+
+            let found = false;
+            for (const cand of candidates) {
+                const text = await safeFetch(cand);
+                if (text && !text.startsWith('File not found') && text.length > 20 && !text.includes('<!DOCTYPE')) {
+                    // Extract Purpose section if present (common in our .wiki.md)
+                    let purpose = text;
+                    const purpMatch = text.match(/## Purpose\s*([\s\S]*?)(?=\n## |$)/i);
+                    if (purpMatch) purpose = purpMatch[1].trim();
+                    else if (text.length > 600) purpose = text.slice(0, 550) + '… (see full file)';
+
+                    content.innerHTML = `<strong class="text-indigo-400">${cand}</strong><br><br>${purpose.replace(/</g,'&lt;')}`;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                content.innerHTML = `No adjacent .wiki.md or .md found for <b>${file}</b> (tried ${candidates.length} candidates).<br><br>
+                <b>Scale / complex layout?</b> Use MCP: <code>get_file_wiki(file="${file}", format="text")</code> or Python wikifier.health + get_file_wiki in server.py.<br>
+                Create <code>${file}.wiki.md</code> next to source (preferred convention) then record-change + mark-green.`;
+            }
+        }
+
+        // Monitor status: reads .wikifier_staging/.last_check (plain timestamp) + hints at monitor loop health
+        // Defensive: old 1970 default = never run. Age calc for actionable UI.
+        async function loadMonitorStatus(forceRefresh = false) {
+            const el = document.getElementById('monitor-status');
+            if (!el) return;
+            el.innerHTML = `<span class="animate-pulse">⏱ checking heartbeat...</span>`;
+
+            const tsText = await safeFetch('.wikifier_staging/.last_check', '1970-01-01 00:00:00');
+            const ts = tsText.trim();
+            let html = '';
+            try {
+                const d = new Date(ts.replace(' AEST','').replace(' UTC','') || '1970');
+                const ageMin = Math.round((Date.now() - d.getTime()) / 60000);
+                const isFresh = ageMin < 10;
+                html = `<span class="${isFresh ? 'text-emerald-400' : 'text-amber-400'}">♥ ${ageMin}m ago</span>`;
+                if (ageMin > 60) html += ` <span class="text-red-400">(stale)</span>`;
+            } catch(e) {
+                html = `<span class="text-red-400">last_check unparsable</span>`;
+            }
+            html += ` <span class="text-[9px] opacity-60">.last_check</span>`;
+            el.innerHTML = html;
+
+            // Optional: could fetch monitor.log tail for "monitor running" but keep defensive/light
+            if (forceRefresh) {
+                setTimeout(() => { el.title = 'Monitor status refreshed. Run ./wikifier.sh monitor & for continuous.'; }, 300);
+            }
+        }
+
+        // Fetch and render health matrix (entrypoint kept for compat) - now delegates to robust impl
+        async function loadHealthMatrixCompat() {
+            await loadHealthMatrix();
+        }
+
+        // ==================== CONTINUED V1-P7 WIRING: legacy load* upgraded + new scale-aware surfaces ====================
+
+        // Pending updates - defensive, could parse to cards later but raw for agent fidelity
         async function loadPending() {
             const container = document.getElementById('pending-content');
-            try {
-                const res = await fetch('pending_updates.md');
-                const md = await res.text();
-                container.innerHTML = `<pre class="whitespace-pre-wrap text-emerald-300">${md}</pre>`;
-            } catch {
-                container.innerHTML = `<div class="text-slate-400 text-xs">No pending_updates.md found. Run check-changes.</div>`;
-            }
+            const md = await safeFetch('pending_updates.md', '(no pending_updates.md)');
+            // Basic cap for huge pending files on monorepos
+            const capped = md.length > 6000 ? md.slice(0, 5800) + '\n... (truncated; full in pending_updates.md or use MCP issues())' : md;
+            container.innerHTML = `<pre class="whitespace-pre-wrap text-emerald-300 text-[10px]">${capped.replace(/</g,'&lt;')}</pre>`;
         }
 
-        // Journal preview
+        // Journal preview - defensive daily + recent fallback
         async function loadJournal() {
             const container = document.getElementById('journal-preview');
-            try {
-                const today = new Date();
-                const path = `journal/${today.getFullYear()}/${String(today.getMonth()+1).padStart(2,'0')}/${String(today.getDate()).padStart(2,'0')}.md`;
-                const res = await fetch(path);
-                const md = await res.text();
-                container.innerHTML = md.split('\n').slice(0, 9).join('\n') || 'No entries today yet.';
-            } catch {
-                container.innerHTML = `No journal entry for today.<br><span class="text-emerald-400">Use record-change to start the log.</span>`;
+            const todayPath = `journal/${new Date().getFullYear()}/${String(new Date().getMonth()+1).padStart(2,'0')}/${String(new Date().getDate()).padStart(2,'0')}.md`;
+            let md = await safeFetch(todayPath, '');
+            if (!md) {
+                // fallback recent journal dir scan not possible in static; show hint
+                md = 'No journal for today.\nUse record-change to start the log.\n(For recent: ls journal/ or MCP journal())';
             }
+            container.innerHTML = md.split('\n').slice(0, 8).join('\n').replace(/</g,'&lt;') || 'No entries.';
         }
 
-        // Mermaid diagram
+        // Mermaid diagram - enhanced with R1 scale note detection
         async function loadMermaid() {
             const container = document.getElementById('mermaid-diagram');
-            
-            try {
-                const res = await fetch('library.md');
-                const md = await res.text();
-                
-                // Extract first ```mermaid block
-                const match = md.match(/```mermaid\n([\s\S]*?)```/);
-                if (match && match[1]) {
-                    container.innerHTML = `<pre class="mermaid">${match[1]}</pre>`;
-                    // Render with mermaid
-                    if (window.mermaid) {
+            const md = await safeFetch('library.md', '');
+            if (!md) {
+                container.innerHTML = `<div class="text-xs text-amber-400 p-4">library.md not found. Run update-maps.</div>`;
+                return;
+            }
+            window.libraryMdCache = md;
+
+            // R1 scale detection (contract with sh R1 logic)
+            if (md.includes('R1 Scale Degradation') || md.includes('LARGE_SCALE_MODE') || md.includes('ScaleNote')) {
+                window.scaleMode = true;
+                container.innerHTML = `<div class="text-xs p-4 bg-amber-900/10 border border-amber-700 rounded"><b>⚠ R1 SCALE MODE ACTIVE</b><br>Full per-edge Mermaid + tables omitted in library.md for 5k-20k+ file monorepos.<br>Rich data survived in .wikifier_staging/import_cache.json + MCP get_cycles / get_dependencies / get_resolution_diagnostics.<br><span class="text-emerald-400">Use directory filter + summary views.</span></div>`;
+                return;
+            }
+
+            const match = md.match(/```mermaid\n([\s\S]*?)```/);
+            if (match && match[1]) {
+                container.innerHTML = `<pre class="mermaid">${match[1]}</pre>`;
+                if (window.mermaid) {
+                    try {
                         mermaid.initialize({ startOnLoad: false, theme: 'dark' });
                         await mermaid.run({ nodes: [container.querySelector('.mermaid')] });
-                    }
-                } else {
-                    container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid diagram found in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span>.</div>`;
+                    } catch(e) { /* ignore render err on huge */ }
                 }
-            } catch {
-                container.innerHTML = `<div class="text-xs text-amber-400 p-4">library.md not found or empty. Run update-maps from the CLI.</div>`;
+            } else {
+                container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span>.</div>`;
             }
         }
 
-        // Simulate running a command (educational)
+        // Dependency Intelligence cards - scale defensive, section based, richer extraction
+        async function loadDependencyIntelligence() {
+            const grid = document.getElementById('intel-grid');
+            if (!grid) return;
+
+            grid.innerHTML = `<div class="col-span-4 text-center py-8 text-slate-500 text-sm">Loading rich intel (library.md + scale-aware)...</div>`;
+
+            const md = window.libraryMdCache || await safeFetch('library.md', '');
+            if (!md) {
+                grid.innerHTML = `<div class="col-span-4 intel-card p-6">library.md missing — run update-maps (or MCP update_maps)</div>`;
+                return;
+            }
+
+            // Detect scale early
+            const isScale = md.includes('R1 Scale') || md.includes('LARGE_SCALE');
+            if (isScale) window.scaleMode = true;
+
+            // Better section extraction (split on ## for robustness vs regex on huge files)
+            function extractSection(h) {
+                const start = md.indexOf(h);
+                if (start === -1) return null;
+                const next = md.indexOf('\n## ', start + 5);
+                return md.substring(start, next > 0 ? next : start + 1200);
+            }
+
+            const cyclesSec = extractSection('## Circular Dependencies');
+            const barrelsSec = extractSection('## Barrel Expansions');
+            const condSec = extractSection('## Conditional & Dynamic');
+            const resolvedSec = extractSection('## Resolved Dependencies');
+
+            let html = '';
+
+            html += makeIntelCard('Circular Dependencies', 'CIABRE • Severity', 'CYCLES', cyclesSec, isScale ? 'R1: top clusters only (full via MCP get_cycles)' : '');
+            html += makeIntelCard('Barrel Expansions', 'BREE • Depth', 'BARRELS', barrelsSec, isScale ? 'Summarized' : '');
+            html += makeIntelCard('Conditional & Dynamic', 'CDIA • Risk', 'CDIA', condSec, isScale ? 'Patterns in cache' : '');
+            html += makeIntelCard('Confidence & Risk + Graph', 'ACS + Res', 'CONF', resolvedSec || (isScale ? 'See scale note in library.md' : ''), isScale ? 'Use get_resolution_diagnostics' : '');
+
+            grid.innerHTML = html;
+        }
+
+        function makeIntelCard(title, sub, badge, section, scaleNote) {
+            const body = section ? section.slice(0, 220).replace(/\n/g, '<br>') : `No data. ${scaleNote || 'Run update-maps.'}`;
+            return `
+                <div class="intel-card rounded-3xl p-4 text-xs">
+                    <div class="flex justify-between">
+                        <div><div class="text-emerald-300 font-semibold">${title}</div><div class="text-[10px] text-slate-400">${sub}</div></div>
+                        <div class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">${badge}</div>
+                    </div>
+                    <div class="mt-3 text-slate-300 leading-tight">${body}</div>
+                    ${scaleNote ? `<div class="mt-2 text-amber-400 text-[9px]">${scaleNote}</div>` : ''}
+                </div>`;
+        }
+
+        // V1 Command Surface: full categorized, copyable, with shell/MCP parity + impl links (contract for UI agents)
+        // V1-P2 Command Surface (executed + verified by main agent)
+        // Lightweight, categorized, filterable, copyable surface for the fast dashboard.
+        // Full rich version with detailed refactor/port notes deferred to diagnostics.html per P6 rules.
+        function loadCommandSurface() {
+            const grid = document.getElementById('command-grid');
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            if (window.COMMAND_DATA && window.COMMAND_DATA.length) {
+                const s = [...window.COMMAND_DATA].sort((a, b) => (a.c || '').localeCompare(b.c || '') || (a.s || '').localeCompare(b.s || ''));
+                let lc = '';
+                s.forEach(cmd => {
+                    if (cmd.c !== lc) {
+                        if (lc) grid.appendChild(Object.assign(document.createElement('div'), { className: 'col-span-2 md:col-span-4 h-px bg-slate-800 my-px' }));
+                        const h = document.createElement('div');
+                        h.className = 'col-span-2 md:col-span-4 text-[7px] text-slate-500 px-0.5';
+                        h.textContent = cmd.c;
+                        grid.appendChild(h);
+                        lc = cmd.c;
+                    }
+                    const b = document.createElement('button');
+                    b.className = 'command-btn px-1 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-left font-mono text-[8px]';
+                    b.setAttribute('data-cat', cmd.c);
+                    b.setAttribute('data-sh', cmd.s);
+                    b.setAttribute('data-mcp', cmd.m);
+                    b.innerHTML = `<span class="text-emerald-400">${cmd.s}</span>`;
+                    b.onclick = () => window.showCommandDetail && window.showCommandDetail(cmd);
+                    grid.appendChild(b);
+                });
+            }
+        }
+        window.COMMAND_DATA = [
+            {c:'Core',s:'check-changes',m:'check_changes()',i:'sh:2335',w:'h.py.wiki.md',n:'Delta+pending',sc:'R1 fast',rf:'Health core',pt:'sh+health'},
+            {c:'Core',s:'health [--dir]',m:'health(dir,fmt)',i:'s:481',w:'h.py.wiki.md',n:'Matrix + filter',sc:'P6: --dir on large',rf:'SSOT',pt:'h.py+json'},
+            {c:'Core',s:'update-maps',m:'update_maps()',i:'s:440',w:'s.py.wiki.md',n:'library+mermaid',sc:'incr / MCP large',rf:'parsers+cache',pt:'hardest port'},
+            {c:'Core',s:'record-change',m:'record_change(f,r)',i:'s:353',w:'s.py.wiki.md',n:'MANDATORY',sc:'lock',rf:'WHY log',pt:'upsert ritual'},
+            {c:'Core',s:'mark-green',m:'mark_green(f)',i:'s:396',w:'h.py.wiki.md',n:'MANDATORY',sc:'loop',rf:'Green+prune',pt:'sacred'},
+            {c:'Agent',s:'get_project_status',m:'get_project_status()',i:'s:1328',w:'s.py.wiki.md',n:'START HERE',sc:'fast',rf:'overview',pt:'h.get_sum'},
+            {c:'Agent',s:'suggest_next_actions',m:'suggest_next()',i:'s:1407',w:'s.py.wiki.md',n:'Next steps',sc:'primer',rf:'prescriptive',pt:'workflow'},
+            {c:'Agent',s:'get_files_needing..',m:'get_files_need(dir?)',i:'s:1269',w:'h.py.wiki.md',n:'Red/Yellow',sc:'dir P6',rf:'triage',pt:'h triage'},
+            {c:'Inspect',s:'journal',m:'journal(d?)',i:'s:649',w:'s.py.wiki.md',n:'Daily log',sc:'',rf:'context',pt:'date md'},
+            {c:'Inspect',s:'cycles',m:'get_cycles(anal)',i:'s:931',w:'s.py.wiki.md',n:'CIABRE',sc:'R1',rf:'tarjan',pt:'cycle det'},
+            {c:'Intel',s:'get_file_wiki',m:'get_file_wiki(f)',i:'s:1104',w:'s.py.wiki.md',n:'Purpose',sc:'',rf:'wiki pane',pt:'cand search'},
+            {c:'Intel',s:'get_dependencies',m:'get_dep(f)',i:'s:695',w:'s.py.wiki.md',n:'Imports+conf',sc:'R1',rf:'graph',pt:'cache+res'},
+            {c:'Daemon',s:'monitor &',m:'N/A',i:'sh:1926',w:'sh',n:'30s hb',sc:'live',rf:'poll',pt:'sh poll'},
+            {c:'More',s:'→ Full list + notes',m:'See diagnostics.html',i:'',w:'',n:'26 cmds + refactor/port notes',sc:'Heavy view',rf:'Exhaustive',pt:'Move to diag'},
+        ];
+
+        // Lightweight command surface for fast dashboard (P6 trim).
+        // Clicking a button copies the main shell command and shows a toast.
+        // Full rich version with refactor/port notes → diagnostics.html
+
+        function showCommandDetail(cmd) {
+            const sh = `./wikifier.sh ${cmd.s}`;
+            navigator.clipboard.writeText(sh).then(() => {
+                const msg = document.createElement('div');
+                msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-emerald-700 px-3 py-1 rounded-xl text-xs z-50`;
+                msg.textContent = `Copied: ${sh}`;
+                document.body.appendChild(msg);
+                setTimeout(() => msg.remove(), 1200);
+            }).catch(() => {});
+
+            // light auto-refresh for common commands
+            if (cmd.s.includes('check') || cmd.s.includes('health')) setTimeout(() => loadHealthMatrix && loadHealthMatrix(), 500);
+            if (cmd.s.includes('update')) setTimeout(() => loadMermaid && loadMermaid(), 500);
+            if (cmd.s.includes('monitor')) loadMonitorStatus && loadMonitorStatus(true);
+        }
+
+        function copyCommandText(el, txt) {
+            const t = txt.replace(/\\n/g,'\n');
+            navigator.clipboard.writeText(t).then(()=>{el.textContent='✓';setTimeout(()=>el&&(el.textContent='COPY'),900);}).catch(()=>{});
+        }
+
+        function filterCommandGrid() {
+            const q=(document.getElementById('cmd-filter')?.value||'').toLowerCase();
+            const g=document.getElementById('command-grid'); if(!g||!window.COMMAND_DATA) return;
+            Array.from(g.children).forEach(el=>{
+                if (el.classList.contains('col-span-') || (el.textContent||'').match(/^[A-Z][a-z]+$/)) {el.style.display='';return;}
+                const s=(el.getAttribute('data-sh')||'').toLowerCase()+(el.getAttribute('data-mcp')||'').toLowerCase()+(el.getAttribute('data-cat')||'').toLowerCase();
+                el.style.display = (!q || s.includes(q)) ? '' : 'none';
+            });
+        }
+
+        // Enhanced runCommand (compat)
         function runCommand(cmd) {
             const msg = document.createElement('div');
-            msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-4 py-2 rounded-2xl shadow-xl text-sm flex items-center gap-x-3 z-50`;
-            msg.innerHTML = `
-                <span>Run in terminal:</span> 
-                <code class="font-mono bg-slate-900 px-2 py-px rounded">./wikifier.sh ${cmd}</code>
-            `;
-            
+            msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-2xl text-xs flex items-center gap-2 z-50`;
+            msg.innerHTML = `Run <code>./wikifier.sh ${cmd}</code> <span class="opacity-60">(or MCP; click surface)</span>`;
             document.body.appendChild(msg);
-            
-            setTimeout(() => {
-                msg.style.transition = 'all 0.2s';
-                msg.style.opacity = '0';
-                setTimeout(() => msg.remove(), 200);
-            }, 2600);
-            
-            // Also attempt to refresh relevant parts of the UI
-            if (cmd === 'check-changes' || cmd === 'health') {
-                setTimeout(loadHealthMatrix, 800);
-            }
-            if (cmd === 'update-maps') {
-                setTimeout(loadMermaid, 800);
+            setTimeout(()=>{msg.style.opacity=0;setTimeout(()=>msg.remove(),100)},1800);
+            if (cmd.includes('check')||cmd.includes('health')) setTimeout(()=>loadHealthMatrix&&loadHealthMatrix(),500);
+            if (cmd.includes('update')) {setTimeout(()=>loadMermaid&&loadMermaid(),400);setTimeout(()=>loadDependencyIntelligence&&loadDependencyIntelligence(),800);}
+            if (cmd.includes('monitor')) loadMonitorStatus&&loadMonitorStatus(true);
+            // try rich detail
+            if (window.COMMAND_DATA) {
+                const m = window.COMMAND_DATA.find(x=>x.s && x.s.includes(cmd.split(' ')[0]));
+                if (m) setTimeout(()=>showCommandDetail(m),200);
             }
         }
 
-        // Boot everything
+        // Boot everything - V1 wiring integrated (P2 enhanced keyboard + COMMAND_DATA render)
         function boot() {
             initTailwind();
+            // expose data early for wiring consumers / diagnostics
+            window.COMMAND_DATA = window.COMMAND_DATA || [];
             
             loadHealthMatrix();
             loadPending();
             loadJournal();
             loadMermaid();
-            
-            // Auto-refresh health every 35 seconds (mimics monitor loop)
+            loadDependencyIntelligence();
+            loadMonitorStatus();
+            loadCommandSurface();  // now rich categorized
+
             setInterval(() => {
                 loadHealthMatrix();
                 loadPending();
-            }, 35000);
-            
-            // Keyboard hint
-            console.log('%c[Wikifier] Dashboard ready. Press R to refresh health.', 'color:#475569');
-            
+                if (Math.random() < 0.3) loadMonitorStatus();
+            }, 32000);
+
+            // Keyboard: r=refresh, /=focus command filter (arch spec)
             document.addEventListener('keydown', function(e) {
                 if (e.key.toLowerCase() === 'r') {
-                    loadHealthMatrix();
-                    loadPending();
+                    loadHealthMatrix(); loadPending(); loadDependencyIntelligence();
+                }
+                if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                    e.preventDefault();
+                    const f = document.getElementById('cmd-filter');
+                    if (f) f.focus();
                 }
             });
-            
-            // Easter egg
-            console.log('%c[Wikifier v0.3] Agent-first. Zero dep. Ready for Grok Build + MCP.', 'color:#166534');
+
+            // P2 final note
+            console.log('%c[V1-P2 Command Surface] Full categorized 26-entry launcher + detail pane w/ exact copies + dual refactor/port notes + R1/P6 scale guidance. Integrated w/ P7 wiring + wikifierWiring. Lean static JS.', 'color:#166534');
         }
 
         window.onload = boot;
+        // Expose for agents, porting, diagnostics.html (P2 additions)
+        window.wikifierWiring = { loadHealthMatrix, filterHealthTable, showWikiPurpose, loadMonitorStatus, loadCommandSurface, loadDependencyIntelligence, safeFetch, parseHealthMd, showCommandDetail, filterCommandGrid, COMMAND_DATA: window.COMMAND_DATA };
     </script>
 </body>
 </html>

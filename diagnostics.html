@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wikifier v0.3 — Deep Diagnostics &amp; Human Refactor/Port Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        body { font-family: 'Inter', system_ui, -apple-system, sans-serif; }
+        .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 600; }
+        .wikifier-header { background: linear-gradient(90deg, #0f172a 0%, #1e2937 100%); }
+        .section-header { font-size: 0.75rem; letter-spacing: 0.5px; font-weight: 600; text-transform: uppercase; color: #64748b; }
+        .intel-card { background: #0f172a; border: 1px solid #334155; transition: transform 0.1s ease, border-color 0.1s ease; }
+        .intel-card:hover { border-color: #475569; transform: translateY(-1px); }
+        .matrix-table { font-size: 0.875rem; }
+        .status-pill { font-size: 0.75rem; padding: 1px 9px; border-radius: 9999px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+        pre, code, .font-mono { font-size: 0.75rem; }
+        .cmd-row { transition: background 0.1s; }
+        .cmd-row:hover { background: #0f172a; }
+        .port-note { font-size: 0.7rem; color: #94a3b8; }
+        .human-section { border-left: 3px solid #f59e0b; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header (shared style, minimal duplication) -->
+        <div class="wikifier-header border-b border-slate-800 px-8 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-x-3">
+                <div class="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center">
+                    <span class="text-slate-950 font-bold text-2xl tracking-tighter">W</span>
+                </div>
+                <div>
+                    <span class="font-display text-3xl font-semibold tracking-tighter">Wikifier</span>
+                    <span class="text-emerald-400 font-mono text-sm ml-1.5 align-super">v0.3</span>
+                </div>
+                <div class="px-3 py-1 bg-amber-900/40 border border-amber-700 rounded-full text-xs text-amber-300 font-medium flex items-center gap-x-1.5">
+                    <div class="w-2 h-2 bg-amber-400 rounded-full"></div>
+                    HUMAN DEV EXPERIENCE
+                </div>
+                <div class="px-3 py-1 bg-slate-900 border border-slate-700 rounded-full text-xs text-emerald-400 font-medium flex items-center gap-x-1.5">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    AGENT-FIRST + HUMAN PARITY
+                </div>
+            </div>
+            <div class="flex items-center gap-x-2 text-sm">
+                <a href="index.html" class="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-1.5">
+                    ← Fast Dashboard
+                </a>
+                <a href="skills/run.md" class="text-[10px] px-2 py-1 bg-slate-800 border border-slate-700 rounded hover:text-emerald-300">Protocol</a>
+                <a href="wikifier/mcp/README.md" class="text-[10px] px-2 py-1 bg-slate-800 border border-slate-700 rounded hover:text-indigo-300">MCP</a>
+                <button onclick="window.location.reload()" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">Refresh</button>
+            </div>
+        </div>
+
+        <div class="px-8 py-8">
+            <!-- Hero for Human Dev -->
+            <div class="mb-8">
+                <div class="flex items-center gap-x-3 mb-2">
+                    <h1 class="font-display text-4xl tracking-tighter font-semibold">For Human Refactors &amp; Porters</h1>
+                    <span class="px-2 py-0.5 text-xs bg-amber-900/30 border border-amber-700 rounded text-amber-300">P4 DELIVERABLE</span>
+                </div>
+                <p class="text-slate-400 max-w-3xl">Genuinely valuable experience for developers opening the dashboard to <strong>refactor code</strong> or <strong>port Wikifier to another agent platform</strong>. Aligns with frozen P1 architecture + P7 wiring. All within P6 budget/scale constraints. Pure static HTML + vanilla JS.</p>
+                <div class="mt-2 flex gap-x-2 text-[10px]">
+                    <div class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded">ZERO DEP • STATIC • FORKABLE</div>
+                    <div class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded">R1 SCALE AWARE (5k–20k+)</div>
+                    <div class="px-2 py-0.5 bg-emerald-900/30 border border-emerald-800 rounded text-emerald-400">Links to all *.wiki.md</div>
+                </div>
+            </div>
+
+            <!-- 1. Architecture at a Glance -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
+                <div class="section-header mb-3">1. Architecture at a Glance (condensed from frozen P1)</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                    <div>
+                        <div class="font-semibold text-emerald-300 mb-1">Two-Page Model</div>
+                        <ul class="text-xs text-slate-300 space-y-0.5 ml-4 list-disc">
+                            <li><strong>index.html</strong> — Fast main dashboard (&lt;30-45KB): health pills, compact command launcher, intel cards, R1 summaries. Entry for agents + humans.</li>
+                            <li><strong>diagnostics.html</strong> — Heavy depth (&lt;55KB): full matrices, exhaustive maps, this human dev hub.</li>
+                        </ul>
+                        <div class="mt-2 text-[10px]"><a href="Findings/v1_visual_layer_architecture.md" class="text-amber-400 underline">Full frozen P1 arch doc →</a></div>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-emerald-300 mb-1">Binding Constraints</div>
+                        <ul class="text-xs text-slate-300 space-y-0.5 ml-4 list-disc">
+                            <li>Zero external runtime deps (Tailwind + Mermaid CDN only at load)</li>
+                            <li>Total visual assets &lt; 85 KB uncompressed</li>
+                            <li>Large monorepo resilience mandatory (R1 degradation, caps, delegation)</li>
+                            <li>All changes recorded via Wikifier process (record-change → wiki → mark-green)</li>
+                            <li>Dual audience: agent-first with full human parity</li>
+                        </ul>
+                        <div class="mt-1 text-[10px] text-slate-400">See README.md scaling table + P6 performance budget.</div>
+                    </div>
+                </div>
+                <div class="mt-3 text-[10px] bg-slate-950 p-2 rounded border border-slate-700">Data flow: pure client fetch of file_health.{json,md}, library.md, pending_updates.md, journal/*.md. Vanilla parsers + R1 detection on "LARGE_SCALE_MODE" / "R1 Scale Degradation". No server, no mutation.</div>
+            </div>
+
+            <!-- 2. Project File Map — Visual Tree with Purposes -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="section-header">2. Project File Map — Visual Tree with Purposes</div>
+                    <div class="text-[10px] px-2 py-0.5 bg-amber-900/30 border border-amber-700 rounded text-amber-300">Human Refactor / Port View</div>
+                </div>
+
+                <p class="text-xs text-slate-400 mb-3">Starting from the root. Key files and their one-line purpose (sourced from high-quality <code>*.wiki.md</code> files created during development + agent analysis). This is the map humans reach for when planning refactors or ports.</p>
+
+                <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4 font-mono text-[13px] leading-[1.35] text-slate-300 overflow-x-auto">
+wikifier/<br>
+├── <span class="text-amber-300">contracts.py</span> ................ <span class="text-slate-400">Frozen shared contracts for all Gap #1 phases (rich metadata shapes, versioning, defensive decoding)</span><br>
+├── <span class="text-emerald-300">health.py</span> ................... <span class="text-slate-400">Documentation Health Matrix (SSOT) + auto-healing + JSON + Markdown dual store</span><br>
+├── <span class="text-emerald-300">import_cache.py</span> ............. <span class="text-slate-400">Rich persistent dependency cache + cycle detection (Tarjan) + barrel resolutions</span><br>
+├── <span class="text-emerald-300">locking.py</span> .................. <span class="text-slate-400">Project-level advisory locking for safe concurrent agents + monitor</span><br>
+├── <span class="text-sky-300">resolution.py</span> ................ <span class="text-slate-400">Central modern resolution engine (package.json exports, tsconfig, monorepos)</span><br>
+│<br>
+├── parsers/<br>
+│   ├── <span class="text-violet-300">python.py</span> ............... <span class="text-slate-400">Rich Python import parser (relative, metadata, confidence)</span><br>
+│   ├── <span class="text-violet-300">javascript.py</span> ........... <span class="text-slate-400">JS/TS parser with barrel following, conditional/dynamic classification, confidence</span><br>
+│   ├── <span class="text-violet-300">bree.py</span> .................. <span class="text-slate-400">Barrel re-export expansion engine (BREE)</span><br>
+│   └── <span class="text-violet-300">cdia.py</span> .................. <span class="text-slate-400">Conditional &amp; Dynamic Import Analysis (CDIA)</span><br>
+│<br>
+├── mcp/<br>
+│   └── <span class="text-rose-300">server.py</span> ............... <span class="text-slate-400">MCP server — 22 tools exposing the full Wikifier surface to agents</span><br>
+│<br>
+├── <span class="text-teal-300">diagnostics.py</span> .............. <span class="text-slate-400">Project diagnostics, aggregates, and health helpers</span><br>
+├── <span class="text-teal-300">gap1_validation_harness.py</span> .. <span class="text-slate-400">Regression test harness for Gap #1 dependency intelligence</span><br>
+└── <span class="text-slate-400">cli.py / __main__.py</span> ........ <span class="text-slate-400">Cross-platform entry points + launcher</span>
+                </div>
+
+                <div class="mt-2 text-[10px] text-slate-400">
+                    Clickable links to full wiki docs where available: 
+                    <a href="wikifier/health.py.wiki.md" class="text-amber-400 hover:underline">health.py.wiki.md</a> • 
+                    <a href="wikifier/parsers/python.py.wiki.md" class="text-amber-400 hover:underline">python.py.wiki.md</a> • 
+                    <a href="wikifier/parsers/javascript.py.wiki.md" class="text-amber-400 hover:underline">javascript.py.wiki.md</a> • 
+                    <a href="wikifier/mcp/server.py.wiki.md" class="text-amber-400 hover:underline">server.py.wiki.md</a>
+                </div>
+            </div>
+
+            <!-- 3. Porting Checklist -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
+                <div class="section-header mb-3">2. Porting Checklist (ready-to-use for real work)</div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
+                    <!-- Port Wikifier core -->
+                    <div>
+                        <div class="font-semibold text-amber-300 mb-2">Porting Wikifier to Another Agent Platform</div>
+                        <ol class="text-xs space-y-1 text-slate-300 list-decimal ml-4">
+                            <li><strong>Start with contracts.py</strong> (FROZEN): all versioned shapes (_vN), dataclasses, to_dict/from_dict, RICH_KEYS. Never break additive contract.</li>
+                            <li><strong>Study existing high-quality *.wiki.md</strong> as source of truth + living docs: health.py.wiki.md, server.py.wiki.md, python.py.wiki.md, javascript.py.wiki.md (and create for others).</li>
+                            <li><strong>locking.py</strong>: adopt or replicate advisory project-level locks (fcntl + mkdir fallback) for concurrent agents + monitor on state files (health.json, import_cache.json, pending, journal).</li>
+                            <li><strong>resolution.py</strong>: single source for canonical paths, strategies (TsPaths, Workspace, PackageExports, BareHeuristic). Parsers delegate to it.</li>
+                            <li><strong>Parsers</strong>: implement uniform rich Dict return (see python parser contract). Python + JS examples show best-effort + confidence.</li>
+                            <li><strong>MCP surface (server.py)</strong>: primary integration point. Replicate @mcp.tool() surface (check_changes, record_*, get_dependencies, get_project_status, suggest_next_actions, get_file_wiki, etc.). Use Pydantic/FastMCP or equiv.</li>
+                            <li><strong>CLI / shell</strong>: wikifier.sh (cmd_* fns + launcher copy on init) + wikifier/cli.py as reference/fallback. Support WIKIFIER_PROJECT_ROOT + --project-root for external monorepos.</li>
+                            <li><strong>Health &amp; cache</strong>: health.py (JSON primary + MD generation), import_cache.py. Use prepare_edit / record_change / mark_green workflow always.</li>
+                            <li><strong>Agent protocol</strong>: enforce skills/run.md mandatory rule in new platform (record-change after every edit).</li>
+                            <li>Test at scale: 5k–15k files using dir filters + incremental only + get_* queries (never full rebuilds).</li>
+                        </ol>
+                    </div>
+                    <!-- Port the visual layer -->
+                    <div>
+                        <div class="font-semibold text-amber-300 mb-2">Porting / Adapting the Visual Layer (index + diagnostics)</div>
+                        <ol class="text-xs space-y-1 text-slate-300 list-decimal ml-4">
+                            <li>Pure static: copy HTML + inline &lt;style&gt; + &lt;script&gt; (Tailwind + Mermaid CDNs). No build, no new deps. Target &lt;85KB total.</li>
+                            <li>Duplicate minimal shared helpers with <span class="font-mono text-amber-400">/* SHARED: ... */</span> and <span class="font-mono text-amber-400">/* HUMAN PORT NOTE: duplicate this fn for your project */</span> markers (see JS below).</li>
+                            <li>Wire to your artifacts: safeFetch your file_health.json / library.md / pending_updates.md (or your equivalents). Reuse parseHealthMd, R1 detection logic.</li>
+                            <li>Command launcher: static data-driven buttons (shell + MCP strings + impl + wiki). onClick = clipboard + educational toast. Extend easily.</li>
+                            <li>R1 / scale: detect "R1 Scale Degradation" | LARGE_SCALE_MODE in library.md early; activate caps (HEALTH_RENDER_CAP), summaries, scale banners, delegation hints.</li>
+                            <li>Two-page: keep index fast (compact views + caps); diagnostics for exhaustive map + this porting hub.</li>
+                            <li>Wiki consumption: replicate showWikiPurpose candidate search (mirrors server.py get_file_wiki) or call MCP.</li>
+                            <li>Exposed wiring: window.wikifierWiring = {...} for other pages / future agents / port debugging.</li>
+                            <li>Record every visual change: use record-change on the .html file(s), update/create .wiki.md, mark-green.</li>
+                            <li>For non-Python agent platforms: the visual layer is language-agnostic. Use it as reference dashboard that calls your platform's equivalent tools.</li>
+                        </ol>
+                        <div class="mt-2 text-[10px] port-note">See source comments in index.html / this file for copyable helpers. Full P1 has "duplicate minimal shared code" rule.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Command Implementation Map -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="section-header">3. Command Implementation Map (shell ↔ MCP ↔ source:line + .wiki.md)</div>
+                    <input id="cmd-filter-input" type="text" placeholder="Filter commands (e.g. health, record, cycles, port)" 
+                           class="text-xs bg-slate-950 border border-slate-700 rounded px-2 py-1 w-72 font-mono" oninput="filterCommandMap()">
+                </div>
+                <div class="overflow-auto max-h-[380px] border border-slate-800 rounded-2xl bg-slate-950">
+                    <table id="cmd-map-table" class="w-full matrix-table text-xs">
+                        <thead class="sticky top-0 bg-slate-900 z-10">
+                            <tr class="border-b border-slate-800 text-left text-slate-400">
+                                <th class="px-3 py-2 font-medium">Cat</th>
+                                <th class="px-3 py-2 font-medium">Shell / CLI</th>
+                                <th class="px-3 py-2 font-medium">MCP Tool</th>
+                                <th class="px-3 py-2 font-medium">Source File:Line</th>
+                                <th class="px-3 py-2 font-medium">.wiki.md</th>
+                                <th class="px-3 py-2 font-medium">Scale / Port Notes</th>
+                                <th class="px-2 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800 text-slate-200">
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-emerald-400">Core</td><td class="px-3 py-1.5 font-mono">check-changes</td><td class="px-3 py-1.5 font-mono">check_changes()</td><td class="px-3 py-1.5 font-mono text-[10px]">sh:1806 / server:319</td><td class="px-3 py-1.5 text-[10px] text-slate-400">—</td><td class="px-3 py-1.5 text-[10px]">Delta; first action</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-emerald-400">Core</td><td class="px-3 py-1.5 font-mono">health [--dir X] [json]</td><td class="px-3 py-1.5 font-mono">health(dir,format="json")</td><td class="px-3 py-1.5 font-mono text-[10px]">health.py:16 / server:481</td><td class="px-3 py-1.5 text-[10px]"><a href="wikifier/health.py.wiki.md" class="text-amber-400 underline">health.py.wiki.md</a></td><td class="px-3 py-1.5 text-[10px]">Dir filter core; R1 essential</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-emerald-400">Core</td><td class="px-3 py-1.5 font-mono">update-maps [--full]</td><td class="px-3 py-1.5 font-mono">update_maps(full=False)</td><td class="px-3 py-1.5 font-mono text-[10px]">sh:1936 / server:440</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">R1: incremental only on large</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-emerald-400">Core</td><td class="px-3 py-1.5 font-mono">validate</td><td class="px-3 py-1.5 font-mono">validate()</td><td class="px-3 py-1.5 font-mono text-[10px]">server:625</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Health + integrity</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-rose-400">Edit</td><td class="px-3 py-1.5 font-mono">record-change &lt;f&gt; "&lt;reason&gt;"</td><td class="px-3 py-1.5 font-mono">record_change(file,reason)</td><td class="px-3 py-1.5 font-mono text-[10px]">server:353</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px] font-semibold text-rose-400">MANDATORY after every refactor</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-rose-400">Edit</td><td class="px-3 py-1.5 font-mono">mark-green &lt;f&gt;</td><td class="px-3 py-1.5 font-mono">mark_green(file)</td><td class="px-3 py-1.5 font-mono text-[10px]">server:396</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Close the loop</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-rose-400">Edit</td><td class="px-3 py-1.5 font-mono">prepare-edit &lt;f&gt;</td><td class="px-3 py-1.5 font-mono">prepare_edit(file)</td><td class="px-3 py-1.5 font-mono text-[10px]">server:417</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Stage mtime (P7 robust)</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-sky-400">Inspect</td><td class="px-3 py-1.5 font-mono">journal [date]</td><td class="px-3 py-1.5 font-mono">journal(date,format="json")</td><td class="px-3 py-1.5 font-mono text-[10px]">server:649</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Audit trail</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-sky-400">Inspect</td><td class="px-3 py-1.5 font-mono">issues</td><td class="px-3 py-1.5 font-mono">issues(severity="high")</td><td class="px-3 py-1.5 font-mono text-[10px]">server:670</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Logged_issues/</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-violet-400">Wiki</td><td class="px-3 py-1.5 font-mono">(MCP) get_file_wiki</td><td class="px-3 py-1.5 font-mono">get_file_wiki(file,format="json")</td><td class="px-3 py-1.5 font-mono text-[10px]">server:1104</td><td class="px-3 py-1.5 text-[10px]"><a href="wikifier/mcp/server.py.wiki.md" class="text-amber-400 underline">server.py.wiki.md</a></td><td class="px-3 py-1.5 text-[10px]">Purpose pane + porting</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-indigo-400">Intel</td><td class="px-3 py-1.5 font-mono">(MCP) get_dependencies</td><td class="px-3 py-1.5 font-mono">get_dependencies(file,format="json")</td><td class="px-3 py-1.5 font-mono text-[10px]">server:695</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Forward edges</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-indigo-400">Intel</td><td class="px-3 py-1.5 font-mono">(MCP) get_cycles</td><td class="px-3 py-1.5 font-mono">get_cycles(analysis=true)</td><td class="px-3 py-1.5 font-mono text-[10px]">server:931 (Tarjan+CIABRE)</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Heavy; full view here</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-teal-400">Agent</td><td class="px-3 py-1.5 font-mono">(MCP) get_project_status</td><td class="px-3 py-1.5 font-mono">get_project_status()</td><td class="px-3 py-1.5 font-mono text-[10px]">server:1328</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Best first call for humans</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-teal-400">Agent</td><td class="px-3 py-1.5 font-mono">(MCP) suggest_next_actions</td><td class="px-3 py-1.5 font-mono">suggest_next_actions()</td><td class="px-3 py-1.5 font-mono text-[10px]">server:1407</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Top workflow per skills/run.md</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-teal-400">Agent</td><td class="px-3 py-1.5 font-mono">(MCP) get_files_needing_attention</td><td class="px-3 py-1.5 font-mono">get_files_needing_attention()</td><td class="px-3 py-1.5 font-mono text-[10px]">server:1269</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Red/Yellow for refactors</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-orange-400">Setup</td><td class="px-3 py-1.5 font-mono">init --target /path</td><td class="px-3 py-1.5 font-mono">N/A</td><td class="px-3 py-1.5 font-mono text-[10px]">sh:2172</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">External monorepo bootstrap</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                            <tr class="cmd-row"><td class="px-3 py-1.5 font-mono text-teal-400">Daemon</td><td class="px-3 py-1.5 font-mono">monitor &amp;</td><td class="px-3 py-1.5 font-mono">N/A</td><td class="px-3 py-1.5 font-mono text-[10px]">sh:1926</td><td class="px-3 py-1.5 text-[10px]">—</td><td class="px-3 py-1.5 text-[10px]">Background heartbeat + lock</td><td class="px-2"><button onclick="copyCmdRow(this)" class="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700">Copy</button></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-2 text-[9px] text-slate-500 font-mono">Click Copy for full invocation + wiki ref. Full parity &amp; impl links for porting. Heavy tools (cycles) documented here; actual compute stays in Python/MCP per P1/P6.</div>
+            </div>
+
+            <!-- 4. Key Files for Refactors -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
+                <div class="section-header mb-3">4. Key Files for Refactors (consumes existing high-quality .wiki.md + core modules)</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 text-xs">
+                    <!-- contracts -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">contracts.py <span class="text-[9px] text-red-400">(FROZEN)</span></div>
+                        <div class="text-slate-400 mt-1">Gap #1 Pre-Wave 0 shared contracts. Versioned dataclasses, to_dict, additive only. Source of truth for parsers, cache, MCP, library, resolution.</div>
+                        <div class="mt-2 flex gap-2"><a href="wikifier/contracts.py" class="text-amber-400 underline">source</a> <span class="text-slate-500">(no .wiki.md yet — highest priority for port)</span></div>
+                    </div>
+                    <!-- health -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">health.py + health.py.wiki.md</div>
+                        <div class="text-slate-400 mt-1">JSON primary truth + MD gen. load/save/upsert/get_summary/needs-attention. Dir filter built-in. Foundation for large monorepos.</div>
+                        <div class="mt-2"><a href="wikifier/health.py" class="text-amber-400 underline">source</a> | <a href="wikifier/health.py.wiki.md" class="text-amber-400 underline">wiki.md</a> (Purpose, design, functions)</div>
+                    </div>
+                    <!-- server -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">mcp/server.py + server.py.wiki.md</div>
+                        <div class="text-slate-400 mt-1">Full MCP tool surface (FastMCP). get_project_status, suggest_next_actions, deps, wiki, record_*, health, cycles, etc. Primary port target for new agent platforms.</div>
+                        <div class="mt-2"><a href="wikifier/mcp/server.py" class="text-amber-400 underline">source</a> | <a href="wikifier/mcp/server.py.wiki.md" class="text-amber-400 underline">wiki.md</a></div>
+                    </div>
+                    <!-- python parser -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">parsers/python.py + python.py.wiki.md</div>
+                        <div class="text-slate-400 mt-1">Rich import parser (uniform Dict contract). Relative resolution via FS walk, docstring stripping, multi-line. Powers everything.</div>
+                        <div class="mt-2"><a href="wikifier/parsers/python.py" class="text-amber-400 underline">source</a> | <a href="wikifier/parsers/python.py.wiki.md" class="text-amber-400 underline">wiki.md</a> (Purpose, return shape, limitations)</div>
+                    </div>
+                    <!-- js parser -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">parsers/javascript.py + javascript.py.wiki.md</div>
+                        <div class="text-slate-400 mt-1">Sister parser, same contract + confidence + TS + bare internal resolution for real monorepos (flat + pnpm/yarn).</div>
+                        <div class="mt-2"><a href="wikifier/parsers/javascript.py" class="text-amber-400 underline">source</a> | <a href="wikifier/parsers/javascript.py.wiki.md" class="text-amber-400 underline">wiki.md</a></div>
+                    </div>
+                    <!-- locking -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">locking.py</div>
+                        <div class="text-slate-400 mt-1">Project-level advisory locks (fcntl + mkdir). Protects health.json, import_cache, pending, journal under multi-agent + monitor. Automatic in high-level tools.</div>
+                        <div class="mt-2"><a href="wikifier/locking.py" class="text-amber-400 underline">source</a> <span class="port-note">(create .wiki.md when porting)</span></div>
+                    </div>
+                    <!-- resolution -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">resolution.py</div>
+                        <div class="text-slate-400 mt-1">Central canonical path + specifier resolver (ProjectContext, strategies, symlink policy). All parsers / cache / MCP delegate here. R4 de-dupe complete.</div>
+                        <div class="mt-2"><a href="wikifier/resolution.py" class="text-amber-400 underline">source</a> <span class="port-note">(create .wiki.md — critical for port)</span></div>
+                    </div>
+                    <!-- others -->
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">wikifier.sh + cli.py</div>
+                        <div class="text-slate-400 mt-1">Shell command impls (cmd_*), launcher, R1 LARGE_SCALE_MODE, streaming, init --target copy logic. cli.py thin dispatch. Reference for non-MCP ports.</div>
+                        <div class="mt-2"><a href="wikifier.sh" class="text-amber-400 underline">sh</a> | <a href="wikifier/cli.py" class="text-amber-400 underline">cli.py</a></div>
+                    </div>
+                    <div class="intel-card rounded-2xl p-4">
+                        <div class="font-semibold text-emerald-300">skills/run.md + mcp/README.md + client-configs</div>
+                        <div class="text-slate-400 mt-1">Mandatory agent protocol + MCP setup for external monorepos. Client examples (Claude etc.). Start here for new platform integration.</div>
+                        <div class="mt-2"><a href="skills/run.md" class="text-amber-400 underline">protocol</a> | <a href="wikifier/mcp/README.md" class="text-amber-400 underline">mcp</a> | client-configs/</div>
+                    </div>
+                </div>
+                <div class="mt-3 text-[10px] text-slate-400">All listed files are the minimal surface a human or porter must master. *.wiki.md files are deliberately high-signal for exactly this use-case.</div>
+            </div>
+
+            <!-- 5. Large Monorepo Realities -->
+            <div class="bg-slate-900 border border-amber-800/60 rounded-3xl p-6 mb-6 human-section">
+                <div class="section-header mb-2 text-amber-300">5. Large Monorepo Realities (what actually changes at 5k–15k+ files)</div>
+                <div class="text-sm text-slate-300">
+                    <p class="mb-2">From real dogfooding (R3, M2-Rem-08, ConsistencyHub 577-file + extrapolated) + R1 hardening in sh + contracts + visual:</p>
+                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-x-6 text-xs ml-4 list-disc">
+                        <li><strong>UI never dumps full data</strong>: HEALTH_RENDER_CAP=180, slice summaries, live client filter on in-mem array. Never 5k+ rows in DOM.</li>
+                        <li><strong>R1 degradation in library.md</strong>: "R1 Scale Degradation" / LARGE_SCALE_MODE / ScaleNote → mermaid + full tables omitted. Rich data lives in import_cache.json + MCP get_* . Visual shows banner + "use MCP / dir filter".</li>
+                        <li><strong>update-maps</strong>: always incremental except after massive structural change. Use get_incremental_status() first. --full is dangerous at scale.</li>
+                        <li><strong>Health</strong>: --dir SUBTREE / MCP health(directory=...) is mandatory. Full table only for tiny projects.</li>
+                        <li><strong>Preferred interface</strong>: MCP for Large/Massive (per README table). Shell ok for tiny/medium.</li>
+                        <li><strong>Locking mandatory</strong>: locking.py protects shared state when monitor + N agents run together.</li>
+                        <li><strong>Visual layer</strong>: same rules — early R1 check, caps, delegation notes, "Query via MCP" hints. Graceful even when artifacts are summarized.</li>
+                        <li><strong>Porting implication</strong>: Your dashboard / tools for 5k+ must replicate: summaries + targeted queries + explicit scale UI. Do not assume "full view always available".</li>
+                    </ul>
+                    <div class="mt-2 text-[10px]"><a href="README.md" class="underline">Full prescriptive scaling table in README</a> | <a href="Findings/v1_visual_layer_architecture.md" class="underline">P1 scale strategy</a></div>
+                </div>
+            </div>
+
+            <!-- 6. Visual Layer Porting + Shared Code -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
+                <div class="section-header mb-3">6. Visual Layer Porting Notes (copy-paste ready)</div>
+                <div class="text-xs text-slate-300">
+                    <p class="mb-2">The visual layer (index.html + diagnostics.html) is the easiest part to port or fork for your own project dashboard:</p>
+                    <pre class="bg-slate-950 p-3 rounded overflow-auto text-[9px] border border-slate-700">/* SHARED (from index.html + diagnostics): defensive fetch + parsers */
+async function safeFetch(path, fallback = '') { ... }  // AbortController + timeout
+function parseHealthMd(md) { ... } // line-based | table tolerant of R1
+/* HUMAN PORT NOTE: duplicate the above two + renderHealthTable + R1 detection
+   (libraryMd.includes('R1 Scale') || rows.length &gt; 300) then set caps + banners.
+   Command surface is pure data + clipboard toasts — replace the array with your cmds.
+   Expose window.yourWiring for diagnostics parity. No build step. */
+</pre>
+                    <p class="mt-2">Header, badges, intel-card, command-btn, status-pill styles are intentionally duplicated (small) with comments so each file is independently forkable. Tailwind script + mermaid only on load. Keyboard 'R' + '/' filter patterns are cheap wins.</p>
+                    <p>For other agent platforms: keep the two-page split, command copy surface (your equivalent of shell + MCP XML), and the "For Human..." hub as-is — just re-point the data sources and command strings.</p>
+                </div>
+            </div>
+
+            <!-- Other aids + process -->
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-sm">
+                <div class="section-header mb-2">Additional Investigation Aids &amp; Process</div>
+                <ul class="text-xs grid grid-cols-1 md:grid-cols-2 gap-x-6 list-disc ml-4 text-slate-300">
+                    <li>Click rows in index health for wiki-purpose pane (uses get_file_wiki logic)</li>
+                    <li>Use MCP get_resolution_diagnostics(), get_cycles(analysis=true) for deep traces (heavy, here only)</li>
+                    <li>journal/ + Logged_issues/ + pending_updates.md for audit during refactors</li>
+                    <li>file_health.json (structured) preferred over .md for scale</li>
+                    <li>monitored_paths.txt + exclude_patterns.txt for scoping large repos</li>
+                    <li><strong>Process (mandatory)</strong>: After any edit (including these HTML files): <code>prepare_edit</code> → edit → <code>record_change "reason"</code> → update/create *.wiki.md → <code>mark-green</code></li>
+                </ul>
+                <div class="mt-3 text-[10px] text-amber-300">This diagnostics.html + the callout in index.html are the "For Human Refactors &amp; Porters" experience. Lightweight, actually useful, highlights every existing .wiki.md and core module.</div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-8 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-5">
+                <div>
+                    Recorded via Wikifier process. Size impact reported to P6. Total visual layer stays inside 85 KB envelope (P6 validation required).
+                </div>
+                <div class="flex gap-x-3">
+                    <a href="index.html" class="hover:text-slate-200">← Back to fast dashboard</a>
+                    <a href="Findings/v1_visual_layer_architecture.md" class="hover:text-slate-200">P1 Arch</a>
+                    <span class="text-slate-600">v1-p4 human dev experience</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind (same as index)
+        function initTailwind() {
+            // no-op; CDN handles
+        }
+
+        // Lightweight command map filter (vanilla, for human usability)
+        function filterCommandMap() {
+            const q = (document.getElementById('cmd-filter-input') || {}).value || '';
+            const rows = document.querySelectorAll('#cmd-map-table tbody tr');
+            const lower = q.toLowerCase();
+            rows.forEach(r => {
+                const txt = r.textContent.toLowerCase();
+                r.style.display = (!q || txt.includes(lower)) ? '' : 'none';
+            });
+        }
+
+        function copyCmdRow(btn) {
+            const row = btn.closest('tr');
+            const cells = row.querySelectorAll('td');
+            const cat = cells[0].textContent.trim();
+            const sh = cells[1].textContent.trim();
+            const mcp = cells[2].textContent.trim();
+            const impl = cells[3].textContent.trim();
+            const wiki = cells[4].textContent.trim();
+            const notes = cells[5].textContent.trim();
+            const txt = `./wikifier.sh ${sh}\n# MCP: ${mcp}\n# Impl: ${impl}\n# Wiki: ${wiki}\n# Notes: ${notes}\n\n# Port/refactor tip: see contracts.py (FROZEN), *.wiki.md files, locking.py, resolution.py`;
+            navigator.clipboard?.writeText(txt).then(() => {
+                const old = btn.textContent;
+                btn.textContent = 'COPIED';
+                setTimeout(() => { btn.textContent = old; }, 1100);
+            }).catch(() => {});
+        }
+
+        // Boot (light)
+        function bootDiag() {
+            initTailwind();
+            console.log('%c[V1-P4 Human Dev] diagnostics.html ready. Full Command Map + Porting Checklist + Key Files + monorepo notes live. Links to all *.wiki.md present. Lightweight static implementation.', 'color:#854d0e');
+            // Keyboard hint
+            document.addEventListener('keydown', e => {
+                if (e.key === '/' && document.getElementById('cmd-filter-input')) {
+                    e.preventDefault();
+                    document.getElementById('cmd-filter-input').focus();
+                }
+            });
+        }
+        window.onload = bootDiag;
+        // Expose for parity / future agents / porting
+        window.wikifierHumanDev = { filterCommandMap, copyCmdRow };
+    </script>
+</body>
+</html>
