@@ -5,6 +5,12 @@ Stores parsed import information per file so that only changed files
 need to be re-parsed on subsequent update-maps runs.
 
 This design is intended to scale from small projects to massive monorepos.
+
+M2 A0/A2: Now also hosts the minimal streaming generator skeleton
+(generate_update_events) that yields ProgressEvent_v1 (with full provenance,
+ACS/CIABRE hooks, barrel/cycle signals, ScopeSpec_v1, checkpoint/resumption).
+The real pipeline integration is future work (A2+); this is the clean contract
+foundation only. All changes additive + backward compatible.
 """
 
 import json
@@ -86,6 +92,11 @@ def get_reverse_dependencies(cache: Dict[str, Any]) -> Dict[str, List[str]]:
     """
     Return the reverse dependency map: target_path -> list of source files that import it.
     Stored under a reserved top-level key to avoid colliding with file entries.
+
+    A1: This is now a first-class persisted structure (parallel to forward graph
+    built on resolved_pairs + BRC _barrel_* structures). Maintained incrementally
+    during updates (O(changed) cost) with its own _reverse_signature for delta
+    detection. Always authoritative for get_dependents / reverse queries.
     """
     return cache.get("_reverse_dependencies", {})
 
@@ -94,11 +105,117 @@ def set_reverse_dependencies(cache: Dict[str, Any], reverse_deps: Dict[str, List
     """
     Store the reverse dependency map.
     This allows get_dependents() to work efficiently even in incremental mode.
+
+    A1: Now first-class. Automatically computes + persists the matching
+    _reverse_signature (modeled on graph_signature) for observability and
+    delta detection. Callers (sh, cli run_full_update, future pure engine)
+    get consistent sig for free.
     """
     if reverse_deps:
         cache["_reverse_dependencies"] = reverse_deps
+        # A1: auto-keep signature in sync (long-term correct, observable design)
+        sig = reverse_dependency_signature(reverse_deps)
+        cache["_reverse_signature"] = sig
     else:
         cache.pop("_reverse_dependencies", None)
+        cache.pop("_reverse_signature", None)
+
+
+def maintain_reverse_dependencies_for_source(
+    cache: Dict[str, Any],
+    source_rel: str,
+    old_targets: List[str],
+    new_targets: List[str],
+) -> None:
+    """
+    A1 Core: Incrementally maintain the reverse index for one source's edge delta.
+
+    - Removes source from reverse lists of its *old* targets (if present).
+    - Adds source to reverse lists of its *new* targets (dedup + sort for stable sig/queries).
+    - Cost: O(old_edges + new_edges for this source) only. No full scan.
+    - Safe, idempotent, handles missing entries, ignores self-deps.
+    - After adjustment, the set_reverse (called internally) auto-updates the signature.
+
+    This delivers the required O(changed) or O(k dependents) scalability for 50k+ files.
+    Intended call sites: Python-primary update paths (cli.run_full_update helpers),
+    persist_rich_cache_data sites (via python -c or direct), record_deletion paths.
+    Existing cycle blast radius and ACS consumers benefit transparently (no changes needed).
+    """
+    if not source_rel or not isinstance(source_rel, str):
+        return
+    # Work on a copy of the current rev map (avoid mutating during iteration issues)
+    rev = dict(get_reverse_dependencies(cache))
+    old = [t for t in (old_targets or []) if t and t != source_rel]
+    new = [t for t in (new_targets or []) if t and t != source_rel]
+
+    # Subtract old contributions (clean only this source)
+    for tgt in old:
+        if tgt in rev and source_rel in rev[tgt]:
+            rev[tgt] = [s for s in rev[tgt] if s != source_rel]
+            if not rev[tgt]:
+                rev.pop(tgt, None)
+
+    # Add new contributions (dedup+sort for determinism + nice sigs)
+    for tgt in new:
+        if tgt not in rev:
+            rev[tgt] = []
+        if source_rel not in rev[tgt]:
+            rev[tgt].append(source_rel)
+            rev[tgt] = sorted(set(rev[tgt]))
+
+    # Persist (this also auto-sets the fresh reverse_signature)
+    set_reverse_dependencies(cache, rev)
+
+
+def rebuild_reverse_dependencies(cache: Dict[str, Any]) -> Dict[str, List[str]]:
+    """
+    A1: Full O(E) rebuild of reverse map from current per-file resolved_pairs/resolved data.
+
+    Use for initial bootstrap (empty cache), after large renames/deletes via record_deletion,
+    or for sh full-rebuild compatibility path. Always returns lists that are sorted + deduped.
+    Callers must save_cache after; signature is auto-set on the internal set_reverse call.
+    """
+    from collections import defaultdict
+    rev: Dict[str, List[str]] = defaultdict(list)
+    for rel, data in cache.items():
+        if not isinstance(rel, str) or rel.startswith("_") or not isinstance(data, dict):
+            continue
+        pairs = data.get("resolved_pairs") or data.get("resolved") or []
+        for p in pairs:
+            tgt = ""
+            if isinstance(p, dict):
+                tgt = p.get("resolved") or ""
+            elif p:
+                tgt = str(p)
+            if tgt and tgt != rel:
+                if rel not in rev[tgt]:
+                    rev[tgt].append(rel)
+    result: Dict[str, List[str]] = {}
+    for t in rev:
+        result[t] = sorted(set(rev[t]))
+    return result
+
+
+def get_reverse_dependency_stats(cache: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    A1: Compact, zero-cost, always-safe stats surface for the reverse dependency index.
+    Includes the signature (for delta/integrity), counts, edge total.
+    Used by CLI run_full_update result, MCP (get_dependents json + new surfaces),
+    health surfaces, diagnostics, get_resolution_diagnostics etc.
+    Parallel to get_cycles_reuse_stats (reused heuristics can be added later).
+    """
+    rev = get_reverse_dependencies(cache) or {}
+    sig = get_reverse_signature(cache)
+    total_edges = sum(len(v or []) for v in rev.values())
+    target_count = len(rev)
+    return {
+        "target_count": target_count,
+        "reverse_signature": sig,
+        "total_reverse_edges": total_edges,
+        "has_index": bool(target_count > 0),
+        "average_dependents_per_target": round(total_edges / target_count, 2) if target_count else 0.0,
+        "node_identity_version": NODE_IDENTITY_VERSION_V1,  # future-proof for canonical reverse
+    }
 
 
 def update_file_data(
@@ -314,6 +431,44 @@ def graph_signature(graph: Dict[str, List[str]]) -> str:
     canon = "|".join(parts)
     h = hashlib.sha256(canon.encode("utf-8")).hexdigest()
     return h[:12]
+
+
+def reverse_dependency_signature(reverse_map: Dict[str, List[str]]) -> str:
+    """Stable short signature of the reverse dependency index (target -> [sources importers]).
+
+    A1: Persisted first-class parallel to graph_signature + BRC structures.
+    Enables cheap delta detection, integrity checks, and future short-circuits
+    for reverse-dependent consumers (get_dependents, blast radius in CIABRE,
+    health/MCP diagnostics).
+
+    If this matches a previously persisted _reverse_signature, the reverse map
+    topology is unchanged (safe to trust for incremental queries even across
+    content-only edits).
+
+    Pure stdlib (hashlib), deterministic, zero side effects. 12-hex-char prefix.
+    Uses "<=" marker (vs "=>" for forward) so signature is distinct.
+    """
+    import hashlib
+    parts: List[str] = []
+    for v in sorted(reverse_map.keys()):
+        ts = sorted(set(reverse_map.get(v, [])))
+        parts.append(f"{v}<={','.join(ts)}")
+    canon = "|".join(parts)
+    h = hashlib.sha256(canon.encode("utf-8")).hexdigest()
+    return h[:12]
+
+
+def get_reverse_signature(cache: Dict[str, Any]) -> Optional[str]:
+    """Return persisted reverse dependency signature or None (A1 first-class index)."""
+    return cache.get("_reverse_signature")
+
+
+def set_reverse_signature(cache: Dict[str, Any], sig: str) -> None:
+    """Persist the reverse dependency signature for delta detection / observability (A1)."""
+    if sig:
+        cache["_reverse_signature"] = sig
+    else:
+        cache.pop("_reverse_signature", None)
 
 
 def compute_cycles(
@@ -1418,6 +1573,78 @@ def ensure_diagnostics_aggregate(cache: Dict[str, Any]) -> Dict[str, Any]:
     return fresh
 
 
+# =============================================================================
+# Workstream D: Resolution Transparency Surfaces (first-class unresolved/low-conf)
+# New helpers (additive, zero-dep, bounded, O(E) with early cutoff for scale).
+# Power get_project_status, health(json), MCP (get_dependencies filters + dedicated),
+# library.md generator, and agent "show me untrustworthy edges" workflows.
+# All problematic edges carry the new python.py provenance + diagnostics for actionability.
+# Ties directly into ACS (low<0.65) + CIABRE (weakest links include low-conf edges).
+# =============================================================================
+
+def get_unresolved_imports(cache: Dict[str, Any], max_results: int = 50) -> List[Dict[str, Any]]:
+    """Return bounded list of import edges with resolution_confidence in ('low', 'unresolved')
+    or missing resolved_path or carrying a diagnostic (failure mode visible).
+
+    Each item: src (importer relpath), raw, resolved/module, confidence, resolved_path,
+    confidence_score, diagnostic (full if present), parser, resolution_strategy, etc.
+    (All rich fields preserved from parser outputs via update_file_data.)
+
+    First-class surface per M2 plan Workstream D. Safe on empty/massive caches.
+    """
+    results: List[Dict[str, Any]] = []
+    for rel, data in cache.items():
+        if isinstance(rel, str) and not rel.startswith("_") and isinstance(data, dict):
+            for p in (data.get("resolved_pairs") or []):
+                if not isinstance(p, dict):
+                    continue
+                conf = (p.get("confidence") or p.get("resolution_confidence") or "").lower()
+                has_diag = bool(p.get("diagnostic"))
+                no_path = not p.get("resolved_path")
+                is_problem = conf in ("low", "unresolved") or has_diag or no_path
+                if is_problem:
+                    entry = dict(p)
+                    entry.setdefault("src", rel)
+                    entry.setdefault("confidence", conf or "unknown")
+                    results.append(entry)
+                    if len(results) >= max_results:
+                        return results
+    return results
+
+
+def get_low_confidence_edges(
+    cache: Dict[str, Any], *, threshold: float = 0.65, max_results: int = 50
+) -> List[Dict[str, Any]]:
+    """Return bounded edges where confidence_score < threshold (or legacy low/unresolved).
+
+    Complements get_unresolved_imports; used for ACS-style hotspots.
+    Includes full provenance/diagnostic when present (from python/JS parity).
+    """
+    results: List[Dict[str, Any]] = []
+    for rel, data in cache.items():
+        if isinstance(rel, str) and not rel.startswith("_") and isinstance(data, dict):
+            for p in (data.get("resolved_pairs") or []):
+                if not isinstance(p, dict):
+                    continue
+                score = p.get("confidence_score")
+                conf_str = (p.get("confidence") or p.get("resolution_confidence") or "").lower()
+                is_low = False
+                try:
+                    if score is not None:
+                        is_low = float(score) < threshold
+                    elif conf_str in ("low", "unresolved"):
+                        is_low = True
+                except Exception:
+                    is_low = conf_str in ("low", "unresolved")
+                if is_low or not p.get("resolved_path"):
+                    entry = dict(p)
+                    entry.setdefault("src", rel)
+                    results.append(entry)
+                    if len(results) >= max_results:
+                        return results
+    return results
+
+
 def prune_barrel_resolutions(
     root: Path, max_age_days: float = 90.0, dry_run: bool = False,
     deleted_files: Optional[Iterable[Union[str, Path]]] = None
@@ -1506,3 +1733,258 @@ def prune_barrel_resolutions(
 if __name__ == "__main__":
     import sys
     print("Wikifier Import Cache module. Import it from Python or use via shell helpers.")
+
+
+# =============================================================================
+# M2 A0 + early A2: Minimal Streaming Skeleton (generator foundation)
+# =============================================================================
+#
+# Purpose (per long-term plan):
+# - Provide a *clean, typed, versioned event-yielding generator* that later waves
+#   (A2 full streaming UX, CLI --resume, MCP partials, scoped subtree) can build on
+#   without re-architecting.
+# - Events are *always* ProgressEvent_v1 shaped (via contracts.create_progress_event
+#   or direct dataclass) and carry:
+#     * Provenance (actor, session, intent, parent)
+#     * ACS + CIABRE hooks (partials, refs, low_conf deltas)
+#     * Barrel + cycle signals (depth, via, scc, severity)
+#     * ScopeSpec_v1 (directory/globs/focus + budgets)
+#     * Checkpoint tokens + resumable hints (for pause/resume on massive repos)
+# - Zero new dependencies. Uses only stdlib + existing wikifier.* (contracts,
+#   locking patterns, compute_* helpers).
+# - **NOT a full implementation**: No real dirty detection, parsing, cycles, ACS,
+#   CIABRE, or persist yet inside the generator. Synthetic milestone events only,
+#   to prove the shape + consumption contract. Real wiring = A2+.
+# - Backward compatible: new function only. Existing callers of load/save/compute_*
+#   unaffected.
+# - Future: this generator will become the heart of run_full_update streaming mode,
+#   daemon background updates, etc.
+#
+# Usage skeleton (for consumers written in A2+):
+#   from wikifier.import_cache import generate_update_events
+#   for event in generate_update_events(root, scope={"directory": "src/"}, run_id="..."):
+#       if event["event_type"] == "partial_ready":
+#           ... act on PartialResult ...
+#       if event.get("checkpoint_token"):
+#           save_checkpoint(...)
+# =============================================================================
+
+def generate_update_events(
+    root: Optional[Path] = None,
+    scope: Optional[Union[Dict[str, Any], "ScopeSpec_v1"]] = None,
+    force_full: bool = False,
+    run_id: Optional[str] = None,
+    verbose: bool = False,
+    **kwargs: Any,
+) -> Iterable[Dict[str, Any]]:
+    """
+    Minimal generator yielding structured ProgressEvent_v1 dicts.
+
+    This is the A0 foundation only. It:
+    - Normalizes scope to ScopeSpec_v1
+    - Emits a start event with full provenance scaffolding
+    - Emits a scope_applied event (with resource hints)
+    - Emits a handful of representative milestone events exercising
+      barrel/cycle/ACS/CIABRE hook fields + checkpoint example
+    - Yields a synthetic partial_result + complete (with next_checkpoint_hint)
+    - Never raises on best-effort paths; always produces usable events.
+
+    Later A2 waves will replace the body with real incremental pipeline:
+        for changed in dirty:
+            yield parsed event
+            for edge in resolve(...):
+                yield edge_resolved (with acs computed inline)
+            ...
+            if budget_exhausted:
+                yield partial_ready with PartialResult_v1 + checkpoint
+        yield ciabre / reverse_index updates
+        yield complete
+
+    Checkpoint/resumption contract (future-proofed here):
+    - Each event may carry "checkpoint_token" (opaque string)
+    - Consumer can pass last_token on resume; generator will (in future)
+      fast-forward using it + Scope.
+
+    Locking: generator itself does not acquire locks (caller responsibility,
+    same as today for run_full_update). Long-running consumers should hold
+    project lock for the whole stream if mutating state.
+
+    All events use contracts.create_progress_event for consistency.
+    """
+    # Defensive root
+    if root is None:
+        try:
+            from .cli import discover_project_root
+            root = discover_project_root()
+        except Exception:
+            root = Path(".").resolve()
+
+    try:
+        root = Path(root).resolve()
+    except Exception:
+        root = Path(".")
+
+    # Normalize scope (supports raw dict or dataclass)
+    try:
+        from .contracts import (
+            ScopeSpec_v1,
+            create_progress_event,
+            M2_CONTRACTS_VERSION,
+        )
+    except Exception:
+        # ultra-defensive fallback (should never happen post A0)
+        ScopeSpec_v1 = None  # type: ignore
+        create_progress_event = None  # type: ignore
+        M2_CONTRACTS_VERSION = "0.0-fallback"
+
+    if ScopeSpec_v1 is not None:
+        if isinstance(scope, ScopeSpec_v1):
+            sc = scope
+        elif isinstance(scope, dict):
+            sc = ScopeSpec_v1.from_dict(scope)
+        else:
+            sc = ScopeSpec_v1()
+    else:
+        sc = type("obj", (object,), {"to_dict": lambda s: {"directory": None}})()  # type: ignore
+
+    if not run_id:
+        run_id = f"run-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{id(root) % 100000:05d}"
+
+    actor = kwargs.get("actor", "import_cache.skeleton")
+    session = kwargs.get("session_id", f"sess-{run_id[-6:]}")
+
+    # 1. Start event (provenance + initial scope + hook scaffolding)
+    start_ev = None
+    if create_progress_event:
+        start_ev = create_progress_event(
+            "start",
+            run_id,
+            scope=sc,
+            provenance={
+                "actor": actor,
+                "session_id": session,
+                "intent_ref": kwargs.get("intent_ref", "update-maps:skeleton"),
+                "parent_checkpoint": kwargs.get("resume_from"),
+            },
+            payload={
+                "force_full": bool(force_full),
+                "m2_foundation": True,
+                "contracts_version": M2_CONTRACTS_VERSION,
+            },
+            diagnostics={"note": "A0 minimal skeleton - real pipeline in A2+"},
+        )
+    else:
+        start_ev = {
+            "event_type": "start",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "run_id": run_id,
+            "scope": (sc.to_dict() if hasattr(sc, "to_dict") else {}),
+            "provenance": {"actor": actor, "session_id": session},
+            "version": "1.0",
+        }
+    yield start_ev
+
+    # 2. Scope applied (early projection point for future real scoping)
+    scope_ev = None
+    if create_progress_event:
+        scope_ev = create_progress_event(
+            "scope_applied",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={
+                "effective_directory": sc.directory if hasattr(sc, "directory") else None,
+                "focus_count": len(getattr(sc, "focus_files", []) or []),
+                "transitive": getattr(sc, "transitive_closure", True),
+            },
+            resource_hints=getattr(sc, "resource_hints", {}) if hasattr(sc, "resource_hints") else {},
+        )
+    else:
+        scope_ev = {"event_type": "scope_applied", "run_id": run_id, "scope": {}, "version": "1.0"}
+    yield scope_ev
+
+    # 3-5. Representative milestone events exercising all required signal channels
+    # (barrel, cycle, ACS, checkpoint). These prove the long-term shape.
+    if create_progress_event:
+        yield create_progress_event(
+            "file_parsed",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={"file": "src/example.ts", "mtime": int(time.time())},
+            barrel_signals={"via_barrel": True, "depth": 2, "detector": "bree"},
+        )
+        yield create_progress_event(
+            "edge_resolved",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={"raw": "./utils", "resolved": "src/utils.ts", "confidence": "high"},
+            acs_hook={
+                "confidence_score": 0.87,
+                "reasons": ["base:high", "strong_resolution_strategy"],
+                "explanation": "High-fidelity ... Recommendation: Safe for automated...",
+            },
+            cycle_signals={"in_cycle": False},
+        )
+        yield create_progress_event(
+            "cycle_detected",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            cycle_signals={"scc_id": "scc-001", "size": 3, "severity": "medium", "ciabre_version": "1.3"},
+            acs_hook={"blast_radius_hint": 12},
+            checkpoint_token=f"after:cycle:scc-001:{run_id[-4:]}",
+        )
+    else:
+        yield {"event_type": "file_parsed", "run_id": run_id, "version": "1.0"}
+        yield {"event_type": "edge_resolved", "run_id": run_id, "acs_hook": {}, "version": "1.0"}
+        yield {"event_type": "cycle_detected", "run_id": run_id, "cycle_signals": {}, "checkpoint_token": "synthetic", "version": "1.0"}
+
+    # 6. Partial ready (early result contract for A2+ agents on budgets)
+    if create_progress_event:
+        partial = {
+            "run_id": run_id,
+            "yielded_at": datetime.now(timezone.utc).isoformat(),
+            "scope_applied": (sc.to_dict() if hasattr(sc, "to_dict") else {}),
+            "files_processed": 1,
+            "edges_resolved": 2,
+            "cycles_found": 1,
+            "acs_partial": {"avg_confidence": 0.71, "low_conf_edges": 0},
+            "next_checkpoint_hint": f"after:partial:{run_id[-4:]}",
+            "version": "1.0",
+        }
+        yield create_progress_event(
+            "partial_ready",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session},
+            payload={"partial_result": partial},
+            partial_result=partial,  # convenience for consumers
+            checkpoint_token=partial["next_checkpoint_hint"],
+        )
+    else:
+        yield {"event_type": "partial_ready", "run_id": run_id, "checkpoint_token": "synthetic-partial", "version": "1.0"}
+
+    # 7. Complete (with final checkpoint + summary hooks)
+    if create_progress_event:
+        yield create_progress_event(
+            "complete",
+            run_id,
+            scope=sc,
+            provenance={"actor": actor, "session_id": session, "completed": True},
+            payload={
+                "success": True,
+                "note": "A0 skeleton complete. Full engine integration in A2+ waves.",
+                "m2_foundation": True,
+            },
+            acs_hook={"final_summary_ref": "_acs_summary"},
+            cycle_signals={"ciabre_ref": "_cycle_analyses"},
+            checkpoint_token=f"final:{run_id}",
+            resumable=False,  # stream ended
+        )
+    else:
+        yield {"event_type": "complete", "run_id": run_id, "version": "1.0"}
+
+    # Generator exhausted cleanly. Real impl will also yield barrel_expanded,
+    # ciabre_updated, reverse_index_updated, error, etc.

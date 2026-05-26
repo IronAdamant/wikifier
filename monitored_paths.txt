@@ -4,7 +4,19 @@
 
 .
 
+# MCP server configuration (important for agent integration)
+.mcp.json
+wikifier/mcp/
+
 # Example for documenting another project:
 # ../my-main-application/src
 # ../my-main-application/tests
 # ../my-main-application/docs
+
+# --- Dogfood target: RecipeLab_alt (non-trivial JS codebase for Wikifier MCP stress test) ---
+# Using symlink for clean relative paths in health matrix and library.md
+recipe-lab-dogfood/src
+recipe-lab-dogfood/tests
+recipe-lab-dogfood/public
+recipe-lab-dogfood/data
+recipe-lab-dogfood/src/internal/mcp-stress

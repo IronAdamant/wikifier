@@ -19,7 +19,7 @@ import re
 import os
 import sys
 from pathlib import Path
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 
 # R6: reuse the canonical script locator (avoids hard ./wikifier.sh assumption in external installs)
@@ -29,10 +29,12 @@ try:
     from wikifier.cli import (
         get_script_path as _get_wikifier_script_path,
         discover_project_root as _cli_discover_project_root,
+        _get_effective_root as _cli_get_effective_root,  # Workstream E: central shared helper for clean API + thin MCP/CLI consumers
     )
 except Exception:
     _get_wikifier_script_path = None
     _cli_discover_project_root = None
+    _cli_get_effective_root = None
 
 mcp = FastMCP("Wikifier")
 
@@ -88,24 +90,25 @@ WIKIFIER_ROOT = _discover_project_root()
 def _get_effective_root(project_root: Optional[str] = None) -> Path:
     """
     Resolve the project root to use for a given operation.
-
-    Resolution order (highest to lowest priority):
-    1. Explicit `project_root` parameter passed to the tool
-    2. WIKIFIER_PROJECT_ROOT environment variable
-    3. Auto-discovered root (from CWD walk or package fallback)
+    Workstream E (clean public API): thin delegation to shared _get_effective_root in cli.py
+    (the library implementation). Falls back to local logic only if import failed at load.
+    This eliminates duplication and ensures parity between library callers and MCP tools.
     """
+    if _cli_get_effective_root is not None:
+        try:
+            return _cli_get_effective_root(project_root)
+        except Exception:
+            pass  # fall to local resilience
+    # Fallback (import failed or error): original MCP logic (explicit/env + startup root)
     if project_root:
         p = Path(project_root).expanduser().resolve()
         if p.exists():
             return p
-        # If the provided path doesn't exist, fall back gracefully
-
     env_root = os.environ.get("WIKIFIER_PROJECT_ROOT")
     if env_root:
         p = Path(env_root).expanduser().resolve()
         if p.exists():
             return p
-
     return WIKIFIER_ROOT  # the one discovered at startup
 
 
@@ -148,6 +151,11 @@ class UpdateMapsResult(BaseModel):
 
     Wave 5: now supports use_python_primary for direct run_full_update (deeper pure-Py
     pipeline + barrel/creative) without shell; falls back to sh path otherwise.
+
+    A2 early (Partial Results & UX Scaffolding): added directory + max_files passthrough
+    to python-primary path for subtree scoping + budget. Result now carries partial,
+    scope, progress, partial_reason, continuation_hint etc. when python-primary used
+    (enables trustworthy partial results even on interrupt/budget/scoped runs).
     """
     success: bool
     project_root: str
@@ -161,6 +169,12 @@ class UpdateMapsResult(BaseModel):
     files_to_reparse: int = 0
     persist_exercised: bool = False
     barrel_creative_tied: bool = False  # Wave 6: Gap#1 barrel + creative signals exercised under pure primary path (for ACS/CIABRE surfaces)
+    # A2 early partial/scoping UX (populated in python-primary path; defaults for sh path)
+    partial: bool = False
+    partial_reason: Optional[str] = None
+    scope: Optional[Dict[str, Any]] = None
+    progress: Optional[Dict[str, Any]] = None
+    continuation_hint: Optional[str] = None
 
 
 # =============================================================================
@@ -330,110 +344,93 @@ def _get_resolved_from_cache(file: str, root: Path) -> list[dict]:
 @mcp.tool()
 def check_changes(project_root: Optional[str] = None) -> dict:
     """
-    Scan for file changes and update the health matrix.
+    Scan for file changes and update the health matrix (Workstream E: thin library consumer).
 
-    Returns structured information about what was detected.
-    Now supports targeting any project via project_root.
+    Delegates directly to the Python library `wikifier.check_changes` (pure primary path,
+    structured return, locking, journal/pending/health side effects). No subprocess shell
+    for this core mandatory tool. Falls back to sh only on import/runtime error.
     """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("check-changes", root=root)
-        # Try to extract how many files changed
-        changed = 0
-        for line in output.splitlines():
-            if "Detected" in line and "changed" in line:
-                try:
-                    changed = int(line.split()[1])
-                except:
-                    pass
-        barrel_sum = {}
-        try:
-            import wikifier.import_cache as ic
-            cache = ic.load_cache(root) or {}
-            barrel_sum = ic.get_barrel_cache_summary(cache) or {}
-        except Exception:
-            barrel_sum = {"has_brc": False, "note": "BRC summary unavailable in check-changes MCP (direct path)"}
-        return {
-            "success": True,
-            "project_root": str(root),
-            "changes_detected": changed,
-            "message": output,
-            "recommendation": "Read file_health.md and pending_updates.md, then prioritize Red → Yellow files.",
-            # Continuation: reports/summary wired into check-changes MCP path (rich auto-Yellow evidence now directly visible to agents via MCP too; daemon benefits via sh)
-            "barrel_invalidation_summary": barrel_sum,
-            "rich_auto_yellow_via": "BRC get_barrel_invalidation_reports + apply (see check-changes sh + health.apply_barrel...)"
-        }
+        from wikifier.cli import check_changes as _lib_check
+        res = _lib_check(project_root=str(root))
+        # Enrich with MCP-specific barrel view if not present (best effort, non breaking)
+        if "barrel_invalidation_summary" not in res or not res.get("barrel_invalidation_summary"):
+            try:
+                import wikifier.import_cache as ic
+                cache = ic.load_cache(root) or {}
+                res["barrel_invalidation_summary"] = ic.get_barrel_cache_summary(cache) or {}
+            except Exception:
+                pass
+        res.setdefault("rich_auto_yellow_via", "Python library check_changes (MCP thin)")
+        return res
     except Exception as e:
-        return {
-            "success": False,
-            "project_root": str(root),
-            "error": str(e)
-        }
+        # Resilient fallback to previous sh path (preserves behavior if lib unavailable)
+        try:
+            output = _run_wikifier_command("check-changes", root=root)
+            return {
+                "success": True,
+                "project_root": str(root),
+                "message": output,
+                "recommendation": "Read file_health.md and pending_updates.md, then prioritize Red → Yellow files.",
+                "fallback": "sh",
+                "error_detail": str(e),
+            }
+        except Exception as e2:
+            return {"success": False, "project_root": str(root), "error": f"lib+sh failed: {e} / {e2}"}
 
 
 @mcp.tool()
 def record_change(file: str, reason: str, project_root: Optional[str] = None) -> dict:
-    """Record a semantic change. Required after edits. Returns structured result."""
+    """Record a semantic change. Required after edits. Returns structured result.
+    (Workstream E: thin direct call to library; no shell for core mandatory workflow.)
+    """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("record-change", [file, reason], root=root)
-        return {
-            "success": True,
-            "file": file,
-            "message": output,
-            "project_root": str(root)
-        }
+        from wikifier.cli import record_change as _lib_record
+        return _lib_record(file=file, reason=reason, project_root=str(root))
     except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root)
-        }
+        # Fallback for resilience
+        try:
+            output = _run_wikifier_command("record-change", [file, reason], root=root)
+            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh", "error_detail": str(e)}
+        except Exception as e2:
+            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
 
 
 @mcp.tool()
 def record_deletion(file: str, reason: str, project_root: Optional[str] = None) -> dict:
-    """Record the deletion of a file with a reason. Returns structured result (final robustness)."""
+    """Record the deletion of a file with a reason. Returns structured result (final robustness).
+    (Workstream E thin library consumer.)
+    """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("record-deletion", [file, reason], root=root)
-        return {
-            "success": True,
-            "file": file,
-            "action": "deletion",
-            "message": output,
-            "project_root": str(root)
-        }
+        from wikifier.cli import record_deletion as _lib_del
+        return _lib_del(file=file, reason=reason, project_root=str(root))
     except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root)
-        }
+        try:
+            output = _run_wikifier_command("record-deletion", [file, reason], root=root)
+            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh"}
+        except Exception as e2:
+            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
 
 
 @mcp.tool()
 def mark_green(file: str, reason: str = "", project_root: Optional[str] = None) -> dict:
-    """Mark a file as Green after updating its wiki summary. Returns structured result."""
+    """Mark a file as Green after updating its wiki summary. Returns structured result.
+    (Workstream E: thin library consumer.)
+    """
     root = _get_effective_root(project_root)
-    args = [file, reason] if reason else [file]
     try:
-        output = _run_wikifier_command("mark-green", args, root=root)
-        return {
-            "success": True,
-            "file": file,
-            "message": output,
-            "project_root": str(root)
-        }
+        from wikifier.cli import mark_green as _lib_mark
+        return _lib_mark(file=file, reason=reason, project_root=str(root))
     except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root)
-        }
+        try:
+            args = [file, reason] if reason else [file]
+            output = _run_wikifier_command("mark-green", args, root=root)
+            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh"}
+        except Exception as e2:
+            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
 
 
 @mcp.tool()
@@ -459,13 +456,25 @@ def prepare_edit(file: str, project_root: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-def update_maps(project_root: Optional[str] = None, full: bool = False, use_python_primary: bool = False) -> UpdateMapsResult:
+def update_maps(
+    project_root: Optional[str] = None,
+    full: bool = False,
+    use_python_primary: bool = False,
+    # A2 early Partial Results & UX Scaffolding: subtree scoping + budget passthrough to python-primary
+    directory: Optional[str] = None,
+    max_files: Optional[int] = None,
+) -> UpdateMapsResult:
     """Rebuild library.md with fresh dependency analysis for the target project.
 
     Wave 5: `use_python_primary=True` wires direct run_full_update() (deeper pipeline
     from cli.py: dirty+parse+persist+barrel/creative tie-in, no sh) for packaged
     external robustness. Falls back to robust _run_wikifier_command (sh) if not or error.
     Explicit flag matches CLI --python-primary and daemon wiring.
+
+    A2 early: `directory` (subtree filter, e.g. "src/") and `max_files` (budget) are
+    forwarded only to the python-primary path. When used, result includes `partial`,
+    `scope`, `progress`, `partial_reason`, `continuation_hint` making partial results
+    trustworthy and usable even if interrupted or budget-limited. Sh path unchanged.
     """
     root = _get_effective_root(project_root)
     used_primary = False
@@ -483,13 +492,19 @@ def update_maps(project_root: Optional[str] = None, full: bool = False, use_pyth
                 verbose=False,
                 use_canonical=True,
                 use_python_primary=True,
+                directory=directory,
+                max_files=max_files,
             )
             duration = time.time() - start
             used_primary = True
             files_reparse = res.get("files_to_reparse", 0)
             persist_done = bool(res.get("persist_pipeline_exercised"))
-            # Construct rich message from the pure path result
-            msg = f"Python-primary: success={res.get('success')} files={files_reparse} persist={persist_done} barrel_creative_tied={res.get('barrel_creative_tied_in_pure_path')} note={res.get('note','')[:200]}"
+            # Construct rich message from the pure path result (now includes A2 partial info)
+            partial_flag = res.get("partial", False)
+            scope = res.get("scope")
+            prog = res.get("progress")
+            hint = res.get("continuation_hint")
+            msg = f"Python-primary: success={res.get('success')} files={files_reparse} persist={persist_done} barrel_creative_tied={res.get('barrel_creative_tied_in_pure_path')} partial={partial_flag} scope={scope} note={str(res.get('note',''))[:150]}"
             return UpdateMapsResult(
                 success=bool(res.get("success")),
                 project_root=str(root),
@@ -503,6 +518,11 @@ def update_maps(project_root: Optional[str] = None, full: bool = False, use_pyth
                 files_to_reparse=files_reparse,
                 persist_exercised=persist_done,
                 barrel_creative_tied=bool(res.get("barrel_creative_tied_in_pure_path")),
+                partial=partial_flag,
+                partial_reason=res.get("partial_reason"),
+                scope=scope,
+                progress=prog,
+                continuation_hint=hint,
             )
         except Exception as ex:
             # fall through to sh path (best-effort, still robust)
@@ -544,6 +564,12 @@ def update_maps(project_root: Optional[str] = None, full: bool = False, use_pyth
         files_to_reparse=0,
         persist_exercised=False,
         barrel_creative_tied=False,
+        # A2 fields default for sh path (no partial info from sh yet)
+        partial=False,
+        partial_reason=None,
+        scope={"note": "sh_path_no_scope_support_yet"},
+        progress=None,
+        continuation_hint=None,
     )
 
 
@@ -617,6 +643,21 @@ def health(
                         "cycles_reuse": cycles_reuse,
                         "sample_barrel_reports": sample_barrel_reports,  # basic observability in health(json)
                     }
+                # M2 Workstream D: same resolution transparency in health(json) for consistency (unresolved/low-conf now first-class alongside ACS/barrel)
+                try:
+                    unresolved_samples = ic.get_unresolved_imports(cache, max_results=5) or []
+                    lowc_samples = ic.get_low_confidence_edges(cache, max_results=5) or []
+                    diag_sum = ic.ensure_diagnostics_aggregate(cache) or {}
+                    if unresolved_samples or lowc_samples or diag_sum.get("low_or_unresolved_count"):
+                        dep_intel["resolution_transparency"] = {
+                            "low_or_unresolved_count": diag_sum.get("low_or_unresolved_count", 0),
+                            "by_category": diag_sum.get("by_category", {}),
+                            "sample_unresolved_or_low_conf": unresolved_samples or lowc_samples or diag_sum.get("samples", [])[:5],
+                            "helpers": "import_cache.get_unresolved_imports / get_low_confidence_edges + get_dependencies(..., unresolved_only=True)",
+                            "parser_parity_note": "python vs JS asymmetry closed for resolved_path / diagnostics / provenance on relatives (Workstream D)",
+                        }
+                except Exception:
+                    pass
             except Exception:
                 pass
             return {
@@ -799,7 +840,7 @@ def issues(severity: str = "all", project_root: Optional[str] = None, format: Li
 # =============================================================================
 
 @mcp.tool()
-def get_dependencies(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None, low_confidence_only: bool = False) -> str | dict:
+def get_dependencies(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None, low_confidence_only: bool = False, unresolved_only: bool = False) -> str | dict:
     """
     Get what a file imports (forward dependencies).
     Returns either human-readable text or structured JSON.
@@ -817,6 +858,7 @@ def get_dependencies(file: str, format: Literal["text", "json"] = "text", projec
       * JSON: filter confidence_score < 0.65 or high-sev reasons; read full explanation + traces + analysis.
       * Text: "why:" lines contain ready-to-quote Recommendation (full action sentence preserved).
     - low_confidence_only=True: server-side ACS filter (post-enrich) to return only low-trust edges (score<0.65 or low/unresolved) for direct risky-dep focus (Gap #1 surfacing polish).
+    - unresolved_only=True (M2 Workstream D Resolution Transparency): further filter to edges that are unresolved / lack resolved_path / carry diagnostic (first-class failure visibility). Combines with low_conf filter. New helpers in import_cache power this + get_project_status/ health / library.md.
     Scalable, precomputed, trustworthy for autonomous use across all codebase sizes.
     """
     root = _get_effective_root(project_root)
@@ -893,6 +935,15 @@ def get_dependencies(file: str, format: Literal["text", "json"] = "text", projec
                 it for it in cached
                 if (it.get("confidence_score") or 1.0) < 0.65
                 or str(it.get("confidence") or "").lower() in ("low", "unresolved")
+            ]
+
+        # M2 Workstream D: unresolved/low-conf transparency filter (additive, uses new import_cache helpers spirit + direct)
+        if unresolved_only:
+            cached = [
+                it for it in cached
+                if str(it.get("confidence") or it.get("resolution_confidence") or "").lower() in ("low", "unresolved")
+                or not it.get("resolved_path")
+                or bool(it.get("diagnostic"))
             ]
 
         if format == "json":
@@ -1005,9 +1056,14 @@ def get_dependents(file: str, format: Literal["text", "json"] = "text", project_
     Get files that import this file (reverse dependencies).
     One of the most valuable tools for understanding impact.
     Now includes cache fallback (Fix 6) for resilience when the main table is sparse.
+
+    A1: Enhanced to surface first-class reverse dependency index details (signature for
+    delta detection, stats) when using the persisted _reverse_dependencies path.
+    The index is maintained incrementally (O(changed)) with its own signature parallel
+    to graph_signature. JSON responses now include "reverse_signature" + "reverse_index_stats".
     """
     root = _get_effective_root(project_root)
-    # Preferred fast path: use the persisted _reverse_dependencies structure (new in M2-Rem-08)
+    # Preferred fast path: use the persisted _reverse_dependencies structure (A1 first-class)
     try:
         import wikifier.import_cache as import_cache
         cache = import_cache.load_cache(root)
@@ -1015,11 +1071,15 @@ def get_dependents(file: str, format: Literal["text", "json"] = "text", project_
         if file in reverse_map:
             dependents = reverse_map[file]
             if format == "json":
+                rev_sig = import_cache.get_reverse_signature(cache)
+                rev_stats = import_cache.get_reverse_dependency_stats(cache)
                 return {
                     "file": file,
                     "dependents": dependents,
                     "count": len(dependents),
-                    "source": "reverse_cache"
+                    "source": "reverse_cache_first_class_a1",
+                    "reverse_signature": rev_sig,
+                    "reverse_index_stats": rev_stats,
                 }
             return f"Files that import {file} ({len(dependents)}):\n" + "\n".join(f"- {d}" for d in dependents)
     except Exception:
@@ -1046,11 +1106,23 @@ def get_dependents(file: str, format: Literal["text", "json"] = "text", project_
             pass
 
     if format == "json":
+        # Even on fallback, try to surface the (possibly present) A1 index signature/stats
+        rev_sig = None
+        rev_stats = {}
+        try:
+            import wikifier.import_cache as import_cache
+            c = import_cache.load_cache(root)
+            rev_sig = import_cache.get_reverse_signature(c)
+            rev_stats = import_cache.get_reverse_dependency_stats(c)
+        except Exception:
+            pass
         return {
             "file": file,
             "dependents": dependents,
             "count": len(dependents),
-            "source": "table" if reverse_map.get(file) else "cache_fallback"
+            "source": "table" if reverse_map.get(file) else "cache_fallback",
+            "reverse_signature": rev_sig,
+            "reverse_index_stats": rev_stats,
         }
 
     if not dependents:
@@ -1556,7 +1628,27 @@ def get_project_status(
                     "acs_version": acs.get("acs_version"),
                     "barrel_invalidation_summary": barrel,  # Wave 2: num_chains, v1 coverage, partials, indexed barrels (for "why" via get_barrel_invalidation_reports when dirty)
                     "sample_barrel_reports": sample_barrel_reports,  # basic observability added (get_project_status + health)
+                    # A1: first-class reverse dependency index now uniformly surfaced on project_status/health (MCP primary surfaces)
+                    "reverse_dependency_index": ic.get_reverse_dependency_stats(cache),
                 }
+            # M2 Workstream D Resolution Transparency (parser parity + new import_cache helpers):
+            # first-class unresolved/low-conf surfaces now in primary status (visible failure modes + provenance).
+            # Agents can now ask "what in my dep map is untrustworthy?" directly. Ties to ACS (low conf) + CIABRE (weak links) + diagnostics aggregates.
+            try:
+                unresolved_samples = ic.get_unresolved_imports(cache, max_results=5) or []
+                lowc_samples = ic.get_low_confidence_edges(cache, max_results=5) or []
+                # reuse existing diagnostics aggregate (has low_or_unresolved_count + by_cat + samples)
+                diag_sum = ic.ensure_diagnostics_aggregate(cache) or {}
+                if unresolved_samples or lowc_samples or diag_sum.get("low_or_unresolved_count"):
+                    dep_intel["resolution_transparency"] = {
+                        "low_or_unresolved_count": diag_sum.get("low_or_unresolved_count", 0),
+                        "by_category": diag_sum.get("by_category", {}),
+                        "sample_unresolved_or_low_conf": unresolved_samples or lowc_samples or diag_sum.get("samples", [])[:5],
+                        "helpers": "import_cache.get_unresolved_imports / get_low_confidence_edges; MCP get_dependencies(..., unresolved_only=True); get_resolution_diagnostics()",
+                        "parser_parity_note": "python.py now emits resolved_path + diagnostic + (parser, strategy, resolution_metadata) for relatives (matches JS fidelity)",
+                    }
+            except Exception:
+                pass
         except Exception:
             pass
 

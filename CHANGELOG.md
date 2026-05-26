@@ -23,6 +23,9 @@ The parallel swarm of 6 implementation agents (plus focused squeeze waves) has c
 
 ## [Unreleased] 
 
+### Added / Completed (Cross-cutting M2 Harness - Agent 7)
+- **Full M2 Scale Harness port (gap1_validation_harness.py)**: Complete 10k-50k synthetic creative generators (barrels/cycles/dyn/cond/creative mixed-lang, tuned for 50k), concurrency stress (multi-agent+daemon+locking, 8-agent deep), functional compaction/journal hooks (real size sim + BRC prune exercise). --m2-health --deep now fully functional with 50k + richer metrics + separate deep report. Integrated WS validation (A-E surfaces) + hardened real monorepo (RecipeLab) + new multi-agent real dogfood runs. All wired to --gap1-health (lite) + --m2-health; zero-dep, observable (M2-* notes/metrics), scalable. Updates to plans/trackers + this CHANGELOG. See Findings/m2-full-closure-longterm-scalable-plan.md (A0 + Cross-Cutting now fully delivered), gap1_validation_harness.py:2625+ (M2 ext), 3508+ (CLI deep), new test_real_multiagent_dogfood. Validates other workstreams at 50k+ creative scale.
+
 ## [0.3.2] - 2026-05-21 (Barrel/BREE + Persistent BRC Gap #1 Wave 3/4 continuation + proof fixes + 5k dogfood + prune/log/MCP/CHANGELOG)
 ### Fixed (root cause of --gap1-health RED for run_barrel_invalidation_proof + Scale+Dogfood + goldens)
 - **Synth resolver bugs in harness** (gap1_validation_harness.py): naive lstrip("./") mangled "../barrels" specs and sub "./leaf" in both proof + 5k scale sres → expansions hit unresolved path with barrel_chain=[] → file_index empty, no leaf in snaps, get_affected/reports missed, 0 Yellows, deletion/symlink/overlap cases failed. Fixed with proper (base / spec).resolve() + barrel index logic (handles .., dirs, leafs, symlinks). Consumers now correctly returned, index populated, Yellows applied, proof+scale GREEN.
