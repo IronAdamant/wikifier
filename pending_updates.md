@@ -2,4 +2,56 @@
 
 (no pending items)
 
-Run `./wikifier.sh check-changes` after pointing `monitored_paths.txt` at a target codebase.
+- Logged_issues/moderate/backend/health-matrix-flakiness.md: LLM/agent edit — Initial issue created for Milestone 1 - Core Reliability.
+- Logged_issues/moderate/other/python-library-design.md: LLM/agent edit — Created focused design issue for the Python library API (split from previous broad issue).
+- Logged_issues/moderate/other/python-library-initial-implementation.md: LLM/agent edit — Created implementation issue for initial Python library (split from previous broad issue).
+- Logged_issues/v0.4-roadmap.md: LLM/agent edit — Updated v0.4 roadmap to reference the new Milestone 1 task list.
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed significant progress on M1-C1: validate command now correctly uses exclude patterns and has improved structure.
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-B1: Journal writing is now atomic.
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-A2: Health matrix writes are now idempotent.
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-A5: mark-green now reliably clears pending entries with improved logic and logging.
+- test/json-test.md: LLM/agent edit — Testing JSON output for M1-B2
+- test/json-test.md: File was deleted. Consider removing wiki entry or marking archival.
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-B2 and M1-B3: JSON output + better validation for record commands.
+- test/journal-format.md: LLM/agent edit — Testing standardized journal format with separator (M1-B4)
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-B4: Journal entries now use consistent '---' separator.
+- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-A3 and M1-A4: Exit codes standardized + better error messages for health operations.
+- Logged_issues/v0.4-roadmap.md: LLM/agent edit — Updated roadmap to reference the new M2 task list.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Made significant robustness improvements to the Python parser during M2-02 refinement.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued M2-02 refinement: Better relative import resolution and multi-line support.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued M2-02 refinement: Better relative import logic and testability.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued M2-02 polish: Better relative resolution and testability.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Light polish on M2-02: Better comments and long-term maintainability notes.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Light polish on M2-02: Added easy-to-run test helper and validation cases.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Final light polish on M2-02: Added limitations, performance notes, and extensibility comments.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Final light polish on M2-02: Added flow comment and minor readability improvements.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Small improvement to M2-02: Parser now outputs JSON when invoked from shell.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Started integration of Python parser into update-maps.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — First integration of Python parser into update-maps completed.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Advanced M2 integration: Real edge drawing logic added to update-maps.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Advanced M2 integration: Better edge resolution + improved graph readability.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Improved output presentation in update-maps (D).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on M2-03 (JS parser) + M2-05 / M2-07 (better edges + output).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on M2-03, M2-05, and M2-07 (A + B + C).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — M2-02: Final light polish completed.
+- v0.4-execution-plan.md: LLM/agent edit — Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks.
+- Logged_issues/v0.4-roadmap.md: LLM/agent edit — Linked to the new detailed v0.4-execution-plan.md.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on M2-05 and M2-07 (edge resolution + output quality).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on A1 (JS parser), B1 (edge resolution), C1 (output quality).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A2 (JS parser), B2 (edge resolution), C2 (output quality).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A3 (JS parser), B3 (edge resolution), C3 (output quality).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A4 (JS parser), B4 (edge resolution), C4 (output quality).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A5 (JS parser), B5 (edge resolution), C5 (output quality).
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A6, B6, C6.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A7, B7, C7.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A8, B8, C8.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A9, B9, C9.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A10, B10, C10.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A11, B11, C11.
+- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A12, B12, C12.
+- v0.4-Execution-Plan.md: LLM/agent edit — Added 'Current Focus Summary' section at the top for quick session context restoration.
+- v0.4-Execution-Plan.md: LLM/agent edit — User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers.
+- src/internal/wikifier-stress/synthetic-dep-graph/churnA.js: LLM/agent edit — Heavy churn test file 0
+- src/internal/wikifier-stress/synthetic-dep-graph/churnB.js: LLM/agent edit — Heavy churn test file 1
+- src/internal/wikifier-stress/synthetic-dep-graph/churnC.js: LLM/agent edit — Heavy churn test file 2
+- wikifier.sh: LLM/agent edit — Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling.

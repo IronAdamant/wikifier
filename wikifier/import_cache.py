@@ -1418,6 +1418,78 @@ def ensure_diagnostics_aggregate(cache: Dict[str, Any]) -> Dict[str, Any]:
     return fresh
 
 
+# =============================================================================
+# Workstream D: Resolution Transparency Surfaces (first-class unresolved/low-conf)
+# New helpers (additive, zero-dep, bounded, O(E) with early cutoff for scale).
+# Power get_project_status, health(json), MCP (get_dependencies filters + dedicated),
+# library.md generator, and agent "show me untrustworthy edges" workflows.
+# All problematic edges carry the new python.py provenance + diagnostics for actionability.
+# Ties directly into ACS (low<0.65) + CIABRE (weakest links include low-conf edges).
+# =============================================================================
+
+def get_unresolved_imports(cache: Dict[str, Any], max_results: int = 50) -> List[Dict[str, Any]]:
+    """Return bounded list of import edges with resolution_confidence in ('low', 'unresolved')
+    or missing resolved_path or carrying a diagnostic (failure mode visible).
+
+    Each item: src (importer relpath), raw, resolved/module, confidence, resolved_path,
+    confidence_score, diagnostic (full if present), parser, resolution_strategy, etc.
+    (All rich fields preserved from parser outputs via update_file_data.)
+
+    First-class surface per M2 plan Workstream D. Safe on empty/massive caches.
+    """
+    results: List[Dict[str, Any]] = []
+    for rel, data in cache.items():
+        if isinstance(rel, str) and not rel.startswith("_") and isinstance(data, dict):
+            for p in (data.get("resolved_pairs") or []):
+                if not isinstance(p, dict):
+                    continue
+                conf = (p.get("confidence") or p.get("resolution_confidence") or "").lower()
+                has_diag = bool(p.get("diagnostic"))
+                no_path = not p.get("resolved_path")
+                is_problem = conf in ("low", "unresolved") or has_diag or no_path
+                if is_problem:
+                    entry = dict(p)
+                    entry.setdefault("src", rel)
+                    entry.setdefault("confidence", conf or "unknown")
+                    results.append(entry)
+                    if len(results) >= max_results:
+                        return results
+    return results
+
+
+def get_low_confidence_edges(
+    cache: Dict[str, Any], *, threshold: float = 0.65, max_results: int = 50
+) -> List[Dict[str, Any]]:
+    """Return bounded edges where confidence_score < threshold (or legacy low/unresolved).
+
+    Complements get_unresolved_imports; used for ACS-style hotspots.
+    Includes full provenance/diagnostic when present (from python/JS parity).
+    """
+    results: List[Dict[str, Any]] = []
+    for rel, data in cache.items():
+        if isinstance(rel, str) and not rel.startswith("_") and isinstance(data, dict):
+            for p in (data.get("resolved_pairs") or []):
+                if not isinstance(p, dict):
+                    continue
+                score = p.get("confidence_score")
+                conf_str = (p.get("confidence") or p.get("resolution_confidence") or "").lower()
+                is_low = False
+                try:
+                    if score is not None:
+                        is_low = float(score) < threshold
+                    elif conf_str in ("low", "unresolved"):
+                        is_low = True
+                except Exception:
+                    is_low = conf_str in ("low", "unresolved")
+                if is_low or not p.get("resolved_path"):
+                    entry = dict(p)
+                    entry.setdefault("src", rel)
+                    results.append(entry)
+                    if len(results) >= max_results:
+                        return results
+    return results
+
+
 def prune_barrel_resolutions(
     root: Path, max_age_days: float = 90.0, dry_run: bool = False,
     deleted_files: Optional[Iterable[Union[str, Path]]] = None
