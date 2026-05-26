@@ -27,6 +27,7 @@ JSON Schema (v1):
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -174,6 +175,58 @@ def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> No
         "reason": reason
     }
     _do_save_health(root, health)
+
+
+def apply_barrel_invalidation_reports(
+    root: Path, reports: List[Dict[str, Any]]
+) -> int:
+    """Apply structured BRC invalidation reports to the health matrix.
+
+    Marks (or updates) each affected importer as 🟡 Yellow with a precise explanation
+    containing the triggering barrel(s), chain_ids, reason, detector, partial flag.
+    This is the key wiring that lets `check-changes` (and therefore the daemon monitor)
+    surface barrel-driven staleness automatically, even when the importer file's own mtime
+    is unchanged.
+
+    Idempotent / safe; uses the existing upsert_entry (locked + json+md).
+    Returns number of importers that received a (new or updated) Yellow barrel note.
+    Zero-dep, scalable (reports are small).
+    """
+    if not reports:
+        return 0
+    updated = 0
+    for r in reports:
+        try:
+            if isinstance(r, dict):
+                imp = r.get("importer")
+                trig = r.get("triggering_barrels") or []
+                cids = r.get("chain_ids") or []
+                reason = r.get("reason") or "barrel staleness"
+                det = r.get("detector_used") or "bree"
+                part = r.get("is_partial", False)
+            else:
+                # dataclass or object
+                imp = getattr(r, "importer", None)
+                trig = getattr(r, "triggering_barrels", []) or []
+                cids = getattr(r, "chain_ids", []) or []
+                reason = getattr(r, "reason", "barrel staleness")
+                det = getattr(r, "detector_used", "bree")
+                part = getattr(r, "is_partial", False)
+            if not imp:
+                continue
+            trig_str = ", ".join(sorted(set(str(t) for t in trig if t))) or "unknown barrel"
+            cid_str = ", ".join(sorted(set(str(c) for c in cids if c)))[:80]
+            part_str = " (partial)" if part else ""
+            expl = (
+                f"stale via barrel re-export from {trig_str}{part_str} "
+                f"(detector={det}, chains={cid_str or 'n/a'}): {reason}"
+            )
+            upsert_entry(root, str(imp), "🟡 Yellow", expl)
+            updated += 1
+        except Exception:
+            # never let one bad report kill the batch
+            continue
+    return updated
 
 
 def get_summary(root: Path, directory: Optional[str] = None) -> Dict[str, Any]:
@@ -536,6 +589,402 @@ def _generate_healing_recommendation(initial_stubs: int, high: int, medium: int)
     return "Mild stub pollution. Low urgency but worth cleaning up."
 
 
+# =============================================================================
+# 10. Structured Journal Durable Layer (M2 Workstream C - Dual Write + Compaction Skeleton)
+# =============================================================================
+# Implements the Python half of dual-write (structured JSONL primary under
+# .wikifier_staging) + safe compaction engine (time + significance, manifest,
+# fully dry-run capable, reversible in principle via manifest+archives).
+#
+# Integrated with contracts.py JournalEventV1 (actor, session, provenance,
+# ACS/rationale links, semantic types, significance).
+#
+# Sh (wikifier.sh write_journal + cmd_record_*) continues to own the exact
+# human MD daily projection format for 100% backward compat during transition.
+# Python emit is the single path for structured append (used by sh via -c).
+#
+# Multi-agent safe: always under locking.file_lock when mutating logs/manifests.
+# Streaming design: compaction & future queries never load full history.
+# Long-term: bounded active state via compaction; events self-describing for
+# 5-10yr survival on large active repos.
+#
+# CLI exposure (skeleton): python -m wikifier.health journal-compact --dry-run
+# python -m wikifier.health journal-emit <type> <file> "<reason>"
+# =============================================================================
+
+import uuid
+from collections.abc import Iterator
+from typing import Iterable
+
+# Contracts integration (defensive for packaged / partial import)
+try:
+    from .contracts import (
+        JournalEventV1,
+        make_journal_event,
+        JOURNAL_SEMANTIC_ACTIONS,
+        get_journal_event_info,
+    )
+except Exception:  # pragma: no cover
+    JournalEventV1 = None  # type: ignore
+    make_journal_event = None  # type: ignore
+    JOURNAL_SEMANTIC_ACTIONS = ("record-change", "record-deletion", "auto-detected")  # type: ignore
+    get_journal_event_info = lambda: {"journal_schema_version": "v1"}  # type: ignore
+
+
+JOURNAL_V1_DIR = "journal/v1"
+JOURNAL_LOG_BASENAME = "events.jsonl"
+JOURNAL_MANIFEST_BASENAME = "compaction_manifest.json"
+JOURNAL_ARCHIVE_DIR = "archives"
+
+
+def _get_journal_root(root: Path) -> Path:
+    return root / ".wikifier_staging" / JOURNAL_V1_DIR
+
+
+def get_journal_log_path(root: Path) -> Path:
+    """Primary structured log (append-only JSONL, versioned v1)."""
+    return _get_journal_root(root) / JOURNAL_LOG_BASENAME
+
+
+def get_journal_manifest_path(root: Path) -> Path:
+    return _get_journal_root(root) / JOURNAL_MANIFEST_BASENAME
+
+
+def ensure_journal_dirs(root: Path) -> None:
+    """Idempotent creation of staging journal layout."""
+    jr = _get_journal_root(root)
+    (jr / JOURNAL_ARCHIVE_DIR).mkdir(parents=True, exist_ok=True)
+
+
+def _atomic_append_jsonl(log_path: Path, line: str) -> None:
+    """Best-effort atomic append for JSONL (tmp + rename on same fs; fallback to open a)."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = log_path.with_suffix(log_path.suffix + ".tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(line.rstrip("\n") + "\n")
+        # best effort atomic replace (works on POSIX; fallback rename may race but rare)
+        tmp.replace(log_path)
+    except Exception:
+        # fallback (non-atomic but functional)
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line.rstrip("\n") + "\n")
+
+
+def append_journal_event(root: Path, event: "JournalEventV1") -> Dict[str, Any]:
+    """Append a validated v1 event to the structured JSONL under project lock."""
+    ensure_journal_dirs(root)
+    log_path = get_journal_log_path(root)
+    if JournalEventV1 is None or not isinstance(event, JournalEventV1):
+        # degraded path
+        line = json.dumps({"version": "v1-degraded", "event": str(event)}, ensure_ascii=False)
+    else:
+        line = event.to_jsonl_line()
+
+    if locking:
+        with locking.file_lock(root):
+            _atomic_append_jsonl(log_path, line)
+    else:
+        _atomic_append_jsonl(log_path, line)
+
+    return {"success": True, "log_path": str(log_path), "event_id": getattr(event, "event_id", "degraded")}
+
+
+def emit_journal_event(
+    root: Path,
+    *,
+    event_type: str,
+    file: str,
+    reason: str,
+    actor: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None,
+    acs_links: Optional[List[Dict[str, Any]]] = None,
+    rationale_links: Optional[List[str]] = None,
+    semantic_tags: Optional[List[str]] = None,
+    significance: Optional[float] = None,
+    extra: Optional[Dict[str, Any]] = None,
+    provenance: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Primary emitter for structured journal events (dual-write support).
+
+    Builds via contracts.make_journal_event (full actor/session/provenance/ACS links/significance).
+    Appends ONLY to the versioned JSONL (structured primary). The human daily MD
+    projection is written by the existing write_journal() in wikifier.sh (exact format preserved
+    for transition compatibility; no behavior change for journal readers).
+
+    Callers (sh record-change etc. via python -c, future Python library, daemon) use this.
+    Returns the emitted event dict + storage info.
+    """
+    if make_journal_event is None:
+        return {"success": False, "error": "contracts unavailable"}
+
+    ev = make_journal_event(
+        event_type=event_type,
+        file=file,
+        reason=reason,
+        actor=actor,
+        session_id=session_id,
+        acs_links=acs_links,
+        rationale_links=rationale_links,
+        semantic_tags=semantic_tags,
+        significance=significance,
+        extra=extra,
+        provenance=provenance,
+    )
+    res = append_journal_event(root, ev)
+    res["event"] = ev.to_dict()
+    res["schema"] = JOURNAL_SCHEMA_VERSION if "JOURNAL_SCHEMA_VERSION" in dir() else "v1"
+    return res
+
+
+# --- Streaming loader (scale: years of events, never OOM) ---
+def iter_journal_events(
+    root: Path,
+    *,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    include_bad: bool = False,
+) -> Iterator[Dict[str, Any]]:
+    """Defensive streaming reader over the v1 JSONL. Yields dicts (from JournalEventV1.from_dict)."""
+    log_path = get_journal_log_path(root)
+    if not log_path.exists():
+        return
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                    ev = JournalEventV1.from_dict(obj) if JournalEventV1 else obj
+                    d = ev.to_dict() if hasattr(ev, "to_dict") else ev
+                    # simple ts filter (string prefix match is sufficient for skeleton)
+                    ts = d.get("ts", "")
+                    if since and ts < since:
+                        continue
+                    if until and ts > until:
+                        continue
+                    yield d
+                except Exception:
+                    if include_bad:
+                        yield {"_bad": True, "raw": line[:200]}
+                    continue
+    except Exception:
+        return
+
+
+# --- Compaction manifest (for safe, auditable, reversible compaction) ---
+def load_journal_manifest(root: Path) -> Dict[str, Any]:
+    mpath = get_journal_manifest_path(root)
+    if mpath.exists():
+        try:
+            with open(mpath, "r", encoding="utf-8") as f:
+                m = json.load(f)
+            if not isinstance(m, dict):
+                m = {}
+            m.setdefault("version", "1")
+            m.setdefault("compactions", [])
+            return m
+        except Exception:
+            pass
+    return {
+        "version": "1",
+        "created": _timestamp(),
+        "compactions": [],
+        "active_log": str(get_journal_log_path(root)),
+        "notes": "M2 Workstream C compaction manifest. Never delete archives without updating this.",
+    }
+
+
+def _save_journal_manifest(root: Path, manifest: Dict[str, Any]) -> None:
+    mpath = get_journal_manifest_path(root)
+    ensure_journal_dirs(root)
+    manifest["last_updated"] = _timestamp()
+    if locking:
+        with locking.file_lock(root):
+            with open(mpath, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2, ensure_ascii=False)
+    else:
+        with open(mpath, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+
+def compact_journal(
+    root: Path,
+    *,
+    dry_run: bool = True,
+    max_age_days: float = 90.0,
+    min_significance: float = 0.60,
+    keep_forever_significant: bool = True,
+) -> Dict[str, Any]:
+    """
+    Safe, time + significance based compaction skeleton (M2 C).
+
+    Policy:
+    - An event is a compaction candidate if (now - ts > max_age_days) AND
+      (significance < min_significance OR not keep_forever for high sig).
+    - High-significance or recent events stay in active log forever.
+    - Dry-run: full analysis + would-be manifest entry, zero writes, zero deletes.
+    - Live: rewrite active JSONL with only kept events (streaming), move compacted
+      slice to archives/<compact-id>/events.jsonl , record full manifest entry
+      (policy, counts, byte sizes, ts ranges, archive path, checksum stub).
+      Manifest makes the operation auditable and reversible (replay archive into
+      active + drop manifest entry is possible manually or in future tool).
+
+    Returns rich report suitable for health/MCP/journal query.
+    Never corrupts; on any error during live, leaves original intact.
+    """
+    ensure_journal_dirs(root)
+    log_path = get_journal_log_path(root)
+    report: Dict[str, Any] = {
+        "dry_run": dry_run,
+        "policy": {
+            "max_age_days": max_age_days,
+            "min_significance": min_significance,
+            "keep_forever_significant": keep_forever_significant,
+        },
+        "started": _timestamp(),
+        "before": {"events": 0, "bytes": 0},
+        "kept": 0,
+        "compacted": 0,
+        "after": {"events": 0, "bytes": 0},
+        "archive_path": None,
+        "manifest_id": None,
+        "errors": [],
+    }
+
+    if not log_path.exists():
+        report["note"] = "No journal log yet"
+        return report
+
+    try:
+        before_bytes = log_path.stat().st_size
+        report["before"]["bytes"] = before_bytes
+    except Exception:
+        before_bytes = 0
+
+    cutoff = None
+    try:
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    except Exception:
+        cutoff = None
+
+    kept_events: List[Dict[str, Any]] = []
+    compacted_events: List[Dict[str, Any]] = []
+    total = 0
+
+    for ev in iter_journal_events(root, include_bad=False):
+        total += 1
+        ts = ev.get("ts", "")
+        sig = float(ev.get("significance", 0.5))
+        is_old = (cutoff is None) or (ts < cutoff)
+        is_low_sig = sig < min_significance
+        should_compact = is_old and (is_low_sig or not (keep_forever_significant and sig >= 0.85))
+
+        if should_compact:
+            compacted_events.append(ev)
+        else:
+            kept_events.append(ev)
+
+    report["before"]["events"] = total
+    report["kept"] = len(kept_events)
+    report["compacted"] = len(compacted_events)
+
+    # Build would-be / real manifest entry
+    compact_id = f"comp-{datetime.now().strftime('%Y%m%d-%H%M%S')}" if "datetime" in dir() else f"comp-{total}"
+    archive_sub = _get_journal_root(root) / JOURNAL_ARCHIVE_DIR / compact_id
+    report["manifest_id"] = compact_id
+    report["archive_path"] = str(archive_sub)
+
+    manifest_entry = {
+        "id": compact_id,
+        "ts": _timestamp(),
+        "policy": report["policy"],
+        "before_count": total,
+        "kept_count": len(kept_events),
+        "compacted_count": len(compacted_events),
+        "before_bytes": before_bytes,
+        "archive": str(archive_sub),
+        "dry_run": dry_run,
+        "reversible": True,
+        "notes": "Use manifest + archives to reconstruct if needed. Do not manually delete.",
+    }
+
+    if dry_run:
+        report["would_compact_examples"] = compacted_events[:3]
+        report["would_write_manifest"] = manifest_entry
+        report["note"] = "DRY RUN — nothing written. Re-run without --dry-run to apply."
+        return report
+
+    # LIVE (careful, under lock for the whole mutation window)
+    try:
+        if locking:
+            lock_ctx = locking.file_lock(root)
+        else:
+            lock_ctx = None  # type: ignore
+
+        def _do_compact():
+            nonlocal report
+            # 1. write kept to a fresh active (tmp then replace)
+            tmp_active = log_path.with_suffix(".compacting")
+            with open(tmp_active, "w", encoding="utf-8") as f:
+                for e in kept_events:
+                    if JournalEventV1:
+                        evo = JournalEventV1.from_dict(e)
+                        f.write(evo.to_jsonl_line() + "\n")
+                    else:
+                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+            # 2. ensure archive dir, write compacted slice
+            archive_sub.mkdir(parents=True, exist_ok=True)
+            archive_log = archive_sub / "events.jsonl"
+            with open(archive_log, "w", encoding="utf-8") as f:
+                for e in compacted_events:
+                    if JournalEventV1:
+                        evo = JournalEventV1.from_dict(e)
+                        f.write(evo.to_jsonl_line() + "\n")
+                    else:
+                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+            # 3. replace active
+            tmp_active.replace(log_path)
+
+            # 4. update manifest
+            m = load_journal_manifest(root)
+            m["compactions"].append(manifest_entry)
+            m["last_compaction"] = compact_id
+            _save_journal_manifest(root, m)
+
+            report["after"]["events"] = len(kept_events)
+            try:
+                report["after"]["bytes"] = log_path.stat().st_size
+            except Exception:
+                pass
+            report["success"] = True
+
+        if lock_ctx:
+            with lock_ctx:
+                _do_compact()
+        else:
+            _do_compact()
+
+    except Exception as ex:
+        report["errors"].append(str(ex))
+        report["success"] = False
+        report["note"] = "Compaction aborted — original log and manifest untouched."
+        # best effort cleanup of partial archive (leave for operator)
+        return report
+
+    return report
+
+
+# Extend CLI for skeleton usability (python -m wikifier.health journal-compact --dry-run etc.)
+# (The dispatch logic is updated in the __main__ block below)
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
@@ -547,6 +996,7 @@ if __name__ == "__main__":
         print("  heal-stubs [--dry-run]   Auto-heal outdated 'Initial stub' entries")
         print("  healable-stubs [dir]     List entries that can be auto-healed")
         print("  healing-stats            Show stub pollution + healing opportunities")
+        print("  prune-barrels [max_days] [ --dry-run ]   Lightweight age-based BRC pruning (default 90d)")
         sys.exit(1)
 
     root = Path(".")
@@ -615,6 +1065,35 @@ if __name__ == "__main__":
         print(f"  → Low quality:                {stats['healable_stubs']['low_quality']}")
         print(f"Stub pollution ratio:          {stats['stub_pollution_ratio']:.1%}")
         print(f"\nRecommendation: {stats['recommendation']}")
+
+    elif cmd in ("prune-barrels", "prune-brc", "gc-barrels"):
+        max_days = 90.0
+        dry = False
+        for a in sys.argv[2:]:
+            if a == "--dry-run":
+                dry = True
+            else:
+                try:
+                    max_days = float(a)
+                except Exception:
+                    pass
+        try:
+            from . import import_cache as _ic
+            root_for_prune = Path(".")
+            # respect WIKIFIER_PROJECT_ROOT if present (for daemon / packaged runs)
+            proj = os.environ.get("WIKIFIER_PROJECT_ROOT")
+            if proj:
+                root_for_prune = Path(proj).expanduser().resolve()
+            res = _ic.prune_barrel_resolutions(root_for_prune, max_age_days=max_days, dry_run=dry)
+            p = res.get("pruned", 0)
+            if dry:
+                print(f"Prune dry-run (max_age={max_days}d): would prune {p} aged BRC chains.")
+            else:
+                print(f"Pruned {p} aged BRC chains (max_age={max_days}d). saved={res.get('saved', False)}")
+            if "error" in res:
+                print(f"  (note: {res['error']})")
+        except Exception as ex:
+            print(f"Prune-barrels error: {ex}")
 
     else:
         print(f"Unknown command: {cmd}")

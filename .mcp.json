@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "wikifier": {
+      "command": "/home/aron/.local/bin/wikifier-mcp",
+      "args": [],
+      "description": "Wikifier - Agent-first codebase wiki, health matrix, and dependency intelligence (MCP mode)"
+    }
+  }
+}
