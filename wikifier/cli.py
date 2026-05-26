@@ -12,6 +12,7 @@ import platform
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from contextlib import contextmanager, nullcontext as _nullcontext
 
 
 def discover_project_root() -> Path:
@@ -590,3 +591,431 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# =============================================================================
+# Workstream E (Python Library + Protocol v0.4 Bridge) — Additional Extraction + MV Skeleton
+# =============================================================================
+# These functions complete more Python-primary extraction and provide the minimal
+# viable public surface for the mandatory agent workflow (check_changes, health,
+# record_change, scoped update_maps, suggest_next_actions, mark_green, etc.).
+# All are directly importable: `from wikifier import record_change, check_changes, ...`
+# or `from wikifier.cli import ...`.
+#
+# Design realized: structured dict returns (success + data), project_root override,
+# auto locking on mutators, pure-Py journal/pending/health updates, delegation to
+# health.py + import_cache.py for rich paths (ACS, BRC, cycles), defensive,
+# zero new deps, scalable-friendly (directory hints, bounded scans).
+# Shell remains thin launcher/compat. MCP/CLI wiring to these is future thin-shim work.
+#
+# API Audit (Agent 6): health submodule/func access documented (flat func via binding;
+# dotted "from wikifier.health import" for internals always works); _get_effective_root
+# now imported+delegated by MCP for centralization; check_changes cands now reuses
+# _collect_candidate_source_files for fidelity/no-dup. Focus: clean public API + rigorous I/O.
+# =============================================================================
+
+from datetime import datetime
+from typing import Union, Literal
+
+try:
+    from . import locking
+except Exception:
+    locking = None  # defensive for import edge cases
+
+try:
+    from . import health as _health_mod
+except Exception:
+    _health_mod = None
+
+try:
+    from . import import_cache as _ic_mod
+except Exception:
+    _ic_mod = None
+
+
+def _get_effective_root(project_root: Optional[Union[str, Path]] = None) -> Path:
+    """Internal helper (mirrors MCP pattern; single source in future)."""
+    if project_root:
+        try:
+            p = Path(project_root).expanduser().resolve()
+            if p.exists():
+                return p
+        except Exception:
+            pass
+    try:
+        return discover_project_root()
+    except Exception:
+        try:
+            return Path.cwd().resolve()
+        except Exception:
+            return Path.cwd()
+
+
+def _timestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _ensure_journal_entry(root: Path, action: str, file: str, reason: str) -> None:
+    """Pure-Py journal writer extracted for record_* / check_changes (skeleton, defensive)."""
+    try:
+        day_dir = root / "journal" / datetime.now().strftime("%Y/%m")
+        day_dir.mkdir(parents=True, exist_ok=True)
+        jf = day_dir / f"{datetime.now().strftime('%d')}.md"
+        entry = f"## [{_timestamp()}] {action}\n**File:** {file}\n**Reason:** {reason}\n\n"
+        with open(jf, "a", encoding="utf-8") as f:
+            f.write(entry)
+    except Exception:
+        # Never break caller workflow on journal side-effect
+        pass
+
+
+def _add_to_pending(root: Path, file: str, msg: str) -> None:
+    """Pure-Py pending_updates.md appender (skeleton, matches sh add_pending)."""
+    try:
+        p = root / "pending_updates.md"
+        line = f"- {file}: {msg}\n"
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
+
+
+def _remove_from_pending(root: Path, file: str) -> None:
+    """Best-effort removal (used by mark_green skeleton)."""
+    try:
+        p = root / "pending_updates.md"
+        if p.exists():
+            lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if file not in ln]
+            p.write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _get_monitored_roots(root: Path) -> List[Path]:
+    """Basic support for monitored_paths.txt (for check_changes skeleton)."""
+    mp = root / "monitored_paths.txt"
+    if mp.exists():
+        try:
+            roots: List[Path] = []
+            for line in mp.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    cand = (root / line).resolve()
+                    if cand.exists():
+                        roots.append(cand)
+            if roots:
+                return roots
+        except Exception:
+            pass
+    return [root]
+
+
+def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """
+    Python-primary `check-changes` (mandatory workflow entrypoint).
+
+    - Uses import_cache.compute_files_needing_reparse + barrel stale for O(changed) detection.
+    - Updates health (Yellow via pure upsert_entry), pending_updates, journal.
+    - Returns structured result (agent-friendly; matches/extends MCP shape).
+    - Acquires project lock. Directory scoping via monitored_paths + future dir param.
+    - This is a core extraction: no shell required for the change-detection + state update loop.
+    """
+    root = _get_effective_root(project_root)
+    result: Dict[str, Any] = {
+        "success": False,
+        "project_root": str(root),
+        "changes_detected": 0,
+        "message": "",
+        "recommendation": "Read file_health.md / health(format='json') + pending_updates.md. Prioritize 🔴 → 🟡.",
+        "barrel_invalidation_summary": {},
+        "rich_auto_yellow_via": "Python check_changes + BRC (import_cache)",
+    }
+    try:
+        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        with lock_ctx:
+            # Leverage existing rich Python dirty + barrel logic (already extracted in prior waves)
+            cands: List[Path] = []
+            for mr in _get_monitored_roots(root):
+                try:
+                    # Reuse the richer pruned collector (full EXCLUDES list, same as run_full_update path)
+                    # for extraction fidelity + no logic dup. monitored roots still honored.
+                    cands.extend(_collect_candidate_source_files(mr))
+                except Exception:
+                    continue
+
+            dirty: List[Path] = []
+            if _ic_mod is not None:
+                try:
+                    dirty = _ic_mod.compute_files_needing_reparse(root, cands, full_rebuild=False) or []
+                    cache = _ic_mod.load_cache(root) or {}
+                    barrel_stale = _ic_mod.invalidate_stale_barrel_entries(
+                        cache, root, changed_files=[str(p) for p in dirty]
+                    ) or []
+                    seen = {str(p.resolve()) for p in dirty}
+                    for rel in barrel_stale:
+                        if rel:
+                            pp = (root / rel).resolve()
+                            if pp.exists() and str(pp) not in seen:
+                                dirty.append(pp)
+                                seen.add(str(pp))
+                    result["barrel_invalidation_summary"] = _ic_mod.get_barrel_cache_summary(cache) or {}
+                except Exception:
+                    pass
+
+            changed_count = 0
+            if _health_mod is not None:
+                for p in (dirty or [])[:200]:  # bounded for skeleton safety at scale
+                    try:
+                        rel = str(p.relative_to(root))
+                    except Exception:
+                        rel = str(p)
+                    _health_mod.upsert_entry(
+                        root, rel, "🟡 Yellow",
+                        "mtime changed since last check-changes (Python primary auto-detected)"
+                    )
+                    _add_to_pending(root, rel, "Auto-detected modification — review and run mark-green after wiki update")
+                    _ensure_journal_entry(root, "auto-detected", rel, "File mtime changed (check_changes Python primary)")
+                    changed_count += 1
+
+            result.update({
+                "success": True,
+                "changes_detected": changed_count,
+                "message": f"Python-primary check_changes complete: {changed_count} files marked/updated. Health + pending + journal touched.",
+            })
+    except Exception as e:
+        result["error"] = str(e)
+        result["message"] = f"check_changes partial failure: {e}"
+    return result
+
+
+def record_change(file: str, reason: str, project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """
+    Python-primary `record-change` (MANDATORY after every agent edit).
+
+    Updates health (Yellow), appends pending_updates.md, writes journal entry.
+    Lock-protected. Structured return. Direct callable without shell.
+    This extracts the core of cmd_record_change + supporting sh fns into the library.
+    """
+    root = _get_effective_root(project_root)
+    result: Dict[str, Any] = {
+        "success": False,
+        "file": file,
+        "project_root": str(root),
+        "reason": reason or "No reason provided.",
+    }
+    if not file or not isinstance(file, str):
+        result["error"] = "file (str) is required"
+        return result
+    try:
+        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        with lock_ctx:
+            rel = file
+            try:
+                pp = Path(file)
+                if pp.is_absolute() or (root / file).exists():
+                    rel = str(pp.resolve().relative_to(root)) if pp.is_absolute() else file
+            except Exception:
+                pass
+            if _health_mod is not None:
+                _health_mod.upsert_entry(root, rel, "🟡 Yellow", reason or "Agent/LLM edit recorded")
+            _add_to_pending(root, rel, f"LLM/agent edit — {reason}")
+            _ensure_journal_entry(root, "record-change", rel, reason or "No reason provided.")
+            result.update({
+                "success": True,
+                "message": "✅ Recorded semantic change (Python primary). Health=🟡, pending + journal updated. Run mark_green after wiki refresh.",
+            })
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
+def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """Python-primary record_deletion (symmetric to record_change)."""
+    root = _get_effective_root(project_root)
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root), "action": "deletion"}
+    try:
+        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        with lock_ctx:
+            if _health_mod is not None:
+                _health_mod.upsert_entry(root, file, "🔴 Red", f"DELETED — {reason}")
+            _add_to_pending(root, file, f"File was deleted. Consider wiki archival. {reason}")
+            _ensure_journal_entry(root, "record-deletion", file, reason or "No reason provided.")
+            result.update({"success": True, "message": "Recorded deletion (Python primary)."})
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
+def mark_green(file: str, reason: str = "", project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+    """Python-primary mark_green (completes the edit→record→wiki→green ritual)."""
+    root = _get_effective_root(project_root)
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root)}
+    rsn = reason or "Summary updated and verified accurate."
+    try:
+        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        with lock_ctx:
+            if _health_mod is not None:
+                _health_mod.upsert_entry(root, file, "🟢 Green", rsn)
+            _remove_from_pending(root, file)
+            result.update({"success": True, "message": f"Marked 🟢 Green (Python primary). {rsn}"})
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
+def suggest_next_actions(
+    project_root: Optional[Union[str, Path]] = None,
+    directory: Optional[str] = None,
+    format: Literal["text", "json"] = "text"
+) -> Union[str, Dict[str, Any]]:
+    """
+    Python-primary suggest_next_actions (covers mandatory guidance).
+
+    Uses health summary + import_cache ACS low-conf integration for actionable output.
+    Structured in json; text for human. Cross-refs protocol.
+    """
+    root = _get_effective_root(project_root)
+    try:
+        red = yellow = 0
+        health_sum: Dict[str, Any] = {}
+        if _health_mod is not None:
+            health_sum = _health_mod.get_summary(root, directory) or {}
+            red = health_sum.get("red", 0)
+            yellow = health_sum.get("yellow", 0)
+
+        suggestions: List[str] = []
+        if red > 0:
+            suggestions.append(f"1. Tackle the {red} 🔴 Red file(s) first — they are highest priority.")
+        if yellow > 0:
+            suggestions.append(f"2. Review the {yellow} 🟡 Yellow files.")
+        suggestions.append("3. Run `update_maps(directory=...)` (Python primary) if imports/structure changed.")
+        suggestions.append("4. Query dependents/dependencies on hot files (via import_cache or MCP).")
+        suggestions.append("5. Review journal/ for recent record-change intent.")
+
+        acs_note = ""
+        if _ic_mod is not None:
+            try:
+                cache = _ic_mod.load_cache(root) or {}
+                acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
+                low = int(acs.get("low_conf_edges", 0) or 0)
+                if low > 0:
+                    suggestions.append(f"6. Review {low} low-confidence edges (see health json 'dependency_intel').")
+                    acs_note = f" ACS low-conf active (avg={acs.get('avg_confidence')})."
+            except Exception:
+                pass
+
+        if format == "json":
+            return {
+                "success": True,
+                "project_root": str(root),
+                "red": red,
+                "yellow": yellow,
+                "suggestions": suggestions,
+                "health_summary": health_sum,
+                "acs_note": acs_note,
+            }
+        return "\n".join(suggestions) + (acs_note or "")
+    except Exception as e:
+        if format == "json":
+            return {"success": False, "error": str(e), "project_root": str(root)}
+        return f"suggest_next_actions error (Python): {e}"
+
+
+def update_maps(
+    project_root: Optional[Union[str, Path]] = None,
+    full: bool = False,
+    directory: Optional[str] = None,
+    use_python_primary: bool = True,
+    verbose: bool = False,
+) -> Dict[str, Any]:
+    """
+    Python facade for update-maps with scoping + python-primary preference.
+
+    Delegates to the extracted run_full_update (deeper pipeline: dirty/parser/persist/barrel/ACS).
+    This advances extraction: callers (library, future thin CLI/MCP, daemon) get pure path by default.
+    """
+    root = _get_effective_root(project_root)
+    try:
+        res = run_full_update(
+            root=root,
+            force_full=full,
+            verbose=verbose,
+            use_canonical=True,
+            use_python_primary=use_python_primary,
+        )
+        res = dict(res)  # copy
+        res["library_facade"] = True
+        res["scoped_directory"] = directory
+        if directory:
+            res.setdefault("note", "")
+            res["note"] += " (directory scoping is advisory in current skeleton; engine-level scoping in later A waves)"
+        return res
+    except Exception as e:
+        return {
+            "success": False,
+            "project_root": str(root),
+            "error": str(e),
+            "library_facade": True,
+        }
+
+
+def health(
+    project_root: Optional[Union[str, Path]] = None,
+    directory: Optional[str] = None,
+    format: Literal["text", "json", "summary", "healing-stats"] = "text"
+) -> Union[str, Dict[str, Any]]:
+    """
+    Flat `from wikifier import health` convenience (delegates to wikifier.health module).
+
+    Preserves all rich behavior (ACS/CIABRE dep_intel attachment in json, scalable summary).
+    Part of the designed public surface.
+    """
+    root = _get_effective_root(project_root)
+    try:
+        if _health_mod is None:
+            return {"success": False, "error": "health module unavailable", "project_root": str(root)} if format == "json" else "health module unavailable"
+        if format == "summary":
+            return _health_mod.get_summary(root, directory)
+        if format == "healing-stats":
+            return _health_mod.get_healing_statistics(root)
+        if format == "json":
+            data = _health_mod.load_health(root)
+            if directory:
+                entries = data.get("entries", {})
+                data["entries"] = {k: v for k, v in entries.items() if str(k).startswith(directory.rstrip("/") + "/")}
+            # Light dep_intel (ACS) to match MCP surfaces — pure path
+            try:
+                if _ic_mod is not None:
+                    cache = _ic_mod.load_cache(root) or {}
+                    acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
+                    data["dependency_intel"] = {"acs_summary": acs, "note": "via Python health() facade"}
+            except Exception:
+                pass
+            return data
+        # text (human)
+        data = _health_mod.load_health(root)
+        entries = data.get("entries", {})
+        lines = ["# Documentation Health Matrix (via Python library)", ""]
+        shown = 0
+        for fp, ent in entries.items():
+            if directory and not str(fp).startswith(directory.rstrip("/") + "/"):
+                continue
+            st = ent.get("status", "")
+            lu = ent.get("last_updated", "")
+            rs = (ent.get("reason") or "")[:80]
+            lines.append(f"- {fp}: {st} | {lu} | {rs}")
+            shown += 1
+            if shown >= 60:
+                break
+        if len(entries) > shown:
+            lines.append(f"... ({len(entries) - shown} more; use format='json' or health --summary for scale)")
+        return "\n".join(lines)
+    except Exception as e:
+        if format == "json":
+            return {"success": False, "error": str(e), "project_root": str(root)}
+        return f"health(text) error (Python library): {e}"
+
+
+# End of Workstream E library skeleton additions.
+# (nullcontext imported at module top for use in lock_ctx defaults.)
+# Update __init__.py to surface these at package level for `from wikifier import ...`.

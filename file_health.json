@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "last_updated": "2026-05-17 08:42:00",
+  "entries": {
+    "pyproject.toml": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:42:44 AEST",
+      "reason": "Finalized for v0.3.0 PyPI release. Ready for automated publishing."
+    },
+    "wikifier/cli.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:39:47 AEST",
+      "reason": "Wiki summary verified accurate after change."
+    },
+    ".github/workflows/publish.yml": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:39:44 AEST",
+      "reason": "Wiki summary verified accurate after change."
+    },
+    "MANIFEST.in": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:42:40 AEST",
+      "reason": "Wiki summary verified accurate after change."
+    },
+    "wikifier/__init__.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:42:40 AEST",
+      "reason": "Wiki summary verified accurate after change."
+    },
+    "Logged_issues/map.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 22:05:18 AEST",
+      "reason": "Wiki summary verified accurate after change."
+    },
+    "Logged_issues/moderate/backend/health-matrix-flakiness.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-15 22:05:18 AEST",
+      "reason": "Initial issue created for Milestone 1 - Core Reliability."
+    },
+    "Logged_issues/moderate/other/python-library-design.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-15 22:08:04 AEST",
+      "reason": "Created focused design issue for the Python library API (split from previous broad issue)."
+    },
+    "Logged_issues/moderate/other/python-library-initial-implementation.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-15 22:08:04 AEST",
+      "reason": "Created implementation issue for initial Python library (split from previous broad issue)."
+    },
+    "README.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:05:45",
+      "reason": "M2-Rem-06 Documentation & Packaging Clarity pass complete. Added prescriptive scaling table by project size, clear pip install + external bootstrap workflow, and improved root detection decision order. Directly addresses remaining gaps in m2_rem_08_dogfood_gaps_open.md."
+    },
+    "test/atomic-test.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 22:20:52 AEST",
+      "reason": "Testing improved mark-green logging"
+    },
+    "test/json-test.md": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-15 22:22:20 AEST",
+      "reason": "DELETED — Testing deletion with JSON"
+    },
+    "test/journal-format.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-15 22:23:20 AEST",
+      "reason": "Testing standardized journal format with separator (M1-B4)"
+    },
+    "Logged_issues/moderate/backend/m1-core-reliability-tasks.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-15 22:25:06 AEST",
+      "reason": "Completed M1-A3 and M1-A4: Exit codes standardized + better error messages for health operations."
+    },
+    "Logged_issues/high/import/update-maps-v0.4-planning.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 22:27:36 AEST",
+      "reason": "Planning document completed and approved."
+    },
+    "v0.4-execution-plan.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 11:37:03 AEST",
+      "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
+    },
+    "Logged_issues/v0.4-roadmap.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 11:37:03 AEST",
+      "reason": "Linked to the new detailed v0.4-execution-plan.md."
+    },
+    "Logged_issues/high/import/m2-dependency-intelligence-tasks.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 12:10:34 AEST",
+      "reason": "Continued progress on A12, B12, C12."
+    },
+    "wikifier/parsers/python.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 01:02:26",
+      "reason": "Fix 3 complete: Python parser now emits resolution_confidence."
+    },
+    "v0.4-Execution-Plan.md": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 12:42:09 AEST",
+      "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
+    },
+    "wikifier/parsers/javascript.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 08:33:49",
+      "reason": "Quick win prototype: Directory marker memoization added to JS bare resolver."
+    },
+    "wikifier/mcp/client-configs/README.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:05:56",
+      "reason": "M2-Rem-06: Added packaging and external project bootstrap tips for MCP client users."
+    },
+    "wikifier/mcp/__init__.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 18:55:36 AEST",
+      "reason": "Package initializer for the MCP module."
+    },
+    "library.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 18:58:53 AEST",
+      "reason": "Regenerated after including wikifier/mcp/ in monitored paths. MCP server files now appear in dependency graph and reverse dependencies."
+    },
+    "skills/run.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:35:55",
+      "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
+    },
+    "recipe-lab-dogfood/src/models/Recipe.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub for Wikifier dogfood — core domain model, many dependents in services/routes."
+    },
+    "recipe-lab-dogfood/src/models/Ingredient.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — used by Recipe, importers, nutrition pipelines."
+    },
+    "recipe-lab-dogfood/src/services/mealPlannerService.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — central service with many cross-deps (search, shopping, nutrition)."
+    },
+    "recipe-lab-dogfood/src/services/searchService.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — heavily used, complex query logic."
+    },
+    "recipe-lab-dogfood/src/api/app.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — Express app entry, route wiring."
+    },
+    "recipe-lab-dogfood/src/cli/index.js": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 21:49:50",
+      "reason": "Lazy loading complete. CLI is now safe for wikifier-stress execution. All Wikifier workflow steps followed."
+    },
+    "recipe-lab-dogfood/src/utils/validation.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — shared validation, depended by many."
+    },
+    "recipe-lab-dogfood/src/plugins/PluginSystemFacade.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — Phase 16 facade, complex plugin hooks."
+    },
+    "recipe-lab-dogfood/src/api/routeLoader.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — Phase 16 split core, facade for routes."
+    },
+    "recipe-lab-dogfood/tests/testRunner.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — custom test runner, 564+ tests."
+    },
+    "recipe-lab-dogfood/public/app.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — client-side UI logic."
+    },
+    "recipe-lab-dogfood/src/services/similarityService.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — Phase 7 service, used by recommendations."
+    },
+    "recipe-lab-dogfood/src/services/versionControlService.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — recipe versioning, complex."
+    },
+    "recipe-lab-dogfood/src/internal/mcp-stress/legacy/routeLoader.js": {
+      "status": "🔴 Red",
+      "last_updated": "2026-05-16 20:10:00 AEST",
+      "reason": "Initial stub — legacy code for MCP stress history."
+    },
+    "wikifier/mcp/server.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 01:08:29",
+      "reason": "Fix 9 polished: Richer data (raw, resolved, confidence) exposed in get_dependencies."
+    },
+    "wikifier/mcp/README.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:05:53",
+      "reason": "M2-Rem-06: Strengthened external project targeting and pip install bootstrap instructions in the MCP context."
+    },
+    "wikifier/health.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 21:03:53",
+      "reason": "File locking integrated for concurrent safety (M2-Rem-07)."
+    },
+    "wikifier.sh": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-17 08:42:00",
+      "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
+    },
+    "wikifier/locking.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:10:19",
+      "reason": "Final polish on M2-Rem-07 complete: Robustness improvements, new diagnostic helper (is_project_locked), better documentation, and agent clarity."
+    },
+    "wikifier/import_cache.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 21:04:02",
+      "reason": "File locking integrated (M2-Rem-07)."
+    },
+    "recipe-lab-dogfood/src/internal/wikifier-stress/wikifierStressHarness.js": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:03:12",
+      "reason": "autonomy cycle 1 complete"
+    },
+    "recipe-lab-dogfood/src/internal/wikifier-stress/README.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 21:48:43",
+      "reason": "Documentation complete and accurate. Harness is now a first-class, self-describing, usable addition to the RecipeLab project for ongoing Wikifier dogfooding."
+    },
+    "recipe-lab-dogfood/MCP_Findings/wikifier_open.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:29:54",
+      "reason": "Comprehensive dogfood report verified: 6 challenge features, exhaustive MCP surface (20+ tools/resources/prompts), all limitations and recommendations documented. Zero other MCPs used."
+    },
+    "src/internal/wikifier-stress/synthetic-dep-graph/churnA.js": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 22:52:23",
+      "reason": "Heavy churn test file 0"
+    },
+    "src/internal/wikifier-stress/synthetic-dep-graph/churnB.js": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 22:52:23",
+      "reason": "Heavy churn test file 1"
+    },
+    "src/internal/wikifier-stress/synthetic-dep-graph/churnC.js": {
+      "status": "🟡 Yellow",
+      "last_updated": "2026-05-16 22:52:24",
+      "reason": "Heavy churn test file 2"
+    },
+    "Findings/m2_rem_08_dogfood_gaps_open.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:13:12",
+      "reason": "MCP Final Robustness section updated in the gap report after completing the consistency and structured return improvements."
+    },
+    "wikifier/mcp/server.py.wiki.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:13:00",
+      "reason": "Wiki summary refreshed after MCP final robustness improvements."
+    },
+    "Findings/m2_rem_08_dogfood_gaps_closed.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:23:42",
+      "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
+    },
+    "wikifier/parsers/python.py.wiki.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:35:41",
+      "reason": "Wiki summary is complete and accurate. Part of thorough M2-Rem-08 dogfood."
+    },
+    "wikifier/parsers/javascript.py.wiki.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:35:44",
+      "reason": "Wiki summary is complete and accurate. Part of thorough M2-Rem-08 dogfood."
+    },
+    "Findings/m2_rem_08_combined_dogfood_findings_open.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 00:29:11",
+      "reason": "Investigation officially initiated. Dedicated log created and first analysis steps begun."
+    },
+    "Logged_issues/high/import/m2-gap-closure-dependency-intelligence.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 08:36:54",
+      "reason": "Profiling harness work started."
+    }
+  }
+}

@@ -30,11 +30,12 @@ In the HTML, a human should be able to observe this. This will not be a fancy wi
 
 There should be skills, and these should be automatically run by LLMs, though humans can operate with them if needed. This is meant to work with smaller to larger repos and having some form of automation should help here, by .bat, .sh or MacOS equivalent should be used at start. LLM can sleep while the processes continue. This can be its own while loop system that once everything is logged and updated and such, the system then at the end should wake the LLM, similar to heartbeat system.
 
-## Core Principles (v0.3)
+## Core Principles (v0.3 + v0.4 evolution)
 
-- **Agent-first design**: Every command and file is optimized for LLM consumption and autonomous operation.
-- **Zero external dependencies**: Only native OS tools (bash, find, grep, stat, date, sed, etc.).
-- **Semantic change tracking**: `record-change` captures *why* a change was made, not just that it happened.
-- **Health Matrix driven workflow**: 🔴 Red / 🟡 Yellow files must be addressed before new work.
+- **Agent-first design**: Every command and file is optimized for LLM consumption and autonomous operation. (v0.4: Python library + Protocol v0.4 as primary surfaces per skills/run.md + m2 plan Workstream E).
+- **Zero external dependencies**: Only native OS tools (bash, find, grep, stat, date, sed, etc.) + pure stdlib Python. (v0.4: library enables full agent loop with zero shell for production use).
+- **Semantic change tracking**: `record-change` captures *why* a change was made, not just that it happened. (Now available as `from wikifier import record_change` with structured returns + locking.)
+- **Health Matrix driven workflow**: 🔴 Red / 🟡 Yellow files must be addressed before new work. (Library `health()` + `check_changes()` + `mark_green()` provide the clean API.)
 - **Heartbeat monitoring**: Passive background `monitor` loop keeps the wiki fresh without constant LLM attention.
 - **Self-documenting**: The system documents its own usage via journals and health flips.
+- **Rigorous low-ambiguity protocol (v0.4)**: See `skills/run.md` for I/O contracts, mandatory workflow (library-preferred), error handling, scaling. Conformance harness + thin CLI/MCP consumers in progress (Agent 6).

@@ -29,10 +29,12 @@ try:
     from wikifier.cli import (
         get_script_path as _get_wikifier_script_path,
         discover_project_root as _cli_discover_project_root,
+        _get_effective_root as _cli_get_effective_root,  # Workstream E: central shared helper for clean API + thin MCP/CLI consumers
     )
 except Exception:
     _get_wikifier_script_path = None
     _cli_discover_project_root = None
+    _cli_get_effective_root = None
 
 mcp = FastMCP("Wikifier")
 
@@ -88,24 +90,25 @@ WIKIFIER_ROOT = _discover_project_root()
 def _get_effective_root(project_root: Optional[str] = None) -> Path:
     """
     Resolve the project root to use for a given operation.
-
-    Resolution order (highest to lowest priority):
-    1. Explicit `project_root` parameter passed to the tool
-    2. WIKIFIER_PROJECT_ROOT environment variable
-    3. Auto-discovered root (from CWD walk or package fallback)
+    Workstream E (clean public API): thin delegation to shared _get_effective_root in cli.py
+    (the library implementation). Falls back to local logic only if import failed at load.
+    This eliminates duplication and ensures parity between library callers and MCP tools.
     """
+    if _cli_get_effective_root is not None:
+        try:
+            return _cli_get_effective_root(project_root)
+        except Exception:
+            pass  # fall to local resilience
+    # Fallback (import failed or error): original MCP logic (explicit/env + startup root)
     if project_root:
         p = Path(project_root).expanduser().resolve()
         if p.exists():
             return p
-        # If the provided path doesn't exist, fall back gracefully
-
     env_root = os.environ.get("WIKIFIER_PROJECT_ROOT")
     if env_root:
         p = Path(env_root).expanduser().resolve()
         if p.exists():
             return p
-
     return WIKIFIER_ROOT  # the one discovered at startup
 
 
@@ -330,110 +333,93 @@ def _get_resolved_from_cache(file: str, root: Path) -> list[dict]:
 @mcp.tool()
 def check_changes(project_root: Optional[str] = None) -> dict:
     """
-    Scan for file changes and update the health matrix.
+    Scan for file changes and update the health matrix (Workstream E: thin library consumer).
 
-    Returns structured information about what was detected.
-    Now supports targeting any project via project_root.
+    Delegates directly to the Python library `wikifier.check_changes` (pure primary path,
+    structured return, locking, journal/pending/health side effects). No subprocess shell
+    for this core mandatory tool. Falls back to sh only on import/runtime error.
     """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("check-changes", root=root)
-        # Try to extract how many files changed
-        changed = 0
-        for line in output.splitlines():
-            if "Detected" in line and "changed" in line:
-                try:
-                    changed = int(line.split()[1])
-                except:
-                    pass
-        barrel_sum = {}
-        try:
-            import wikifier.import_cache as ic
-            cache = ic.load_cache(root) or {}
-            barrel_sum = ic.get_barrel_cache_summary(cache) or {}
-        except Exception:
-            barrel_sum = {"has_brc": False, "note": "BRC summary unavailable in check-changes MCP (direct path)"}
-        return {
-            "success": True,
-            "project_root": str(root),
-            "changes_detected": changed,
-            "message": output,
-            "recommendation": "Read file_health.md and pending_updates.md, then prioritize Red → Yellow files.",
-            # Continuation: reports/summary wired into check-changes MCP path (rich auto-Yellow evidence now directly visible to agents via MCP too; daemon benefits via sh)
-            "barrel_invalidation_summary": barrel_sum,
-            "rich_auto_yellow_via": "BRC get_barrel_invalidation_reports + apply (see check-changes sh + health.apply_barrel...)"
-        }
+        from wikifier.cli import check_changes as _lib_check
+        res = _lib_check(project_root=str(root))
+        # Enrich with MCP-specific barrel view if not present (best effort, non breaking)
+        if "barrel_invalidation_summary" not in res or not res.get("barrel_invalidation_summary"):
+            try:
+                import wikifier.import_cache as ic
+                cache = ic.load_cache(root) or {}
+                res["barrel_invalidation_summary"] = ic.get_barrel_cache_summary(cache) or {}
+            except Exception:
+                pass
+        res.setdefault("rich_auto_yellow_via", "Python library check_changes (MCP thin)")
+        return res
     except Exception as e:
-        return {
-            "success": False,
-            "project_root": str(root),
-            "error": str(e)
-        }
+        # Resilient fallback to previous sh path (preserves behavior if lib unavailable)
+        try:
+            output = _run_wikifier_command("check-changes", root=root)
+            return {
+                "success": True,
+                "project_root": str(root),
+                "message": output,
+                "recommendation": "Read file_health.md and pending_updates.md, then prioritize Red → Yellow files.",
+                "fallback": "sh",
+                "error_detail": str(e),
+            }
+        except Exception as e2:
+            return {"success": False, "project_root": str(root), "error": f"lib+sh failed: {e} / {e2}"}
 
 
 @mcp.tool()
 def record_change(file: str, reason: str, project_root: Optional[str] = None) -> dict:
-    """Record a semantic change. Required after edits. Returns structured result."""
+    """Record a semantic change. Required after edits. Returns structured result.
+    (Workstream E: thin direct call to library; no shell for core mandatory workflow.)
+    """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("record-change", [file, reason], root=root)
-        return {
-            "success": True,
-            "file": file,
-            "message": output,
-            "project_root": str(root)
-        }
+        from wikifier.cli import record_change as _lib_record
+        return _lib_record(file=file, reason=reason, project_root=str(root))
     except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root)
-        }
+        # Fallback for resilience
+        try:
+            output = _run_wikifier_command("record-change", [file, reason], root=root)
+            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh", "error_detail": str(e)}
+        except Exception as e2:
+            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
 
 
 @mcp.tool()
 def record_deletion(file: str, reason: str, project_root: Optional[str] = None) -> dict:
-    """Record the deletion of a file with a reason. Returns structured result (final robustness)."""
+    """Record the deletion of a file with a reason. Returns structured result (final robustness).
+    (Workstream E thin library consumer.)
+    """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("record-deletion", [file, reason], root=root)
-        return {
-            "success": True,
-            "file": file,
-            "action": "deletion",
-            "message": output,
-            "project_root": str(root)
-        }
+        from wikifier.cli import record_deletion as _lib_del
+        return _lib_del(file=file, reason=reason, project_root=str(root))
     except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root)
-        }
+        try:
+            output = _run_wikifier_command("record-deletion", [file, reason], root=root)
+            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh"}
+        except Exception as e2:
+            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
 
 
 @mcp.tool()
 def mark_green(file: str, reason: str = "", project_root: Optional[str] = None) -> dict:
-    """Mark a file as Green after updating its wiki summary. Returns structured result."""
+    """Mark a file as Green after updating its wiki summary. Returns structured result.
+    (Workstream E: thin library consumer.)
+    """
     root = _get_effective_root(project_root)
-    args = [file, reason] if reason else [file]
     try:
-        output = _run_wikifier_command("mark-green", args, root=root)
-        return {
-            "success": True,
-            "file": file,
-            "message": output,
-            "project_root": str(root)
-        }
+        from wikifier.cli import mark_green as _lib_mark
+        return _lib_mark(file=file, reason=reason, project_root=str(root))
     except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root)
-        }
+        try:
+            args = [file, reason] if reason else [file]
+            output = _run_wikifier_command("mark-green", args, root=root)
+            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh"}
+        except Exception as e2:
+            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
 
 
 @mcp.tool()

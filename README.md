@@ -91,23 +91,36 @@ chmod +x wikifier.sh
 ./wikifier.sh check-changes
 ```
 
-### Mandatory Rule for Every LLM / Grok Build Session
+### Mandatory Rule for Every LLM / Grok Build Session (Protocol v0.4)
 
-Copy this into the **start of every new prompt** when working in a Wikifier-managed project:
+**Authoritative spec**: See `skills/run.md` (Wikifier Agent Protocol v0.4) + the full library surface design in `Findings/m2-full-closure-longterm-scalable-plan.md` (Workstream E).
+
+Copy this (or the exact block from skills/run.md) into the **start of every new prompt**:
 
 ```text
-You are operating inside a Wikifier v0.3 project.
+You are now operating inside a Wikifier v0.4 managed codebase (Agent Protocol v0.4).
 
-MANDATORY FIRST STEPS:
-1. Run: wikifier check-changes
-2. Read file_health.md + pending_updates.md
-3. Prioritise 🔴 Red → 🟡 Yellow items
-4. For every code edit: wikifier record-change "path/to/file" "I did X because Y"
-5. After updating the wiki summary: wikifier mark-green "path/to/file"
-6. Re-validate before finishing
+FIRST ACTIONS (mandatory):
+1. If the Wikifier MCP server is connected, prefer its tools (get_project_status, check_changes, suggest_next_actions).
+2. Else if the `wikifier` Python package is importable, prefer the direct library API:
+     from wikifier import check_changes, health, record_change, mark_green, suggest_next_actions, update_maps, discover_project_root
+     check_changes()
+     h = health(format="json")  # or "summary"
+     ... perform edit ...
+     record_change("path/to/file", "concise semantic reason (why, not what)")
+     ... update wiki summary ...
+     mark_green("path/to/file")
+     if imports_or_structure_changed:
+         update_maps(directory="src/", use_python_primary=True)
+     suggest_next_actions(format="json")
+     health(format="json")
+3. Otherwise fall back to shell: wikifier check-changes
+... (see full mandatory workflow, I/O contracts, error handling, and scaling in skills/run.md)
 ```
 
-> **Note**: This rule applies per-project. When using Wikifier on an external codebase (not the Wikifier repo itself), the agent should be told which project root to operate on (via `WIKIFIER_PROJECT_ROOT`, `--project-root`, or the `project_root` parameter on MCP tools).
+**Python Library (clean public API, zero-dep)**: The preferred path for agents (when importable). Provides structured dicts, auto-locking, Python-primary paths for the full mandatory loop with no shell. See `__init__.py`, `cli.py` (Workstream E funcs), and the design doc. Submodule power access (e.g. `from wikifier.health import ...`) remains available.
+
+> **Note**: This rule applies per-project. When using Wikifier on an external codebase (not the Wikifier repo itself), the agent should be told which project root to operate on (via `WIKIFIER_PROJECT_ROOT`, `--project-root`, or the `project_root` parameter on MCP tools / library calls). The library + protocol make sessions low-ambiguity across models.
 
 ---
 
@@ -168,8 +181,8 @@ Wikifier is explicitly designed to scale from tiny scripts to massive monorepos.
 |-----------------------|---------------------------|-------------------------------------------|-------------------------------------------------|--------------------------|
 | **Tiny / Small**<br>(< 300 files) | Shell or MCP             | `wikifier health` (full table is fine)   | `wikifier update-maps` (default incremental)   | Use `.wiki.md` files next to sources for best `get_file_wiki`. Full rebuilds are cheap. |
 | **Medium**<br>(300–2,000 files) | MCP preferred            | `health --summary` or `health --dir src/` | `update_maps()` (incremental). Use `--full` only after large refactors or suspected cache corruption. | Prefer MCP tools (`get_project_status`, `suggest_next_actions`). Use directory filtering heavily. |
-| **Large**<br>(2,000–8,000 files) | **MCP strongly recommended** | `health(format="json", directory="src/services/")` + `--summary` | Always incremental. Inspect with `get_incremental_status()`. `--full` only on major structural changes. | Enable locking (automatic via Python backend). Run background `monitor &` safely. Use `get_files_needing_attention`. |
-| **Massive**<br>(8,000–30,000+ files) | **MCP only**             | `health --summary --dir <package>/` (never full table) | Incremental + `get_incremental_status()` before/after. Never run `--full` unless cache is known stale. | Use `get_dependents` / `get_dependencies` per-file. Leverage `import_cache.json` visibility. Multiple agents + monitor is safe thanks to M2-Rem-07 locking. |
+| **Large**<br>(2,000–8,000 files) | **MCP or Python library strongly recommended** | `health(format="json", directory="src/services/")` (via library or MCP) + `--summary` | Always incremental via `update_maps(..., use_python_primary=True)` (library). | Enable locking (automatic). Use library `check_changes` / `suggest_next_actions` for structured agent loops. |
+| **Massive**<br>(8,000–30,000+ files) | **Python library or MCP only** | `health(format="summary", directory=...)` via `from wikifier import health` (or MCP) | `update_maps(directory=..., use_python_primary=True)` (library facade to pure path). | Library or MCP required. Directory scoping + summaries mandatory. Full protocol + locking + import_cache ACS/CIABRE. See Workstream E design. |
 
 **When to use `--full` (rare):**
 - After moving/renaming many packages or changing import styles across the codebase.

@@ -13,12 +13,14 @@
   - [x] Gap #1 foundational work (substantially closed at 89–93%)
   - [-] Remaining last-mile items in Gap #1
   - [-] `update-maps` Performance & UX at Scale (now the dominant blocker)
-- [ ] **M3 – Agent Interface & Ergonomics** (Python library, strengthened protocol)
+- [~] **M3 – Agent Interface & Ergonomics** (Python library, strengthened protocol) *(Workstream E: design + v0.4 protocol + MV skeleton [x] in m2-full-closure plan; Agent 6 active completing extraction to clean public API, conformance harness, CLI/MCP thin consumers, doc merges + dogfood. See E resumption section.)*
 - [ ] **M4 – State Management & Scale**
 - [ ] **M5 – Final Polish & Release**
 
-**Current Phase**: Deep in M2 (specifically post-M2-Rem-08 Gap #1 closure + shift toward `update-maps` scale work).  
-**Rule**: No M3 until M2 is solid.
+**Current Phase**: Deep in M2 (post Gap #1 Swarm Complete; now executing full M2 closure per long-term scalable plan).  
+**Rule**: No M3 until M2 is solid.  
+
+**Primary Reference for Remaining Work**: `Findings/m2-full-closure-longterm-scalable-plan.md` (detailed phased architecture + checkboxes for all gaps, designed for tiny → 50k+ creative monorepos with no short-term hacks).
 
 ---
 
@@ -132,7 +134,7 @@
 - [ ] Resource Output Volume & Summarization (no pagination/summary modes)
 - [ ] Long-Running / Stateful Ergonomics (journal & pending_updates bloat)
 - [ ] Transparency of Resolution Failures
-- [ ] M3+ Foundational Work (Python library, agent protocol, etc.)
+- [~] M3+ Foundational Work (Python library, agent protocol, etc.) *(Detailed in m2-full-closure-longterm-scalable-plan.md Workstream E + Agent 6 resumption; library surface + Protocol v0.4 live, focus now clean API rigor + harness/wiring/dogfood)*
 
 ---
 
@@ -157,9 +159,12 @@
 ## 5. Next Priorities (My Recommendation)
 
 **Short-term (before M3):**
-1. `update-maps` Performance & UX at Scale (progress reporting, partial results, subtree filtering)
-2. Final small Gap #1 hardening wave (barrel_v2/res_meta completeness + cycle persistence + external robustness)
-3. Health Matrix freshness improvements
+All remaining M2 work is now defined with detailed long-term architecture and checkboxes in:
+→ `Findings/m2-full-closure-longterm-scalable-plan.md`
+
+1. Workstream A: `update-maps` Performance & UX at Scale (streaming/resumable, reverse deps first-class, structured+summary output, subtree scoping) — highest priority.
+2. Workstreams B–E (Health hygiene + freshness, Durable journal/pending, Resolution transparency, Python library + formal protocol) executed in parallel waves per the plan.
+3. All solutions explicitly designed for tiny → 50k+ file creative monorepos with no short-term hacks.
 
 **Medium-term:**
 - Resource summarization
