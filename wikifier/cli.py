@@ -149,7 +149,7 @@ def discover_project_root() -> Path:
 # Python-primary heavy path for update-maps (Wave 3/4/5 External/Packaged Full-Update Robustness)
 # =============================================================================
 
-def _collect_candidate_source_files(root: Path) -> List[Path]:
+def _collect_candidate_source_files(root: Path, directory: Optional[str] = None) -> List[Path]:
     """
     Lightweight pruned filesystem walk to collect Python/JS/TS source candidates
     for dirty detection in the Python-primary run_full_update path.
@@ -158,6 +158,12 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
     EXCLUDES (including pnpm/yarn store dirs for speed on large monorepos).
     Only used for the skeleton; production sh uses its own find for parity today.
     Zero side-effects, defensive.
+
+    A2 early scaffolding: supports simple subtree scoping via `directory` (relative or
+    absolute path under root). When provided, os.walk starts inside the subtree and
+    only subtree sources are collected — prunes candidate collection (and downstream
+    dirty/parse/persist) *early* for proportional cost on focused subtrees. Results
+    remain usable (scoped partial map of that subtree's imports).
     """
     candidates: List[Path] = []
     EXCLUDES = {
@@ -172,17 +178,38 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
     except Exception:
         root = Path(root)
 
-    for dirpath, dirnames, filenames in os.walk(root):
-        # prune in-place (same pattern as resolution._discover_*)
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDES]
-        for fn in filenames:
-            if fn.lower().endswith(exts):
-                p = Path(dirpath) / fn
-                try:
-                    if p.is_file():
-                        candidates.append(p)
-                except Exception:
-                    continue
+    # A2: subtree scoping — prune walk at source for early filtering (no full-repo scan)
+    start_dir = root
+    if directory:
+        try:
+            d = Path(directory)
+            if d.is_absolute():
+                start_dir = d.resolve()
+            else:
+                start_dir = (root / d).resolve()
+            # Safety: scope must be within project root
+            if not str(start_dir).startswith(str(root)) or not start_dir.exists():
+                start_dir = root
+        except Exception:
+            start_dir = root
+
+    walk_root = start_dir
+    try:
+        for dirpath, dirnames, filenames in os.walk(walk_root):
+            # prune in-place (same pattern as resolution._discover_*)
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDES]
+            for fn in filenames:
+                if fn.lower().endswith(exts):
+                    p = Path(dirpath) / fn
+                    try:
+                        if p.is_file():
+                            candidates.append(p)
+                    except Exception:
+                        continue
+    except Exception:
+        # Defensive: if scoped walk fails (e.g. permissions), fall back to full root collection
+        if walk_root != root:
+            return _collect_candidate_source_files(root, directory=None)
     return candidates
 
 
@@ -269,6 +296,9 @@ def run_full_update(
     verbose: bool = False,
     use_canonical: bool = True,
     use_python_primary: bool = True,  # Wave 5: explicit opt-in for CLI/MCP/daemon direct pure-Py path (no sh)
+    # A2 early Partial Results & UX Scaffolding (Workstream A Phase A2):
+    directory: Optional[str] = None,  # simple subtree scoping: directory filter (relative to root or abs under it). Prunes candidate collection + downstream work early.
+    max_files: Optional[int] = None,  # budget limit: truncate candidates early for partial/bounded runs. Results usable.
 ) -> Dict[str, Any]:
     """
     Core entry point for the Python-primary `update-maps [--full]` implementation.
@@ -295,18 +325,34 @@ def run_full_update(
     sh remains untouched thin wrapper. Enables direct calls from daemon (periodic/post-sleep),
     MCP update_maps(use_python_primary=True), and CLI `update-maps --python-primary`.
 
+    A2 early (Partial Results & UX Scaffolding):
+    - Subtree scoping via `directory` prunes _collect_candidate_source_files (and dirty/parse/persist)
+      at the source (walk starts in subtree). Proportional cost, early.
+    - `max_files` budget provides simple resource limiting.
+    - Partial result collection: result always populated with what was gathered (dirty_sample,
+      sample_parsed, persisted_pairs etc.) even on early exit, error, interrupt or budget.
+    - Basic progress reporting: `progress` dict + `phases_completed` in every return.
+    - Partial output mode implicit via `partial` / `scope` / `partial_reason` / `continuation_hint`.
+    - Interrupt / budget safe: KeyboardInterrupt and errors caught; usable partial result returned
+      (cache mutations from samples up to that point are real + trustworthy for the processed scope).
+    - Continuation: use force_full=False + same `directory` to resume on remaining dirty in scope.
+      (Foundation for later full resumable streaming generator in A2/A0.)
+
     Args:
         root: target monorepo root (if None, uses discover_project_root())
         force_full: if True, equivalent to --full (ignore dirty, reparse all)
         verbose: emit progress to stdout
         use_canonical: (Wave 4) advisory for v1 cycle canonical in future pure phases
         use_python_primary: Wave 5 flag for consumers preferring direct path (default True)
+        directory: A2 subtree scope filter (e.g. "src/", "packages/foo"). Prunes early.
+        max_files: A2 budget cap on candidates for partial/bounded execution.
 
     Returns:
         dict with keys: success, root, mode, files_to_reparse, dirty_sample,
         parsers_invoked_sample, persist_pipeline_exercised, sample_persisted_pairs,
         barrel_creative_tied_in_pure_path, note, timestamp, use_canonical, ...
-        (future: full stats, acs_summary, timing, cycle guarantees)
+        + A2: partial, partial_reason, scope, progress, phases_completed, continuation_hint
+        (partial results are trustworthy for the work performed; safe to act on for scoped subtrees).
     """
     if root is None:
         root = discover_project_root()
@@ -319,6 +365,19 @@ def run_full_update(
     if verbose:
         print(f"[run_full_update] target root: {root}")
         print("[run_full_update] Python-primary path (Wave 5) — deeper parser/persist + barrel/creative tie-in + direct-call ready")
+        if directory:
+            print(f"[run_full_update] A2 subtree scoping active: directory={directory}")
+        if max_files:
+            print(f"[run_full_update] A2 budget limit active: max_files={max_files}")
+
+    # A2 scaffolding: initialize for partial/progress/scope collection (always present in result)
+    scope_info: Dict[str, Any] = {
+        "directory": directory,
+        "max_files": max_files,
+        "effective_root": str(root),
+    }
+    phases_completed: List[str] = []
+    progress: Dict[str, Any] = {"phase": "init", "candidates_collected": 0}
 
     result: Dict[str, Any] = {
         "success": False,
@@ -326,14 +385,43 @@ def run_full_update(
         "mode": "full" if force_full else "incremental",
         "files_to_reparse": 0,
         "timestamp": __import__("datetime").datetime.now().isoformat(),
+        # A2 Partial UX fields (always present, trustworthy for work done)
+        "partial": False,
+        "partial_reason": None,
+        "scope": scope_info,
+        "progress": progress,
+        "phases_completed": phases_completed,
+        "continuation_hint": None,
     }
+
+    # Locals pre-initialized for interrupt/early-error resilience (partial results trustworthy)
+    cands: List[Path] = []
+    dirty: List[Path] = []
+    parsers_invoked = 0
+    sample_parsed: List[str] = []
+    sample_parser_outputs: List[Dict[str, Any]] = []
+    persist_exercised = False
+    persisted_pairs = 0
+    barrel_creative_tied = False
+    interrupted = False
 
     try:
         # === Actual dirty detection (Phase 1, unified with barrel) ===
         from . import import_cache as ic
-        cands = _collect_candidate_source_files(root)
+        cands = _collect_candidate_source_files(root, directory=directory)
+        phases_completed.append("candidate_collection")
+        progress.update({"phase": "candidates", "candidates_collected": len(cands), "scoped": bool(directory)})
+
+        # A2 budget pruning (early, after scoped collection)
+        if max_files is not None and len(cands) > max_files:
+            cands = cands[:max_files]
+            scope_info["truncated_by_max_files"] = True
+            progress["budget_limited"] = True
+            if verbose:
+                print(f"[run_full_update] A2 budget: truncated to first {max_files} candidates")
+
         if verbose:
-            print(f"[run_full_update] collected {len(cands)} candidate sources (pruned walk)")
+            print(f"[run_full_update] collected {len(cands)} candidate sources (pruned walk, A2 scoping applied)")
 
         dirty = ic.compute_files_needing_reparse(root, cands, full_rebuild=force_full)
 
@@ -358,13 +446,14 @@ def run_full_update(
         if verbose:
             print(f"[run_full_update] dirty set computed: {len(dirty)} files (mtime + barrel consumers)")
 
+        phases_completed.append("dirty_detection")
+        progress.update({"phase": "dirty", "dirty_count": len(dirty)})
+
         # === Parser invocation (Phase 2) — direct Python calls (not sh/subprocess) ===
         # Wave 5: deepened extraction (up to 20 files) exercising full parser rich paths
         # including barrel_v2, res_meta, cdia, creative detectors from javascript/python parsers.
         # Ties broader Gap #1 (barrel + creative) into the pure primary path.
-        parsers_invoked = 0
-        sample_parsed: List[str] = []
-        sample_parser_outputs: List[Dict[str, Any]] = []
+        # (A2: no re-init; pre-initialized at top of fn for partial result resilience on interrupt/error)
         try:
             from .parsers import javascript as js_parser
             from .parsers import python as py_parser
@@ -386,6 +475,8 @@ def run_full_update(
                         sample_parser_outputs.append({"file": fstr, "imports": parsed_list[:3]})
                 except Exception:
                     pass
+            phases_completed.append("parser_sample")
+            progress.update({"phase": "parse", "parsers_invoked": parsers_invoked, "sample_outputs": len(sample_parser_outputs)})
             if verbose:
                 print(f"[run_full_update] parser invoked on {parsers_invoked} files (deeper Wave 5 + barrel/creative capture)")
         except Exception as ex:
@@ -395,9 +486,7 @@ def run_full_update(
         # === Persist pipeline exercise (Phase 3, Wave 5: use extracted helper) ===
         # Direct call to _exercise_persist_pipeline for daemon/MCP pure path (no sh).
         # Now includes creative_v1 + barrel tie-in for Gap#1 completeness under python-primary.
-        persist_exercised = False
-        persisted_pairs = 0
-        barrel_creative_tied = False
+        # (A2: no re-init of flags; pre-initialized at top of fn for partial/interrupt resilience)
         try:
             cache = ic.load_cache(root)
             exercised, n = _exercise_persist_pipeline(root, sample_parser_outputs, cache, verbose=verbose)
@@ -426,10 +515,14 @@ def run_full_update(
             # Zero new deps, additive comment + flag guarantee only. Persist count may be 0 but flag now reliably set.
             persist_exercised = True
             barrel_creative_tied = True
+            phases_completed.append("persist_exercise")
+            progress.update({"phase": "persist", "persisted_pairs": persisted_pairs})
         except Exception as ex:
             if verbose:
                 print(f"[run_full_update] persist pipeline exercise skipped (non-fatal): {ex}")
 
+        # A2: determine if this is a partial (scoped or budget) but successful run
+        is_scoped_partial = bool(directory or (max_files is not None))
         result.update({
             "success": True,
             "files_to_reparse": len(dirty or []),
@@ -441,9 +534,36 @@ def run_full_update(
             "barrel_creative_tied_in_pure_path": barrel_creative_tied,
             "use_canonical": use_canonical,
             "use_python_primary": use_python_primary,
+            "partial": is_scoped_partial,
+            "partial_reason": "subtree_scoped" if directory else ("budget_limited" if max_files is not None else None),
+            "scope": scope_info,
+            "progress": progress,
+            "phases_completed": phases_completed,
+            "continuation_hint": (
+                "Scoped or budget-limited partial run. "
+                "Rerun with force_full=False + same directory (or higher max_files) to continue incrementally on remaining dirty files in scope. "
+                "Partial results (samples + any persisted pairs) are trustworthy for the processed subtree."
+            ) if is_scoped_partial else None,
             "note": "Wave 5: dirty+parser(deep 20)+persist(extracted helper) + barrel_v2/creative_v1 tie-in now deeper in pure Python. "
                     "Direct daemon/MCP/CLI --python-primary calls without sh. Discovery+env robust for external. "
-                    "Full ACS/CIABRE/cycles still sh for fidelity (progressive Phase 4).",
+                    "Full ACS/CIABRE/cycles still sh for fidelity (progressive Phase 4). "
+                    "A2: subtree scoping + partial/progress fields added (early scaffolding).",
+        })
+    except KeyboardInterrupt:
+        interrupted = True
+        if verbose:
+            print("[run_full_update] INTERRUPTED — returning partial results gathered so far (trustworthy for processed scope)")
+        result.update({
+            "success": False,
+            "error": "interrupted",
+            "use_canonical": use_canonical,
+            "partial": True,
+            "partial_reason": "interrupted_by_user",
+            "scope": scope_info,
+            "progress": progress,
+            "phases_completed": phases_completed,
+            "continuation_hint": "User interrupt. Partial results (candidates/dirty/samples/persisted up to interrupt) are safe to use. Resume with incremental run (force_full=False) + same scope.",
+            "note": "A2: partial result returned on interrupt (usable, cache may have partial updates from samples).",
         })
     except Exception as ex:
         if verbose:
@@ -452,12 +572,19 @@ def run_full_update(
             "success": False,
             "error": str(ex),
             "use_canonical": use_canonical,
+            "partial": True,
+            "partial_reason": f"error_after_phases:{phases_completed[-1] if phases_completed else 'init'}",
+            "scope": scope_info,
+            "progress": progress,
+            "phases_completed": phases_completed,
+            "continuation_hint": "Error during run. Partial data collected up to failure point is usable for diagnosis or scoped work. Retry with adjusted scope/budget recommended.",
             "note": "Wave 5 partial: error during Python-primary (deeper pipeline); "
-                    "falling back to sh path recommended for full update.",
+                    "falling back to sh path recommended for full update. "
+                    "A2: partial result + diagnostics included for trustworthiness.",
         })
 
     if verbose:
-        print(f"[run_full_update] completed for {root} (files_to_reparse={result.get('files_to_reparse')})")
+        print(f"[run_full_update] completed for {root} (files_to_reparse={result.get('files_to_reparse')}, partial={result.get('partial')})")
 
     return result
 
@@ -550,15 +677,35 @@ def main():
         # Take direct pure-Py path (deeper pipeline in run_full_update); no subprocess sh
         try:
             force_full = any(x in ("--full", "-f", "--force-full", "--full-rebuild") for x in argv)
+            # A2 early: support subtree scoping + budget in --python-primary CLI UX (e.g. --dir src/ --max-files 200)
+            directory = None
+            max_files = None
+            for a in argv:
+                if a.startswith(("--dir=", "--directory=")):
+                    directory = a.split("=", 1)[1]
+                elif a in ("--dir", "--directory") and (argv.index(a) + 1 < len(argv)):
+                    directory = argv[argv.index(a) + 1]
+                if a.startswith(("--max-files=", "--max_files=")):
+                    try:
+                        max_files = int(a.split("=", 1)[1])
+                    except Exception:
+                        pass
+                elif a in ("--max-files", "--max_files") and (argv.index(a) + 1 < len(argv)):
+                    try:
+                        max_files = int(argv[argv.index(a) + 1])
+                    except Exception:
+                        pass
             res = run_full_update(
                 root=Path(project_root) if project_root else None,
                 force_full=force_full,
                 verbose=True,
                 use_canonical=use_canonical,
                 use_python_primary=True,
+                directory=directory,
+                max_files=max_files,
             )
             import json
-            print("[wikifier] Python-primary path active (Wave 5 External robustness)")
+            print("[wikifier] Python-primary path active (Wave 5 External robustness + A2 partial/scoping)")
             print(json.dumps(res, indent=2, default=str))
             sys.exit(0 if res.get("success", False) else 1)
         except Exception as e:

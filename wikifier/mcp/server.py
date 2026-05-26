@@ -19,7 +19,7 @@ import re
 import os
 import sys
 from pathlib import Path
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
 
 # R6: reuse the canonical script locator (avoids hard ./wikifier.sh assumption in external installs)
@@ -148,6 +148,11 @@ class UpdateMapsResult(BaseModel):
 
     Wave 5: now supports use_python_primary for direct run_full_update (deeper pure-Py
     pipeline + barrel/creative) without shell; falls back to sh path otherwise.
+
+    A2 early (Partial Results & UX Scaffolding): added directory + max_files passthrough
+    to python-primary path for subtree scoping + budget. Result now carries partial,
+    scope, progress, partial_reason, continuation_hint etc. when python-primary used
+    (enables trustworthy partial results even on interrupt/budget/scoped runs).
     """
     success: bool
     project_root: str
@@ -161,6 +166,12 @@ class UpdateMapsResult(BaseModel):
     files_to_reparse: int = 0
     persist_exercised: bool = False
     barrel_creative_tied: bool = False  # Wave 6: Gap#1 barrel + creative signals exercised under pure primary path (for ACS/CIABRE surfaces)
+    # A2 early partial/scoping UX (populated in python-primary path; defaults for sh path)
+    partial: bool = False
+    partial_reason: Optional[str] = None
+    scope: Optional[Dict[str, Any]] = None
+    progress: Optional[Dict[str, Any]] = None
+    continuation_hint: Optional[str] = None
 
 
 # =============================================================================
@@ -459,13 +470,25 @@ def prepare_edit(file: str, project_root: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-def update_maps(project_root: Optional[str] = None, full: bool = False, use_python_primary: bool = False) -> UpdateMapsResult:
+def update_maps(
+    project_root: Optional[str] = None,
+    full: bool = False,
+    use_python_primary: bool = False,
+    # A2 early Partial Results & UX Scaffolding: subtree scoping + budget passthrough to python-primary
+    directory: Optional[str] = None,
+    max_files: Optional[int] = None,
+) -> UpdateMapsResult:
     """Rebuild library.md with fresh dependency analysis for the target project.
 
     Wave 5: `use_python_primary=True` wires direct run_full_update() (deeper pipeline
     from cli.py: dirty+parse+persist+barrel/creative tie-in, no sh) for packaged
     external robustness. Falls back to robust _run_wikifier_command (sh) if not or error.
     Explicit flag matches CLI --python-primary and daemon wiring.
+
+    A2 early: `directory` (subtree filter, e.g. "src/") and `max_files` (budget) are
+    forwarded only to the python-primary path. When used, result includes `partial`,
+    `scope`, `progress`, `partial_reason`, `continuation_hint` making partial results
+    trustworthy and usable even if interrupted or budget-limited. Sh path unchanged.
     """
     root = _get_effective_root(project_root)
     used_primary = False
@@ -483,13 +506,19 @@ def update_maps(project_root: Optional[str] = None, full: bool = False, use_pyth
                 verbose=False,
                 use_canonical=True,
                 use_python_primary=True,
+                directory=directory,
+                max_files=max_files,
             )
             duration = time.time() - start
             used_primary = True
             files_reparse = res.get("files_to_reparse", 0)
             persist_done = bool(res.get("persist_pipeline_exercised"))
-            # Construct rich message from the pure path result
-            msg = f"Python-primary: success={res.get('success')} files={files_reparse} persist={persist_done} barrel_creative_tied={res.get('barrel_creative_tied_in_pure_path')} note={res.get('note','')[:200]}"
+            # Construct rich message from the pure path result (now includes A2 partial info)
+            partial_flag = res.get("partial", False)
+            scope = res.get("scope")
+            prog = res.get("progress")
+            hint = res.get("continuation_hint")
+            msg = f"Python-primary: success={res.get('success')} files={files_reparse} persist={persist_done} barrel_creative_tied={res.get('barrel_creative_tied_in_pure_path')} partial={partial_flag} scope={scope} note={str(res.get('note',''))[:150]}"
             return UpdateMapsResult(
                 success=bool(res.get("success")),
                 project_root=str(root),
@@ -503,6 +532,11 @@ def update_maps(project_root: Optional[str] = None, full: bool = False, use_pyth
                 files_to_reparse=files_reparse,
                 persist_exercised=persist_done,
                 barrel_creative_tied=bool(res.get("barrel_creative_tied_in_pure_path")),
+                partial=partial_flag,
+                partial_reason=res.get("partial_reason"),
+                scope=scope,
+                progress=prog,
+                continuation_hint=hint,
             )
         except Exception as ex:
             # fall through to sh path (best-effort, still robust)
@@ -544,6 +578,12 @@ def update_maps(project_root: Optional[str] = None, full: bool = False, use_pyth
         files_to_reparse=0,
         persist_exercised=False,
         barrel_creative_tied=False,
+        # A2 fields default for sh path (no partial info from sh yet)
+        partial=False,
+        partial_reason=None,
+        scope={"note": "sh_path_no_scope_support_yet"},
+        progress=None,
+        continuation_hint=None,
     )
 
 
