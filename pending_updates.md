@@ -58,6 +58,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 - skills/run.md: Auto-detected modification — review and run mark-green after wiki update
 - Findings/m2-full-closure-longterm-scalable-plan.md: Auto-detected modification — review and run mark-green after wiki update
@@ -106,3 +107,5 @@
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final

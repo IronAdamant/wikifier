@@ -51,6 +51,17 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 # Module Version & Status
 # =============================================================================
 
+<<<<<<< HEAD
+=======
+# Workstream E (v0.4 Protocol + Library): Library high-level returns are plain dicts
+# with "success": bool, "project_root": str, optional "error", plus domain fields
+# (e.g. "changes_detected", health "entries", acs in "dependency_intel").
+# These are not frozen dataclasses (for max zero-dep agent ergonomics + json direct).
+# New shapes should be additive; see m2-full-closure plan + skills/run.md for I/O contracts.
+# Conformance harness validates shapes + error taxonomy against this + the public API.
+
+
+>>>>>>> agent-6-library-final
 __contracts_version__ = "1.0.0-prewave0-frozen"
 FROZEN_DATE = "2026-05-17"
 STATUS = "FROZEN - Pre-Wave 0 complete. All phases must use these definitions."
@@ -621,6 +632,7 @@ def synthesize_dynamic_from_legacy(
 def get_contracts_info() -> Dict[str, Any]:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     """For health, MCP diagnostics, and agent introspection."""
     return {
 =======
@@ -631,6 +643,10 @@ def get_contracts_info() -> Dict[str, Any]:
     """For health, MCP diagnostics, and agent introspection."""
     return {
 >>>>>>> agent-7-harness-final
+=======
+    """For health, MCP diagnostics, and agent introspection."""
+    return {
+>>>>>>> agent-6-library-final
         "contracts_version": __contracts_version__,
         "frozen_date": FROZEN_DATE,
         "status": STATUS,
@@ -642,12 +658,15 @@ def get_contracts_info() -> Dict[str, Any]:
     }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     base["journal"] = get_journal_event_info()
     return base
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 
 
 def enrich_diagnostic_with_analysis(
@@ -1019,6 +1038,7 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
 # =============================================================================
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 # 9. Structured Journal & Durable Intent Log (Workstream C - M2 Full Closure start)
 # =============================================================================
@@ -1305,6 +1325,8 @@ def get_journal_event_info() -> Dict[str, Any]:
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 # Self-test / smoke (run as python -m wikifier.contracts)
 # =============================================================================
 
@@ -1381,6 +1403,7 @@ if __name__ == "__main__":
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     # === JournalEventV1 (M2 Workstream C) smoke ===
     ev1 = make_journal_event(
@@ -1423,6 +1446,8 @@ if __name__ == "__main__":
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
     print("All smoke tests passed. Contracts are stable and defensive.")
     print(json.dumps(get_contracts_info(), indent=2))
     sys.exit(0)

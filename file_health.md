@@ -5,14 +5,18 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 | .github/workflows/publish.yml | 🟢 Green | 2026-05-15 21:39:44 AEST | Wiki summary verified accurate after change. |
 | Findings/m2_rem_08_combined_dogfood_findings_open.md | 🟢 Green | 2026-05-17 00:29:11 | Investigation officially initiated. Dedicated log created and first analysis steps begun. |
 | Findings/m2_rem_08_dogfood_gaps_closed.md | 🟢 Green | 2026-05-16 23:23:42 | M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project. |
 | Findings/m2_rem_08_dogfood_gaps_open.md | 🟢 Green | 2026-05-16 23:13:12 | MCP Final Robustness section updated in the gap report after completing the consistency and structured return improvements. |
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -49,6 +53,8 @@
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 | Logged_issues/high/import/m2-dependency-intelligence-tasks.md | 🟡 Yellow | 2026-05-16 12:10:34 AEST | Continued progress on A12, B12, C12. |
 | Logged_issues/high/import/m2-gap-closure-dependency-intelligence.md | 🟢 Green | 2026-05-17 08:36:54 | Profiling harness work started. |
 | Logged_issues/high/import/update-maps-v0.4-planning.md | 🟢 Green | 2026-05-15 22:27:36 AEST | Planning document completed and approved. |
@@ -63,6 +69,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 | RELEASE_NOTES.md | 🟡 Yellow | 2026-05-27 08:41:09 | mtime changed since last check-changes (auto-detected) |
 | TRADEOFFS.md | 🟡 Yellow | 2026-05-27 08:41:25 | mtime changed since last check-changes (auto-detected) |
@@ -73,6 +80,8 @@
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 | library.md | 🟢 Green | 2026-05-16 18:58:53 AEST | Regenerated after including wikifier/mcp/ in monitored paths. MCP server files now appear in dependency graph and reverse dependencies. |
 | pyproject.toml | 🟢 Green | 2026-05-15 21:42:44 AEST | Finalized for v0.3.0 PyPI release. Ready for automated publishing. |
 | recipe-lab-dogfood/MCP_Findings/wikifier_open.md | 🟢 Green | 2026-05-16 23:29:54 | Comprehensive dogfood report verified: 6 challenge features, exhaustive MCP surface (20+ tools/resources/prompts), all limitations and recommendations documented. Zero other MCPs used. |
@@ -95,10 +104,13 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 | skills/run.md | 🟢 Green | 2026-05-16 23:35:55 | Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates. |
 | src/internal/wikifier-stress/synthetic-dep-graph/churnA.js | 🟡 Yellow | 2026-05-16 22:52:23 | Heavy churn test file 0 |
 | src/internal/wikifier-stress/synthetic-dep-graph/churnB.js | 🟡 Yellow | 2026-05-16 22:52:23 | Heavy churn test file 1 |
@@ -109,6 +121,7 @@
 | v0.4-Execution-Plan.md | 🟡 Yellow | 2026-05-16 12:42:09 AEST | User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers. |
 | v0.4-execution-plan.md | 🟡 Yellow | 2026-05-16 11:37:03 AEST | Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks. |
 | wikifier.sh | 🟢 Green | 2026-05-17 16:21:10 AEST | Core CLI implemented and documented. |
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -136,6 +149,8 @@
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 | wikifier/__init__.py | 🟢 Green | 2026-05-15 21:42:40 AEST | Wiki summary verified accurate after change. |
 | wikifier/cli.py | 🟢 Green | 2026-05-15 21:39:47 AEST | Wiki summary verified accurate after change. |
 | wikifier/health.py | 🟢 Green | 2026-05-16 21:03:53 | File locking integrated for concurrent safety (M2-Rem-07). |
@@ -153,15 +168,19 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 | Findings/v1_visual_layer_architecture.md | 🟢 Green | 2026-05-18 16:29:49 AEST | V1-P1 Architecture Document complete and self-documenting as frozen reference for the wave. No separate wiki.md needed for Findings report; content serves as authoritative summary. Health promoted to Green per agent protocol. |
 | index.html | 🟢 Green | 2026-05-18 16:48:11 AEST | V1-P2 Command Surface role completed and verified by main agent. Post-trim lightweight implementation is stable, error-free, and compliant with P6 performance rules and frozen architecture. |
 | diagnostics.html | 🟢 Green | 2026-05-18 16:39:44 AEST | V1-P4 created full human refactor/porter hub (~39KB). All sections delivered: Arch Glance, Porting Checklist, Command Impl Map with .wiki.md links, Key Files consuming existing wiki.md, monorepo realities, visual port notes. Process followed (prepare+record+mark-green). Size impact to P6: combined visual ~85.7KB close to cap, P6 to validate/trim if needed. |
 | Findings/p6_real_world_validation_report.md | 🟢 Green | 2026-05-18 16:39:52 AEST | P6 notified of V1-P4 visual size impact (46.6KB index + 39KB diagnostics). Awaiting P6 sign-off/validation per wave charter. |
 | Findings/v1_visual_layer_wave_closure_report.md | 🟢 Green | 2026-05-18 16:48:53 AEST | V1-P8 Closer report finalized and wave officially closed. All P1–P7 deliverables accounted for and integrated. |
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -170,3 +189,5 @@
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final

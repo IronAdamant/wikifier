@@ -3,6 +3,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   "last_updated": "2026-05-17 08:42:00",
 =======
   "last_updated": "2026-05-27 08:41:36",
@@ -13,6 +14,9 @@
 =======
   "last_updated": "2026-05-17 08:42:00",
 >>>>>>> agent-7-harness-final
+=======
+  "last_updated": "2026-05-17 08:42:00",
+>>>>>>> agent-6-library-final
   "entries": {
     "pyproject.toml": {
       "status": "🟢 Green",
@@ -25,6 +29,7 @@
       "reason": "Wiki summary verified accurate after change."
     },
     ".github/workflows/publish.yml": {
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -46,6 +51,11 @@
       "last_updated": "2026-05-15 21:39:44 AEST",
       "reason": "Wiki summary verified accurate after change."
 >>>>>>> agent-7-harness-final
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-15 21:39:44 AEST",
+      "reason": "Wiki summary verified accurate after change."
+>>>>>>> agent-6-library-final
     },
     "MANIFEST.in": {
       "status": "🟢 Green",
@@ -112,6 +122,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
       "last_updated": "2026-05-16 11:37:03 AEST",
       "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
 =======
@@ -126,6 +137,10 @@
       "last_updated": "2026-05-16 11:37:03 AEST",
       "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
 >>>>>>> agent-7-harness-final
+=======
+      "last_updated": "2026-05-16 11:37:03 AEST",
+      "reason": "Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks."
+>>>>>>> agent-6-library-final
     },
     "Logged_issues/v0.4-roadmap.md": {
       "status": "🟡 Yellow",
@@ -147,6 +162,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
       "last_updated": "2026-05-16 12:42:09 AEST",
       "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
 =======
@@ -161,6 +177,10 @@
       "last_updated": "2026-05-16 12:42:09 AEST",
       "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
 >>>>>>> agent-7-harness-final
+=======
+      "last_updated": "2026-05-16 12:42:09 AEST",
+      "reason": "User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers."
+>>>>>>> agent-6-library-final
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
@@ -186,6 +206,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-16 23:35:55",
       "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
@@ -204,6 +225,11 @@
       "last_updated": "2026-05-16 23:35:55",
       "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
 >>>>>>> agent-7-harness-final
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:35:55",
+      "reason": "Verified during M2-Rem-08 dogfood. Content remains accurate after recent concurrency and packaging updates."
+>>>>>>> agent-6-library-final
     },
     "recipe-lab-dogfood/src/models/Recipe.js": {
       "status": "🔴 Red",
@@ -295,6 +321,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
       "last_updated": "2026-05-17 08:42:00",
       "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
 =======
@@ -309,6 +336,10 @@
       "last_updated": "2026-05-17 08:42:00",
       "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
 >>>>>>> agent-7-harness-final
+=======
+      "last_updated": "2026-05-17 08:42:00",
+      "reason": "Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling."
+>>>>>>> agent-6-library-final
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
@@ -364,6 +395,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
       "status": "🟢 Green",
       "last_updated": "2026-05-16 23:23:42",
       "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
@@ -382,6 +414,11 @@
       "last_updated": "2026-05-16 23:23:42",
       "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
 >>>>>>> agent-7-harness-final
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-16 23:23:42",
+      "reason": "M2-Rem-08 dogfood gaps report closed and renamed from _open. Content updated to reflect completion of M2-Rem-06, M2-Rem-07 final polish, and MCP Final Robustness on the Wikifier project."
+>>>>>>> agent-6-library-final
     },
     "wikifier/parsers/python.py.wiki.md": {
       "status": "🟢 Green",
@@ -394,6 +431,7 @@
       "reason": "Wiki summary is complete and accurate. Part of thorough M2-Rem-08 dogfood."
     },
     "Findings/m2_rem_08_combined_dogfood_findings_open.md": {
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -415,11 +453,17 @@
       "last_updated": "2026-05-17 00:29:11",
       "reason": "Investigation officially initiated. Dedicated log created and first analysis steps begun."
 >>>>>>> agent-7-harness-final
+=======
+      "status": "🟢 Green",
+      "last_updated": "2026-05-17 00:29:11",
+      "reason": "Investigation officially initiated. Dedicated log created and first analysis steps begun."
+>>>>>>> agent-6-library-final
     },
     "Logged_issues/high/import/m2-gap-closure-dependency-intelligence.md": {
       "status": "🟢 Green",
       "last_updated": "2026-05-17 08:36:54",
       "reason": "Profiling harness work started."
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -614,6 +658,8 @@
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
     }
   }
 }

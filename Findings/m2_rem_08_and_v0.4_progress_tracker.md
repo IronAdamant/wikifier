@@ -13,7 +13,7 @@
   - [x] Gap #1 foundational work (substantially closed at 89–93%)
   - [-] Remaining last-mile items in Gap #1
   - [-] `update-maps` Performance & UX at Scale (now the dominant blocker)
-- [ ] **M3 – Agent Interface & Ergonomics** (Python library, strengthened protocol)
+- [~] **M3 – Agent Interface & Ergonomics** (Python library, strengthened protocol) *(Workstream E: design + v0.4 protocol + MV skeleton [x] in m2-full-closure plan; Agent 6 active completing extraction to clean public API, conformance harness, CLI/MCP thin consumers, doc merges + dogfood. See E resumption section.)*
 - [ ] **M4 – State Management & Scale**
 - [ ] **M5 – Final Polish & Release**
 
@@ -134,7 +134,7 @@
 - [ ] Resource Output Volume & Summarization (no pagination/summary modes)
 - [ ] Long-Running / Stateful Ergonomics (journal & pending_updates bloat)
 - [ ] Transparency of Resolution Failures
-- [ ] M3+ Foundational Work (Python library, agent protocol, etc.)
+- [~] M3+ Foundational Work (Python library, agent protocol, etc.) *(Detailed in m2-full-closure-longterm-scalable-plan.md Workstream E + Agent 6 resumption; library surface + Protocol v0.4 live, focus now clean API rigor + harness/wiring/dogfood)*
 
 ---
 

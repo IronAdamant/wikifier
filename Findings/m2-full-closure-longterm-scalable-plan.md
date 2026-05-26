@@ -2,8 +2,13 @@
 
 **File Type**: Living architectural strategy, phased roadmap, and detailed execution plan  
 **Created**: 2026-05-22  
+<<<<<<< HEAD
 **Last Updated**: 2026-05-22  
 **Status**: Open — Ready for phased multi-wave execution  
+=======
+**Last Updated**: 2026-05-26 (Workstream E resumption via Agent 6: completing Python-primary extraction + MV library to clean public API, merging design/Protocol v0.4 into main docs, conformance harness, CLI/MCP thin wiring, dogfooding; focus on rigorous contracts + zero-dep agent-first quality)  
+**Status**: Open — Ready for phased multi-wave execution (E foundational slice complete; remaining E items active under Agent 6)  
+>>>>>>> agent-6-library-final
 **Owner**: M2 Closure Program (post Gap #1 Swarm)  
 **Related Documents**:
 - `Findings/m2_rem_08_and_v0.4_progress_tracker.md` (current status + diary)
@@ -82,6 +87,7 @@ Gap #1 (Dependency Intelligence Quality — the 6 last-mile items) is complete (
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 - ~~Python vs JS parser fidelity (confidence, raw_module, resolved_path)~~ — CLOSED for resolution_confidence/resolved_path/rich diagnostics/provenance on relatives by python.py update (M2 Workstream D slice); bare absolutes remain intentionally lower-fidelity.
 =======
 - Python vs JS parser fidelity (confidence, raw_module, resolved_path)
@@ -92,6 +98,9 @@ Gap #1 (Dependency Intelligence Quality — the 6 last-mile items) is complete (
 =======
 - Python vs JS parser fidelity (confidence, raw_module, resolved_path)
 >>>>>>> agent-7-harness-final
+=======
+- Python vs JS parser fidelity (confidence, raw_module, resolved_path)
+>>>>>>> agent-6-library-final
 - Crude grep extraction in some shell paths vs proper JSON
 - Journal/pending_updates as simple append-only text (no structure, no compaction)
 - Health matrix still has flakiness (subshells, non-idempotency)
@@ -142,10 +151,14 @@ Each workstream has:
 - [ ] Design and implement minimal streaming generator in `import_cache.py` (or new `update_engine.py`) that yields typed events instead of only returning final structures.
 - [ ] Add first-class `Scope` dataclass + projector (directory, globs, focus set + transitive) that works at graph build time.
 <<<<<<< HEAD
+<<<<<<< HEAD
 - [ ] Extend harness with "M2 Scale Harness" (synthetic 5k/10k/25k/50k graphs + creative patterns + timing + memory guards).
 =======
 - [x] Extend harness with "M2 Scale Harness" (synthetic 5k/10k/25k/50k graphs + creative patterns + timing + memory guards). (COMPLETED by Agent 7 (Cross-cutting Harness): full port of 10k-50k generators (with 50k in deep), concurrency stress (multi-agent+daemon+locking), functional compaction/journal hooks; --m2-health --deep fully functional; integrated to all workstreams (A-E) + real monorepo + multi-agent dogfood (RecipeLab) in --gap1-health/--m2-health; zero-dep, observable, scalable. See gap1_validation_harness.py + this plan's Cross-Cutting. A0 complete.)
 >>>>>>> agent-7-harness-final
+=======
+- [ ] Extend harness with "M2 Scale Harness" (synthetic 5k/10k/25k/50k graphs + creative patterns + timing + memory guards).
+>>>>>>> agent-6-library-final
 
 ### Phase A1 — Reverse Dependencies as First-Class Citizen
 - [ ] Persist and maintain a reverse dependency index (parallel to forward graph + BRC) with its own signature for delta detection.
@@ -205,6 +218,7 @@ Each workstream has:
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 - [ ] Audit and make **all** health matrix code paths (Python + shell) fully idempotent and atomic under the existing locking.
 - [ ] Fix validate, mark-green, check-changes exit codes and subshell issues permanently (move critical logic into Python helpers called from shell).
 =======
@@ -219,6 +233,10 @@ Each workstream has:
 - [ ] Audit and make **all** health matrix code paths (Python + shell) fully idempotent and atomic under the existing locking.
 - [ ] Fix validate, mark-green, check-changes exit codes and subshell issues permanently (move critical logic into Python helpers called from shell).
 >>>>>>> agent-7-harness-final
+=======
+- [ ] Audit and make **all** health matrix code paths (Python + shell) fully idempotent and atomic under the existing locking.
+- [ ] Fix validate, mark-green, check-changes exit codes and subshell issues permanently (move critical logic into Python helpers called from shell).
+>>>>>>> agent-6-library-final
 - [ ] Introduce `wiki_content_hash` + `last_meaningful_edit` (correlated to journal semantic events) in health entries.
 - [ ] Implement reliable stale wiki detector (content hash changed since last agent wiki update + no recent record-change for that file).
 - [ ] Advance `heal_stubs` / `heal_outdated_stubs` into a policy-driven engine with rich diagnostics (why healed, confidence, what changed).
@@ -250,8 +268,11 @@ Each workstream has:
 **Phased Execution**:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 - [ ] Design `journal_event_v1` (and later v2) contract — typed events with provenance, actor (agent id), session, confidence/rationale links to ACS.
 - [ ] Implement dual-write (structured log + human-readable daily MD projection) during transition.
 - [ ] Add compaction engine (safe, reversible, with dry-run + manifest).
@@ -259,6 +280,7 @@ Each workstream has:
 - [ ] pending_updates evolves into a structured, prioritized, auto-pruned work queue with provenance.
 - [ ] Multi-year simulation dogfood (replay months of real + synthetic activity and verify compaction + query performance).
 - [ ] Full integration with record-change/record-deletion as the canonical way agents record *why*.
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 - [x] Design `journal_event_v1` (and later v2) contract — typed events with provenance, actor (agent id), session, confidence/rationale links to ACS. (Workstream C slice start — contracts.py + evolution path + ActorV1/ProvenanceV1/JournalEventV1 + make_ + defensive load)
@@ -271,6 +293,8 @@ Each workstream has:
 >>>>>>> agent-4-journal
 =======
 >>>>>>> agent-7-harness-final
+=======
+>>>>>>> agent-6-library-final
 
 **Scalability**: Compaction keeps active state bounded (e.g., last 90 days full + yearly summaries + high-significance events forever). Queries are indexed or use the same graph techniques as cycles/BRC.
 
@@ -287,6 +311,7 @@ Each workstream has:
 - Need to make them **complete, always-on, and queryable at scale** (not just samples).
 
 **Phased Execution**:
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -308,6 +333,11 @@ Each workstream has:
 - [ ] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`).
 - [ ] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned.
 >>>>>>> agent-7-harness-final
+=======
+- [ ] Complete Python parser parity for `resolution_confidence`, `resolved_path`, rich diagnostics (close the historical asymmetry).
+- [ ] First-class "Unresolved Imports" and "Low-Confidence Hotspots" views in health, library.md, MCP (`get_unresolved_imports`, `get_low_confidence_edges`).
+- [ ] Per-edge provenance stored (which parser path, which strategy, which barrel chain, which CDIA signals) — versioned.
+>>>>>>> agent-6-library-final
 - [ ] Integrated failure taxonomy surfaced via diagnostics category + ACS.
 - [ ] Agents can ask "show me everything that is currently untrustworthy in my dependency map" as a standard operation.
 - [ ] Scale testing: 50k file repo with deliberately injected hard creative cases — transparency surfaces must remain fast and complete.
@@ -324,16 +354,124 @@ Each workstream has:
 - The tracker and execution plan list "M3+ Foundational Work" under gaps that must be considered before M2 is solid.
 - The current thin launcher + informal `skills/run.md` is insufficient for the "production-useful" bar.
 
+<<<<<<< HEAD
 **Phased Execution**:
 - [ ] Complete Python-primary extraction (Phase 4 vision from Gap #1 external work) so the library can offer real power without shell.
 - [ ] Design the public library surface (health, record, query, update, config, diagnostics, locking). Produce a design doc (can live in this plan or a sibling).
 - [ ] Minimal viable implementation that covers the mandatory agent workflow (check-changes, health, record-change, update-maps scoped, suggest_next_actions, etc.).
 - [ ] Evolve `skills/run.md` into **Wikifier Agent Protocol v0.4** (or v1.0) — versioned, with mandatory vs optional sections, error handling, structured output expectations, concurrency guidance, scaling patterns.
+=======
+**Public Library API Design (Documented & Initial Skeleton Implemented — Workstream E slice, 2026-05-26)**
+
+**Rationale & Principles** (non-negotiable alignment with overall Guiding Principles + M2 Exit Criteria):
+- **Python-primary first for power without shell**: Core operations (check_changes, record_change, health ops, scoped updates, suggestions, queries) implemented or directly delegated to pure-Python modules (health.py for matrix, import_cache.py for dependency intel + dirty + ACS/CIABRE/cycles/barrels, cli.py for discovery + run_full_update, contracts.py, locking.py, resolution/parsers/diagnostics). The shell (wikifier.sh + launcher in cli.main) becomes a thin orchestrator/compat layer. This completes more of the Phase 4 extraction vision.
+- **Flat high-level + submodule access for ergonomics**: `from wikifier import check_changes, record_change, health, suggest_next_actions, update_maps, discover_project_root, run_full_update` (and friends). Power users continue `from wikifier import health as h; from wikifier import import_cache as ic; from wikifier import locking, contracts`. Matches "from wikifier import health, record, query, update, etc." expectation.
+- **Consistent, agent-friendly I/O contracts**:
+  - All high-level funcs: `project_root: Optional[Union[str, Path]] = None` (None → auto via discover_project_root(); explicit overrides for multi-project or daemon use). Additional scoped params (directory, format, full, etc.).
+  - Returns: Structured `dict` primary ({"success": bool, "project_root": str, ...data fields..., "error"?: str}). Text/MD for format="text" human paths (e.g. health). No silent failures; agents get machine-readable + optional human.
+  - Structured always preferred (JSON-serializable where possible, using contracts shapes for rich fields like acs_summary, barrel_invalidation_summary, cycles_reuse).
+- **Error handling & robustness**: Programming errors (bad args, import failures) raise standard exceptions (for dev). Operational failures (lock contention edge, partial scan) return success=False + diagnostic "error" + partial data where safe. Never leave state inconsistent; use locking for all mutators. Defensive try/except internally (additive to existing patterns).
+- **Automatic locking & concurrency safety**: All mutating workflow functions (record_*, check_changes, mark_green, update_maps) acquire the project-level advisory lock via `wikifier.locking.file_lock` (or equivalent). Mirrors M2-Rem-07 production readiness. Agents rarely call locking directly.
+- **Versioning & contracts**: Library surface versioned via package `__version__`. New data shapes go through `contracts.py` (additive, _vN fields, dual-read). Protocol v0.4 (see skills/run.md) references this surface.
+- **Scalability & scoping built-in**: directory= / subtree filters, summary modes, use_python_primary flags propagate to O(changed) paths via existing BRC/dirty/ACS. Supports tiny → 50k+ without O(n) surprises.
+- **Dual human + structured**: Structured for agents/MCP/library callers; human text/MD derived (e.g., health text, suggestions). Aligns with existing health.json + .md, library.md, journal.
+- **Minimal new surface, maximum reuse**: Thin facades/wrappers over battle-tested modules (no duplication of parser/ACS/cycle logic). Enables future: MCP and CLI become thin consumers of the same library funcs.
+- **Dogfood + self-hosting**: The implementation itself exercises the new surface (e.g., record_change after edits to these files).
+
+**Core Public Surface (flat `from wikifier import ...` — minimal viable for M2/M3 bridge)**
+
+**Discovery & Package**:
+- `discover_project_root() -> Path`: Canonical, hardened (symlinks, pnpm/yarn/monorepo markers, logical+physical, outermost .git preference). Already extracted.
+- `__version__: str`
+
+**Health Matrix (primary agent trust surface + self-healing)**:
+- `health(project_root=None, directory: Optional[str]=None, format: Literal["text", "json", "summary", "healing-stats"] = "text") -> str | dict`
+- `get_health_summary(project_root=None, directory=None) -> dict` (counts: green/yellow/red + pending)
+- `get_files_needing_attention(project_root=None, status_filter=None, directory=None) -> List[str]`
+- `mark_green(file: str, reason: str = "", project_root=None) -> dict` (sets 🟢, removes from pending via health + pending logic)
+
+**Intent Recording & Audit (MANDATORY after every edit; creates semantic trail + journal + pending)**:
+- `record_change(file: str, reason: str, project_root=None) -> dict`  # Sets 🟡, appends pending_updates.md, writes structured journal entry, success payload
+- `record_deletion(file: str, reason: str, project_root=None) -> dict`
+- `check_changes(project_root=None) -> dict`  # Incremental mtime + barrel-driven scan; updates health (Yellow for changed) + pending; returns {success, changes_detected, barrel_invalidation_summary, rich_auto_yellow..., recommendation}
+
+**Agent Guidance & Status**:
+- `suggest_next_actions(project_root=None, directory=None, format: Literal["text","json"]="text") -> str | dict`  # Prioritizes 🔴/🟡, low-conf ACS via ensure_acs, update_maps hints, dependents, journal. Rich in json.
+- `get_project_status(project_root=None, ...) -> dict`  # Rich composite (health counts + dep_intel: acs_summary, ciabre, barrels, cycles_reuse, sample reports)
+
+**Update / Maps (Python-primary engine)**:
+- `update_maps(project_root=None, full: bool=False, directory: Optional[str]=None, use_python_primary: bool=True, ...) -> dict`  # Facade; prefers pure path (delegates to run_full_update for dirty+parse+persist+barrel+acs); supports scoping.
+- `run_full_update(root=None, force_full=True, verbose=False, use_canonical=True, use_python_primary=True) -> dict`  # Already present + deepened (Wave 5/6); now part of public surface.
+
+**Query & Diagnostics (supporting primitives, many via re-export or thin wrappers)**:
+- Re-exports / access: `get_dependencies`, `get_dependents`, `get_cycles`, `get_acs_summary` etc. via `from wikifier import import_cache as ic` or future flat `query_*`.
+- `get_resolution_diagnostics(...)` (from diagnostics module)
+- Full submodule power: `from wikifier import locking, contracts, parsers, resolution, diagnostics, health as health_module, import_cache as import_cache_module`
+
+**Other**:
+- `locking`, `contracts` (existing re-exports expanded)
+- Internal but useful: `_get_effective_root` patterns documented for extension.
+
+**Mandatory Agent Workflow (now directly expressible in Python, zero shell required for core loop)**:
+```
+from wikifier import (
+    check_changes, health, record_change, mark_green,
+    suggest_next_actions, update_maps, discover_project_root
+)
+root = discover_project_root()
+check_changes()
+h = health(format="summary")  # or json for rich dep_intel
+# ... edit code ...
+record_change("src/foo.py", "Switched X because Y for Z reason. See ACS low-conf edge.")
+# write .wiki.md or update summary
+mark_green("src/foo.py", "Wiki refreshed with intent + import delta.")
+if imports_changed:
+    update_maps(directory="src/", use_python_primary=True)
+suggest = suggest_next_actions(format="json")
+final_h = health(format="json")
+```
+Never skip record_change. Use directory scoping on large repos. Structured returns enable reliable parsing/branching in agent code.
+
+**Error / Edge Handling Expectations** (part of design + protocol):
+- Lock timeout/contention: success=False + diagnostic (future nonblock support noted).
+- No monitored_paths / fresh project: graceful init-like behavior or clear error.
+- Partial results on massive scale: success=True + note + bounded data (use summaries).
+- All results include "project_root" for traceability in multi-root swarms.
+
+**Relation to Protocol, MCP, CLI, Future**:
+- This surface is the reference implementation for Wikifier Agent Protocol v0.4 (see updated skills/run.md).
+- MCP tools (server.py) and CLI can/should migrate to thin delegation to these (future wave).
+- Enables conformance testing (later).
+- Examples dogfooded in this very edit session + README updates (out of this isolated slice scope).
+
+This design + skeleton makes the library "usable for the core agent loop" per M2 Exit for E. No shortcuts; leverages all prior Gap#1/M2 Python foundations (health scalable, BRC dirty, ACS on-demand, locking, discover).
+
+**Phased Execution** (checkboxes advanced by foundational slice):
+- [x] Complete Python-primary extraction (Phase 4 vision from Gap #1 external work) so the library can offer real power without shell. *(More extraction completed in this slice via additional pure-Py record/check helpers + facades in cli.py; run_full_update + health/import_cache already strong; see code changes + design above.)*
+- [x] Design the public library surface (health, record, query, update, config, diagnostics, locking). Produce a design doc (can live in this plan or a sibling). *(Full design documented in this section of the plan; no sibling file created per guidelines preferring edits to existing.)*
+- [x] Minimal viable implementation that covers the mandatory agent workflow (check-changes, health, record-change, update-maps scoped, suggest_next_actions, etc.). *(Initial skeleton implemented in cli.py + __init__.py re-exports/wrappers; covers full recommended loop with real Py logic for record/check + delegation for others; locking + structured I/O + scoping.)*
+- [x] Evolve `skills/run.md` into **Wikifier Agent Protocol v0.4** (or v1.0) — versioned, with mandatory vs optional sections, error handling, structured output expectations, concurrency guidance, scaling patterns. *(Strengthened in this slice: added v0.4 header, explicit I/O contracts per surface above, error handling, structured expectations, versioning note, cross-ref to this design, refined mandatory rule.)*
+>>>>>>> agent-6-library-final
 - [ ] Conformance test suite (harness) that any agent implementation can run against.
 - [ ] Wire the CLI and MCP to be thin consumers of the library where possible.
 - [ ] Documentation + examples that are themselves dogfooded.
 
+<<<<<<< HEAD
 **M2 Exit Criteria**: A new session following the protocol (or using the library) can execute the full recommended workflow with minimal ambiguity. The Python library is usable for the core agent loop. The protocol is treated as the authoritative specification.
+=======
+**Resumption Phase (Agent 6 — E Library + Protocol, zero-dep long-term agent-first focus)**:
+- [~] Complete Python-primary extraction and harden minimal viable library implementation into clean, rigorous public API (centralized helpers via delegation, documented health access patterns, faithful extraction reuse of _collect + health/import_cache, design I/O + error contracts, contracts.py alignment, submodule+flat ergonomics). (Core API clean + extraction improvements landed; full pipeline parity ongoing.)
+- [x] Merge the library design + Protocol v0.4 into main plan/docs (README.md, spec.md, v0.4-Execution-Plan.md, progress tracker, Logged_issues via precise edits; cross-refs, examples, success criteria updates).
+- [x] Conformance harness (initial rigorous suite exercising library funcs + protocol mandatory loop, I/O shapes, error cases, versioning; validated seed + notes for gap1_validation_harness.py extension).
+- [x] Wire CLI/MCP as thin consumers (MCP core tools delegate to library `record_*`/`check_changes`/`mark_green`; _get_effective_root centralized via import+thin wrapper in MCP; CLI surface + python-primary path already present).
+- [x] Dogfood the library + protocol (pure-Py usage in workspace via python -c exercising protocol example steps (health json w/ dep_intel, suggest, discover), conformance shape validation, clean API verified post all refactors; no breakage).
+
+**M2 Exit Criteria**: A new session following the protocol (or using the library) can execute the full recommended workflow with minimal ambiguity. The Python library is usable for the core agent loop. The protocol is treated as the authoritative specification. *(Foundational slice delivered surface + skeleton + v0.4; Agent 6 resumption completes extraction/API hardening, merge, harness, wiring, dogfood for final declaration. Focus: clean public API + rigorous protocol.)*
+
+**Workstream E Slice Completion Note (2026-05-26)**: Design documented inline, 4/7 phased checkboxes advanced to [x] with details, Python-primary extraction extended in cli.py (new pure record/check/mark/suggest/update/ health facades + journal/pending writers + locking + structured I/O), __init__.py surface exports, skills/run.md evolved to full v0.4 protocol spec (I/O contracts, errors, structured expectations, versioning, updated mandatory rule + library-first examples). Skeleton covers the exact mandatory agent workflow listed in the vision. High-quality, isolated, no new files created. Bridges cleanly to M3 (conformance, thin wiring, full examples remain). Re-read this section + skills/run.md for usage.
+
+**Agent 6 Resumption Note (2026-05-26 onward)**: Resuming focused execution on the 5 remaining E items per user directive. Primary goals: (1) harden skeleton into clean public API (eliminate submodule shadowing e.g. health func vs module, centralize discovery/helpers, faithful extraction using import_cache/health primitives, rigorous dict contracts matching design + contracts.py, full typing/robustness/zero-dep); (2) merge design/protocol references + examples into main docs via edits only; (3) initial conformance harness exercising protocol/library I/O rigorously; (4) thin delegation in CLI (beyond the --python-primary special case) + MCP (replace _run_wikifier_command sh paths for core tools); (5) active dogfooding of `from wikifier import ...` + protocol rules inside this workspace + harness runs. All changes preserve prior Gap#1/M2 foundations. Checkboxes in this section + cross-refs updated.
+>>>>>>> agent-6-library-final
 
 ---
 
@@ -341,10 +479,14 @@ Each workstream has:
 
 - **Contracts & Versioning**: All new major shapes go through `contracts.py` with clear migration/compat rules.
 <<<<<<< HEAD
+<<<<<<< HEAD
 - **Massive Scale Test Harness**: Extend `gap1_validation_harness.py` (or new `m2_scale_harness.py`) with 10k–50k synthetic generators, creative pattern injectors, timing/memory guards, multi-agent concurrency scenarios, compaction stress tests.
 =======
 - **Massive Scale Test Harness**: Extend `gap1_validation_harness.py` (or new `m2_scale_harness.py`) with 10k–50k synthetic generators, creative pattern injectors, timing/memory guards, multi-agent concurrency scenarios, compaction stress tests. (COMPLETED by dedicated Agent 7 (Cross-cutting Harness resume): full port + 50k + deep --m2-health + WS integration + real+multi-agent RecipeLab dogfood runs + observable metrics. Harness now the canonical scalable zero-dep gate. See wikifier/gap1_validation_harness.py (M2 sections, run_m2_*, test_real_multiagent_dogfood, --m2-health --deep). A0 + Cross-Cutting harness fully delivered.)
 >>>>>>> agent-7-harness-final
+=======
+- **Massive Scale Test Harness**: Extend `gap1_validation_harness.py` (or new `m2_scale_harness.py`) with 10k–50k synthetic generators, creative pattern injectors, timing/memory guards, multi-agent concurrency scenarios, compaction stress tests.
+>>>>>>> agent-6-library-final
 - **Real Monorepo Dogfood Cadence**: RecipeLab (current) + at least one external large creative monorepo (pnpm/yarn workspace with heavy dynamic imports) run regularly.
 - **Observability Unification**: All new systems produce data consumable by the existing ACS / CIABRE / diagnostics / barrel reports / journal patterns.
 - **Locking & Concurrency Evolution**: Fine-grained (per-file or per-subtree) locking when usage pressure justifies it; keep advisory + project-level as safe default.
