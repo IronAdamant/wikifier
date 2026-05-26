@@ -1,23 +1,97 @@
-# exclude_patterns.txt — Glob-style patterns to ignore during scans
-# These are matched against the full path.
+# Wikifier v0.4+ — Default Exclude Patterns
+# These patterns are applied during scans (check-changes, validate, update-maps, etc.)
+# They are designed to be aggressive but safe for most projects.
+# Users can edit this file to add or remove patterns as needed.
 
-node_modules
-.git
+# ============================================
+# Virtual Environments & Python Environments
+# ============================================
+.venv
+.venv-*
+venv
+venv-*
+.env
+.env-*
+env
+env-*
+.virtualenv
+.conda
+.conda-env
+
+# ============================================
+# Build, Distribution & Compiled Output
+# ============================================
 build
 dist
+out
+target
+*.egg-info
+*.whl
+*.tar.gz
 __pycache__
 *.pyc
 *.pyo
-.venv
-venv
-.env
-*.egg-info
-target
-out
-.next
+*.pyd
+
+# ============================================
+# Caches & Temporary Files
+# ============================================
+.cache
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+.pytype
+.pyre
+dmypy.json
+site-packages
+
+# ============================================
+# Package Managers & Dependencies
+# ============================================
+node_modules
+bower_components
+vendor
+
+# ============================================
+# IDEs & Editor Files
+# ============================================
 .idea
 .vscode
-*.log
-wikifier/.wikifier_staging
+.vs
+*.swp
+*.swo
+*~
+
+# ============================================
+# Version Control
+# ============================================
+.git
+.gitattributes
+.gitignore
+.hg
+.svn
+
+# ============================================
+# OS Generated
+# ============================================
+.DS_Store
+Thumbs.db
+
+# ============================================
+# Documentation Build Output
+# ============================================
+docs/_build
+site
+_build
+htmlcov
+
+# ============================================
+# Wikifier Internal (also hardcoded in the script for safety)
+# ============================================
+.wikifier_staging
 journal
 Logged_issues
