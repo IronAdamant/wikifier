@@ -57,6 +57,7 @@
 - wikifier.sh: LLM/agent edit — Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling.
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 - skills/run.md: Auto-detected modification — review and run mark-green after wiki update
 - Findings/m2-full-closure-longterm-scalable-plan.md: Auto-detected modification — review and run mark-green after wiki update
@@ -103,3 +104,5 @@
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final

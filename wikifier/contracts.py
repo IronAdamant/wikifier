@@ -620,12 +620,17 @@ def synthesize_dynamic_from_legacy(
 
 def get_contracts_info() -> Dict[str, Any]:
 <<<<<<< HEAD
+<<<<<<< HEAD
     """For health, MCP diagnostics, and agent introspection."""
     return {
 =======
     """For health, MCP diagnostics, and agent introspection. Extended additively for journal_event_v1 (M2 Workstream C)."""
     base = {
 >>>>>>> agent-4-journal
+=======
+    """For health, MCP diagnostics, and agent introspection."""
+    return {
+>>>>>>> agent-7-harness-final
         "contracts_version": __contracts_version__,
         "frozen_date": FROZEN_DATE,
         "status": STATUS,
@@ -636,10 +641,13 @@ def get_contracts_info() -> Dict[str, Any]:
         "num_dynamic_tags": len(DYNAMIC_SEMANTIC_TAGS),
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     base["journal"] = get_journal_event_info()
     return base
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
 
 
 def enrich_diagnostic_with_analysis(
@@ -1010,6 +1018,7 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
 
 # =============================================================================
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 # 9. Structured Journal & Durable Intent Log (Workstream C - M2 Full Closure start)
 # =============================================================================
@@ -1294,6 +1303,8 @@ def get_journal_event_info() -> Dict[str, Any]:
 
 # =============================================================================
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
 # Self-test / smoke (run as python -m wikifier.contracts)
 # =============================================================================
 
@@ -1369,6 +1380,7 @@ if __name__ == "__main__":
     assert "High-fidelity" in e4 or "Safe for automated" in e4  # decision language
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     # === JournalEventV1 (M2 Workstream C) smoke ===
     ev1 = make_journal_event(
@@ -1409,6 +1421,8 @@ if __name__ == "__main__":
     assert "JSONL" in info["primary_storage"]
 
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
     print("All smoke tests passed. Contracts are stable and defensive.")
     print(json.dumps(get_contracts_info(), indent=2))
     sys.exit(0)

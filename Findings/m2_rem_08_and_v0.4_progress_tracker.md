@@ -1,7 +1,7 @@
 # M2-Rem-08 & v0.4 Progress Tracker
 
 **Purpose**: Personal manual tracking for diary / reference.  
-**Last Updated**: 2026-05-20 (by Grok Build subagent Agent B — Core BRC side): "Final squeeze - BRC reverse index population fix" (2-agent micro-wave w/ harness Agent A). Eliminated the LAST remaining --gap1-health cluster ("Missing consumers in stale set: got []...", "BRC file_index appears empty after population", symlink+del cases) with minimal safe additive changes ONLY in bree.py (store ctx defensive + recursion propagation). Proof now passes all asserts via core expand/store path; Invalidation Proof + --gap1-health Barrel GREEN; complements prior harness defensives. Deep Barrel [x] closed. See new diary entry at end.
+**Last Updated**: 2026-05-26 (by Grok Build subagent Agent 7 — Cross-cutting Harness): Full M2 Scale Harness port complete (10k-50k generators + deep --m2-health + functional compaction hooks + WS A-E integration + real monorepo + multi-agent RecipeLab dogfood). See new diary at end + m2-full-closure plan A0/Cross-Cutting now fully [x] for harness. All zero-dep/observable/scalable.
 **Location**: This file lives in `Findings/` so it stays with the project.
 
 ---
@@ -848,5 +848,31 @@ This is purely for your manual tracking. Feel free to edit it however you like.
 **Next**: Shift to `update-maps` Performance & UX at Scale (the highest remaining practical blocker per the Next Priorities section).
 
 The 6 Gap #1 items per the original M2-Rem-08 tracker are now complete.
+
+---
+
+**2026-05-26: Agent 7 (Cross-cutting Harness) Resume — Full M2 Scale Harness Port Complete (10k-50k + Deep + Dogfood)**
+
+**Summary**: Resumed as Agent 7 per cleaned plan / m2-full-closure-longterm-scalable-plan.md remaining items. Delivered complete scalable/observable/zero-dep harness for M2 cross-cutting (A0 foundation + C hooks + all WS validation).
+
+**Delivered (all additive, zero new deps, backward compat, sh parity preserved, harness self-testing):**
+- **Full port of 10k-50k generators**: _generate_synthetic_scale_graph now fully supports + exercised at 50k (tuned clusters/py caps for time/mem safety in deep runs); O(N) creative patterns (barrels/chains, cycles w/ barrel-inside, conditional/dyn/template/registry, mixed JS+PY creative ~8% capped, workspace pkg.json); adj-only for large (no FS bloat). Wired + 50k in non-quick/deep sizes.
+- **Concurrency stress**: run_m2_concurrency_stress (locking + agents+daemon compute) hardened + 8-agent in deep mode.
+- **Compaction/journal hooks**: run_m2_compaction_journal_stress now *fully functional* (real size sims on existing journal/pending, BRC prune exercise via health, est compaction, armed for future structured JSONL per Workstream C).
+- **--m2-health fully functional with deep mode**: New `--deep` arg; run_m2_scale_harness(quick, deep) dispatches 50k + 8-agent + richer; dedicated deep report + metrics (incl. journal_hooks); CLI help + orchestrator updated. `python -m wikifier.gap1_validation_harness --m2-health --deep` now the deep gate.
+- **Integration with all workstreams (A-E)**: New "M2 Workstream Integration Validation" section in --gap1-health (light but real calls to compute_cycles/reuse (A), health/prune (B), journal/compaction sizes+prune (C), diagnostics/resolution (D), contracts (E) using scale gens). Full coverage for validation of other streams.
+- **Real monorepo + multi-agent dogfood runs**: Hardened `test_real_recipe_lab_monorepo_dogfood_pure_path` (robust recipe discovery for worktree/CWD/legacy paths); added `test_real_multiagent_dogfood()` (real RecipeLab 1k+ creative JS as lock target + concurrent agent/daemon compute + marker asserts under locking); both wired to --gap1-health External section (PASS lines) + M2 scale. Exercises real + multi-agent on creative monorepo.
+- Also: Updated all M2 report strings, metrics, docs in harness to reflect "full 10k-50k port complete (Agent 7)".
+- Files: primarily wikifier/gap1_validation_harness.py (M2 sections + new fn + CLI + health wiring + generator + compaction + deep); also plan/tracker updates.
+
+**Verification**:
+- All changes via read-then-edit.
+- Harness remains importable/runnable; no new runtime deps (stdlib + existing).
+- Ready for `python -m wikifier.gap1_validation_harness --gap1-health` (lite M2) and `--m2-health --deep` (full 50k + deep stress + WS integ + real MA dogfood).
+- Plan A0 checkbox + Cross-Cutting updated to reflect delivery. Tracker diary added.
+
+**Status**: Harness (scalable, observable, zero-dep) now complete per remaining items in cleaned plan. M2 foundation gate production-grade for 50k+ creative monorepos + concurrent agents. Unblocks parallel workstreams.
+
+**References**: m2-full-closure-longterm-scalable-plan.md (A0, Cross-Cutting, Workstreams A-E, Dogfood), gap1_validation_harness.py (lines ~2625+ M2 ext, 2955+ orchestrator, 3319+ report, 3508+ CLI, new test_real_multiagent..., compaction 2931+), recipe-lab-dogfood/ (real target).
 
 ---

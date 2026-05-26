@@ -30,11 +30,14 @@ import json
 import os
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 import re
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -185,6 +188,7 @@ def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> No
     _do_save_health(root, health)
 
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 =======
@@ -373,6 +377,8 @@ def validate_health(root: Path) -> Dict[str, Any]:
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
 def apply_barrel_invalidation_reports(
     root: Path, reports: List[Dict[str, Any]]
 ) -> int:
@@ -1195,6 +1201,7 @@ if __name__ == "__main__":
         print("  prune-barrels [max_days] [ --dry-run ]   Lightweight age-based BRC pruning (default 90d)")
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
         print("  mark-green <file> [reason]   Idempotent Green + clear pending (locked)")
         print("  remove-pending <file>        Idempotent remove from pending_updates (locked)")
@@ -1203,6 +1210,8 @@ if __name__ == "__main__":
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
         sys.exit(1)
 
     root = Path(".")
@@ -1303,6 +1312,7 @@ if __name__ == "__main__":
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     elif cmd == "mark-green":
         if len(sys.argv) < 3:
@@ -1363,5 +1373,7 @@ if __name__ == "__main__":
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
     else:
         print(f"Unknown command: {cmd}")

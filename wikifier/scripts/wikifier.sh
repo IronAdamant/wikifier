@@ -2073,6 +2073,7 @@ if n > 0:
     fi
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
     # Explicit success for consistent exit codes (fixes flakiness where check-changes would exit non-zero on benign conditions)
@@ -2081,6 +2082,8 @@ if n > 0:
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
 }
 
 cmd_health() {
@@ -2320,6 +2323,7 @@ print("\n> Machine-readable: `wikifier cycles`, MCP `get_cycles(format=\"json\",
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     # M2 Workstream D Resolution Transparency (parser parity + import_cache helpers): first-class unresolved/low-conf in library.md
     # Makes failure modes (no resolved_path, low conf, diagnostics with agent suggestions) visible without grepping cache or MCP.
@@ -2357,6 +2361,8 @@ if unres or lowc or diag.get("low_or_unresolved_count", 0) > 0:
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
     ( python3 -c '
 from pathlib import Path
 import wikifier.import_cache as ic
@@ -2534,10 +2540,14 @@ cmd_init() {
     PENDING_UPDATES="$PROJECT_ROOT/pending_updates.md"
     LIBRARY_MD="$PROJECT_ROOT/library.md"
 <<<<<<< HEAD
+<<<<<<< HEAD
     mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
 =======
     mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT" "$STAGING_DIR/journal/v1"
 >>>>>>> agent-4-journal
+=======
+    mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
+>>>>>>> agent-7-harness-final
 
     [[ ! -f "$MONITORED_PATHS_FILE" ]] && echo "." > "$MONITORED_PATHS_FILE"
     [[ ! -f "$EXCLUDE_PATTERNS_FILE" ]] && cat > "$EXCLUDE_PATTERNS_FILE" << 'EOT'
@@ -2573,12 +2583,16 @@ EOT
     echo "project_root=$PROJECT_ROOT" > "$PROJECT_ROOT/.wikifier/config" 2>/dev/null || true
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
 
     # Seed a first health entry for the tool itself
     upsert_health "wikifier.sh" "🟢 Green" "Core CLI implemented and documented."
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 
@@ -2588,6 +2602,8 @@ EOT
 >>>>>>> agent-3-health-reliability
 =======
 >>>>>>> agent-4-journal
+=======
+>>>>>>> agent-7-harness-final
     # R6 UX: auto-copy launcher wikifier.sh into target (full-featured copy when running from source)
     if [[ "$do_copy" == true ]]; then
         local self_script="${BASH_SOURCE[0]:-$0}"
