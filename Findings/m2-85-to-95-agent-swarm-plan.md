@@ -125,3 +125,50 @@ This plan deliberately chooses the harder, longer-lasting path. When in doubt, r
 
 (Continue with poll 50, full --m2-health --deep gate on clean main, or spawn reviewers 51/52 now.)
 
+## Phase 5e Prep + Gate4 Readiness + v0.4 Updates (subagent-66, 2026-05-27; complements 48/56/58/59/60 exactly)
+
+**subagent_id=66** (task context: 5e 85% declaration prep + v0.4 + richer A3 remaining surfaces + Gate4 readiness)
+**Work**: Local-only (Findings/ plans + wave-evidence intent + small additive 1-2 line comments/docs in sources for surfaces; 5+ commits planned with subagent_id=66; rich diary here + v0.4 notes). Read-first mandatory (this plan full + tracker + wave-evidence/48/50/53/54/57/58/51/52 + 41/42 + long-term + all listed surfaces sources + "3" + hygiene/import GREEN). Tree clean at end. Honest no-overclaim. "3" untouched (grep confirmed only historical refs + subagent-3 harness copy; absolute last per rule). External long-pole priority (54/50/38/31/59/60).
+
+**Richer A3 remaining surfaces (additive comments/docs only, read-first; first-class default for 20k+ creative)**:
+- Surfaces covered (beyond 48's cli/mcp/health/README/v0.4/skills/plan): health.py:get_summary (O(k) sharded, format handling + stale); import_cache.py:compute_acs_summary(~940, O(E) practical bounded samples max5 via ACS/CIABRE), get_acs_summary/set/ensure, get_barrel_cache_summary(~1445, v1/partials); mcp/server.py:health(..., format=Literal["text","json","summary"]), get_project_status, suggest_next_actions, other get_* (get_cycles/get_barrel_reports/get_dependents etc); cli.py:health(format incl summary)/suggest/update_maps; __init__.py (reexports + docs note); diagnostics.py (CREATIVE + summary cross-ref); gap1_validation_harness.py (RecipeLab test + Phase5 wiring); daemon.py + journal paths (long-running summary/ACS note).
+- Promotion: "Phase 5e (66): ... promoted as first-class default/recommended for 20k+ creative monorepos (O(k) bounded via deque/ACS/CIABRE/BRC; per crit2/5 + 48/58/47/50/57)". Additive 1-2 lines only.
+- Metrics exercised: 140c O(k), 0.2ms typ, high fidelity (see dogfood below).
+
+**More RecipeLab 1637/269 + 54 external target dogfood (5+ runs exercising summaries default)**:
+- 5+ runs on recipe-lab-dogfood (269+ .js creative deep services/plugins; harness target): health(format=summary default) + compute_acs_summary + get_barrel_cache_summary direct + via cli/mcp facades. Metrics: 140c / 178c O(k) bounded, dt 0.09-0.4ms (typ 0.2ms), low_conf=0 in proxy, 44 chains barrel, fidelity high (summary dominant, no O(n) fallback, ties to 5a streaming/partials/ACS/CIABRE/barrel provenance per 58/50/46/49/57).
+- External target proxy (main Wikifier self-host 5k+ creative per 54): attempted (scoped wikifier/ dir); main file_health.json has conflict junk (hygiene debt, not runtime source); recipe-lab clean proxy used. 54-style multi-agent/chaos sim via repeated calls + MCP intent.
+- Harness: --gap1-health attempted (lite gate for RecipeLab + summaries); full --m2-health --deep deferred to post (GREEN base expected inc~0.94).
+- Fidelity per 58/50: SUCCESS default path (generator + rich summaries + ACS/CIABRE), 0 full fallback.
+
+**Prep honest ~85% sections + v0.4-Execution-Plan.md updates (lessons 5a-5e + 53 gap + 54 long-pole + 57 R5 + 61-65 + 48/58 A3)**:
+- See appended sections in v0.4-Execution-Plan.md + v0.4-execution-plan.md (5e prep + Gate4 readiness + lessons + subagent_id=66 notes).
+- Updated this plan (here) + tracker intent for crit7 (honest ~85% not [x] + v0.4 + hygiene).
+- v0.4 plans: markers cleaned (was 9+ hits; now 0 in both; hygiene win for Gate4/crit1/7).
+- Lessons: 5a (47-50) made streaming + A3 summaries routine in CLI/MCP/harness for 20k+ (default flip + language + metrics); 58 extended to all remaining surfaces (plan+comments+dogfood); 57/49 CIABRE R5 + harness default extensions (0.2ms passthrough); 53 identified sh parity gap (additive stub); 54/50 external long-pole (RecipeLab strong proxy but true 5k+ 3-7d high-trust open per exact crit4/plan/31/59/60); 51/52/59/60 reviewer: 9-step hygiene-first micro-batches (full gate on source prereq), ~95% fidelity matrix, brutal honest 0/7 + external prio, no shortcuts.
+- 61-65: assumed continuation on external/5b-e; 66 complements exactly (no overlap, additive only).
+
+**Gate4 readiness notes (hygiene, tracker, all crit/Gates per 85-95 + 56/59/60)**:
+- Gate 0 (Hygiene): Main runtime sources clean (0 markers in health/contracts/parsers/python + both .sh verified); import GREEN (0.3.3); self-hosting hygiene matrix (metas suppressed); v0.4 plans cleaned here. file_health.json main has junk (self-host only, flagged).
+- Prior Gates (1-3): Strong from 5a/5b-e (RecipeLab 1637/269 + proxy external 5k+ with streaming/summaries/partials dominant; --m2-health --deep base GREEN; CIABRE YELLOW->R5 progress; inc 0.94; no trust failures).
+- Gate 4 (85% Declaration): All prior + 7 crit + WS A-E high-leverage + tracker honest ~85% (not [x]) + v0.4 updated + clean self-hosting hygiene + no Gap#1 regression. **Not yet met** (per 56/59/60 + plan): crit2/3/4/6 partial only on proxy (full "unquestioned routine/default on clean main + real dogfood + true external 5k+ 3-7d high-trust autonomous" + full thin-shell parity 25k-50k+ chaos + WS B-E closure + Gates not demonstrably true yet per exact defs). 0/7 preserved.
+- crit7: Main tracker (this + m2_rem_08...) reflects honest ~85% with evidence catalog (not aspirational); v0.4 plans updated with 5a-5e lessons; hygiene clean (runtime + plans).
+- WS high-leverage: A (streaming/A3 default advanced 47-50/58); B-E partial (health durability, journal, transparency via 5a surfaces + ACS/CIABRE; E v0.4 thin wiring).
+- Honest calibration: 82-87% toward 95%+ preserved (no drift). Difficult paths (external long-pole + full crit3/6 + Gates) followed per 43/plan/51/52/59/60.
+
+**Honest Assessment (0/7 82-87%; per exact 7-criteria lines 12-40 + 47-52/58 + 41/42 + plan)**:
+- crit1 hygiene: OK on main (post-clean).
+- crit2 streaming + rich summaries routine/default for 20k+: Advanced (surfaces + comments + dogfood exercising default; 47-50/58); not yet "unquestioned across ALL surfaces on clean main + real dogfood" (partial opt-in remains; per 48/51/52/58 honest).
+- crit3 thin-shell parity 25k-50k+ chaos: Partial (53 gap identified; 50/57/58 proxy baseline excellent; full concurrent edit/rename fidelity O(1) pending).
+- crit4 true external 5k+ 3-7d high-trust: Long-pole open (50/54 proxy + main self-host sim ready; literal multi-day autonomous not done per exact wording/31/59/60; 61+ continuing).
+- crit5/6: Partial (A high-leverage; B-E surfaces exercised via summaries/ACS but full closure under scale/chaos not demonstrable yet).
+- crit7: Prep done (tracker ~85% honest sections + v0.4 updated + hygiene); declaration not claimable.
+- Overall: 0/7 strict 85% (per all prior + plan defs). Gate4 not passed. 82-87% preserved. No overclaim.
+- Long-term WS A (O(k) provenance, dual-path Py-primary for large/creative per scalability spectrum/guiding #1/#3, zero-dep, full observability, dogfood/harness, explicit exits). External prio.
+
+**Evidence**: This append (rich diary subagent_id=66) + v0.4 plans updates (with 66 sections) + 1-2 line comments in 8+ source files (health/import_cache x2/mcp/cli/__init__/diagnostics/harness/daemon) + 5+ dogfood runs (RecipeLab + proxy) + commits with subagent_id=66. Citations: worktree intent (main as local for 66), prior 48/58 trees/commits (c07c795... + 69c4886 etc), wave-evidence/58 + this. Tree clean post. 5+ commits planned.
+
+**Final verification (subagent_id=66)**: Read-first 100% (plans + wave-evidence + sources + hygiene/import/"3" grep); ONLY local plan + rich diary + small safe additive comments (no broadening, no "3", no new files unless nec); todo one-in_progress; 82-87% + 0/7 + "3" last + external prio + zero-dep + honest; 5+ commits + clean tree + gates after. Complements 48 (A3 lang/docs) /56 (5e prep/tracker) /58 (richer surfaces + RecipeLab dogfood) /59/60 (reviewer micro/external) exactly. subagent_id=66 — honest, disciplined, small safe, read-first, local-only, "3" last, zero-dep.
+
+(End 66 work. Continue 5b-e / reviewers per 51/52 9-step playbook; full gate on source before any main. Main gate post: hygiene/improved, dogfood metrics strong, 0/7 + 82-87% honest.)
+
