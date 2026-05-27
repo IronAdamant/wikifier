@@ -3384,7 +3384,10 @@ def run_gap1_health_check(quick: bool = True) -> str:
     lines.append("--- P1 Pipeline & Contracts ---")
     if CONTRACTS_AVAILABLE:
         try:
-            info = get_contracts_info()
+            # Fresh local import to avoid any UnboundLocal / namespace pollution
+            # from earlier conditional imports or fixtures in this large function.
+            from wikifier.contracts import get_contracts_info as _get_contracts_info
+            info = _get_contracts_info()
             lines.append(f"  Contracts: v{info.get('contracts_version')}  rich_fields: {','.join(info.get('rich_pipe_fields', []))}")
             p_err = validate_pipeline_richness(m)
             if p_err:
