@@ -463,6 +463,10 @@ def update_maps(
     # A2 early Partial Results & UX Scaffolding: subtree scoping + budget passthrough to python-primary
     directory: Optional[str] = None,
     max_files: Optional[int] = None,
+    # Micro-step 3: explicit streaming params (additive, BC)
+    scope: Optional[Dict[str, Any]] = None,
+    resume_from: Optional[str] = None,
+    time_budget_ms: Optional[float] = None,
 ) -> UpdateMapsResult:
     """Rebuild library.md with fresh dependency analysis for the target project.
 
@@ -477,6 +481,14 @@ def update_maps(
     trustworthy and usable even if interrupted or budget-limited. Sh path unchanged.
     """
     root = _get_effective_root(project_root)
+    # Micro-step 3 mapping (thin, additive)
+    if resume_from and "resume_token" not in locals():
+        resume_token = resume_from
+    if time_budget_ms is not None and "max_time" not in locals():
+        max_time = (time_budget_ms / 1000.0) if time_budget_ms > 1000 else time_budget_ms
+    if scope and isinstance(scope, dict) and not directory:
+        directory = scope.get("directory") or scope.get("dir") or directory
+
     used_primary = False
     files_reparse = 0
     persist_done = False

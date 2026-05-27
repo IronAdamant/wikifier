@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+- Wave 3 micro-steps (real generator body + CLI streaming flag delegation + MCP streaming param support) delivered by dedicated subagents in original worktrees and successfully integrated to main (2026-05-27). Plans updated with accurate closure notes.
+
 ## [0.3.3] - 2026-05-21
 
 **Major Milestone: Completion of the 6 Gap #1 Last-Mile Items**

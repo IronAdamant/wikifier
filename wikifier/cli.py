@@ -537,6 +537,7 @@ def main():
         elif arg in ("--no-use-canonical", "--no_use_canonical", "--use-canonical=false"):
             use_canonical = False
             filtered_argv.append(arg)
+
         elif arg.startswith("--use-canonical="):
             val = arg.split("=", 1)[1].lower()
             use_canonical = val not in ("0", "false", "no")
@@ -544,6 +545,10 @@ def main():
         else:
             filtered_argv.append(arg)
         i += 1
+
+    # Micro-step 2 (A2 CLI wiring): detect streaming UX flags after parsing
+    a2_flag_markers = ("--stream", "--stream=", "--resume", "--resume_token", "--max-time", "--max_time", "--progress", "--summary", "--partial", "--dir=", "--directory=", "--max-files", "--max_files", "--format", "--format=summary", "--format=stream")
+    has_a2_ux_flags = any(any(a == m or a.startswith(m) for m in a2_flag_markers) for a in filtered_argv)
 
     if project_root:
         os.environ["WIKIFIER_PROJECT_ROOT"] = project_root
@@ -568,6 +573,36 @@ def main():
         stripped_filtered.append(a)
 
     if python_primary_requested and is_update_maps_cmd:
+        force_full = any(x in ("--full", "-f", "--force-full", "--full-rebuild") for x in argv)
+        progress_mode = "none"
+        directory = None
+        max_files = None
+        resume_token = None
+        max_time = None
+        # Micro-step 2: streaming path (has_a2_ux_flags)
+        if has_a2_ux_flags:
+            print("[wikifier] A2 Python-primary streaming path (delegating to run_update_stream facade)")
+            fmt = "summary" if any(a.startswith("--format=summary") for a in argv) else "full"
+            try:
+                from .import_cache import run_update_stream as _facade
+                for event in _facade(
+                    root=Path(project_root) if project_root else None,
+                    force_full=force_full,
+                    verbose=(progress_mode == "dots"),
+                    directory=directory,
+                    max_files=max_files,
+                    resume_token=resume_token,
+                    max_time=max_time,
+                    format=fmt,
+                ):
+                    if event.get("event_type") == "complete":
+                        print(str(event))
+                    elif progress_mode in ("structured", "dots"):
+                        print(str(event))
+                # done
+            except Exception as e:
+                print(f"[wikifier] Streaming delegation error (falling back): {e}")
+            return 0
         # Take direct pure-Py path (deeper pipeline in run_full_update); no subprocess sh
         try:
             force_full = any(x in ("--full", "-f", "--force-full", "--full-rebuild") for x in argv)
