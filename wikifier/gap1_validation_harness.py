@@ -2674,7 +2674,10 @@ def run_scale_performance_profiling(metrics: ValidationMetrics, num_leaves: int 
                 scale_cache["cyc1.js"] = {"resolved_pairs": [{"resolved": "cyc2.js", "via_barrel": True, "barrel_depth": 2}]}
                 scale_cache["cyc2.js"] = {"resolved_pairs": [{"resolved": "cyc3.js", "is_conditional": True}]}
                 scale_cache["cyc3.js"] = {"resolved_pairs": [{"resolved": "cyc0.js", "confidence": "medium"}]}
-                anres = compute_cycle_analyses(scale_cache, max_items=20)
+                # Improvement: build graph+edge_meta once and pass it to exercise the reuse path
+                # (directly targets the "graph-reuse + Tarjan" R5 target mentioned in the perf note)
+                g, em = build_graph_with_edge_metadata(scale_cache)
+                anres = compute_cycle_analyses(scale_cache, max_items=20, graph=g, edge_meta=em)
                 ciabre_t = time.time() - t3
                 # R5: use internal timing + summary monitoring for scale perf regression guard
                 internal_ms = anres.get("compute_time_ms", int(ciabre_t*1000))
