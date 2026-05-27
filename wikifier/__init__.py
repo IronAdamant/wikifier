@@ -23,6 +23,7 @@ from . import locking
 from . import import_cache
 from . import resolution  # Robust Path Normalization Layer (Limitation #3 / Gap #1)
 from . import diagnostics  # Failure Transparency & Diagnostics Layer (Limitation #5 / Gap #1) - schema, aggregates, get_resolution_diagnostics support
+# Phase 5e (66): __init__ re-exports + docs now note health/suggest/import_cache summaries (format=summary default for 20k+ creative O(k) ACS/CIABRE/barrel; additive per 48/58/47).
 
 # Gap #1 External / Packaged: unified discovery helper (CLI + MCP + shell mirror) for reliable
 # PROJECT_ROOT on external monorepos after `pip install wikifier`. Primary entry for Python consumers.

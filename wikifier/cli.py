@@ -1031,6 +1031,7 @@ def health(
             return {"success": False, "error": "health module unavailable", "project_root": str(root)} if format == "json" else "health module unavailable"
         if format == "summary":
             return _health_mod.get_summary(root, directory)
+        # Phase 5e (66): CLI health(format=summary) + suggest/update_maps first-class default for 20k+ creative (O(k) via health.get_summary + import_cache ACS/barrel; complements 47/48/58 A3 promotion + format=summary).
         if format == "healing-stats":
             return _health_mod.get_healing_statistics(root)
         if format == "json":

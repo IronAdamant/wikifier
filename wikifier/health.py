@@ -693,6 +693,7 @@ def get_summary(root: Path, directory: Optional[str] = None, include_stale: bool
     practical summary-only views without full materialization.
     """
     health = load_health(root)
+    # Phase 5e (66): health.get_summary (format=summary path) promoted as first-class default/recommended for 20k+ creative monorepos (O(k) sharded, complements compute_acs_summary + ACS/CIABRE/BRC bounded via deque; per crit2/5 + 48/58).
     entries = health.get("entries", {})
 
     green = yellow = red = 0

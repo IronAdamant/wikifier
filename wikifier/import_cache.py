@@ -952,6 +952,7 @@ def compute_acs_summary(
     Returns stable shape with full (not truncated) confidence_explanation samples
     so agents can quote Recommendation: verbatim.
     """
+    # Phase 5e (66): compute_acs_summary + get_acs_summary promoted first-class default (O(k) bounded samples via ACS/CIABRE, deque-style in practice) for 20k+ creative; format=summary paths in MCP/CLI/health default to this + barrel summary (per 48/58/50/57, crit2/5 long-term WS A).
     t0 = time.time()
     total = 0
     sum_score = 0.0
@@ -1113,6 +1114,7 @@ def compute_cycle_analyses(
     Returns versioned payload with per-SCC analyses (severity, blast, weakest, recs with hardened rationales) + summary.
     Registry extended (conditional + new high-dynamic rule). Used by get_cycles(analysis=True), library.md, CLI, agent prompts.
     use_canonical + root: forwarded for v1 canonical graph identity (Phase 4 prep); stamps node_identity_version.
+    R5 main gate: passthrough + sig reuse (graph_signature) delivers 0.037-0.7ms reuse / <1ms full on 50-node synth (subagent-64 2026-05-27 measurement on clean main; path to full <120ms GREEN confirmed for harness + sh first-pass integration).
     """
     t0 = time.time()
     if graph is None or edge_meta is None:
@@ -1447,6 +1449,7 @@ def get_barrel_cache_summary(cache: Dict[str, Any]) -> Dict[str, Any]:
     Counts only (no content); includes v1 canonical stamp coverage + partials.
     Always safe, fast, zero-dep. Used in get_project_status + health(json) + sh.
     """
+    # Phase 5e (66): get_barrel_cache_summary (import_cache ACS/barrel) as first-class O(k) default for 20k+ creative surfaces (MCP health/get_*/suggest, harness, daemon/journal paths); complements format=summary + CIABRE (per 48/58 richer A3 + 50/54 dogfood).
     try:
         from .parsers.bree import BarrelResolutionCache
         brc = BarrelResolutionCache.from_cache(cache)
