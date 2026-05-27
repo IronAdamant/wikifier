@@ -46,22 +46,14 @@ import base64
 import json
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from datetime import datetime, timezone
+import fnmatch
+from pathlib import Path
 
 # =============================================================================
 # Module Version & Status
 # =============================================================================
 
-<<<<<<< HEAD
-=======
-# Workstream E (v0.4 Protocol + Library): Library high-level returns are plain dicts
-# with "success": bool, "project_root": str, optional "error", plus domain fields
-# (e.g. "changes_detected", health "entries", acs in "dependency_intel").
-# These are not frozen dataclasses (for max zero-dep agent ergonomics + json direct).
-# New shapes should be additive; see m2-full-closure plan + skills/run.md for I/O contracts.
-# Conformance harness validates shapes + error taxonomy against this + the public API.
-
-
->>>>>>> agent-6-library-final
 __contracts_version__ = "1.0.0-prewave0-frozen"
 FROZEN_DATE = "2026-05-17"
 STATUS = "FROZEN - Pre-Wave 0 complete. All phases must use these definitions."
@@ -630,23 +622,8 @@ def synthesize_dynamic_from_legacy(
 # =============================================================================
 
 def get_contracts_info() -> Dict[str, Any]:
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     """For health, MCP diagnostics, and agent introspection."""
-    return {
-=======
-    """For health, MCP diagnostics, and agent introspection. Extended additively for journal_event_v1 (M2 Workstream C)."""
     base = {
->>>>>>> agent-4-journal
-=======
-    """For health, MCP diagnostics, and agent introspection."""
-    return {
->>>>>>> agent-7-harness-final
-=======
-    """For health, MCP diagnostics, and agent introspection."""
-    return {
->>>>>>> agent-6-library-final
         "contracts_version": __contracts_version__,
         "frozen_date": FROZEN_DATE,
         "status": STATUS,
@@ -656,17 +633,21 @@ def get_contracts_info() -> Dict[str, Any]:
         "num_conditional_tags": len(CONDITIONAL_SEMANTIC_TAGS),
         "num_dynamic_tags": len(DYNAMIC_SEMANTIC_TAGS),
     }
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    base["journal"] = get_journal_event_info()
+    # M2 A0+ additive extension (safe; evaluated at call time after full module load)
+    try:
+        base["m2_contracts_version"] = M2_CONTRACTS_VERSION
+        base["m2_shapes"] = [
+            "ScopeSpec_v1", "ProgressEvent_v1", "UpdateRun_v1",
+            "PartialResult_v1", "ReverseDependencyIndex_v1",
+            "ScopeSpecV1", "ProgressEventV1", "UpdateRunV1",
+            "PartialResultV1", "ReverseDependencyIndexV1",
+        ]
+        base["m2_reserved_keys"] = [
+            k for k in RESERVED_TOP_LEVEL_KEYS if k.startswith("_reverse_dependency") or k.startswith("_update") or k.startswith("_partial")
+        ]
+    except Exception:
+        pass  # defensive: if M2 section not yet loaded (impossible post-import) or during smoke
     return base
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
 
 
 def enrich_diagnostic_with_analysis(
@@ -1036,297 +1017,711 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
 
 
 # =============================================================================
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-# 9. Structured Journal & Durable Intent Log (Workstream C - M2 Full Closure start)
+# 9. M2 Full Closure — Workstream A0 + early A2: Scalable Update Contracts
+# (Additive, non-breaking foundation. Long-term scalable design per plan.)
 # =============================================================================
 #
-# journal_event_v1 (and evolution path) per M2 long-term scalable plan.
-# Typed events for semantic intent recording: record-change, record-deletion,
-# auto-detected changes, future rationale attachments, etc.
+# Guiding principles (binding for this slice + future waves):
+# - Event-sourced friendly: every ProgressEvent_v1 is a first-class record with
+#   full provenance (actor, session, intent_ref, parent), ACS/CIABRE hooks,
+#   barrel + cycle signals, scope projection info, and checkpoint/resumption hints.
+# - Proportional cost + resumable: ScopeSpec_v1 enables subtree/focus scoping at
+#   engine level (not post-filter). Checkpoint tokens allow pause/resume on
+#   50k-file creative monorepos without losing partial work.
+# - Dual persisted structures: forward (existing) + ReverseDependencyIndex_v1
+#   (incremental, graph_signature delta, node_identity_v1 ready).
+# - Zero new dependencies. Pure stdlib + dataclasses + existing patterns
+#   (defensive from_dict, RESERVED keys, ACS compute, version stamps).
+# - Versioning: All shapes carry explicit "version". New major via new _vN names
+#   + migration note + CHANGELOG. Dual emission supported.
+# - Observability: Events feed health, MCP streaming responses, journal (C),
+#   diagnostics, library.md summaries (A3). ACS/CIABRE always first-class citizens.
 #
-# Core requirements (long-term durability for years on large repos):
-# - Actor (type + identifier for agents/humans/daemons/swarms) + session_id
-#   for correlating activity across concurrent or long-running agent sessions.
-# - Full provenance (source, wikifier ver, host/pid, git context) for audit.
-# - Explicit links to ACS (confidence snapshots, explanations, low-conf edges
-#   involved in the change) + rationale wiki/library.md anchors + related events.
-# - Semantic action types (extensible append-only vocabulary).
-# - Significance scoring (0-1) + semantic tags for time+impact based compaction.
-# - Bounded, self-describing, JSONL friendly. Defensive from_dict everywhere.
-# - Event IDs stable for cross-refs and compaction manifests.
+# RESERVED keys extended below for persisted M2 structures.
+# These shapes are the contract for the minimal streaming generator skeleton
+# (in import_cache.py) and all later A1-A4 / cross workstreams.
 #
-# Storage (implemented in health.py + wikifier.sh dual-write):
-#   Primary (durable): $ROOT/.wikifier_staging/journal/v1/events.jsonl  (append-only)
-#   Projection (human): $ROOT/journal/YYYY/MM/DD.md  (existing format, untouched)
-#
-# Evolution rules (binding, like other contracts):
-# - v1 is frozen after this slice. Additive fields only (new optional keys OK).
-# - v2 will introduce JournalEventV2 + migrate_v1_to_v2 helper + dual read.
-# - from_dict always tolerates missing/extra keys, future versions, corrupt data.
-# - Consumers check .get("version") or "schema_version".
-# - Dual emission/compat for >=2 releases.
-# - All new shapes registered here; update get_contracts_info + smoke.
-#
-# This survives: 100k+ events/year, monorepo refactors, agent swarm activity,
-# project moves, without O(n) scans or unbounded MD bloat. Queries later use
-# streaming + same graph techniques as BRC/cycles.
-#
-# Zero new deps. Pure stdlib + existing patterns.
+# DO NOT put engine logic or full UX here. Pure shapes + helpers only.
+# =============================================================================
 
-JOURNAL_SCHEMA_VERSION = "v1"
+M2_CONTRACTS_VERSION = "1.0.0-wave3-a0-finalized"
 
-JOURNAL_SEMANTIC_ACTIONS: Tuple[str, ...] = (
-    "record-change",
-    "record-deletion",
-    "auto-detected",
-    # Future (append-only): "mark-green", "heal-stub", "rationale-attach",
-    # "intent-update", "compaction-summary", "session-start", ...
-)
-
+# --- ScopeSpec_v1 (first-class scope for scoped/resumable updates) ---
 @dataclass(frozen=True)
-class ActorV1:
+class ScopeSpec_v1:
     """
-    Who originated the intent record.
-    Supports human edits, single agents, daemons, and multi-agent swarms.
-    Identifier examples: "claude-3-5-sonnet-1234", "human:aron", "daemon:monitor",
-    "swarm:gap1-wave@host-42".
+    Declarative scope for update-maps / streaming runs (A0 foundation, A2 delivery).
+
+    Applied early (dirty detection, graph build, reverse index projection) for
+    true O(changed + scope) cost even on 50k+ file monorepos.
+
+    Supports:
+    - directory subtree (with max_depth)
+    - include/exclude globs (portable, no fnmatch dep beyond stdlib)
+    - focus_files: seed set + optional transitive closure (for "impact of X")
+    - follow_symlinks + node_identity_version awareness
+
+    Long-term: Scope projector lives in update engine; produces checkpointable
+    partial scopes for resumption. Resource_hints (time_budget_ms, token_budget,
+    max_files) influence early termination + best-effort partials.
+
+    Serialized in ProgressEvent_v1, UpdateRun_v1, PartialResult_v1, and MCP/CLI.
     """
-    type: Literal["human", "agent", "system", "daemon", "swarm"] = "agent"
-    identifier: str = "unknown"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    directory: Optional[str] = None
+    include_globs: List[str] = field(default_factory=list)
+    exclude_globs: List[str] = field(default_factory=list)
+    focus_files: List[str] = field(default_factory=list)
+    max_depth: Optional[int] = None
+    transitive_closure: bool = True
+    follow_symlinks: bool = False
+    seed_reason: Optional[str] = None  # e.g. "cli:--dir src/" or "agent:focus:core.ts+dependents"
+    resource_hints: Dict[str, Any] = field(default_factory=dict)
+    version: str = "1.0"
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "ActorV1":
+    def from_dict(cls, d: Dict[str, Any]) -> "ScopeSpec_v1":
+        """Defensive loader. Tolerates legacy/partial/malformed input."""
         if not isinstance(d, dict):
             d = {}
         return cls(
-            type=str(d.get("type", "agent"))[:30],
-            identifier=str(d.get("identifier", "unknown"))[:200],
-            metadata=dict(d.get("metadata") or {}),
+            directory=(str(d.get("directory"))[:500] if d.get("directory") else None),
+            include_globs=[str(x)[:200] for x in (d.get("include_globs") or [])][:100],
+            exclude_globs=[str(x)[:200] for x in (d.get("exclude_globs") or [])][:100],
+            focus_files=[str(x)[:500] for x in (d.get("focus_files") or [])][:500],
+            max_depth=(int(d.get("max_depth")) if isinstance(d.get("max_depth"), (int, float)) else None),
+            transitive_closure=bool(d.get("transitive_closure", True)),
+            follow_symlinks=bool(d.get("follow_symlinks", False)),
+            seed_reason=(str(d.get("seed_reason"))[:300] if d.get("seed_reason") else None),
+            resource_hints=dict(d.get("resource_hints") or {}),
+            version=str(d.get("version", "1.0"))[:10],
         )
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
 
+
+# --- ProgressEvent_v1 (the heartbeat of the streaming / resumable pipeline) ---
 @dataclass(frozen=True)
-class ProvenanceV1:
+class ProgressEvent_v1:
     """
-    Complete machine + process + version provenance for the emission.
-    Enables years-later debugging of "why did this event appear" under
-    concurrent agents, daemon runs, or packaged installs.
+    Canonical event shape yielded by the M2 streaming generator foundation.
+    (Wave 3 A0: finalized with full defensive shapes + ACS/CIABRE hooks.)
+
+    EVERY milestone (parse, resolve, barrel expand, cycle, ACS, CIABRE, reverse update)
+    emits one. Consumers can:
+    - Stream live (CLI progress, MCP SSE-like)
+    - Checkpoint (save token + last event for --resume)
+    - Filter (e.g. only barrel/cycle events for diagnostics)
+    - Early terminate on budget
+
+    Required fields for long-term trust:
+    - Provenance: who/why/when/session/intent link (journal correlation ready)
+    - ACS/CIABRE hooks: partial aggregates or refs (never lose "why low conf?")
+      acs_hook carries {confidence_score, reasons[], explanation, ...} from compute_acs_confidence
+      cycle_signals + barrel_signals carry CIABRE blast/severity + barrel depth/chain info
+    - Barrel/cycle signals: first-class (no grepping logs)
+    - Scope + checkpoint: enables subtree + resumption at 50k scale
+
+    Event types are append-only vocabulary (document new ones here).
     """
-    source: str = "unknown"  # e.g. "mcp:record_change", "sh:cmd_record_change", "python:health.emit_journal_event"
-    wikifier_version: str = ""
-    timestamp_local: str = ""
-    host: Optional[str] = None
-    pid: Optional[int] = None
-    git_commit: Optional[str] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "ProvenanceV1":
-        if not isinstance(d, dict):
-            d = {}
-        pid = d.get("pid")
-        return cls(
-            source=str(d.get("source", "unknown"))[:100],
-            wikifier_version=str(d.get("wikifier_version", ""))[:50],
-            timestamp_local=str(d.get("timestamp_local", ""))[:40],
-            host=(str(d.get("host"))[:100] if d.get("host") else None),
-            pid=int(pid) if isinstance(pid, (int, float, str)) and str(pid).isdigit() else None,
-            git_commit=(str(d.get("git_commit"))[:40] if d.get("git_commit") else None),
-            extra=dict(d.get("extra") or {}),
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(frozen=True)
-class JournalEventV1:
-    """
-    Canonical v1 typed journal event.
-
-    Primary on-disk form (JSONL line): compact, one event per line.
-    Every field clamped + defensive for 10-year log hygiene on busy repos.
-
-    Links:
-    - acs_links: list of dicts capturing ACS snapshot at time of change
-      (e.g. [{"target": "foo.js:bar", "confidence": 0.72, "explanation": "...", "rationale_ref": "library.md#sec-3"}])
-    - rationale_links: wiki summaries, library sections, prior event_ids that
-      provide the "why" for this change.
-    - session_id: correlates all events from one logical agent session / task.
-
-    significance: drives safe compaction (high = keep longer or forever).
-    """
-    version: str = JOURNAL_SCHEMA_VERSION
-    event_id: str = ""
-    ts: str = ""  # ISO-8601 UTC preferred
-    event_type: str = "unknown"
-    actor: Dict[str, Any] = field(default_factory=dict)
-    session_id: Optional[str] = None
-    file: str = ""
-    reason: str = ""
+    event_type: str
+    timestamp: str
+    run_id: str
+    scope: Dict[str, Any]  # ScopeSpec_v1 shape (defensive)
+    payload: Dict[str, Any] = field(default_factory=dict)
     provenance: Dict[str, Any] = field(default_factory=dict)
-    acs_links: List[Dict[str, Any]] = field(default_factory=list)
-    rationale_links: List[str] = field(default_factory=list)
-    semantic_tags: List[str] = field(default_factory=list)
-    significance: float = 0.5
-    extra: Dict[str, Any] = field(default_factory=dict)
+    acs_hook: Optional[Dict[str, Any]] = None
+    barrel_signals: Dict[str, Any] = field(default_factory=dict)
+    cycle_signals: Dict[str, Any] = field(default_factory=dict)
+    checkpoint_token: Optional[str] = None
+    resumable: bool = True
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+    version: str = "1.0"
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "JournalEventV1":
-        """Extremely defensive loader. Tolerates v0 (pre), v1, future v2+ fields, garbage."""
+    def from_dict(cls, d: Dict[str, Any]) -> "ProgressEvent_v1":
         if not isinstance(d, dict):
             d = {}
-        actor_d = d.get("actor") or {}
-        prov_d = d.get("provenance") or {}
-        # support legacy "action" key from early sh
-        et = d.get("event_type") or d.get("action") or "unknown"
+        sc = ScopeSpec_v1.from_dict(d.get("scope") or {})
         return cls(
-            version=str(d.get("version", d.get("schema_version", "v1")))[:10],
-            event_id=str(d.get("event_id", ""))[:128],
-            ts=str(d.get("ts", d.get("timestamp", "")))[:40],
-            event_type=str(et)[:50],
-            actor=ActorV1.from_dict(actor_d).to_dict(),
-            session_id=(str(d.get("session_id"))[:100] if d.get("session_id") else None),
-            file=str(d.get("file", ""))[:500],
-            reason=str(d.get("reason", ""))[:2048],
-            provenance=ProvenanceV1.from_dict(prov_d).to_dict(),
-            acs_links=[dict(x) for x in (d.get("acs_links") or []) if isinstance(x, dict)][:20],
-            rationale_links=[str(x)[:400] for x in (d.get("rationale_links") or []) if x][:30],
-            semantic_tags=[str(x)[:40] for x in (d.get("semantic_tags") or []) if x][:20],
-            significance=max(0.0, min(1.0, float(d.get("significance", 0.5) or 0.5))),
-            extra=dict(d.get("extra") or {}),
+            event_type=str(d.get("event_type", "unknown"))[:60],
+            timestamp=str(d.get("timestamp") or datetime.now(timezone.utc).isoformat())[:50],
+            run_id=str(d.get("run_id", "run-unknown"))[:120],
+            scope=sc.to_dict(),
+            payload=dict(d.get("payload") or {}),
+            provenance=dict(d.get("provenance") or {}),
+            acs_hook=(dict(d.get("acs_hook")) if isinstance(d.get("acs_hook"), dict) else None),
+            barrel_signals=dict(d.get("barrel_signals") or {}),
+            cycle_signals=dict(d.get("cycle_signals") or {}),
+            checkpoint_token=(str(d.get("checkpoint_token"))[:300] if d.get("checkpoint_token") else None),
+            resumable=bool(d.get("resumable", True)),
+            diagnostics=dict(d.get("diagnostics") or {}),
+            version=str(d.get("version", "1.0"))[:10],
         )
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
-        # ensure sub-structures are normalized dicts
-        if isinstance(self.actor, ActorV1):
-            d["actor"] = self.actor.to_dict()
-        if isinstance(self.provenance, ProvenanceV1):
-            d["provenance"] = self.provenance.to_dict()
+        # Normalize scope
+        if "scope" in d and isinstance(d["scope"], ScopeSpec_v1):
+            d["scope"] = d["scope"].to_dict()
         return d
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
 
-    def to_jsonl_line(self) -> str:
-        """One-line compact form for append-only JSONL log."""
-        return self.to_json()
+
+# --- UpdateRun_v1 (lifecycle descriptor for long-running / resumable updates) ---
+@dataclass
+class UpdateRun_v1:
+    """
+    Descriptor for an entire update-maps execution (CLI, MCP, daemon, library).
+
+    Created at start of streaming run. Updated on checkpoints / completion.
+    Enables:
+    - Tracking concurrent runs under locking
+    - --resume from last checkpoint_token
+    - Query "what is the status of the long update I started?"
+    - Correlating journal events (Workstream C) to runs
+
+    Persisted (bounded) under _update_runs reserved key in future waves.
+    """
+    run_id: str
+    started_at: str
+    scope: Dict[str, Any]
+    status: str = "running"  # pending|running|paused|completed|failed|cancelled
+    completed_at: Optional[str] = None
+    metrics: Dict[str, Any] = field(default_factory=dict)
+    partial_result: Optional[Dict[str, Any]] = None
+    checkpoint_token: Optional[str] = None
+    provenance: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
+    version: str = "1.0"
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "UpdateRun_v1":
+        if not isinstance(d, dict):
+            d = {}
+        return cls(
+            run_id=str(d.get("run_id", ""))[:120],
+            started_at=str(d.get("started_at", ""))[:50],
+            scope=ScopeSpec_v1.from_dict(d.get("scope") or {}).to_dict(),
+            status=str(d.get("status", "running"))[:30],
+            completed_at=(str(d.get("completed_at"))[:50] if d.get("completed_at") else None),
+            metrics=dict(d.get("metrics") or {}),
+            partial_result=(dict(d.get("partial_result")) if isinstance(d.get("partial_result"), dict) else None),
+            checkpoint_token=(str(d.get("checkpoint_token"))[:300] if d.get("checkpoint_token") else None),
+            provenance=dict(d.get("provenance") or {}),
+            error=(str(d.get("error"))[:2000] if d.get("error") else None),
+            version=str(d.get("version", "1.0"))[:10],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
 
 
-def make_journal_event(
-    *,
+# --- PartialResult_v1 (safe early output for agents on budgets) ---
+@dataclass(frozen=True)
+class PartialResult_v1:
+    """
+    Bounded, actionable snapshot from a (still-running or paused) scoped update.
+
+    The primary deliverable for "I only have 30s / 4k tokens" agent workflows.
+    Always safe to act on (consistency within the applied scope + last checkpoint).
+
+    Contains:
+    - Counts + bounded samples (resolved_pairs, cycles)
+    - ACS + CIABRE partials (hooks, never lose diagnostics)
+    - Reverse index delta (A1 tie-in)
+    - next_checkpoint_hint for clean resumption
+    - Full diagnostics bag
+
+    Returned by streaming generator on "partial_ready" events or explicit --partial calls.
+    """
+    run_id: str
+    yielded_at: str
+    scope_applied: Dict[str, Any]
+    files_processed: int = 0
+    edges_resolved: int = 0
+    cycles_found: int = 0
+    low_conf_edges: int = 0
+    barrel_chains_expanded: int = 0
+    resolved_pairs_sample: List[Dict[str, Any]] = field(default_factory=list)
+    cycles_sample: List[Dict[str, Any]] = field(default_factory=list)
+    acs_partial: Optional[Dict[str, Any]] = None
+    cycle_analyses_partial: Optional[Dict[str, Any]] = None
+    reverse_index_delta: Optional[Dict[str, Any]] = None
+    next_checkpoint_hint: Optional[str] = None
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+    version: str = "1.0"
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "PartialResult_v1":
+        if not isinstance(d, dict):
+            d = {}
+        return cls(
+            run_id=str(d.get("run_id", ""))[:120],
+            yielded_at=str(d.get("yielded_at", ""))[:50],
+            scope_applied=ScopeSpec_v1.from_dict(d.get("scope_applied") or {}).to_dict(),
+            files_processed=int(d.get("files_processed") or 0),
+            edges_resolved=int(d.get("edges_resolved") or 0),
+            cycles_found=int(d.get("cycles_found") or 0),
+            low_conf_edges=int(d.get("low_conf_edges") or 0),
+            barrel_chains_expanded=int(d.get("barrel_chains_expanded") or 0),
+            resolved_pairs_sample=[dict(x) for x in (d.get("resolved_pairs_sample") or []) if isinstance(x, dict)][:30],
+            cycles_sample=[dict(x) for x in (d.get("cycles_sample") or []) if isinstance(x, dict)][:15],
+            acs_partial=(dict(d.get("acs_partial")) if isinstance(d.get("acs_partial"), dict) else None),
+            cycle_analyses_partial=(dict(d.get("cycle_analyses_partial")) if isinstance(d.get("cycle_analyses_partial"), dict) else None),
+            reverse_index_delta=(dict(d.get("reverse_index_delta")) if isinstance(d.get("reverse_index_delta"), dict) else None),
+            next_checkpoint_hint=(str(d.get("next_checkpoint_hint"))[:300] if d.get("next_checkpoint_hint") else None),
+            diagnostics=dict(d.get("diagnostics") or {}),
+            version=str(d.get("version", "1.0"))[:10],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
+
+
+# --- ReverseDependencyIndex_v1 (A0 contract, A1 implementation target) ---
+@dataclass
+class ReverseDependencyIndex_v1:
+    """
+    Authoritative, incrementally-updatable reverse dependency index.
+
+    Shape: target_relpath -> sorted list of direct importer relpaths.
+
+    Key properties (long-term):
+    - graph_signature + node_identity_version for safe delta/reuse (like cycles/BRC)
+    - Provenance (build_mode, reused, source_run, merge details)
+    - ACS tie-in: low-conf reverse edges annotated for risk
+    - CIABRE blast hints: high-impact dependents surfaced for cycle recs
+    - Checkpointable for partial rebuilds on massive repos
+
+    Persisted under _reverse_dependency_index_v1 (see RESERVED_TOP_LEVEL_KEYS).
+    Current flat _reverse_dependencies coexists for transition (import_cache helpers
+    will dual-write in A1).
+
+    Query surfaces (get_dependents, get_impact, MCP) will use this directly for
+    O(k) instead of O(E) reconstruction.
+    """
+    version: str = "1.0"
+    generated_at: str = ""
+    index: Dict[str, List[str]] = field(default_factory=dict)
+    graph_signature: Optional[str] = None
+    node_identity_version: str = NODE_IDENTITY_VERSION_V1
+    stats: Dict[str, Any] = field(default_factory=dict)
+    provenance: Dict[str, Any] = field(default_factory=dict)
+    acs_tied: bool = False
+    ciabre_blast_hints: Dict[str, Any] = field(default_factory=dict)
+    checkpoint_ref: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ReverseDependencyIndex_v1":
+        if not isinstance(d, dict):
+            d = {}
+        raw_idx = d.get("index") or {}
+        if isinstance(raw_idx, dict):
+            clean_idx: Dict[str, List[str]] = {}
+            for k, v in raw_idx.items():
+                if isinstance(k, str) and k:
+                    importers = [str(x)[:500] for x in (v or []) if x][:2000]
+                    clean_idx[str(k)[:500]] = sorted(set(importers))  # stable
+        else:
+            clean_idx = {}
+        return cls(
+            version=str(d.get("version", "1.0"))[:10],
+            generated_at=str(d.get("generated_at", ""))[:50],
+            index=clean_idx,
+            graph_signature=(str(d.get("graph_signature"))[:64] if d.get("graph_signature") else None),
+            node_identity_version=str(d.get("node_identity_version", NODE_IDENTITY_VERSION_V1))[:10],
+            stats=dict(d.get("stats") or {}),
+            provenance=dict(d.get("provenance") or {}),
+            acs_tied=bool(d.get("acs_tied", False)),
+            ciabre_blast_hints=dict(d.get("ciabre_blast_hints") or {}),
+            checkpoint_ref=(str(d.get("checkpoint_ref"))[:300] if d.get("checkpoint_ref") else None),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
+
+
+# =============================================================================
+# V1 Aliases (for plan/docs naming parity + consumer convenience; same classes)
+# =============================================================================
+# Plan refers to ScopeSpecV1 / ProgressEventV1 etc.; implementation uses _v1
+# suffix for pythonic versioned names. Aliases provide both.
+ScopeSpecV1 = ScopeSpec_v1
+ProgressEventV1 = ProgressEvent_v1
+UpdateRunV1 = UpdateRun_v1
+PartialResultV1 = PartialResult_v1
+ReverseDependencyIndexV1 = ReverseDependencyIndex_v1
+
+
+# Extend RESERVED_TOP_LEVEL_KEYS (additive, documented for M2)
+RESERVED_TOP_LEVEL_KEYS["_reverse_dependency_index_v1"] = (
+    "M2 A0/A1: Structured ReverseDependencyIndex_v1 (target -> importers list). "
+    "Incrementally maintained with graph_signature delta detection + node_identity_version. "
+    "Provenance, stats, ACS low-conf ties, CIABRE blast hints, checkpoint support. "
+    "Enables O(k) dependents + impact analysis at massive scale. Coexists with legacy "
+    "_reverse_dependencies during A1 transition. Authoritative for get_dependents etc."
+)
+RESERVED_TOP_LEVEL_KEYS["_update_runs"] = (
+    "M2 A0/A2: Bounded registry of UpdateRun_v1 descriptors (lifecycle + checkpoints). "
+    "Supports resumable streaming UX, concurrent agent visibility, MCP status queries. "
+    "Not a full semantic journal (see Workstream C). Retention policy + compaction future."
+)
+RESERVED_TOP_LEVEL_KEYS["_partial_results"] = (
+    "M2 A0/A2: Named or latest PartialResult_v1 snapshots from long/scoped/streaming updates. "
+    "Agents consume early results + continuation tokens safely. Bounded; ties to run_id + scope."
+)
+
+
+def create_progress_event(
     event_type: str,
-    file: str,
-    reason: str,
-    actor: Optional[Dict[str, Any]] = None,
-    session_id: Optional[str] = None,
-    provenance: Optional[Dict[str, Any]] = None,
-    acs_links: Optional[List[Dict[str, Any]]] = None,
-    rationale_links: Optional[List[str]] = None,
-    semantic_tags: Optional[List[str]] = None,
-    significance: Optional[float] = None,
-    extra: Optional[Dict[str, Any]] = None,
-) -> JournalEventV1:
+    run_id: str,
+    scope: Union[ScopeSpec_v1, Dict[str, Any], None] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
     """
-    Ergonomic factory for emitting v1 events. Auto-generates stable event_id,
-    ISO ts, sensible defaults + best-effort provenance capture (git, host, pid).
-    Boosts significance for high-impact actions (deletions, breaking changes).
-    Never raises; always returns a valid event (degraded fields on capture fail).
+    Factory for well-formed ProgressEvent_v1 dicts (use in generator skeleton + engine).
+    Ensures provenance/acs/barrel/cycle scaffolding is present.
+    Extra kwargs go into payload (or override known fields if exact match).
     """
-    import uuid
-    import datetime
-    import socket
-    import os
+    if isinstance(scope, ScopeSpec_v1):
+        sc_d = scope.to_dict()
+    elif isinstance(scope, dict):
+        sc_d = ScopeSpec_v1.from_dict(scope).to_dict()
+    else:
+        sc_d = ScopeSpec_v1().to_dict()
 
-    ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-    eid = str(uuid.uuid4())
+    base_payload = kwargs.pop("payload", {})
+    prov = kwargs.pop("provenance", {})
+    acs = kwargs.pop("acs_hook", None)
+    barrel = kwargs.pop("barrel_signals", {})
+    cycle = kwargs.pop("cycle_signals", {})
+    chk = kwargs.pop("checkpoint_token", None)
+    res = kwargs.pop("resumable", True)
+    diag = kwargs.pop("diagnostics", {})
 
-    if actor is None:
-        actor = {
-            "type": "agent",
-            "identifier": os.environ.get("WIKIFIER_ACTOR", os.environ.get("USER", "unknown-agent")),
-            "metadata": {"via": "make_journal_event"},
-        }
+    # Remaining kwargs -> payload
+    extra_payload = {**base_payload, **kwargs}
 
-    if provenance is None:
-        prov: Dict[str, Any] = {
-            "source": "python:make_journal_event",
-            "wikifier_version": __contracts_version__,
-            "timestamp_local": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z"),
-            "host": socket.gethostname() if "socket" in dir() else None,
-            "pid": os.getpid(),
-        }
-        # best-effort git (no hard dep, silent fail)
-        try:
-            import subprocess
-            root = os.environ.get("WIKIFIER_PROJECT_ROOT", ".")
-            res = subprocess.run(
-                ["git", "rev-parse", "--short", "HEAD"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                timeout=1,
-            )
-            if res.returncode == 0:
-                prov["git_commit"] = res.stdout.strip()[:12]
-        except Exception:
-            pass
-        provenance = prov
-
-    # significance policy (skeleton; health compaction will use + allow override)
-    sig = significance if significance is not None else 0.5
-    et_lower = event_type.lower()
-    if et_lower == "record-deletion":
-        sig = max(sig, 0.85)
-    if any(kw in reason.lower() for kw in ("breaking", "contract", "security", "api change", "core delete", "refactor critical")):
-        sig = max(sig, 0.9)
-    if et_lower in ("record-change", "auto-detected") and any(kw in reason.lower() for kw in ("add", "new feature", "introduce")):
-        sig = max(sig, 0.65)
-
-    ev = JournalEventV1(
-        event_id=eid,
-        ts=ts,
+    ev = ProgressEvent_v1(
         event_type=event_type,
-        actor=actor,
-        session_id=session_id,
-        file=file,
-        reason=reason,
-        provenance=provenance or {},
-        acs_links=acs_links or [],
-        rationale_links=rationale_links or [],
-        semantic_tags=semantic_tags or [],
-        significance=round(sig, 3),
-        extra=extra or {},
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        run_id=run_id,
+        scope=sc_d,
+        payload=extra_payload,
+        provenance=prov,
+        acs_hook=acs if isinstance(acs, dict) else None,
+        barrel_signals=dict(barrel),
+        cycle_signals=dict(cycle),
+        checkpoint_token=chk,
+        resumable=bool(res),
+        diagnostics=dict(diag),
+        version="1.0",
     )
-    return ev
+    return ev.to_dict()
 
 
-def get_journal_event_info() -> Dict[str, Any]:
-    """For health/MCP diagnostics and contracts introspection."""
+# =============================================================================
+# 10. M2 Scope Projector (A0 finalized in Wave 3, A2 full engine wiring)
+# (Pure, zero-dep, long-term scalable. Lives with ScopeSpec_v1 / ScopeSpecV1 contract.)
+# =============================================================================
+#
+# Why here (contracts): ScopeSpec_v1 is the frozen declarative contract.
+# The projector is the canonical, testable implementation of "apply this spec".
+# All consumers (generator, run_update_stream, dirty detectors, MCP/CLI scoping,
+# future daemon) use this single source — guarantees consistent semantics from
+# tiny scripts to 50k-file creative monorepos.
+#
+# Design (non-negotiable per M2 plan):
+# - Proportional: directory subtree + globs prune candidates early (O(candidates in scope)).
+# - Focus + transitive_closure: for "impact of X" uses reverse edges (dependents closure);
+#   seeds + their transitive importers. Requires reverse_index (A1); graceful degrade if absent.
+# - max_depth: relative to scope.directory (or root). Prevents explosion in deep trees.
+# - Globs: stdlib fnmatch only (portable, no third-party). Normalized to / .
+# - Deterministic + defensive: never crashes on bad input; logs diagnostics in return.
+# - Checkpoint friendly: projector can return "projected_scope" + "next_seed" hints for partials.
+# - Symlinks: follow_symlinks advisory passed through; actual FS walk (cli/import_cache)
+#   decides os.walk(followlinks=...) or Path.resolve handling.
+#
+# Eventual: full Scope_v1 dataclass will hold spec + applied_file_set + stats +
+# partial_projection_token for resumable scoped runs.
+# =============================================================================
+
+
+def _normalize_rel(p: Union[str, Path]) -> str:
+    """Internal: POSIX-style relative path, no leading ./ , no trailing / (except root), safe for matching."""
+    s = str(p).replace("\\", "/").strip()
+    if s.startswith("./"):
+        s = s[2:]
+    if s.startswith("/"):
+        # absolute -> best effort basename tail for safety; real roots use rel from root
+        s = s.lstrip("/")
+    s = s.rstrip("/")  # critical for dir specs like 'src/' to become 'src'
+    return s or "."
+
+
+def _compute_depth(rel: str, base_dir: Optional[str]) -> int:
+    """Depth in directory tree relative to base or implicit root (count of / segments)."""
+    r = rel.strip("/")
+    if not r:
+        return 0
+    if base_dir:
+        b = base_dir.strip("/")
+        if r.startswith(b + "/") or r == b:
+            r = r[len(b):].lstrip("/")
+        elif r == b:
+            return 0
+    return 0 if not r else r.count("/") + 1
+
+
+def _matches_globs(rel: str, include_globs: List[str], exclude_globs: List[str]) -> bool:
+    """Portable glob match using fnmatch (stdlib). include: any-of (or all if empty). exclude: none-of."""
+    if any(fnmatch.fnmatch(rel, g) or fnmatch.fnmatch("/" + rel, g) for g in (exclude_globs or [])):
+        return False
+    if not include_globs:
+        return True
+    return any(fnmatch.fnmatch(rel, g) or fnmatch.fnmatch("/" + rel, g) for g in include_globs)
+
+
+def matches_scope(
+    spec: Union[ScopeSpec_v1, Dict[str, Any], None],
+    file_path: Union[str, Path],
+    *,
+    root: Optional[Path] = None,
+) -> bool:
+    """
+    Pure predicate: does this file (rel or abs) satisfy the ScopeSpec_v1?
+
+    Directory + max_depth + globs only (FS-level filter). Does not handle
+    focus_files transitive (see project_scope for that).
+    Used for early pruning in candidate collection and dirty walks.
+    """
+    if spec is None:
+        return True
+    if isinstance(spec, dict):
+        spec = ScopeSpec_v1.from_dict(spec)
+    elif not isinstance(spec, ScopeSpec_v1):
+        return True
+
+    rel = _normalize_rel(file_path)
+
+    # Directory subtree filter
+    if spec.directory:
+        d = _normalize_rel(spec.directory)
+        d_prefix = d + "/" if d else ""
+        if not (rel == d or (d_prefix and rel.startswith(d_prefix))):
+            return False
+
+    # Depth (relative to directory or root)
+    depth = _compute_depth(rel, spec.directory)
+    if spec.max_depth is not None and depth > int(spec.max_depth):
+        return False
+
+    # Globs (include any, exclude none)
+    if not _matches_globs(rel, spec.include_globs, spec.exclude_globs):
+        return False
+
+    return True
+
+
+def compute_focus_closure(
+    focus_files: List[str],
+    reverse_index: Optional[Dict[str, List[str]]] = None,
+    *,
+    max_depth: Optional[int] = None,
+    follow_forward: bool = False,  # False = dependents (impact); True = deps (forward)
+) -> Dict[str, Any]:
+    """
+    Compute transitive closure for focus set.
+
+    - If reverse_index present: for dependents mode, BFS following importers (who depends on me).
+    - Seeds always included.
+    - Bounded by max_depth (edge hops) if given.
+    - Returns dict with 'closure', 'seeds', 'stats' for diagnostics / PartialResult.
+    - Graceful: if no index, returns just the seeds (no transitive).
+    - Zero side effects, pure, O(closure size) which is proportional by design.
+    """
+    seeds = [ _normalize_rel(f) for f in (focus_files or []) if f ]
+    if not seeds:
+        return {"closure": [], "seeds": [], "stats": {"hops": 0, "degraded": True}}
+
+    if not reverse_index or not isinstance(reverse_index, dict):
+        # No index: best-effort seeds only (transitive deferred or handled upstream)
+        return {
+            "closure": sorted(set(seeds)),
+            "seeds": sorted(set(seeds)),
+            "stats": {"hops": 0, "degraded": True, "reason": "no_reverse_index"},
+        }
+
+    # Build reverse or forward adj for BFS
+    # reverse_index: target -> [importers]  => for dependents, from seed follow the importers list
+    adj: Dict[str, List[str]] = {}
+    if follow_forward:
+        # Would need forward graph; not primary for "dependents" use case. Degrade.
+        return {
+            "closure": sorted(set(seeds)),
+            "seeds": sorted(set(seeds)),
+            "stats": {"hops": 0, "degraded": True, "reason": "forward_not_supported_yet"},
+        }
+
+    # Dependents mode: from each node, the "dependents" are the keys that list it as importer? Wait:
+    # reverse_index[target] = list of direct importers of target.
+    # So to find who depends on seed (transitive), we need the inverse of reverse_index:
+    # importer -> [targets it imports] would be forward.
+    # To walk dependents: start from seed, find all X such that seed in reverse_index.get(X, []) ? No.
+    # reverse_index["foo.js"] = ["bar.js", "baz.js"] means bar and baz import foo.
+    # So dependents of foo = ["bar","baz"] (direct).
+    # To find dependents of bar: look for entries where bar appears in their importer list.
+    # I.e. we need the "who imports bar" -> invert the index.
+
+    # Build inverted: importer -> list of things_it_imports ? No, wait for walk:
+    # To traverse "dependents graph": from a target, its direct dependents are the values in reverse_index[target].
+    # Yes: dependents_graph[ target ] = reverse_index[target]  (the importers)
+    # Then from seed, collect all reachable in dependents_graph.
+
+    dependents_graph: Dict[str, List[str]] = {
+        _normalize_rel(k): [_normalize_rel(v) for v in (vs or [])] for k, vs in reverse_index.items()
+    }
+
+    from collections import deque  # stdlib, local import ok inside func for zero top-level cost
+    visited: set = set()
+    q = deque()
+    for s in seeds:
+        q.append((s, 0))
+        visited.add(s)
+
+    closure: List[str] = []
+    hops = 0
+    maxd = max_depth if max_depth is not None else 999999
+
+    while q:
+        cur, d = q.popleft()
+        closure.append(cur)
+        hops = max(hops, d)
+        if d >= maxd:
+            continue
+        for dep in dependents_graph.get(cur, []):
+            if dep not in visited:
+                visited.add(dep)
+                q.append((dep, d + 1))
+
     return {
-        "journal_schema_version": JOURNAL_SCHEMA_VERSION,
-        "semantic_actions": list(JOURNAL_SEMANTIC_ACTIONS),
-        "event_class": "JournalEventV1",
-        "primary_storage": ".wikifier_staging/journal/v1/events.jsonl (JSONL)",
-        "projection": "journal/YYYY/MM/DD.md (human MD, dual-written)",
-        "compaction": "time + significance (skeleton in health.py)",
+        "closure": sorted(set(closure)),
+        "seeds": sorted(set(seeds)),
+        "stats": {
+            "hops": hops,
+            "size": len(closure),
+            "degraded": False,
+            "used_reverse_index": True,
+        },
+    }
+
+
+def project_scope(
+    spec: Union[ScopeSpec_v1, Dict[str, Any], None],
+    candidate_files: Iterable[Union[str, Path]],
+    *,
+    root: Optional[Path] = None,
+    reverse_index: Optional[Dict[str, List[str]]] = None,
+    include_focus_closure: bool = True,
+) -> Dict[str, Any]:
+    """
+    Full Scope projector (the engine-level applicator). Wave 3 A0 finalized.
+
+    Pure, stdlib-only, proportional (never O(repo) for large creative monorepos).
+    Supports directory subtree, portable globs (fnmatch), max_depth, focus_files +
+    transitive_closure (dependents via reverse index for impact cones).
+
+    Returns:
+        {
+            "matched_files": List[str] (relpaths satisfying spec; intersect dir+globs+focus_closure),
+            "focus_closure": (if focus + index) the transitive dependents or seeds,
+            "stats": {num_candidates, num_matched, focus_size, degraded, ...},
+            "applied_spec": spec.to_dict() if applicable,
+            "next_checkpoint_hint": optional for large projections,
+        }
+
+    Usage in streaming pipeline:
+        candidates = collect_dirty_candidates(root)
+        proj = project_scope(scope, candidates, reverse_index=rev_index)
+        for f in proj["matched_files"]:
+            ... parse only these ...
+        # Then for graph build, further project edges using same.
+
+    This is what makes subtree / focus / partials O(scope) not O(repo) at 50k scale.
+    Full ACS/CIABRE provenance flows through events using the matched set.
+    """
+    if spec is None:
+        spec = ScopeSpec_v1()
+    elif isinstance(spec, dict):
+        spec = ScopeSpec_v1.from_dict(spec)
+    elif not isinstance(spec, ScopeSpec_v1):
+        spec = ScopeSpec_v1()
+
+    candidates = [_normalize_rel(f) for f in candidate_files]
+
+    # 1. FS-level filter (dir + globs + depth)
+    fs_matched = [f for f in candidates if matches_scope(spec, f, root=root)]
+
+    # 2. Focus + transitive (dependents by default for impact/partial UX)
+    # Semantics (Wave 3 A0 finalized, long-term scalable):
+    # - First apply directory + globs + max_depth FS filter (proportional prune).
+    # - If focus_files + transitive_closure: compute dependents closure via reverse index (BFS, O(closure)).
+    # - Then intersect: effective matched = (dir/glob/depth filtered) ∩ focus_closure (incl seeds).
+    #   This gives "the impact cone of focus inside the scoped dir" — proportional, not whole-repo.
+    # - Seeds (focus_files) always in closure even on degraded (no index).
+    # - If no dir specified but focus given: matched reduces to the closure (seeds + dependents).
+    # - max_depth on focus hops is honored in compute_focus_closure.
+    # - Always deterministic, sorted, defensive (no crashes on bad globs/paths).
+    focus_info: Dict[str, Any] = {"closure": [], "seeds": [], "stats": {"degraded": True}}
+    if spec.focus_files and include_focus_closure:
+        focus_info = compute_focus_closure(
+            spec.focus_files,
+            reverse_index=reverse_index,
+            max_depth=spec.max_depth,
+            follow_forward=False,
+        )
+        if focus_info.get("closure"):
+            focus_set = set(focus_info["closure"])
+            # Clean intersect (bugfix from skeleton): previous "or" was no-op and confusing.
+            # Intersection ensures proportional scoped update (focus impact within dir/glob constraints).
+            fs_matched = [f for f in fs_matched if f in focus_set]
+
+    stats = {
+        "num_candidates": len(candidates),
+        "num_matched": len(fs_matched),
+        "focus_seeds": len(spec.focus_files or []),
+        "focus_closure_size": len(focus_info.get("closure", [])),
+        "degraded_focus": focus_info.get("stats", {}).get("degraded", False),
+        "directory": spec.directory,
+        "max_depth": spec.max_depth,
+    }
+
+    return {
+        "matched_files": sorted(set(fs_matched)),
+        "focus_closure": focus_info,
+        "stats": stats,
+        "applied_spec": spec.to_dict(),
+        "next_checkpoint_hint": f"scope-proj:{spec.directory or 'root'}:{len(fs_matched)}" if fs_matched else None,
+        "version": "1.0",
     }
 
 
 # =============================================================================
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
 # Self-test / smoke (run as python -m wikifier.contracts)
 # =============================================================================
 
@@ -1401,53 +1796,158 @@ if __name__ == "__main__":
     assert "strong strategy 'ts-paths:src'" in e4 or "strong resolution" in e4.lower()
     assert "High-fidelity" in e4 or "Safe for automated" in e4  # decision language
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    # === JournalEventV1 (M2 Workstream C) smoke ===
-    ev1 = make_journal_event(
-        event_type="record-change",
-        file="src/foo.py",
-        reason="Refactor for M2 durable journal foundation. Links to ACS and prior rationale.",
-        session_id="sess-smoke-42",
-        semantic_tags=["refactor", "foundation"],
-        significance=0.75,
+    # ========== NEW M2 A0 shapes smoke (defensive roundtrips + factory + RESERVED) - Wave 3 finalized ==========
+    print("M2 A0 contracts smoke...")
+
+    scope = ScopeSpec_v1(directory="src/", focus_files=["core.ts"], transitive_closure=True, seed_reason="test-focus", resource_hints={"max_files": 500})
+    scope_d = scope.to_dict()
+    scope2 = ScopeSpec_v1.from_dict(scope_d)
+    assert scope2.directory == "src/"
+    assert "core.ts" in scope2.focus_files
+    assert scope2.version == "1.0"
+
+    run_id = "run-20260526-abc123"
+    ev = create_progress_event(
+        "file_parsed",
+        run_id,
+        scope=scope,
+        file="src/core.ts",
+        progress_pct=12.5,
+        provenance={"actor": "cli", "session_id": "sess-xyz"},
+        acs_hook={"low_conf_delta": 1},
+        barrel_signals={"depth": 2, "via_barrel": True},
+        cycle_signals={"in_cycle": True, "scc_size": 4},
+        checkpoint_token="after:src/core.ts:17",
     )
-    assert ev1.version == "v1"
-    assert ev1.event_type == "record-change"
-    assert ev1.file == "src/foo.py"
-    assert 0.7 <= ev1.significance <= 0.8
-    assert ev1.session_id == "sess-smoke-42"
-    assert "python:make_journal_event" in str(ev1.provenance)
-    assert ev1.event_id and len(ev1.event_id) > 10
+    assert ev["event_type"] == "file_parsed"
+    assert ev["run_id"] == run_id
+    assert ev["scope"]["directory"] == "src/"
+    assert ev["provenance"]["actor"] == "cli"
+    assert ev["barrel_signals"]["depth"] == 2
+    assert ev["cycle_signals"]["in_cycle"]
+    assert ev["checkpoint_token"] and ev["resumable"]
+    assert "acs_hook" in ev
 
-    d = ev1.to_dict()
-    assert d["version"] == "v1"
-    loaded = JournalEventV1.from_dict(d)
-    assert loaded.event_id == ev1.event_id
-    assert loaded.significance == ev1.significance
+    ev2 = ProgressEvent_v1.from_dict(ev)
+    assert ev2.event_type == "file_parsed"
+    assert ev2.checkpoint_token == "after:src/core.ts:17"
 
-    # from_dict tolerance (legacy / future fields)
-    legacyish = {"action": "auto-detected", "file": "bar.js", "reason": "mtime", "extra_future": {"x":1}}
-    loaded2 = JournalEventV1.from_dict(legacyish)
-    assert loaded2.event_type == "auto-detected"
-    assert loaded2.file == "bar.js"
+    run = UpdateRun_v1(run_id=run_id, started_at="2026-...", scope=scope_d, status="running", provenance={"actor": "mcp"})
+    run_d = run.to_dict()
+    run2 = UpdateRun_v1.from_dict(run_d)
+    assert run2.status == "running"
 
-    # deletion boosts significance
-    ev_del = make_journal_event(event_type="record-deletion", file="core/api.py", reason="Remove deprecated")
-    assert ev_del.significance >= 0.85
+    partial = PartialResult_v1(
+        run_id=run_id,
+        yielded_at="2026-...",
+        scope_applied=scope_d,
+        files_processed=42,
+        acs_partial={"avg": 0.71},
+        cycle_analyses_partial={"version": "1.3"},
+        next_checkpoint_hint="after:src/core.ts:17",
+    )
+    p_d = partial.to_dict()
+    p2 = PartialResult_v1.from_dict(p_d)
+    assert p2.files_processed == 42 and p2.acs_partial and p2.next_checkpoint_hint
 
-    info = get_journal_event_info()
-    assert info["journal_schema_version"] == "v1"
-    assert "record-deletion" in info["semantic_actions"]
-    assert "JSONL" in info["primary_storage"]
+    rev = ReverseDependencyIndex_v1(
+        index={"dist/utils.js": ["src/core.ts", "src/app.ts"]},
+        graph_signature="a1b2c3d4e5f6",
+        provenance={"build_mode": "incremental", "reused": False},
+        acs_tied=True,
+        ciabre_blast_hints={"high_blast": ["dist/utils.js"]},
+    )
+    rev_d = rev.to_dict()
+    rev2 = ReverseDependencyIndex_v1.from_dict(rev_d)
+    assert "dist/utils.js" in rev2.index
+    assert rev2.acs_tied and rev2.graph_signature
+    assert rev2.node_identity_version == NODE_IDENTITY_VERSION_V1
 
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
+    # ========== NEW M2 A0 Scope Projector smoke (matches, closure, project_scope) - Wave 3 finalized ==========
+    print("M2 Scope projector smoke...")
+
+    # FS level matches + globs + depth
+    spec = ScopeSpec_v1(directory="src/", include_globs=["*.ts"], exclude_globs=["*.d.ts"], max_depth=3)
+    assert matches_scope(spec, "src/core.ts")
+    assert matches_scope(spec, "src/deep/nested/foo.ts")
+    assert not matches_scope(spec, "src/deep/nested/foo.js")  # glob
+    assert not matches_scope(spec, "src/deep/nested/foo.d.ts")  # exclude
+    assert not matches_scope(spec, "tests/bar.ts")  # wrong dir
+    # depth calc: src/a/b/c/d.ts under src/ -> after prefix 'a/b/c/d' -> count(/)=3 +1 =4 > max=3 => False
+    assert not matches_scope(spec, "src/a/b/c/d.ts")
+    spec2 = ScopeSpec_v1(directory="src/", max_depth=4)
+    assert matches_scope(spec2, "src/a/b/c/d.ts")
+
+    # Globs empty = match all under dir
+    spec3 = ScopeSpec_v1(directory="lib/")
+    assert matches_scope(spec3, "lib/foo/bar.py")
+
+    # Focus closure using synthetic reverse index (dependents)
+    rev_idx = {
+        "src/core.ts": ["src/app.ts", "src/pages/home.ts"],
+        "src/utils.ts": ["src/core.ts", "src/app.ts"],
+        "src/app.ts": ["tests/test_app.ts"],
+    }
+    clos = compute_focus_closure(["src/core.ts"], reverse_index=rev_idx)
+    assert "src/core.ts" in clos["closure"]
+    assert "src/app.ts" in clos["closure"]
+    assert "tests/test_app.ts" in clos["closure"]  # transitive
+    assert clos["stats"]["size"] >= 3 and not clos["stats"].get("degraded")
+
+    # Full project_scope integration (FS + focus)
+    candidates = ["src/core.ts", "src/utils.ts", "src/app.ts", "tests/test_app.ts", "lib/other.js"]
+    proj = project_scope(
+        ScopeSpec_v1(directory="src/", focus_files=["src/core.ts"], transitive_closure=True),
+        candidates,
+        reverse_index=rev_idx,
+    )
+    assert "matched_files" in proj and "focus_closure" in proj and "stats" in proj
+    assert "src/core.ts" in proj["matched_files"]
+    assert "src/app.ts" in proj["matched_files"]
+    assert proj["stats"]["num_matched"] >= 2
+    assert proj["next_checkpoint_hint"] and "scope-proj" in proj["next_checkpoint_hint"]
+    assert proj["version"] == "1.0"
+
+    # Degrade gracefully with no index
+    proj2 = project_scope(ScopeSpec_v1(focus_files=["src/core.ts"]), candidates, reverse_index=None)
+    assert proj2["stats"]["degraded_focus"] is True
+    assert "src/core.ts" in proj2["matched_files"]  # seeds still
+
+    # V1 alias smoke (plan naming + dual access)
+    assert ScopeSpecV1 is ScopeSpec_v1
+    s_v1 = ScopeSpecV1(directory="src")
+    assert s_v1.directory == "src"
+    ev_v1 = ProgressEventV1.from_dict({"event_type": "test", "run_id": "r1", "scope": {}})
+    assert ev_v1.version == "1.0"
+
+    # Cleaned projector intersect regression (focus limits matched proportionally)
+    proj3 = project_scope(
+        ScopeSpec_v1(focus_files=["src/core.ts"]),
+        candidates + ["other/out.ts"],
+        reverse_index=rev_idx,
+    )
+    assert "src/core.ts" in proj3["matched_files"]
+    assert "src/app.ts" in proj3["matched_files"]
+    assert "other/out.ts" not in proj3["matched_files"]  # outside focus closure
+    assert not any("lib/" in m for m in proj3["matched_files"])
+
+    print("M2 Scope projector smoke: PASS")
+
+    # RESERVED keys present and documented
+    assert "_reverse_dependency_index_v1" in RESERVED_TOP_LEVEL_KEYS
+    assert "M2 A0/A1" in RESERVED_TOP_LEVEL_KEYS["_reverse_dependency_index_v1"]
+    assert "_update_runs" in RESERVED_TOP_LEVEL_KEYS
+    assert "_partial_results" in RESERVED_TOP_LEVEL_KEYS
+
+    # contracts_info now surfaces M2
+    info = get_contracts_info()
+    assert "m2_contracts_version" in info
+    assert "ScopeSpec_v1" in info.get("m2_shapes", [])
+    assert "ScopeSpecV1" in info.get("m2_shapes", [])
+    assert any(k.startswith("_reverse_dependency") for k in info.get("m2_reserved_keys", []))
+
+    print("M2 A0 shape roundtrips + factory + RESERVED + info extension: PASS")
+
     print("All smoke tests passed. Contracts are stable and defensive.")
     print(json.dumps(get_contracts_info(), indent=2))
     sys.exit(0)

@@ -1,55 +1,61 @@
 """
-Wikifier Health Matrix - Scalable Implementation (M2-Rem-02)
+Wikifier Health Matrix - Scalable Implementation (M2-Rem-02 + Health B)
 
 This module provides fast, scalable operations on the Documentation Health Matrix.
 It is designed to work well from small projects (< 300 files) all the way to massive
-monorepos (10k+ files).
+monorepos (10k+ files). M2 Health B extensions add durable wiki freshness tracking
+(wiki_content_hash + last_meaningful_edit correlated to journal semantic events),
+policy-driven healing, stale detection, sharded views, and self-hosting hygiene —
+all zero-dependency, observable, and production-safe under concurrency.
 
-Architecture:
-- `file_health.json` is the primary source of truth (fast dict lookups).
-- `file_health.md` is a generated human-readable view.
-- Small projects can continue using the simple Markdown workflow.
-- Larger projects benefit from significantly faster queries and updates.
+Architecture (Durable + Observable):
+- `file_health.json` primary source (fast dict, versioned, additive migration).
+- Contracts in contracts.py (HealthEntry_v1) are the single source of truth for shapes.
+- Every mutation of freshness fields carries 'freshness_provenance' for explainability.
+- `file_health.md` is a generated human-readable view (no freshness fields to keep readable).
+- Small projects: full fidelity. Massive: summary/sharded + lazy full views preferred.
 
-JSON Schema (v1):
+JSON Schema (v2 - additive from v1):
 {
-  "version": 1,
-  "last_updated": "2026-05-16T12:34:56",
+  "version": 2,
+  "last_updated": "2026-05-27T12:34:56",
   "entries": {
     "relative/path/to/file.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-05-16 12:34:56",
-      "reason": "Wiki summary verified accurate."
+      "last_updated": "2026-05-27 12:34:56",
+      "reason": "Wiki summary verified accurate.",
+      "wiki_content_hash": "sha256:9f86d08... (of .wiki.md at last mark-green)",
+      "last_meaningful_edit": "2026-05-27 11:22:00",
+      "last_wiki_refresh": "2026-05-27 12:34:56",
+      "freshness_provenance": "mark-green via mcp; record-change journal ref"
     },
     ...
   }
 }
+
+Old v1 entries load safely (missing freshness fields default to absent/None).
 """
 
+import hashlib
 import json
 import os
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 import re
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 
 # Import locking (M2-Rem-07)
 try:
     from . import locking
 except ImportError:
     locking = None
+
+# M2 Health B durable contracts (HealthEntry + normalize for migration/observability)
+try:
+    from . import contracts
+except ImportError:
+    contracts = None
 
 HEALTH_JSON = "file_health.json"
 HEALTH_MD = "file_health.md"
@@ -64,29 +70,167 @@ def _timestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _normalize_health_entry_local(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Local fallback (when contracts import unavailable) for B1 durable additive migration.
+    Mirrors contracts.normalize_health_entry exactly. Idempotent."""
+    if not isinstance(entry, dict):
+        entry = {}
+    core = {
+        "status": str(entry.get("status", "🟡 Yellow"))[:120],
+        "last_updated": str(entry.get("last_updated", _timestamp()))[:50],
+        "reason": str(entry.get("reason", ""))[:3000],
+    }
+    for k in ("wiki_content_hash", "last_meaningful_edit", "last_wiki_refresh", "freshness_provenance"):
+        v = entry.get(k)
+        if isinstance(v, str) and v:
+            core[k] = v
+    return core
+
+
+def _compute_wiki_content_hash(wiki_path: Optional[Path]) -> Optional[str]:
+    """Durable content hash (sha256 of bytes) for wiki summary. Zero-dep stdlib.
+    Used to detect actual content drift vs mtime-only. Returns 'sha256:<hex>' or None."""
+    if not wiki_path or not wiki_path.exists() or not wiki_path.is_file():
+        return None
+    try:
+        data = wiki_path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        return f"sha256:{digest}"
+    except Exception:
+        return None
+
+
+def _is_stale_wiki(root: Path, file: str, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Core durable stale wiki detector (B3).
+    Returns rich diagnostic dict if the wiki summary is stale w.r.t code intent
+    (last_meaningful_edit from journal record-change after last wiki hash capture),
+    or if content hash has drifted (out-of-band edit).
+    Returns None if fresh or insufficient data.
+    Observable: full provenance + confidence + actionable rec.
+    Zero-dep, O(1) per file (uses precomputed fields + cheap hash of wiki if present).
+    """
+    if not isinstance(entry, dict):
+        return None
+    wiki_path = _find_existing_wiki_file(root, file)
+    live_hash = _compute_wiki_content_hash(wiki_path)
+    stored_hash = entry.get("wiki_content_hash")
+    last_mean = entry.get("last_meaningful_edit")
+    last_wiki_r = entry.get("last_wiki_refresh")
+
+    reasons: List[str] = []
+    details: Dict[str, Any] = {}
+    conf = 0.0
+
+    # Primary durable signal: intent changed after wiki was last marked trusted
+    if last_mean and last_wiki_r:
+        try:
+            if last_mean > last_wiki_r:  # lexical sort works for our YYYY-MM-DD HH:MM:SS
+                reasons.append("meaningful_edit_after_wiki_refresh (journal semantic post-dates last mark-green)")
+                conf += 0.75
+                details["intent_vs_wiki_delta"] = f"{last_mean} > {last_wiki_r}"
+        except Exception:
+            pass
+
+    # Content drift robustness (detects wiki edited without going through mark-green tools)
+    if live_hash and stored_hash and live_hash != stored_hash:
+        reasons.append("wiki_content_hash_mismatch (current wiki bytes != hash at last trusted mark-green)")
+        conf += 0.6
+        details["hash_mismatch"] = {"stored": stored_hash[:32] + "...", "live": live_hash[:32] + "..."}
+
+    if not reasons:
+        return None
+
+    if not wiki_path or not live_hash:
+        reasons.append("wiki_file_absent_or_unreadable_after_intent_change")
+        conf = max(conf, 0.5)
+
+    status = entry.get("status", "")
+    provenance = entry.get("freshness_provenance", "")
+
+    return {
+        "file": file,
+        "is_stale": True,
+        "confidence": round(min(1.0, conf), 2),
+        "reasons": reasons,
+        "last_meaningful_edit": last_mean,
+        "last_wiki_refresh": last_wiki_r,
+        "stored_wiki_hash": stored_hash,
+        "live_wiki_hash": live_hash,
+        "current_status": status,
+        "wiki_file": str(wiki_path.relative_to(root)) if wiki_path else None,
+        "freshness_provenance": provenance,
+        "diagnostics": details,
+        "recommendation": "Refresh the wiki summary to reflect latest recorded intent, then run mark-green to re-capture hash + promote."
+    }
+
+
+def get_stale_wikis(root: Path, directory: Optional[str] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    """
+    Public: list of files with stale wikis (rich, explainable, filterable by dir for scale).
+    Bounded + directory scoped for >10k file repos. Ready for MCP + CLI + health(json).
+    """
+    health = load_health(root)
+    results: List[Dict[str, Any]] = []
+    for f, e in list(health.get("entries", {}).items()):
+        if directory:
+            if not f.startswith(directory.rstrip("/") + "/"):
+                continue
+        diag = _is_stale_wiki(root, f, e)
+        if diag:
+            results.append(diag)
+            if len(results) >= limit:
+                break
+    return sorted(results, key=lambda x: (-x.get("confidence", 0.0), x["file"]))
+
+
 def load_health(root: Path) -> Dict[str, Any]:
     """
     Load the health matrix from file_health.json.
     Falls back to migrating from file_health.md if JSON does not exist.
+
+    M2 Health B: Defensive additive migration for v1 -> v2 (freshness fields).
+    Every entry is normalized via contracts.normalize_health_entry (or local equiv)
+    so old data + new code is always safe and observable-ready.
+    Top-level version bumped to 2 on next save.
     """
     json_path = _get_health_path(root)
 
     if json_path.exists():
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if data.get("version") != 1:
-                # Future version handling can go here
-                pass
-            return data
+        version = data.get("version", 1)
+        entries = data.get("entries", {}) or {}
+        normalized_entries = {}
+        for k, v in entries.items():
+            if contracts and hasattr(contracts, "normalize_health_entry"):
+                normalized_entries[k] = contracts.normalize_health_entry(v)
+            else:
+                normalized_entries[k] = _normalize_health_entry_local(v)
+        data["entries"] = normalized_entries
+        if version < 2:
+            data["version"] = 2  # mark for future save; additive, no breakage
+        return data
 
     # Migration path: if JSON doesn't exist but MD does
     md_path = root / HEALTH_MD
     if md_path.exists():
-        return _migrate_from_markdown(md_path)
+        migrated = _migrate_from_markdown(md_path)
+        # Normalize migrated entries too (B1 durable)
+        entries = migrated.get("entries", {})
+        norm = {}
+        for k, v in entries.items():
+            if contracts and hasattr(contracts, "normalize_health_entry"):
+                norm[k] = contracts.normalize_health_entry(v)
+            else:
+                norm[k] = _normalize_health_entry_local(v)
+        migrated["entries"] = norm
+        migrated["version"] = 2
+        return migrated
 
-    # Fresh project
+    # Fresh project (start at v2 with Health B fields ready)
     return {
-        "version": 1,
+        "version": 2,
         "last_updated": _timestamp(),
         "entries": {}
     }
@@ -108,6 +252,7 @@ def _do_save_health(root: Path, health_data: Dict[str, Any]) -> None:
     """Internal save without locking."""
     json_path = _get_health_path(root)
     health_data["last_updated"] = _timestamp()
+    health_data["version"] = 2  # B durable: ensure v2 on every save (additive fields)
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(health_data, f, indent=2, ensure_ascii=False)
@@ -139,7 +284,7 @@ def _migrate_from_markdown(md_path: Path) -> Dict[str, Any]:
                 }
 
     health_data = {
-        "version": 1,
+        "version": 2,  # B1: start emitting v2 (additive Health B fields ready via normalize)
         "last_updated": _timestamp(),
         "entries": entries
     }
@@ -181,21 +326,33 @@ def upsert_entry(root: Path, file: str, status: str, reason: str = "") -> None:
 
 
 def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> None:
-    """Internal upsert without locking."""
+    """Internal upsert without locking.
+
+    M2 Health B durable: preserve existing wiki freshness fields (hash, meaningful_edit,
+    wiki_refresh, provenance) on non-refresh upserts (e.g. barrel invalidation, auto Yellow).
+    Only freshness-aware paths (mark-green, record via new helpers) mutate those.
+    Always normalize to guarantee schema.
+    """
     health = load_health(root)
-    health["entries"][file] = {
+    existing = health.get("entries", {}).get(file, {})
+    # Start from normalized existing to keep B fields
+    if contracts and hasattr(contracts, "normalize_health_entry"):
+        base = contracts.normalize_health_entry(existing)
+    else:
+        base = _normalize_health_entry_local(existing)
+
+    base.update({
         "status": status,
         "last_updated": _timestamp(),
         "reason": reason
-    }
+    })
+    # Ensure provenance note if a non-freshness update (observability)
+    if not base.get("freshness_provenance"):
+        base["freshness_provenance"] = f"upsert:{status} (non-freshness path)"
+    health["entries"][file] = base
     _do_save_health(root, health)
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 # ----------------------------- Pending Updates Helpers (locked, idempotent) -----------------------------
 # These ensure pending_updates.md mutations are atomic with health under the project lock
 # (per locking.py contract). Eliminates races/duplicates with add_pending from shell/monitor.
@@ -278,10 +435,107 @@ def add_to_pending(root: Path, file: str, msg: str) -> None:
         _do_add_to_pending(root, file, msg)
 
 
+# ----------------------------- M2 Health B: Durable Freshness Paths (wiki_content_hash + last_meaningful_edit) -----------------------------
+# These tie wiki state to journal semantic events (record-change etc.) for reliable stale detection.
+# All mutations under project lock. Every change emits freshness_provenance for full observability.
+# Designed for 10k-50k file monorepos: O(1) per file, no full scans in hot paths.
+
+def _do_record_meaningful_edit(root: Path, file: str, reason: str = "", ts: Optional[str] = None, journal_ref: Optional[str] = None) -> None:
+    """Internal (locked caller): record a semantic/journal-backed edit for the file.
+    Sets last_meaningful_edit (for stale correlation) + Yellow + provenance.
+    Used by record_change/record_deletion paths (shell + MCP + future library).
+    """
+    health = load_health(root)
+    existing = health.get("entries", {}).get(file, {})
+    if contracts and hasattr(contracts, "normalize_health_entry"):
+        base = contracts.normalize_health_entry(existing)
+    else:
+        base = _normalize_health_entry_local(existing)
+
+    now = ts or _timestamp()
+    prov = f"record-meaningful-edit:{now}"
+    if journal_ref:
+        prov += f"; journal_ref={journal_ref}"
+    if reason:
+        prov += f" | {reason[:120]}"
+    base.update({
+        "status": "🟡 Yellow",
+        "last_updated": now,
+        "reason": reason or base.get("reason", "Semantic change recorded (correlates to journal)"),
+        "last_meaningful_edit": now,
+        "freshness_provenance": prov
+    })
+    health["entries"][file] = base
+    _do_save_health(root, health)
+
+
+def record_meaningful_edit(root: Path, file: str, reason: str = "", ts: Optional[str] = None, journal_ref: Optional[str] = None) -> None:
+    """Public: locked record of meaningful (journal semantic) edit. Updates last_meaningful_edit for B3 detector."""
+    if locking:
+        with locking.file_lock(root):
+            _do_record_meaningful_edit(root, file, reason, ts, journal_ref)
+    else:
+        _do_record_meaningful_edit(root, file, reason, ts, journal_ref)
+
+
+def _do_mark_wiki_refresh(root: Path, file: str, wiki_hash: Optional[str], reason: str = "", ts: Optional[str] = None, provenance: Optional[str] = None) -> None:
+    """Internal: persist the captured wiki_content_hash + last_wiki_refresh after a trusted wiki summary write.
+    Called from enhanced mark-green. Enables exact content-based staleness vs intent change.
+    """
+    health = load_health(root)
+    existing = health.get("entries", {}).get(file, {})
+    if contracts and hasattr(contracts, "normalize_health_entry"):
+        base = contracts.normalize_health_entry(existing)
+    else:
+        base = _normalize_health_entry_local(existing)
+
+    now = ts or _timestamp()
+    prov_parts = [p for p in (base.get("freshness_provenance"), provenance or "mark-wiki-refresh") if p]
+    new_prov = "; ".join(prov_parts)[:500]
+    base.update({
+        "last_updated": now,
+        "last_wiki_refresh": now,
+        "freshness_provenance": new_prov
+    })
+    if wiki_hash:
+        base["wiki_content_hash"] = wiki_hash
+    if reason:
+        base["reason"] = reason
+    health["entries"][file] = base
+    _do_save_health(root, health)
+
+
+def mark_wiki_refresh(root: Path, file: str, reason: str = "", ts: Optional[str] = None) -> None:
+    """Public locked: explicit wiki content hash capture + refresh stamp (for advanced callers or direct wiki tooling)."""
+    if locking:
+        with locking.file_lock(root):
+            wiki_file = _find_existing_wiki_file(root, file)
+            h = _compute_wiki_content_hash(wiki_file)
+            _do_mark_wiki_refresh(root, file, h, reason, ts, provenance=f"explicit mark_wiki_refresh; wiki={wiki_file.name if wiki_file else 'none'}")
+    else:
+        wiki_file = _find_existing_wiki_file(root, file)
+        h = _compute_wiki_content_hash(wiki_file)
+        _do_mark_wiki_refresh(root, file, h, reason, ts, provenance=f"explicit mark_wiki_refresh; wiki={wiki_file.name if wiki_file else 'none'}")
+
+
 def _do_mark_green(root: Path, file: str, reason: str = "") -> None:
-    """Internal combined op (health + pending) without re-acquiring lock."""
+    """Internal combined op (health + pending) without re-acquiring lock.
+
+    M2 Health B: On mark-green (the canonical 'wiki now trusted' action), also capture
+    the current wiki_content_hash (durable content not mtime) + last_wiki_refresh + provenance.
+    This powers the reliable stale wiki detector. Ties the Green state to a specific wiki snapshot.
+    """
     effective_reason = reason or "Wiki summary verified accurate after change."
+    # B2: capture wiki hash for freshness correlation (durable, observable)
+    wiki_file = _find_existing_wiki_file(root, file)
+    wiki_hash = _compute_wiki_content_hash(wiki_file)
+    prov = f"mark-green:{_timestamp()} (wiki hash captured)"
+    if wiki_file:
+        prov += f"; wiki={wiki_file.name}"
+    # First ensure Green + basic (preserves other fields via enhanced upsert)
     _do_upsert_entry(root, file, "🟢 Green", effective_reason)
+    # Now layer the wiki refresh fields (separate durable step)
+    _do_mark_wiki_refresh(root, file, wiki_hash, effective_reason, provenance=prov)
     _do_remove_from_pending(root, file)
 
 
@@ -378,13 +632,6 @@ def validate_health(root: Path) -> Dict[str, Any]:
 
 # ----------------------------- apply_barrel... (continues) -----------------------------
 
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
 def apply_barrel_invalidation_reports(
     root: Path, reports: List[Dict[str, Any]]
 ) -> int:
@@ -437,11 +684,13 @@ def apply_barrel_invalidation_reports(
     return updated
 
 
-def get_summary(root: Path, directory: Optional[str] = None) -> Dict[str, Any]:
-    """Return a summary of the health matrix (fast even for large repos).
+def get_summary(root: Path, directory: Optional[str] = None, include_stale: bool = False) -> Dict[str, Any]:
+    """Return a summary of the health matrix (fast even for large repos; sharded by dir).
 
     If directory is provided, only counts files under that subdirectory.
     This enables scalable views in massive monorepos (e.g. health per package).
+    M2 B: include_stale=True adds bounded stale_wiki count (via B3 detector) for
+    practical summary-only views without full materialization.
     """
     health = load_health(root)
     entries = health.get("entries", {})
@@ -464,20 +713,50 @@ def get_summary(root: Path, directory: Optional[str] = None) -> Dict[str, Any]:
         elif "🔴" in status:
             red += 1
 
-    return {
+    out = {
         "total": total,
         "green": green,
         "yellow": yellow,
         "red": red,
         "pending_updates": 0,
-        "directory": directory or "."
+        "directory": directory or ".",
+        "version": health.get("version", 2),
+        "last_updated": health.get("last_updated")
     }
+    if include_stale:
+        try:
+            stales = get_stale_wikis(root, directory=directory, limit=1000)  # bounded for practicality
+            out["stale_count"] = len(stales)
+            out["stale_sample"] = [s["file"] for s in stales[:3]]
+        except Exception:
+            out["stale_count"] = -1
+    return out
 
 
-def get_files_needing_attention(root: Path, status_filter: Optional[str] = None, directory: Optional[str] = None) -> List[str]:
+def _is_self_hosting_meta_file(rel_path: str) -> bool:
+    """B6 self-hosting hygiene predicate.
+    These files frequently receive auto Yellow from mtime (own edits to health/journal/templates).
+    Suppress from 'needing attention' unless genuinely 🔴 Red for *content* reasons (not mtime drift).
+    Prevents noise/pollution when dogfooding or running on the wikifier repo itself.
+    """
+    p = rel_path.lower()
+    metas = [
+        "file_health.json", "file_health.md",
+        "wikifier/health.py",  # the impl itself
+        ".github/issue_template/wiki_health.md",
+        "logged_issues", "journal/", "pending_updates.md",
+        "health.py.wiki.md", "server.py.wiki.md",  # self docs
+        "exclude_patterns.txt", "monitored_paths.txt"  # config often touched
+    ]
+    return any(m in p for m in metas)
+
+
+def get_files_needing_attention(root: Path, status_filter: Optional[str] = None, directory: Optional[str] = None, include_meta: bool = False) -> List[str]:
     """Return list of files that need attention, optionally filtered by status and/or directory.
 
-    Directory filtering is key for scalability in large monorepos.
+    Directory filtering + B6 self-hosting hygiene (default: suppress wikifier meta files unless truly Red)
+    are key for scalability and clean dogfood on the project itself.
+    include_meta=True overrides hygiene filter for debugging.
     """
     health = load_health(root)
     result = []
@@ -491,6 +770,10 @@ def get_files_needing_attention(root: Path, status_filter: Optional[str] = None,
         if status_filter and status_filter not in status:
             continue
         if "🟡" in status or "🔴" in status:
+            if not include_meta and _is_self_hosting_meta_file(file_path) and "🔴" not in status:
+                # Self-hosting hygiene (durable/observable): skip mtime-only Yellows on our own state
+                # (reason logged via provenance in health entry; visible in health(json) or diagnostics)
+                continue
             result.append(file_path)
 
     return sorted(result)
@@ -614,72 +897,144 @@ def _assess_wiki_quality(wiki_path: Path) -> Dict[str, Any]:
     }
 
 
-def heal_outdated_stubs(root: Path, min_wiki_length: int = 350, dry_run: bool = False) -> int:
+# ----------------------------- M2 Wave 3 B: Policy-Driven Heal Engine (rich diagnostics + provenance) -----------------------------
+# Configurable, observable, zero-dep. Supports current stubs + future stale/wiki-drift policies.
+# Every decision emits structured diagnostics + freshness_provenance tag for audit (ties to HealthEntry).
+# Scalable: O(1) per candidate (reuses _assess + _is_stale_wiki + bounded walks).
+
+def heal_with_policy(
+    root: Path,
+    policy: Optional[Dict[str, Any]] = None,
+    dry_run: bool = False
+) -> Dict[str, Any]:
     """
-    Automatically heal entries that are still marked as "Initial stub" (or equivalent 🔴 Red)
-    but now have a substantial wiki summary.
-
-    Uses improved quality heuristics:
-    - Raw length
-    - Presence of markdown headings
-    - Presence of bullet points / lists
-    - Semantic signals ("Purpose", "Role", "Overview", "Responsibilities")
-    - Code blocks
-
-    This allows differentiated healing:
-    - Medium quality → 🟡 Yellow ("Needs review")
-    - High quality → 🟢 Green (auto-trusted)
-
-    Returns the number of entries that were healed.
+    Policy-driven heal engine (B completion).
+    policy dict (all optional, safe defaults):
+      {
+        "targets": ["stubs"],  # "stubs" | "stale" (extensible)
+        "stub": {
+          "min_wiki_length": 350,
+          "auto_green_on": "high",   # "high" | "medium" | "never"
+          "auto_yellow_on": "medium"
+        },
+        "stale": {
+          "min_confidence": 0.65,
+          "action": "mark_yellow_with_note"  # or "log_only"
+        },
+        "provenance_tag": "policy-heal-v1"
+      }
+    Returns rich diagnostics (not just count): per-file changes with old/new/reason/quality/diag,
+    policy used, summary stats, actionable recommendation. Fully durable (calls mark paths for hash/provenance).
     """
+    policy = policy or {}
+    targets = policy.get("targets", ["stubs"])
+    stub_p = policy.get("stub", {})
+    min_len = int(stub_p.get("min_wiki_length", 350))
+    green_q = stub_p.get("auto_green_on", "high")
+    yellow_q = stub_p.get("auto_yellow_on", "medium")
+    stale_p = policy.get("stale", {})
+    stale_conf = float(stale_p.get("min_confidence", 0.65))
+    prov_tag = policy.get("provenance_tag", "policy-heal-v1")
+
     health = load_health(root)
+    changes: List[Dict[str, Any]] = []
     healed = 0
-    changes: List[tuple] = []
+    stale_checked = 0
+    stale_healed = 0
 
-    for rel_path, entry in list(health.get("entries", {}).items()):
+    entries = list(health.get("entries", {}).items())
+    for rel_path, entry in entries:
         status = entry.get("status", "")
         reason = entry.get("reason", "")
+        diag: Dict[str, Any] = {}
 
-        # Only heal true "Initial stub" style entries
-        is_stub = "Initial stub" in status or ("🔴" in status and "stub" in reason.lower())
-        if not is_stub:
-            continue
+        # Stubs target (existing behavior generalized)
+        if "stubs" in targets:
+            is_stub = "Initial stub" in status or ("🔴" in status and "stub" in reason.lower())
+            if is_stub:
+                wiki_file = _find_existing_wiki_file(root, rel_path)
+                if wiki_file:
+                    quality = _assess_wiki_quality(wiki_file)
+                    diag["wiki_quality"] = quality
+                    do_heal = False
+                    new_status = status
+                    new_r = reason
+                    if quality["quality"] == "high" and green_q != "never":
+                        new_status = "🟢 Green"
+                        new_r = f"Auto-healed via policy (high-quality wiki, was {status})"
+                        do_heal = True
+                    elif quality["quality"] == "medium" and quality["length"] >= min_len and yellow_q == "medium":
+                        new_status = "🟡 Yellow"
+                        new_r = f"Auto-healed via policy (meaningful wiki now exists, was {status})"
+                        do_heal = True
 
-        wiki_file = _find_existing_wiki_file(root, rel_path)
-        if not wiki_file:
-            continue
+                    if do_heal:
+                        if not dry_run:
+                            # preserve B fields, layer provenance
+                            base = contracts.normalize_health_entry(entry) if (contracts and hasattr(contracts, "normalize_health_entry")) else _normalize_health_entry_local(entry)
+                            base.update({
+                                "status": new_status,
+                                "last_updated": _timestamp(),
+                                "reason": new_r,
+                                "freshness_provenance": (base.get("freshness_provenance") or "") + f"; {prov_tag}:stub target=stub q={quality['quality']}"
+                            })
+                            health["entries"][rel_path] = base
+                        changes.append({
+                            "file": rel_path, "old_status": status, "new_status": new_status,
+                            "quality": quality["quality"], "wiki_size": quality["length"],
+                            "diagnostics": diag, "policy_target": "stubs"
+                        })
+                        healed += 1
 
-        quality = _assess_wiki_quality(wiki_file)
+        # Stale target (uses B3 detector for policy heal of drift)
+        if "stale" in targets:
+            stale_diag = _is_stale_wiki(root, rel_path, entry)
+            if stale_diag and stale_diag.get("confidence", 0) >= stale_conf:
+                stale_checked += 1
+                if stale_p.get("action", "mark_yellow_with_note") == "mark_yellow_with_note":
+                    if not dry_run:
+                        base = contracts.normalize_health_entry(entry) if (contracts and hasattr(contracts, "normalize_health_entry")) else _normalize_health_entry_local(entry)
+                        new_r = f"Policy-healed stale wiki (conf={stale_diag['confidence']}; reasons: {'; '.join(stale_diag['reasons'])})"
+                        base.update({
+                            "status": "🟡 Yellow",
+                            "last_updated": _timestamp(),
+                            "reason": new_r,
+                            "freshness_provenance": (base.get("freshness_provenance") or "") + f"; {prov_tag}:stale conf={stale_diag['confidence']}"
+                        })
+                        health["entries"][rel_path] = base
+                    changes.append({
+                        "file": rel_path, "old_status": status, "new_status": "🟡 Yellow",
+                        "diagnostics": {"stale": stale_diag}, "policy_target": "stale"
+                    })
+                    stale_healed += 1
+                    healed += 1  # count for compat too
 
-        # Decision logic based on quality
-        if quality["quality"] == "high":
-            new_status = "🟢 Green"
-            new_reason = f"Auto-healed: high-quality wiki summary detected (was {status})"
-        elif quality["quality"] == "medium" and quality["length"] >= min_wiki_length:
-            new_status = "🟡 Yellow"
-            new_reason = f"Auto-healed: meaningful wiki summary now exists (was {status})"
-        else:
-            # Low quality or too short — do not heal
-            continue
-
-        if not dry_run:
-            health["entries"][rel_path] = {
-                "status": new_status,
-                "last_updated": _timestamp(),
-                "reason": new_reason
-            }
-
-        changes.append((rel_path, status, new_status, quality["quality"]))
-        healed += 1
-
-    if healed > 0 and not dry_run:
+    if (healed > 0 or stale_healed > 0) and not dry_run:
         save_health(root, health)
 
-    for item in changes:
-        rel, old, new, q = item
-        print(f"  Healed: {rel}  [{q} quality]  {old} → {new}")
+    rec = f"Healed {healed} under policy (stubs:{healed - stale_healed}, stale-involved:{stale_healed}). Review changes + run stale-wikis again."
+    if not changes:
+        rec = "No healable items matched current policy."
 
-    return healed
+    return {
+        "healed_count": healed,
+        "stale_checked": stale_checked,
+        "stale_healed": stale_healed,
+        "changes": changes[:100],  # bound for large
+        "policy_used": policy or {"targets": ["stubs"]},
+        "diagnostics": {"total_candidates_considered": len(entries)},
+        "recommendation": rec,
+        "dry_run": dry_run
+    }
+
+
+def heal_outdated_stubs(root: Path, min_wiki_length: int = 350, dry_run: bool = False) -> int:
+    """Backward-compat wrapper over the policy engine (stubs target only). Returns count for existing callers (MCP/CLI)."""
+    res = heal_with_policy(root, policy={"targets": ["stubs"], "stub": {"min_wiki_length": min_wiki_length}}, dry_run=dry_run)
+    # Print rich for CLI visibility (existing behavior + more)
+    for ch in res.get("changes", []):
+        print(f"  Healed: {ch['file']}  [{ch.get('quality', '?')}]  {ch['old_status']} → {ch['new_status']}")
+    return int(res.get("healed_count", 0))
 
 
 def get_healable_stubs(root: Path, min_wiki_length: int = 350, directory: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -797,402 +1152,6 @@ def _generate_healing_recommendation(initial_stubs: int, high: int, medium: int)
     return "Mild stub pollution. Low urgency but worth cleaning up."
 
 
-# =============================================================================
-# 10. Structured Journal Durable Layer (M2 Workstream C - Dual Write + Compaction Skeleton)
-# =============================================================================
-# Implements the Python half of dual-write (structured JSONL primary under
-# .wikifier_staging) + safe compaction engine (time + significance, manifest,
-# fully dry-run capable, reversible in principle via manifest+archives).
-#
-# Integrated with contracts.py JournalEventV1 (actor, session, provenance,
-# ACS/rationale links, semantic types, significance).
-#
-# Sh (wikifier.sh write_journal + cmd_record_*) continues to own the exact
-# human MD daily projection format for 100% backward compat during transition.
-# Python emit is the single path for structured append (used by sh via -c).
-#
-# Multi-agent safe: always under locking.file_lock when mutating logs/manifests.
-# Streaming design: compaction & future queries never load full history.
-# Long-term: bounded active state via compaction; events self-describing for
-# 5-10yr survival on large active repos.
-#
-# CLI exposure (skeleton): python -m wikifier.health journal-compact --dry-run
-# python -m wikifier.health journal-emit <type> <file> "<reason>"
-# =============================================================================
-
-import uuid
-from collections.abc import Iterator
-from typing import Iterable
-
-# Contracts integration (defensive for packaged / partial import)
-try:
-    from .contracts import (
-        JournalEventV1,
-        make_journal_event,
-        JOURNAL_SEMANTIC_ACTIONS,
-        get_journal_event_info,
-    )
-except Exception:  # pragma: no cover
-    JournalEventV1 = None  # type: ignore
-    make_journal_event = None  # type: ignore
-    JOURNAL_SEMANTIC_ACTIONS = ("record-change", "record-deletion", "auto-detected")  # type: ignore
-    get_journal_event_info = lambda: {"journal_schema_version": "v1"}  # type: ignore
-
-
-JOURNAL_V1_DIR = "journal/v1"
-JOURNAL_LOG_BASENAME = "events.jsonl"
-JOURNAL_MANIFEST_BASENAME = "compaction_manifest.json"
-JOURNAL_ARCHIVE_DIR = "archives"
-
-
-def _get_journal_root(root: Path) -> Path:
-    return root / ".wikifier_staging" / JOURNAL_V1_DIR
-
-
-def get_journal_log_path(root: Path) -> Path:
-    """Primary structured log (append-only JSONL, versioned v1)."""
-    return _get_journal_root(root) / JOURNAL_LOG_BASENAME
-
-
-def get_journal_manifest_path(root: Path) -> Path:
-    return _get_journal_root(root) / JOURNAL_MANIFEST_BASENAME
-
-
-def ensure_journal_dirs(root: Path) -> None:
-    """Idempotent creation of staging journal layout."""
-    jr = _get_journal_root(root)
-    (jr / JOURNAL_ARCHIVE_DIR).mkdir(parents=True, exist_ok=True)
-
-
-def _atomic_append_jsonl(log_path: Path, line: str) -> None:
-    """Best-effort atomic append for JSONL (tmp + rename on same fs; fallback to open a)."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = log_path.with_suffix(log_path.suffix + ".tmp")
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(line.rstrip("\n") + "\n")
-        # best effort atomic replace (works on POSIX; fallback rename may race but rare)
-        tmp.replace(log_path)
-    except Exception:
-        # fallback (non-atomic but functional)
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(line.rstrip("\n") + "\n")
-
-
-def append_journal_event(root: Path, event: "JournalEventV1") -> Dict[str, Any]:
-    """Append a validated v1 event to the structured JSONL under project lock."""
-    ensure_journal_dirs(root)
-    log_path = get_journal_log_path(root)
-    if JournalEventV1 is None or not isinstance(event, JournalEventV1):
-        # degraded path
-        line = json.dumps({"version": "v1-degraded", "event": str(event)}, ensure_ascii=False)
-    else:
-        line = event.to_jsonl_line()
-
-    if locking:
-        with locking.file_lock(root):
-            _atomic_append_jsonl(log_path, line)
-    else:
-        _atomic_append_jsonl(log_path, line)
-
-    return {"success": True, "log_path": str(log_path), "event_id": getattr(event, "event_id", "degraded")}
-
-
-def emit_journal_event(
-    root: Path,
-    *,
-    event_type: str,
-    file: str,
-    reason: str,
-    actor: Optional[Dict[str, Any]] = None,
-    session_id: Optional[str] = None,
-    acs_links: Optional[List[Dict[str, Any]]] = None,
-    rationale_links: Optional[List[str]] = None,
-    semantic_tags: Optional[List[str]] = None,
-    significance: Optional[float] = None,
-    extra: Optional[Dict[str, Any]] = None,
-    provenance: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Primary emitter for structured journal events (dual-write support).
-
-    Builds via contracts.make_journal_event (full actor/session/provenance/ACS links/significance).
-    Appends ONLY to the versioned JSONL (structured primary). The human daily MD
-    projection is written by the existing write_journal() in wikifier.sh (exact format preserved
-    for transition compatibility; no behavior change for journal readers).
-
-    Callers (sh record-change etc. via python -c, future Python library, daemon) use this.
-    Returns the emitted event dict + storage info.
-    """
-    if make_journal_event is None:
-        return {"success": False, "error": "contracts unavailable"}
-
-    ev = make_journal_event(
-        event_type=event_type,
-        file=file,
-        reason=reason,
-        actor=actor,
-        session_id=session_id,
-        acs_links=acs_links,
-        rationale_links=rationale_links,
-        semantic_tags=semantic_tags,
-        significance=significance,
-        extra=extra,
-        provenance=provenance,
-    )
-    res = append_journal_event(root, ev)
-    res["event"] = ev.to_dict()
-    res["schema"] = JOURNAL_SCHEMA_VERSION if "JOURNAL_SCHEMA_VERSION" in dir() else "v1"
-    return res
-
-
-# --- Streaming loader (scale: years of events, never OOM) ---
-def iter_journal_events(
-    root: Path,
-    *,
-    since: Optional[str] = None,
-    until: Optional[str] = None,
-    include_bad: bool = False,
-) -> Iterator[Dict[str, Any]]:
-    """Defensive streaming reader over the v1 JSONL. Yields dicts (from JournalEventV1.from_dict)."""
-    log_path = get_journal_log_path(root)
-    if not log_path.exists():
-        return
-    try:
-        with open(log_path, "r", encoding="utf-8") as f:
-            for raw in f:
-                line = raw.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    ev = JournalEventV1.from_dict(obj) if JournalEventV1 else obj
-                    d = ev.to_dict() if hasattr(ev, "to_dict") else ev
-                    # simple ts filter (string prefix match is sufficient for skeleton)
-                    ts = d.get("ts", "")
-                    if since and ts < since:
-                        continue
-                    if until and ts > until:
-                        continue
-                    yield d
-                except Exception:
-                    if include_bad:
-                        yield {"_bad": True, "raw": line[:200]}
-                    continue
-    except Exception:
-        return
-
-
-# --- Compaction manifest (for safe, auditable, reversible compaction) ---
-def load_journal_manifest(root: Path) -> Dict[str, Any]:
-    mpath = get_journal_manifest_path(root)
-    if mpath.exists():
-        try:
-            with open(mpath, "r", encoding="utf-8") as f:
-                m = json.load(f)
-            if not isinstance(m, dict):
-                m = {}
-            m.setdefault("version", "1")
-            m.setdefault("compactions", [])
-            return m
-        except Exception:
-            pass
-    return {
-        "version": "1",
-        "created": _timestamp(),
-        "compactions": [],
-        "active_log": str(get_journal_log_path(root)),
-        "notes": "M2 Workstream C compaction manifest. Never delete archives without updating this.",
-    }
-
-
-def _save_journal_manifest(root: Path, manifest: Dict[str, Any]) -> None:
-    mpath = get_journal_manifest_path(root)
-    ensure_journal_dirs(root)
-    manifest["last_updated"] = _timestamp()
-    if locking:
-        with locking.file_lock(root):
-            with open(mpath, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2, ensure_ascii=False)
-    else:
-        with open(mpath, "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=2, ensure_ascii=False)
-
-
-def compact_journal(
-    root: Path,
-    *,
-    dry_run: bool = True,
-    max_age_days: float = 90.0,
-    min_significance: float = 0.60,
-    keep_forever_significant: bool = True,
-) -> Dict[str, Any]:
-    """
-    Safe, time + significance based compaction skeleton (M2 C).
-
-    Policy:
-    - An event is a compaction candidate if (now - ts > max_age_days) AND
-      (significance < min_significance OR not keep_forever for high sig).
-    - High-significance or recent events stay in active log forever.
-    - Dry-run: full analysis + would-be manifest entry, zero writes, zero deletes.
-    - Live: rewrite active JSONL with only kept events (streaming), move compacted
-      slice to archives/<compact-id>/events.jsonl , record full manifest entry
-      (policy, counts, byte sizes, ts ranges, archive path, checksum stub).
-      Manifest makes the operation auditable and reversible (replay archive into
-      active + drop manifest entry is possible manually or in future tool).
-
-    Returns rich report suitable for health/MCP/journal query.
-    Never corrupts; on any error during live, leaves original intact.
-    """
-    ensure_journal_dirs(root)
-    log_path = get_journal_log_path(root)
-    report: Dict[str, Any] = {
-        "dry_run": dry_run,
-        "policy": {
-            "max_age_days": max_age_days,
-            "min_significance": min_significance,
-            "keep_forever_significant": keep_forever_significant,
-        },
-        "started": _timestamp(),
-        "before": {"events": 0, "bytes": 0},
-        "kept": 0,
-        "compacted": 0,
-        "after": {"events": 0, "bytes": 0},
-        "archive_path": None,
-        "manifest_id": None,
-        "errors": [],
-    }
-
-    if not log_path.exists():
-        report["note"] = "No journal log yet"
-        return report
-
-    try:
-        before_bytes = log_path.stat().st_size
-        report["before"]["bytes"] = before_bytes
-    except Exception:
-        before_bytes = 0
-
-    cutoff = None
-    try:
-        from datetime import datetime, timedelta, timezone
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
-    except Exception:
-        cutoff = None
-
-    kept_events: List[Dict[str, Any]] = []
-    compacted_events: List[Dict[str, Any]] = []
-    total = 0
-
-    for ev in iter_journal_events(root, include_bad=False):
-        total += 1
-        ts = ev.get("ts", "")
-        sig = float(ev.get("significance", 0.5))
-        is_old = (cutoff is None) or (ts < cutoff)
-        is_low_sig = sig < min_significance
-        should_compact = is_old and (is_low_sig or not (keep_forever_significant and sig >= 0.85))
-
-        if should_compact:
-            compacted_events.append(ev)
-        else:
-            kept_events.append(ev)
-
-    report["before"]["events"] = total
-    report["kept"] = len(kept_events)
-    report["compacted"] = len(compacted_events)
-
-    # Build would-be / real manifest entry
-    compact_id = f"comp-{datetime.now().strftime('%Y%m%d-%H%M%S')}" if "datetime" in dir() else f"comp-{total}"
-    archive_sub = _get_journal_root(root) / JOURNAL_ARCHIVE_DIR / compact_id
-    report["manifest_id"] = compact_id
-    report["archive_path"] = str(archive_sub)
-
-    manifest_entry = {
-        "id": compact_id,
-        "ts": _timestamp(),
-        "policy": report["policy"],
-        "before_count": total,
-        "kept_count": len(kept_events),
-        "compacted_count": len(compacted_events),
-        "before_bytes": before_bytes,
-        "archive": str(archive_sub),
-        "dry_run": dry_run,
-        "reversible": True,
-        "notes": "Use manifest + archives to reconstruct if needed. Do not manually delete.",
-    }
-
-    if dry_run:
-        report["would_compact_examples"] = compacted_events[:3]
-        report["would_write_manifest"] = manifest_entry
-        report["note"] = "DRY RUN — nothing written. Re-run without --dry-run to apply."
-        return report
-
-    # LIVE (careful, under lock for the whole mutation window)
-    try:
-        if locking:
-            lock_ctx = locking.file_lock(root)
-        else:
-            lock_ctx = None  # type: ignore
-
-        def _do_compact():
-            nonlocal report
-            # 1. write kept to a fresh active (tmp then replace)
-            tmp_active = log_path.with_suffix(".compacting")
-            with open(tmp_active, "w", encoding="utf-8") as f:
-                for e in kept_events:
-                    if JournalEventV1:
-                        evo = JournalEventV1.from_dict(e)
-                        f.write(evo.to_jsonl_line() + "\n")
-                    else:
-                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
-
-            # 2. ensure archive dir, write compacted slice
-            archive_sub.mkdir(parents=True, exist_ok=True)
-            archive_log = archive_sub / "events.jsonl"
-            with open(archive_log, "w", encoding="utf-8") as f:
-                for e in compacted_events:
-                    if JournalEventV1:
-                        evo = JournalEventV1.from_dict(e)
-                        f.write(evo.to_jsonl_line() + "\n")
-                    else:
-                        f.write(json.dumps(e, ensure_ascii=False) + "\n")
-
-            # 3. replace active
-            tmp_active.replace(log_path)
-
-            # 4. update manifest
-            m = load_journal_manifest(root)
-            m["compactions"].append(manifest_entry)
-            m["last_compaction"] = compact_id
-            _save_journal_manifest(root, m)
-
-            report["after"]["events"] = len(kept_events)
-            try:
-                report["after"]["bytes"] = log_path.stat().st_size
-            except Exception:
-                pass
-            report["success"] = True
-
-        if lock_ctx:
-            with lock_ctx:
-                _do_compact()
-        else:
-            _do_compact()
-
-    except Exception as ex:
-        report["errors"].append(str(ex))
-        report["success"] = False
-        report["note"] = "Compaction aborted — original log and manifest untouched."
-        # best effort cleanup of partial archive (leave for operator)
-        return report
-
-    return report
-
-
-# Extend CLI for skeleton usability (python -m wikifier.health journal-compact --dry-run etc.)
-# (The dispatch logic is updated in the __main__ block below)
-
-
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
@@ -1200,27 +1159,18 @@ if __name__ == "__main__":
         print("Commands:")
         print("  summary                  Show counts")
         print("  upsert <file> <status> [reason]   Add/update a file")
-        print("  needs-attention          List files needing work")
+        print("  needs-attention [dir] [--include-meta]  List needing (B6: meta files like file_health.* suppressed by default unless 🔴)")
         print("  heal-stubs [--dry-run]   Auto-heal outdated 'Initial stub' entries")
         print("  healable-stubs [dir]     List entries that can be auto-healed")
         print("  healing-stats            Show stub pollution + healing opportunities")
         print("  prune-barrels [max_days] [ --dry-run ]   Lightweight age-based BRC pruning (default 90d)")
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-        print("  mark-green <file> [reason]   Idempotent Green + clear pending (locked)")
+        print("  mark-green <file> [reason]   Idempotent Green + clear pending + wiki hash capture (B2)")
+        print("  mark-wiki-refresh <file> [reason]  Explicit wiki_content_hash + last_wiki_refresh capture (locked)")
+        print("  record-meaningful <file> [reason] [journal_ref]  Set last_meaningful_edit (ties to journal semantic; for record-change)")
+        print("  stale-wikis [dir] [limit]    List files with stale wikis (B3 detector; rich diags + confidence)")
         print("  remove-pending <file>        Idempotent remove from pending_updates (locked)")
         print("  add-pending <file> <msg>     Idempotent add to pending (locked)")
         print("  validate                     Report files missing health entries (no subshell)")
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
         sys.exit(1)
 
     root = Path(".")
@@ -1247,8 +1197,14 @@ if __name__ == "__main__":
         print(f"Updated: {file} → {status}")
 
     elif cmd == "needs-attention":
-        directory = sys.argv[2] if len(sys.argv) > 2 else None
-        files = get_files_needing_attention(root, directory=directory)
+        directory = None
+        include = False
+        for a in sys.argv[2:]:
+            if a == "--include-meta":
+                include = True
+            elif not a.startswith("--"):
+                directory = a
+        files = get_files_needing_attention(root, directory=directory, include_meta=include)
         for f in files:
             print(f)
 
@@ -1319,11 +1275,6 @@ if __name__ == "__main__":
         except Exception as ex:
             print(f"Prune-barrels error: {ex}")
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
     elif cmd == "mark-green":
         if len(sys.argv) < 3:
             print("Usage: python -m wikifier.health mark-green <file> [reason]")
@@ -1332,10 +1283,60 @@ if __name__ == "__main__":
         reason = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else ""
         try:
             mark_green(root, file, reason)
-            print(f"🟢 Marked Green (and pending cleared if present): {file}")
+            print(f"🟢 Marked Green (and pending cleared if present; wiki hash captured for B2 freshness): {file}")
         except Exception as e:
             print(f"mark-green error: {e}")
             sys.exit(1)
+
+    elif cmd == "mark-wiki-refresh":
+        if len(sys.argv) < 3:
+            print("Usage: python -m wikifier.health mark-wiki-refresh <file> [reason]")
+            sys.exit(1)
+        file = sys.argv[2]
+        reason = " ".join(sys.argv[3:]) if len(sys.argv) > 3 else ""
+        try:
+            mark_wiki_refresh(root, file, reason)
+            print(f"Wiki refresh captured (content hash + last_wiki_refresh set): {file}")
+        except Exception as e:
+            print(f"mark-wiki-refresh error: {e}")
+            sys.exit(1)
+
+    elif cmd == "record-meaningful":
+        if len(sys.argv) < 3:
+            print("Usage: python -m wikifier.health record-meaningful <file> [reason] [journal_ref]")
+            sys.exit(1)
+        file = sys.argv[2]
+        reason = sys.argv[3] if len(sys.argv) > 3 else ""
+        journal_ref = sys.argv[4] if len(sys.argv) > 4 else None
+        try:
+            record_meaningful_edit(root, file, reason, journal_ref=journal_ref)
+            print(f"Meaningful edit recorded (last_meaningful_edit + provenance set for stale detector): {file}")
+        except Exception as e:
+            print(f"record-meaningful error: {e}")
+            sys.exit(1)
+
+    elif cmd in ("stale-wikis", "stale-wiki", "detect-stale"):
+        directory = None
+        limit = 200
+        for a in sys.argv[2:]:
+            if a.isdigit():
+                limit = int(a)
+            elif not a.startswith("--"):
+                directory = a
+        stales = get_stale_wikis(root, directory=directory, limit=limit)
+        if not stales:
+            print("No stale wikis detected (all wikis are in sync with recorded meaningful edits).")
+        else:
+            print(f"Detected {len(stales)} stale wiki(s){' (limited)' if len(stales)==limit else ''}:")
+            for s in stales:
+                print(f"  {s['file']} (conf={s['confidence']})")
+                print(f"     Reasons: {'; '.join(s['reasons'])}")
+                if s.get("wiki_file"):
+                    print(f"     Wiki: {s['wiki_file']}")
+                if s.get("last_meaningful_edit"):
+                    print(f"     Last intent: {s['last_meaningful_edit']} | Last wiki refresh: {s.get('last_wiki_refresh')}")
+                print(f"     Rec: {s['recommendation']}")
+                print()
 
     elif cmd == "remove-pending":
         if len(sys.argv) < 3:
@@ -1380,12 +1381,5 @@ if __name__ == "__main__":
             print(f"validate error: {e}")
             sys.exit(1)
 
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
     else:
         print(f"Unknown command: {cmd}")

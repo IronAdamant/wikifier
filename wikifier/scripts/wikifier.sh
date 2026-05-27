@@ -89,7 +89,7 @@ PENDING_UPDATES="$PROJECT_ROOT/pending_updates.md"
 LIBRARY_MD="$PROJECT_ROOT/library.md"
 POLL_INTERVAL="${WIKIFIER_POLL_INTERVAL:-30}"
 
-mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT" "$STAGING_DIR/journal/v1"
+mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
 
 # ----------------------------- Helper Functions -----------------------------
 
@@ -137,52 +137,51 @@ build_exclude_expr() {
     fi
 }
 
-# Upsert a row in the health matrix — now thin wrapper delegating to Python for idempotency/atomicity/locking/JSON+MD sync.
-# Legacy direct MD manipulation removed (was root cause of dups, races, drift under concurrency).
-# Kept for any external/embedded callers; always safe now.
+# Upsert a row in the Markdown health table (very simple but effective)
+# We treat file_health.md as the single source of truth.
 upsert_health() {
     local file="$1"
-    local status="$2"
+    local status="$2"          # 🟢 or 🟡 or 🔴
     local reason="${3:-}"
-    if [[ -z "$file" || -z "$status" ]]; then
-        error "upsert_health: file and status required"
-        return 1
-    fi
-    python3 -m wikifier.health upsert "$file" "$status" "$reason" 2>/dev/null || {
-        # Last-resort fallback (rare): direct (still better than nothing, but agents should use py path)
-        # This fallback is intentionally non-ideal to encourage migration to locked Python path.
-        log "WARN: Python upsert unavailable; using minimal direct MD (not recommended under concurrency)"
-        local now; now=$(timestamp)
-        if [[ ! -f "$FILE_HEALTH" ]]; then
-            cat > "$FILE_HEALTH" << 'EOT'
+
+    local now
+    now=$(timestamp)
+
+    # Ensure file exists with header
+    if [[ ! -f "$FILE_HEALTH" ]]; then
+        cat > "$FILE_HEALTH" << 'EOT'
 # Documentation Health Matrix
 
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
 EOT
-        fi
-        local safe_file; safe_file=$(printf '%s' "$file" | sed 's/[\/&]/\\&/g')
-        if grep -qF "| $file |" "$FILE_HEALTH" 2>/dev/null; then
-            sed -i.bak "s#| $safe_file | .* | .* | .* |#| $file | $status | $now | $reason |#" "$FILE_HEALTH" && rm -f "$FILE_HEALTH.bak" || true
-        else
-            echo "| $file | $status | $now | $reason |" >> "$FILE_HEALTH" || true
-        fi
-    }
+    fi
+
+    # Escape for sed (basic)
+    local safe_file
+    safe_file=$(printf '%s' "$file" | sed 's/[\/&]/\\&/g')
+
+    # Check if file already has an entry
+    if grep -qF "| $file |" "$FILE_HEALTH" 2>/dev/null; then
+        # Update existing row (replace the whole line)
+        local new_line="| $file | $status | $now | $reason |"
+        sed -i.bak "s#| $safe_file | .* | .* | .* |#$new_line#" "$FILE_HEALTH" && rm -f "$FILE_HEALTH.bak"
+    else
+        # Append new row
+        echo "| $file | $status | $now | $reason |" >> "$FILE_HEALTH"
+    fi
 }
 
-# Mark a file Green (convenience) — now delegates to reliable locked Python helper
-# This guarantees: single atomic lock for health+pending, no dups, idempotent, consistent with JSON source.
+# Mark a file Green (convenience)
 mark_green() {
     local file="$1"
-    local reason="${2:-Wiki summary verified accurate after change.}"
-    if [[ -z "$file" ]]; then
-        error "mark_green: file required"
-        return 1
+    local reason="${2:-Summary updated and verified accurate.}"
+    upsert_health "$file" "🟢 Green" "$reason"
+    # Remove from pending if present
+    if [[ -f "$PENDING_UPDATES" ]]; then
+        grep -vF "$file" "$PENDING_UPDATES" > "$PENDING_UPDATES.tmp" || true
+        mv "$PENDING_UPDATES.tmp" "$PENDING_UPDATES"
     fi
-    python3 -m wikifier.health mark-green "$file" "$reason" || {
-        error "mark-green Python helper failed for $file"
-        return 1
-    }
 }
 
 # Append to pending_updates.md
@@ -192,10 +191,7 @@ add_pending() {
     echo "- $file: $msg" >> "$PENDING_UPDATES"
 }
 
-# Write a journal entry (dual-write for M2 Workstream C)
-# MD projection (human daily) format is 100% unchanged for backward compat.
-# Structured v1 JSONL is additionally emitted to .wikifier_staging/journal/v1/events.jsonl
-# via the health.py + contracts.py emitter (actor/session/provenance/ACS links/significance).
+# Write a journal entry
 write_journal() {
     local action="$1"   # "record-change", "record-deletion", "auto-detected", etc.
     local file="$2"
@@ -206,38 +202,12 @@ write_journal() {
     mkdir -p "$day_dir"
     local journal_file="$day_dir/$(date +%d).md"
 
-    # Existing human-readable daily MD projection (exact, untouched)
     cat >> "$journal_file" << EOM
 ## [$(timestamp)] $action
 **File:** $file
 **Reason:** $reason
 
 EOM
-
-    # Dual-write: structured event (primary durable log). Best-effort, never breaks MD path.
-    # Uses python path for typed JournalEventV1 emission + locking + provenance capture.
-    if command -v python3 >/dev/null 2>&1; then
-        python3 -c '
-import os, sys
-from pathlib import Path
-try:
-    from wikifier.health import emit_journal_event
-    root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT") or ".").resolve()
-    sess = os.environ.get("WIKIFIER_SESSION_ID")
-    res = emit_journal_event(
-        root,
-        event_type="'"$action"'",
-        file="'"$file"'",
-        reason="'"$reason"'",
-        session_id=sess,
-    )
-    if not res.get("success"):
-        print("[journal] structured dual-write warning:", res.get("error"), file=sys.stderr)
-except Exception as ex:
-    # Never fail the human path on structured issues (transition safety)
-    print("[journal] structured dual-write best-effort skipped:", ex, file=sys.stderr)
-' 2>/dev/null || true
-    fi
 }
 
 # Simple cross-language import discovery (extendable)
@@ -1187,6 +1157,52 @@ for k, v in json.load(sys.stdin).items():
         files_to_reparse=("${python_files[@]}" "${js_files[@]}")
     fi
 
+    # A1 Wave 3 Agent 2 final wiring (scale dogfood polish): delta-correct reverse for reparsed sources.
+    # Pre-load gave full prior reverse (incl. old contribs of now-dirty srcs). For each to-reparse source:
+    # use remove_source_from_reverse_index (O(its old edges) via maintain_ + its cache entry) on a snapshot
+    # to produce cleaned rev, then repopulate shell assoc from it. New edges added during reparse via record.
+    # Result: correct full reverse at persist time (no stale removed-imports/rename contribs). Exercises new
+    # helpers. O(changed) total. 50k+ safe (no full scans). Mirrors wikifier.sh .
+    if [[ ${#files_to_reparse[@]} -gt 0 ]]; then
+        reparses_for_a1=$(printf '%s\n' "${files_to_reparse[@]}")
+        cleaned_rev_json=$(python3 -c '
+import sys, json, os
+from pathlib import Path
+import wikifier.import_cache as ic
+root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT", os.environ.get("WIKIFIER_ROOT", "."))).resolve()
+reparse_paths = [line.strip() for line in sys.stdin if line.strip()]
+try:
+    cache = ic.load_cache(root)
+    for f in reparse_paths:
+        try:
+            pf = Path(f)
+            if pf.is_absolute():
+                rel = str(pf.resolve().relative_to(root))
+            else:
+                rel = str((root / pf).resolve().relative_to(root))
+        except Exception:
+            rel = f
+        ic.remove_source_from_reverse_index(cache, rel)
+    cleaned = ic.get_reverse_dependencies(cache)
+    print(json.dumps(cleaned))
+except Exception as ex:
+    print("{}", file=sys.stderr)
+    print("{}")
+' <<< "$reparses_for_a1" 2>/dev/null || echo '{}')
+        if [[ -n "$cleaned_rev_json" && "$cleaned_rev_json" != "{}" && "$cleaned_rev_json" != "" ]]; then
+            unset reverse_deps 2>/dev/null || true
+            declare -gA reverse_deps=()
+            echo "$cleaned_rev_json" | python3 -c '
+import json, sys
+for k, v in json.load(sys.stdin).items():
+    print(f"{k}|{",".join(v)}")
+' 2>/dev/null | while IFS='|' read -r tgt sources; do
+                [[ -n "$tgt" ]] && reverse_deps["$tgt"]="$sources"
+            done
+            reverse_deps_loaded=1
+        fi
+    fi
+
     # === Phase 2: BREE Barrel Cache Invalidation integrated into first-pass ===
     # Uses mtimes_snapshot + reverse index to mark *only* affected importers dirty.
     # This is the key fix for barrel staleness (change deep barrel, only its consumers re-expand).
@@ -1976,11 +1992,6 @@ EOF
 }
 
 cmd_check_changes() {
-    # Defensive: disable set -e inside this complex cmd (many protected py calls, find, realpath, date, journal appends).
-    # Re-enable after. Combined with explicit exit 0 in main + || true everywhere, guarantees 0 on success paths.
-    # This permanently fixes the "check-changes non-zero even on success" flakiness.
-    set +e
-
     log "Running incremental change detection..."
 
     local last_ts
@@ -2013,19 +2024,10 @@ cmd_check_changes() {
             local rel_file
             rel_file=$(realpath --relative-to="$PROJECT_ROOT" "$file" 2>/dev/null || echo "$file")
 
-<<<<<<< HEAD
             upsert_health "$rel_file" "🟡 Yellow" "mtime changed since last check-changes (auto-detected)"
             # Collect for delta barrel reports (Wave continuation: pass changed list to BRC get_reports for O(changed) + rich auto-Yellow only on relevant)
             changed_files_list+="${rel_file}"$'\n'
             add_pending "$rel_file" "Auto-detected modification — review and run mark-green after wiki update"
-=======
-            # Delegate mutations to reliable Python helpers (locked + idempotent).
-            # Eliminates duplicate rows, MD/JSON drift, and races with mark-green / other agents.
-            python3 -m wikifier.health upsert "$rel_file" "🟡 Yellow" "mtime changed since last check-changes (auto-detected)" 2>/dev/null || true
-            # Collect for delta barrel reports ...
-            changed_files_list+="${rel_file}"$'\n'
-            python3 -m wikifier.health add-pending "$rel_file" "Auto-detected modification — review and run mark-green after wiki update" 2>/dev/null || true
->>>>>>> agent-3-health-reliability
             write_journal "auto-detected" "$rel_file" "File mtime changed (check-changes)"
 
             ((changed++))
@@ -2071,22 +2073,6 @@ if n > 0:
     print(f"[barrel] auto-marked {n} importer(s) Yellow via BRC reports (daemon/check-changes)")
 ' 2>/dev/null || true
     fi
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-
-    # Explicit success for consistent exit codes (fixes flakiness where check-changes would exit non-zero on benign conditions)
-    set -e
-    return 0
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
 }
 
 cmd_health() {
@@ -2106,14 +2092,13 @@ cmd_record_change() {
         exit 1
     fi
 
-    # Delegate health+pending mutations to locked Python helpers (idempotent, atomic, JSON+MD consistent)
-    python3 -m wikifier.health upsert "$file" "🟡 Yellow" "$reason" || true
-    python3 -m wikifier.health add-pending "$file" "LLM/agent edit — $reason" || true
+    upsert_health "$file" "🟡 Yellow" "$reason"
+    add_pending "$file" "LLM/agent edit — $reason"
     write_journal "record-change" "$file" "$reason"
 
     log "✅ Recorded semantic change for $file"
     log "   Reason: $reason"
-    log "   → health matrix updated to Yellow via Python (locked). Run mark-green after wiki summary is refreshed."
+    log "   → file_health.md updated to Yellow. Run mark-green after wiki summary is refreshed."
 }
 
 cmd_record_deletion() {
@@ -2125,9 +2110,8 @@ cmd_record_deletion() {
         exit 1
     fi
 
-    # Delegate to Python (locked, no dups, consistent source of truth)
-    python3 -m wikifier.health upsert "$file" "🔴 Red" "DELETED — $reason" || true
-    python3 -m wikifier.health add-pending "$file" "File was deleted. Consider removing wiki entry or marking archival." || true
+    upsert_health "$file" "🔴 Red" "DELETED — $reason"
+    add_pending "$file" "File was deleted. Consider removing wiki entry or marking archival."
     write_journal "record-deletion" "$file" "$reason"
 
     # Wave 4 GC continuation: deletion-triggered BRC prune (removes chains/importers/index refs mentioning the deleted path)
@@ -2146,6 +2130,33 @@ try:
         print(f"[barrel] GC pruned {p} BRC entries (age+del) referencing deleted path on record-deletion", file=sys.stderr)
 except Exception as ex:
     print(f"[barrel] prune-on-delete best-effort skipped: {ex}", file=sys.stderr)
+' 2>/dev/null || true
+
+        # A1 Wave 3 Agent 2: apply_record_deletion_to_reverse_index (removes as source via maintain_ + as target key).
+        # Long-term scalable, exercises the new helpers, keeps reverse accurate after renames/deletes without rebuild.
+        # Uses best-effort rel norm (realpath relative or as-provided). Updates sig. Saves only on success.
+        python3 -c '
+import os, sys
+from pathlib import Path
+try:
+    from wikifier.import_cache import apply_record_deletion_to_reverse_index
+    root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT") or ".").resolve()
+    farg = "'"$file"'"
+    try:
+        pf = Path(farg)
+        if pf.is_absolute():
+            rel = str(pf.resolve().relative_to(root))
+        else:
+            rel = str((root / pf).resolve().relative_to(root))
+    except Exception:
+        rel = farg
+    cache = __import__("wikifier.import_cache", fromlist=["load_cache"]).load_cache(root)
+    stats_before = __import__("wikifier.import_cache", fromlist=["get_reverse_dependency_stats"]).get_reverse_dependency_stats(cache)
+    new_stats = apply_record_deletion_to_reverse_index(cache, rel)
+    __import__("wikifier.import_cache", fromlist=["save_cache"]).save_cache(root, cache)
+    print(f"[A1] reverse cleaned for deleted {rel}: targets={new_stats.get(\"target_count\",0)} edges={new_stats.get(\"total_reverse_edges\",0)} (was targets={stats_before.get(\"target_count\",0)})", file=sys.stderr)
+except Exception as ex:
+    print(f"[A1] reverse clean on delete best-effort skipped: {ex}", file=sys.stderr)
 ' 2>/dev/null || true
     fi
 
@@ -2206,6 +2217,95 @@ EOT
     if [[ "${1:-}" == "--full" ]]; then
         full_rebuild=true
         log "Full rebuild requested (--full)"
+    fi
+
+    # Micro-step start: A2 streaming/partial parity detection (additive, no behavior change yet)
+    # When any of these flags are present we will eventually delegate more work to the
+    # Python streaming generator instead of always doing a full traditional rebuild.
+    local streaming_requested=false
+    for arg in "$@"; do
+        case "$arg" in
+            --stream|--stream=*|--resume|--resume=*|--max-time|--max_time|--max-time=*|--max_time=*|--progress|--progress=*|--partial)
+                streaming_requested=true
+                break
+                ;;
+        esac
+    done
+    if $streaming_requested; then
+        log "A2 streaming/partial flags detected — delegating core work to Python run_update_stream"
+
+        # Extract common streaming parameters from the original arguments
+        local dir_arg=""
+        local max_files_arg=""
+        local resume_arg=""
+        local max_time_arg=""
+
+        for arg in "$@"; do
+            case "$arg" in
+                --dir=*|--directory=*) dir_arg="${arg#*=}" ;;
+                --dir|--directory)
+                    # next argument
+                    ;;
+                --max-files=*) max_files_arg="${arg#*=}" ;;
+                --max-files)
+                    ;;
+                --resume=*) resume_arg="${arg#*=}" ;;
+                --resume)
+                    ;;
+                --max-time=*) max_time_arg="${arg#*=}" ;;
+                --max-time)
+                    ;;
+            esac
+        done
+
+        # Handle cases where value is in next positional arg (simple handling)
+        # For a first pass we rely mostly on = form; can be improved later.
+
+        python3 -c '
+import sys
+from pathlib import Path
+import wikifier.import_cache as ic
+
+root = Path(".")
+kwargs = {}
+
+# Pass through parameters if provided
+if "'"${dir_arg}"'":
+    kwargs["directory"] = "'"${dir_arg}"'"
+if "'"${max_files_arg}"'":
+    try:
+        kwargs["max_files"] = int("'"${max_files_arg}"'")
+    except:
+        pass
+if "'"${resume_arg}"'":
+    kwargs["resume_from"] = "'"${resume_arg}"'"
+if "'"${max_time_arg}"'":
+    try:
+        mt = float("'"${max_time_arg}"'")
+        kwargs["time_budget_ms"] = int(mt * 1000) if mt < 1000 else int(mt)
+    except:
+        pass
+
+try:
+    ev_count = 0
+    file_count = 0
+    for ev in ic.run_update_stream(root=root, format="full", **kwargs):
+        ev_count += 1
+        # Robust event type extraction (dataclass or dict from contracts ProgressEvent_v1)
+        if isinstance(ev, dict):
+            et = ev.get("event") or ev.get("type") or ev.get("kind") or ""
+            if et == "file_parsed" or ("file" in ev or "path" in ev):
+                file_count += 1
+        else:
+            et = getattr(ev, "event", None) or getattr(ev, "type", None) or getattr(ev, "kind", None) or ""
+            if et == "file_parsed":
+                file_count += 1
+        if ev_count % 25 == 0:
+            print(".", end="", flush=True)
+    print(f"\n[shell] Python streaming delegation completed ({ev_count} events, ~{file_count} files)")
+except Exception as e:
+    print(f"[shell] Streaming delegation error (will continue with traditional path): {e}", file=sys.stderr)
+' 2>&1 || log "Streaming delegation encountered an issue (continuing traditionally)"
     fi
 
     local paths
@@ -2323,52 +2423,33 @@ if acs.get("total_scored_edges"):
 print("\n> Machine-readable: `wikifier cycles`, MCP `get_cycles(format=\"json\", analysis=True)`. CIABRE v1.3 (R5 + registry ext): severity+blast+weakest + ranked practical recs (full rationale/hint/safety, ACS refs) from dogfood-tuned rules. ACS summary + samples in _acs_summary. Full in cache.\n")
 ' 2>/dev/null || echo "\n## Circular Dependencies\n(Requires update-maps run to populate cache.)\n" ) >> "$LIBRARY_MD"
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-    # M2 Workstream D Resolution Transparency (parser parity + import_cache helpers): first-class unresolved/low-conf in library.md
-    # Makes failure modes (no resolved_path, low conf, diagnostics with agent suggestions) visible without grepping cache or MCP.
-    # Uses new get_unresolved_imports / get_low_confidence_edges + existing diagnostics aggregate. Bounded samples. Ties to ACS/CIABRE.
+    # A1: "Who depends on me" / Reverse Dependencies section in library.md (first-class index)
     ( python3 -c '
 from pathlib import Path
 import wikifier.import_cache as ic
 root = Path(".")
 cache = ic.load_cache(root)
-unres = ic.get_unresolved_imports(cache, max_results=8) or []
-lowc = ic.get_low_confidence_edges(cache, max_results=8) or []
-diag = ic.ensure_diagnostics_aggregate(cache) or {}
-if unres or lowc or diag.get("low_or_unresolved_count", 0) > 0:
-    print("\n## Resolution Transparency (Unresolved / Low-Confidence Imports)")
-    print(f"**Low or unresolved count**: {diag.get(\"low_or_unresolved_count\", 0)} (see get_resolution_diagnostics for by_category + full samples)")
-    print(f"**Sample unresolved/low-conf edges** (src | raw -> resolved | conf | has_path | has_diag):")
-    seen = set()
-    for e in (unres + lowc)[:8]:
-        src = e.get("src", "?")
-        raw = (e.get("raw") or e.get("raw_module") or "?")[:40]
-        res = (e.get("resolved") or e.get("module") or "?")[:40]
-        conf = e.get("confidence") or e.get("resolution_confidence") or "?"
-        has_p = "yes" if e.get("resolved_path") else "no"
-        has_d = "yes" if e.get("diagnostic") else "no"
-        key = (src, raw)
-        if key in seen: continue
-        seen.add(key)
-        print(f"  - {src}: {raw} -> {res} | conf={conf} | path={has_p} | diag={has_d}")
-    print("> Actionable: use `get_dependencies(..., unresolved_only=True, format=\"json\")` or MCP `get_unresolved_imports` equivalent for full list + suggestions. Python/JS parser parity now provides resolved_path + per-edge (parser/strategy/resolution_metadata) + rich diagnostics for these edges.")
-    print("> Ties into ACS (low<0.65 hotspots) + CIABRE weakest links. No important resolution limitation is hidden.\n")
-' 2>/dev/null || echo "\n## Resolution Transparency\n(Requires update-maps + cache population for unresolved/low-conf surfaces.)\n" ) >> "$LIBRARY_MD"
+rev = ic.get_reverse_dependencies(cache) or {}
+stats = ic.get_reverse_dependency_stats(cache)
+sig = ic.get_reverse_signature(cache)
+print("\n## Reverse Dependencies (A1 First-Class Index — \"Who depends on me\")")
+print(f"**Targets with dependents**: {stats.get(\"target_count\", 0)} | **Total reverse edges**: {stats.get(\"total_reverse_edges\", 0)} | **Signature**: {sig or \"n/a\"} (delta-detectable, O(changed) maintained)")
+print()
+if rev:
+    # High-impact: sort by #dependents desc, bounded for scale (50k+ safe)
+    high = sorted(rev.items(), key=lambda kv: -len(kv[1]))[:10]
+    print("**High-impact modules (most reverse dependents — blast radius leaders)**:")
+    for tgt, srcs in high:
+        cnt = len(srcs)
+        sample = ", ".join(srcs[:4])
+        print(f"- `{tgt}` ← {cnt} files depend on it (e.g. {sample})")
+    print()
+    print("> Per-file \"Who depends on me\": use MCP `get_reverse_dependencies(target=\"...\")` or `get_dependents` (both O(1) from index, include signature+stats in JSON). Full map via Python `from wikifier import get_reverse_dependencies` + cache.")
+else:
+    print("(No reverse dependencies recorded — run `update-maps` to populate first-class index.)")
+print("> Scalable: direct from persisted _reverse_dependencies (no rebuild). See contracts + import_cache for maintain_ API on renames/deletes.\n")
+' 2>/dev/null || echo "\n## Reverse Dependencies (A1)\n(Requires update-maps + cache.)\n" ) >> "$LIBRARY_MD"
 
->>>>>>> agent-5-transparency
-=======
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
     ( python3 -c '
 from pathlib import Path
 import wikifier.import_cache as ic
@@ -2444,9 +2525,8 @@ EOT
 }
 
 cmd_validate() {
-    log "Validating that every monitored file has a health entry (via reliable Python helper)..."
+    log "Validating that every monitored file has a health entry..."
 
-<<<<<<< HEAD
     local missing=0
     local exclude
     exclude=$(build_exclude_expr)
@@ -2468,16 +2548,6 @@ cmd_validate() {
     else
         log "⚠️  $missing file(s) lack wiki entries. Run update-maps + create summaries."
     fi
-=======
-    # Fixed: delegated entirely to Python validate_health() which:
-    # - has no subshell scoping bugs for counters
-    # - uses health JSON (or migration) as source of truth
-    # - produces consistent output + bounded results
-    # - always exits 0 (informational command); missing count is reported
-    python3 -m wikifier.health validate 2>&1 || {
-        log "⚠️  validate helper encountered an issue (non-fatal; continuing)"
-    }
->>>>>>> agent-3-health-reliability
 }
 
 cmd_journal() {
@@ -2545,19 +2615,7 @@ cmd_init() {
     FILE_HEALTH="$PROJECT_ROOT/file_health.md"
     PENDING_UPDATES="$PROJECT_ROOT/pending_updates.md"
     LIBRARY_MD="$PROJECT_ROOT/library.md"
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
-=======
-    mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT" "$STAGING_DIR/journal/v1"
->>>>>>> agent-4-journal
-=======
-    mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
->>>>>>> agent-7-harness-final
-=======
-    mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
->>>>>>> agent-6-library-final
 
     [[ ! -f "$MONITORED_PATHS_FILE" ]] && echo "." > "$MONITORED_PATHS_FILE"
     [[ ! -f "$EXCLUDE_PATTERNS_FILE" ]] && cat > "$EXCLUDE_PATTERNS_FILE" << 'EOT'
@@ -2591,35 +2649,10 @@ EOT
     # Create .wikifier/ marker dir for upward discovery (MCP + future tools)
     mkdir -p "$PROJECT_ROOT/.wikifier"
     echo "project_root=$PROJECT_ROOT" > "$PROJECT_ROOT/.wikifier/config" 2>/dev/null || true
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
 
     # Seed a first health entry for the tool itself
     upsert_health "wikifier.sh" "🟢 Green" "Core CLI implemented and documented."
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-
-    # Seed a first health entry for the tool itself — via reliable Python (creates JSON + MD, locked, idempotent)
-    python3 -m wikifier.health upsert "wikifier.sh" "🟢 Green" "Core CLI implemented and documented." 2>/dev/null || true
-
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
     # R6 UX: auto-copy launcher wikifier.sh into target (full-featured copy when running from source)
     if [[ "$do_copy" == true ]]; then
         local self_script="${BASH_SOURCE[0]:-$0}"
@@ -2726,7 +2759,7 @@ main() {
         mark-green)              cmd_mark_green "$@" ;;
         monitor)                 cmd_monitor ;;
         daemon)                  python3 -m wikifier.daemon "$@" ;;
-        update-maps)             cmd_update_maps ;;
+        update-maps)             cmd_update_maps "$@" ;;
         validate)                cmd_validate ;;
         journal)                 cmd_journal "$@" ;;
         issues)                  cmd_issues "$@" ;;
@@ -2738,11 +2771,6 @@ main() {
             exit 1
             ;;
     esac
-
-    # Production reliability: guarantee clean 0 exit for success paths.
-    # Prevents spurious non-zero from check-changes / health ops in `cmd && cmd` agent workflows
-    # even if some internal non-fatal cmd (with || true) had transient status.
-    exit 0
 }
 
 main "$@"
