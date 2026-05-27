@@ -1,0 +1,32 @@
+### Phase 4a Final Honest Assessment & Close (subagent-39)
+**Ended**: 2026-05-27T17:xx (session close)
+**Commits**: 6ac6f56 (start+diary), a5ed764 (B1 diary), cdc2d9e (B1 code hygiene health+contracts). Clean tree post-restore of pre-existing stray mods.
+**Artifacts**: None new phase4a-*.md created (per "NEVER create docs unless explicitly requested"; evidence in v2 diary + git + harness output + code commits only). 
+
+**Summary of Phase 4a Work (per v2 verbatim + rules)**:
+- MANDATORY + inspections complete (v2 full, long-term WS B-E + tracker, subagent-33/38 v2+logs+37 phase2 diary+cross history).
+- Branch clean, diary rich with subagent_id=39 everywhere.
+- Difficult-first: B1 addressed the flakiest health durability blocker (marker debt in health/contracts causing SyntaxError flakiness on import/any concurrent/heal use). 0 conflict markers now; hygiene surfaces (33) + journal C + E notes preserved/enabled. Import GREEN. Baseline --m2-health started (harness PASSes on core, RecipeLab notes).
+- Quick surfaces audit (C/D/E): journal/pending dir+emit present (C bounded state ready); diagnostics import + health resolution_transparency paths exist (D); `from wikifier import health, discover...` + suggest OK (E v0.4 library usable for core loop per 36/prior; protocol in skills/run.md).
+- No code beyond minimal B1 hygiene (read first, search_replace only health/contracts + local v2 plan). Zero new deps. "3" untouched.
+- Harness/RecipeLab: baseline run + python exercises (health summary, library imports, heal cmd surface, journal ls). Streaming/partials dominant in prior foundations leveraged (no new).
+- All commits/diary: subagent_id=39. [x] only honest/committed evidence (B1 hygiene [x] for debt; full B/C/D/E high-leverage partial per limited scope).
+- Clean tree: yes (our B1 + plan only; pre-existing restored).
+
+**Honest vs 85% 7-criteria (esp. #6 WS B-E high-leverage phases closed sufficient for 85% usability)**:
+- #1 (zero markers runtime/plans): PARTIAL (health/contracts cleaned in this tree; shells 42 markers + parsers 62 + plans remain per 33/plan; not full Gate0).
+- #2 (streaming default): Inherited from 35/36 (not regressed).
+- #3 (shell parity): Inherited from 37 (not touched).
+- #4 (external 5k+ multi-day): Not done (Phase 3 from 38 partial; this 4a focused internal).
+- #5 (WS A): Not in scope.
+- **#6 (WS B-E high-leverage closed sufficient for 85% usability)**: **PARTIAL / FOUNDATIONAL ONLY**. 
+  - B: High-leverage hygiene (durability blocker) closed [x] (0 markers in health, atomic locked ops, import OK; flakiness from debt eliminated). Stub pollution/stale wiki detection/heal policy under rapid multi-agent + RecipeLab 1637 heavy: surfaces present + harness baseline, but full stress simulation (1000s edits + heal) + metrics not executed (cancelled B2 per time/scope; honest insufficient for "zero flakiness" claim).
+  - C: Surfaces (journal v1 JSONL+MD dual, emit in health, pending bounded, compaction skeleton) present from prior (33-38 journal slices); queries via health/MCP possible. No 1000+ event heavy sim + usefulness proof (C2 pending).
+  - D: Transparency (diagnostics, resolution_transparency in health, low-conf in ACS, get_* in import_cache/MCP per long-term) surfaces exist post hygiene; parser parity inherited. No explicit exercise on partials/failures/low-conf cases with streaming dominant.
+  - E: Library v0.4 (flat imports health/record/suggest/discover OK, reexports, thin facades per 36/prior + E resumption) usable for core loop; protocol v0.4 in skills; MCP wiring thin in server. No full conformance harness run or MCP zero-dep dogfood loop.
+  - Overall for #6: **Sufficient hygiene foundation for 85% usability laid (runnable, no syntax flakiness, surfaces for heal/journal/transparency/library ready)**, but **not full high-leverage closure** (missing heavy concurrent/1000+ event/transparency-on-partials/library dogfood evidence per mission "Run full --m2-health --deep + RecipeLab... exercising the above surfaces heavily"). Per v2 "honest checkboxes only", cannot claim [x] for crit#6 or Gate4.
+- #7 (tracker ~85%, v0.4 lessons, hygiene): Not updated (only local v2; no main tracker edit per isolation).
+
+**Gate 4 readiness**: NOT READY. Prior gates (esp Gate0 full 0 markers all runtime, Gate1-3 streaming/external) incomplete in this tree/history. WS B-E high-leverage only foundational slice closed (B1). Clean tree yes, no Gap#1 regressed (import OK). Reviewers 41/42: this 39 tree delivers honest B hygiene win + evidence collection setup + rich local diary/audit vs v2 Phase4a. Safe hygiene-first merge candidate for the debt cleanup alone.
+
+**Recommendations (for 40/41/42 or main)**: 
