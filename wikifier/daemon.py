@@ -14,6 +14,7 @@ Key features:
 Designed to keep the Health Matrix, journal, and (future) incremental update-maps
 fresh with minimal manual intervention on long-running projects.
 """
+# Phase 5e (66): daemon + journal paths now note health summaries / ACS/barrel / format=summary as first-class default for 20k+ creative (O(k) bounded ACS/CIABRE per 48/58/50; for long-running Gate4 hygiene).
 
 from __future__ import annotations
 

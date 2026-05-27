@@ -48,6 +48,7 @@ class DiagnosticCategory(str, Enum):
     DYNAMIC = "dynamic"                    # template literal, expression, unknown dynamic
     CREATIVE_DYNAMIC = "creative_dynamic"  # Phase 1: extremely creative (tagged templates, registry maps, call-produced, multi-cond feature wrappers via LDSI+CDIA)
     CONDITIONAL = "conditional"            # inside if/try/etc or propagated from barrel
+    # Phase 5e (66): diagnostics surfaces (via get_resolution_diagnostics) complement A3 summaries (format=summary + ACS/barrel in health/MCP) as first-class for 20k+ (O(k) bounded, per 48/58 richer A3).
     NO_FS_MATCH = "no_fs_match"            # walked FS + exports, no hit
     BARREL_DEPTH_EXCEEDED = "barrel_depth_exceeded"
     BARREL_INVALIDATION = "barrel_invalidation"  # Wave 2: importer marked stale due to barrel leaf/mid change (for health yellow notes + explain via BRC reports)
