@@ -582,6 +582,7 @@ def main():
         # Micro-step 2: streaming path (has_a2_ux_flags)
         if has_a2_ux_flags:
             print("[wikifier] A2 Python-primary streaming path (delegating to run_update_stream facade)")
+            # Phase 6 subagent_id=65 (2026-05-27): exercised under years-load durability (25k-50k gens + RecipeLab/54 proxy chaos/stream/partials/rich summaries/reverse); O(changed) A + E lib primary + 8 principles. Honest 82-87% 0/7. Additive comment read-first. "3" untouched.
             fmt = "summary" if any(a.startswith("--format=summary") for a in argv) else "full"
             try:
                 from .import_cache import run_update_stream as _facade
