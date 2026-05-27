@@ -1,0 +1,89 @@
+=== M2 HEALTH GATE (extended scale + full --gap1-health + DEEP 50k) ===
+  PASS: barrel_hell_hard_conditional — all layer expectations met
+  PASS: deep_cycle_ciabre_stress — all layer expectations met
+  PASS: resolution_exports_variants — all layer expectations met
+  PASS: cjs_aggregator_real_dogfood_p6_f3 — all layer expectations met
+  PASS: dynamic_conditional_template_dogfood_f3 — all layer expectations met
+  Scale perf: 58 files, parse~1611.8ms, bree~0.0ms, resolve~1.3ms, ciabre~0.3ms (leaves=50, cycd=5)
+BARREL INVALIDATION PROOF: PASS
+  Consumers marked (selective): ['src/importer1.js', 'src/importer2.js']
+  Unrelated protected: src/unrelated.js not in stale
+  Reverse index (get_affected): ['src/importer1.js', 'src/importer2.js']
+  BRC entries/index size: 7 / 4
+  Post-reparse clean: yes
+  (Proves: BRC mtime snapshots + file_index reverse map drive correct dirty set for barrel edits)
+  SCALE 10k+ chains: pop 237ms | delta 1.4ms PASS | full 128ms | log append ok
+    (MCP get_barrel_reports exercised: 0 reports + 0 log entries)
+  5k-DOGFOOD: 42 selective Yellows via apply | reports 1.6ms | log_entries=0 | prune_dry=0
+  REAL-RECIPELAB DeepBarrel: chains=487 indexed=438 reports=22 prune_dry=0 logn=0 mcp_reports=3
+=== GAP #1 HEALTH CHECK (P7 + F6 Final Validation & Health Check Hardening) ===
+Date: 2026-05-27 16:40
+Focus: Pipeline (P1) | ACS numeric+reasons (P2/F2) | CIABRE (P3) | CJS+dynamic dogfood (F6/F3/P6) | ACS+CIABRE Surfacing on-demand+integration (Gap#1) | Perf+Regression
+
+--- P1 Pipeline & Contracts ---
+  Contracts: ERROR cannot access local variable 'get_contracts_info' where it is not associated with a value
+
+--- Core Golden (barrel+cycle+exports + F6 dogfood CJS/dynamic) ---
+  barrel_hell_hard_conditional: PASS
+  deep_cycle_ciabre_stress: PASS
+  resolution_exports_variants: PASS
+  cjs_aggregator_real_dogfood_p6_f3: PASS
+  dynamic_conditional_template_dogfood_f3: PASS
+  ACS numeric / CJS barrel signals exercised: OK (via_barrel + score in CJS fixture)
+
+--- Scale Perf Baseline (R7 first-pass many barrels/deep cycles + spawn + CIABRE) ---
+  R5 CIABRE monitoring: version=1.3, high_sev=1, max_blast=0, internal_ms=0
+  Scale perf: 58 files, parse~1611.8ms, bree~0.0ms, resolve~1.3ms, ciabre~0.3ms (leaves=50, cycd=5)
+  PERF REC: First-pass >200ms on modest scale — consider persistent barrel cache hit in first-pass, broader memo on bree _has_package_marker + dir walks.
+  CIABRE recent avg (R7 monorepo synth): 8.2ms (target <250ms for 50+ node; baseline post R7: <50ms typical with graph reuse on 50-leaf barrel+cycle. Pre-R7 detection fix: O(N) spawns dominated even clean runs.)
+
+--- Barrel Invalidation Proof (BRC mtime + reverse index selective dirty) ---
+  Invalidation Proof: PASS (only real barrel consumers marked stale; unrelated protected; reverse index exercised)
+
+--- Barrel Scale Stress + 5k+ Dogfood Sim (10k+ chains <50ms delta; edit+selective Yellow+prune+log audit; 5-sample richer MCP) ---
+  Scale+Dogfood: PASS (10k chains delta<50ms hot path; 42-consumer 5k-sim selective Yellows; reports<50ms; prune+log; real-monorepo pattern)
+
+--- M2 Scale Harness (full 10k-50k synthetic creative graphs w/ barrels+cycles+dyn/creative; inc vs full mem/time guards; multi-agent concurrency stress; functional compaction/journal hooks) ---
+  M2-Scale: PASS (full 10k-50k generators ported; mem/timing/completeness guards; multi-agent+daemon lock stress; functional compaction/journal hooks)
+    M2-CONCURRENCY: 3 agents + daemon under lock: all OK, markers=4
+    M2-JOURNAL: compaction hook FIRED (journals=2 14175B, pending=12366B, est_compact=15875B, prune_ex=False pruned~0)
+    M2-JOURNAL: hook ready for Workstream C JSONL structured + ACS-sig compaction
+    M2-SCALE: all generators + guards + concurrency + journal hooks PASSED (lite 10k-50k)
+    M2 metrics: files=2726 peak_mem=0.0MB inc_ratio=0.78 conc_scen=4 journal_hooks=1
+    (use --m2-health --deep for full 50k + 8-agent deep mode validation)
+
+--- M2 Workstream Integration Validation (A:inc/update, B:health, C:journal/compaction, D:diag/resolution, E:contracts/library) ---
+  WS-Integration: PASS (A/B/C/D/E light surfaces exercised via gens + APIs; full validation in scale/dogfood sections)
+
+--- Cycle Incremental Dogfood + v1 Symlink View (real reuse timing proof per gap1_cycles_longterm_strategy) ---
+  Cycle Dogfood: (see notes; timing/reuse/v1 exercised)
+
+--- External Subdir/Symlink/pnpm/yarn/workspace + Real Monorepo Dogfood (Wave 5/6 pure path + yarn-subpkg discovery) ---
+  Basic Subdir: PASS
+  Symlink View: PASS (logical parents + discover/daemon/run_full_update)
+  pnpm-Store-like: PASS ($PWD logical deep path + hardened discover)
+  Yarn-Store-like: PASS (realpath + store-skip + run_full_update persist deepen)
+  Workspace-Subpkg (outermost): PASS (prefers .git root over inner package.json + persist exercised)
+  RecipeLab Real Monorepo (1k+ JS pure path + barrel/creative): PASS (run_full_update direct, no sh)
+  Real Multi-Agent Dogfood (1k+ creative monorepo + 3agent+daemon under lock): PASS (or synthetic fallback if no target)
+
+--- ACS + CIABRE Surfacing Uniformity (ensure_acs + suggest/get_files + CIABRE v1.3 dogfood) ---
+  ACS ensure_acs_summary_persisted + compute/set/save + full rec samples: PASS
+  suggest/get_files ACS integration: exercised (no hard crash; Wikifier command 'health' failed on /tmp/gap1_acs_ciabre_test_z_uh7std: /home/aron/.grok/worktrees/Wikifier/subagent-38/wikifier/scripts/wikifier.sh: line 2016: syntax error near unexpected token `<<<')
+  CIABRE v1.3 recs + full rationale/hint/safety on dogfood cycles (deep_cycle fixture): exercised via golden validation
+
+--- Health Metrics ---
+  Tests run: 23  Passed: 15  Failed: 0
+  Barrel coverage (sample): 100%
+  Perf samples: 10  avg: 240.9ms
+  Notes captured: 36
+
+GAP #1 HEALTH: YELLOW
+Issues: cannot access local variable 'get_contracts_info' where it is not associated with a value
+Command: python -m wikifier.gap1_validation_harness --gap1-health   (repeatable quality gate)
+=== END GAP #1 HEALTH CHECK ===
+
+--- M2 Deep Scale Results ---
+M2 deep scale: PASS (10k-50k creative patterns, inc/full guards, 8-agent concurrency, journal/compaction hooks exercised)
+M2 metrics: files=89921 peak=0.0MB inc_ratio=0.94 conc_scen=9 journal_hooks=1
+DEEP MODE: 50k generators + max concurrency stress + full compaction hook verification complete (per m2 scalable plan cross-cutting).
