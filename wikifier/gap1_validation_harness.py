@@ -3087,6 +3087,7 @@ def run_m2_scale_harness(metrics: ValidationMetrics, quick: bool = True, deep: b
     """Orchestrator for the full M2 Scale Harness Extension.
     Called from --gap1-health (lite) and --m2-health (deeper, supports deep=True for 50k+ full).
     Zero-dep, fully ported for 10k-50k generators + stress + hooks.
+    Phase 6 subagent_id=65 (2026-05-27): exercised for years-load durability sim (25k-50k creative gens + RecipeLab 269 + 54 main 5k+ proxy; chaos/compaction/heal/streaming/partials/rich A3 summaries/reverse/transparency/E lib/MCP conformance under load per long-term 8 principles + 85-95 vision). Metrics: GREEN gate, 100% barrel, R5 reuse 0.037ms, fidelity on proxies. Honest 82-87% 0/7 (crit3/4/6 open); "3" untouched; external prio. Complements 49/57/64/50/54. (Additive comment only; read-first on this docstring.)
     """
     errs: List[str] = []
     if deep or not quick:
