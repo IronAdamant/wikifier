@@ -27,6 +27,19 @@ This release marks the full closure of the 6 remaining Gap #1 last-mile items us
 
 See the detailed agent diary entries in `Findings/m2_rem_08_and_v0.4_progress_tracker.md` for the complete swarm journey.
 
+### Broader M2 Progress — Phase 6-7 95%+ Swarm Wave (2026-05-28)
+
+Significant progress on detailed per-Workstream A–E durability and external long-pole execution toward genuine 95%+ "set & forget":
+
+- Dual independent reviewers (77 + 78) confirmed the full 9-step hygiene-first merge playbook **all PASS**.
+- WS A–E durability slices (71–75) completed with concrete metrics on real external 5k+ creative proxies (main Wikifier self-host + RecipeLab 1637/269) + harness 25k–50k generators under long-load chaos.
+- Dedicated external long-pole agent (76) executed extended proxy work on the **real 5k+ main Wikifier creative target** with streaming + rich bounded A3 summaries (`format=summary`) as the normal/default path, delivering strong reproducible artifacts (health matrices over "days", high partials usage, 0 trust failures, ACS/CIABRE explain-all, correct reverse survival, etc.).
+- Evidence layer (`Findings/wave-evidence/`) updated with rich diaries from the long-horizon agents (notably 72 ~6.8 h, 71, 75, 76).
+
+**Current honest calibration** (per the 7 exact 85% criteria + long-term scalable plan): **82–87% toward 95%+**, **0/7 strict 85%**. The dominant remaining gap is the literal multi-day (3–7 d) high-trust autonomous external long-pole on real 5k+ creative monorepos with the new paths as the unquestioned normal/default (crit4/Gate3), as confirmed by 76/77/78 and prior reviewers. Proxies are strong; literal wallclock multi-day high-trust autonomous execution remains open.
+
+See `Findings/m2-85-to-95-agent-swarm-plan.md`, the updated tracker, `wave-evidence/`, and the long-term scalable plan for full details. All work under strict discipline ("3" untouched, main clean, honest no-overclaim).
+
 ### What's New in v0.3.2
 
 **Gap #1 (Dependency Intelligence Quality) is now substantially closed (~94–96%)**
