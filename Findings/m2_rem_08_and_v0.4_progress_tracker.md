@@ -1167,4 +1167,26 @@ This wave completes the major 5b-e execution + Phase 6 start + rigorous independ
 
 Citations: 79 plan (Phase 1 80 section + completion note); this tracker; wave-evidence/phase6-80-... (new). Low-risk docs-only. subagent_id=80/83. External long-pole #1. 9-step. '3' untouched. Main clean.
 
+**2026-05-28 addendum: subagent-85 WS E Phase 2 v0.4 Thin Conformance on Same Real 5k+ Main Wikifier Creative Target (parallel to 80 Phase 1)**
+
+**Completed**: Task 019e6dd6-62c1-7973-afdc-2a7d9d877501 (516.7s, 51 calls, 1 turn, exit 0). WS E Lead per 79 Phase 2 (on *same real sessions* as 80 Phase 1 external long-pole).
+
+**Key Results on User's Real Project** (same primary 5k+ main Wikifier creative self-host as 80/76):
+- Mandatory first reads (79/85-95/long-term/tracker/README + wave-evidence 76/75/77/78/81/80 + v0.4 sources + "3" LAST greps) completed immediately.
+- Rich local WT diary (subagent-85/Findings/subagent-85-diary-phase2-ws-e.md, 49kB+) with verbatim long-term E 95% exit + 7-criteria (crit6) + 8/9 principles + v0.4 protocol + iron rules + honest 82-87%/0/7 + 80 integration.
+- 4 commits (all subagent_id=85; 9-step; tree clean).
+- Real usage exercised (pure lib primary on exact same target/sessions as 80): health(format=summary/json) rich O(k) bounded A3 with ACS/CIABRE/reverse/provenance/intel (D transparency); suggest/check O(changed) structured; scoped update_maps (use_python_primary + streaming/partials/PartialResult_v1/continuation); ergonomics excellent (1 import, natural kwargs, minimal ambiguity); protocol alignment (skills/run.md v0.4 mandatory record_change after edits, low-ambiguity workflow); thin sh parity; MCP schemas-first deferred but many core tools pure lib delegates per 75. High fidelity vs 75/76/81 baselines on *exact same 5k+ creative target*. 0 trust failures in exercised paths.
+- Metrics vs *exact* long-term E 95%+ exit + 7-crit (crit6 E) + 8/9 principles + v0.4 + 85-95 Phase 2: Library usable for core agent loop on real 5k+ creative (proven); full recommended workflow with minimal ambiguity (health/check/suggest/update exercised; natural calls; structured returns); protocol authoritative (matches v0.4 mandatory rule + surfaces). 8 principles upheld (scalability 5k+ creative, zero-dep, dual-path Py-primary, frozen/versioned contracts, full obs ACS/CIABRE default, dogfood+harness+real ext on user's project, explicit exits).
+- Honest gaps (no overclaim): Full multi-step with mandatory record_change on sustained 80 load + full MCP thin/schemas audit + 81 richer A3/obs integration + literal years + complete real 50k+ (proxies strong from 75/76/80 on this exact target).
+- 80 parallel confirmed active (system note during run; same real sessions/target for combined artifacts).
+- Resume ID: 019e6dd6-62c1-7973-afdc-2a7d9d877501.
+
+**Honest Calibration**: 82-87% / 0/7 preserved (E foundations advanced on real 5k+ main Wikifier creative via 75 prior + this + pure lib + protocol; contributes to Phase 2 per 79 plan; crit4/Gate3 literal 3-7d still dominant open per exact wording + 76/77/78/80/79). External long-pole #1 (integrated with 80 on same real usage). 9-step upheld. Main clean. '3' untouched.
+
+**Evidence**: WT diary + 4 commits; new harvest `wave-evidence/phase6-85-wse-v0.4-thin-phase2-subagent-85-completion.txt` (full subagent output + diary excerpts + metrics vs exact E exit + citations + 80 integration); citation in 79 plan (Phase 2 WS E section). Complements 80 (Phase 1 on same real target/sessions), 76 (strongest proxy on same), 75 (prior E baseline on same), 77/78, 81.
+
+**Process**: Low-risk docs-only harvest + citations (79 plan + this tracker). subagent_id=85/80. External long-pole #1. 9-step. '3' untouched. Main clean.
+
+Next for E/Phase 2: Full loop with record_change on 80-driven real load; MCP thin audit; 81 integration; 5th+ commit id=85; gates; harvest updates; 86/87 prep (external artifacts #1).
+
 ---
