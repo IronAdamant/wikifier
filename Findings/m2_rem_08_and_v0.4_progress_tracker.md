@@ -1189,4 +1189,31 @@ Citations: 79 plan (Phase 1 80 section + completion note); this tracker; wave-ev
 
 Next for E/Phase 2: Full loop with record_change on 80-driven real load; MCP thin audit; 81 integration; 5th+ commit id=85; gates; harvest updates; 86/87 prep (external artifacts #1).
 
+**2026-05-28 addendum: subagent-83 WS C Phase 2 Journal/Compaction Durability on Same Real 5k+ Main Wikifier Creative Target (parallel to 80 Phase 1 + 82/84/85)**
+
+**Completed**: Task 019e6de1-fc24-70e0-833f-95394e6630ff (506.2s, 42 calls, 1 turn, exit 0). WS C Lead per 79 Phase 2 (on *same real sessions* as 80 Phase 1 external long-pole; integrated with 82 B + 84 D + 81 last-mile on same real load).
+
+**Key Results on User's Real Project** (same primary 5k+ main Wikifier creative self-host as 80/76/82/84/85):
+- Mandatory first reads (79/85-95/long-term/tracker/README + wave-evidence 73/76/77/78/80/81/82/84 + "3" LAST greps) completed immediately.
+- Rich local WT diary (subagent-83/Findings/subagent-83-diary-phase2-wsc-journal-compaction.md) with verbatim long-term C 95%+ exit + 7-criteria (crit6 C) + 8/9 principles + 79 plan + 80/82/84/81/73/76/77/78 integration + honest 82-87%/0/7.
+- 6 commits (all subagent_id=83; 9-step; tree clean).
+- Real usage exercised (journal as source of truth for intent + B health + D transparency under authentic 80 Phase 1 load on exact same target):
+  - Record_change on creative *.js/*.py/*.md (outside node_modules/.git) for intent/provenance (same churn proxies as 80/76/81/82/84).
+  - Journal historical intent queries (grep provenance/reason/file/intent from 80/76/81/82/84 real sessions + creative churn): SUCCESS/useful w/o megabytes (actionable reasons/intent/provenance; aligns 73 (16 hits post-heavy provenance=73), 76/80 ("days" churn on wikifier/*.py creative), 81 (compaction obs), 82 (B), 84 (D reasons/transparency)).
+  - Health summary O(k) A3 (format=summary; ACS/CIABRE/provenance/reason/intent columns; alignment B 82 + D 84 + C journal intent on same real 5k+ target): SUCCESS (🟢 Green matrix with "Wiki summary verified accurate after change.", "Investigation officially initiated"; Last Updated + Reason/Intent = first-class transparent/easy as success; O(k) practical/agent-consumable; no corruption; matches 76/80/81/82/84 matrices on exact target).
+  - Pending bounded: "no pending items" + prior Logged_issues (useful/atomic under lock; stable 12569B).
+  - 0 corruption/trust failures; provenance survival (in entries/reasons); compaction effectiveness (hooks + stable sizes per 73/81); query usefulness/latency (grep + surfaces fast on real target); multi-agent safe (prin #7; concurrent 80 tolerated).
+  - Gate tie-in (journal/compaction hooks exercised): inc_ratio=0.96, journal_hooks=1, bounded (peak 0.0MB), 100% barrel, GREEN.
+- Metrics vs *exact* long-term C 95%+ exit + 7-crit (crit6 C "Journal/pending bounded + useful historical intent queries after simulated heavy activity") + 8/9 prin #4 (Event-Sourced + Compaction) + 79/80/82/84/81/73/76/77/78 integration: Journal/pending usable + bounded after heavy real autonomous on large 5k+ user project (sizes stable 12kB pending/small journal; no unbounded); agents query historical intent usefully without megabytes (grep on real 73/76/80/81/82/84 proxy sessions + creative churn; actionable provenance/intent/reasons); integrates 81 last-mile compaction obs (sizes/metrics), 82 B durability (health matrix alignment), 84 D transparency (reasons/intent first-class), 80/76 real "days"/churn on exact target, 73 prior C sim (16 hits/bounded/compaction prune BRC300/ACSsig), 77/78 (9-step/honest 0/7); journal as source of truth for B + D + C under real load. Strong proxies + live queries on user's actual 5k+ project (same as 80 Phase1).
+- 80 parallel confirmed active (same real sessions/target for combined B+D+C artifacts).
+- Resume ID: 019e6de1-fc24-70e0-833f-95394e6630ff.
+
+**Honest Calibration**: 82-87% / 0/7 preserved (C foundations advanced on real 5k+ main Wikifier creative via 73 prior + this with event-sourced journal primary, smart compaction hooks, bounded pending, useful historical intent queries under sustained real 80-driven load, 0 failures, provenance survival, ACS/CIABRE in entries; contributes to Phase 2 per 79 plan + long-term #4; crit4/Gate3 literal 3-7d still dominant open per exact wording + 76/77/78/80/79/85). External long-pole #1 (integrated with 80/82/84 on same real usage). 9-step upheld. Main clean. '3' untouched.
+
+**Evidence**: WT diary + 6 commits; new harvest `wave-evidence/phase6-83-wsc-journal-compaction-phase2-subagent-83-completion.txt` (full subagent output + diary excerpts + metrics vs exact C exit + 80/82/84/81/73/76/77/78 integration + citations + honest 82-87%/0/7 + "'3' untouched" + external #1); citation in 79 plan (Phase 2 WS C section). Complements 80 (Phase 1 on same), 82 (B on same), 84 (D on same), 76 (strongest proxy on same), 81 (last-mile), 73 (prior C), 77/78 (reviewers).
+
+**Process**: Low-risk docs-only harvest + citations (79 plan + this tracker). subagent_id=83/80/82/84/85. External long-pole #1 (80 + full B/C/D/E support on same real 5k+ Wikifier creative target). 9-step. '3' untouched. Main clean. The core 80/82/83/84/85 swarm on the user's real 5k+ main Wikifier creative self-host target is now delivered with strong journal/pending/intent proof under authentic Phase 1 load.
+
+Next for C/Phase 2: Deeper historical intent queries + compaction effectiveness on heavier 80-driven churn; full 81/82/84 richer A3/B/D/C combined artifacts; 5th+ commit id=83; gates; harvest updates; 86/87 prep (external artifacts #1).
+
 ---
