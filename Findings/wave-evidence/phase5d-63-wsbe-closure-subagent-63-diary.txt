@@ -1,0 +1,21 @@
+# subagent-63 WS B-E High-Leverage Closure (Phase 5d crit6) Rich Diary - Harvested Evidence (subagent_id=70)
+
+**subagent_id=70** (harvest; all contain subagent_id=70; local-only /home/aron/.grok/worktrees/Wikifier/subagent-70)
+**Source**: /home/aron/.grok/worktrees/Wikifier/subagent-63/Findings/m2-85-to-95-agent-swarm-plan.md (local rich append per task)
+**Worktree 63**: /home/aron/.grok/worktrees/Wikifier/subagent-63
+**Citations**: subagent-63 WT + 5 commits (new run_m2_wsbe_crit6_stress); complements 55 directly; on 54 external (main Wikifier 5k+) + RecipeLab 1637/269 + harness 25k-50k gens under concurrent load. subagent_id=70
+**"3" untouched**: Per 63/plan: only historical + subagent-3; confirmed last pre-harvest (subagent_id=70).
+**Rules 100% (subagent_id=70)**: read-first, local-only, zero-dep, honest 0/7 82-87%, external long-pole prio, 9-step from 51/52/59/60/67/68.
+
+## Overview + Deliverables (from central 61-68 + 63 local per task)
+Heavy stress on B (health durability + heal_with_policy + stale wiki under rapid multi-agent/chaos), C (journal/pending bounded + historical intent queries post heavy + compaction), D (first-class low-conf/unresolved/failure transparency + parser parity + ACS/CIABRE as easy as success), E (v0.4 thin lib/MCP/CLI wiring + format=summary + protocol surfaces) on 54 external target + RecipeLab 1637/269 + harness 25k-50k gens under concurrent load. High-leverage phases closed *sufficient for 85% usability* on real ext 5k+ creative + RecipeLab (per crit6/51/52). Builds directly on 55 (5 commits, new run_m2_wsbe_crit6_stress). Still 0/7 overall.
+
+**Key artifacts (subagent_id=70)**: Harness stress runs exercising B/C/D/E; MCP/lib full surfaces on 54/RecipeLab (health flips, journal intent, barrel_reports 300 v1, transparency low-conf, E v0.4 conformance); metrics vs long-term WS B-E exits + 8 principles; honest diary in local plan.
+
+## Honest Calibration (subagent_id=70)
+0/7 strict 85% (crit6 partial high-leverage on proxies per exact 85-95 + long-term; full on clean main + real dogfood pending); 82-87% preserved (no drift); external long-pole (61) highest per 67/68. "3" untouched. 9-step all PASS context from reviewers.
+
+**Final (subagent_id=63 + harvest subagent_id=70)**: WS B-E high-leverage closed sufficient for 85% on ext 5k+ (complements 55). 0/7 + 82-87%. subagent_id=70 evidence harvest.
+
+---
+**Harvest note (subagent_id=70)**: Created from 63 local plan + central 61-68 summary (style matched 59/65/61 examples). "3" confirmed before. Discrepancy: missing in central wave-evidence/ vs claims. subagent_id=70. Ready for merge.

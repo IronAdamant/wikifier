@@ -1,0 +1,19 @@
+# subagent-66 5e + v0.4 + Richer A3 + Gate4 Prep Rich Diary - Harvested Evidence (subagent_id=70)
+
+**subagent_id=70** (harvest; all contain subagent_id=70; local-only)
+**Source**: /home/aron/.grok/worktrees/Wikifier/subagent-66/Findings/m2-85-to-95-agent-swarm-plan.md (Phase 5e 66 section + rich diary + v0.4 updates)
+**Worktree 66**: /home/aron/.grok/worktrees/Wikifier/subagent-66
+**Citations**: subagent-66 WT + 5+ commits subagent_id=66; surfaces promoted (health.get_summary, import_cache ACS/barrel, mcp health/format=summary + get_*/suggest, cli, __init__/diagnostics/harness/daemon/journal) as first-class default for 20k+ (O(k) via ACS/CIABRE/BRC, 1-2 line additive comments); 5+ RecipeLab 1637/269 + 54 external proxy dogfood (140c O(k), 0.2ms typ, high fidelity); major v0.4-Execution-Plan.md + v0.4-execution-plan.md updates (5a-5e lessons + 53/54/57/61-65 + hygiene, markers cleaned); Gate4 readiness (hygiene, tracker ~85% honest, all crit/Gates). Complements 48/56/58/59/60 exactly. subagent_id=70
+**"3" untouched**: Confirmed (historical + subagent-3 only; subagent_id=70 pre-create).
+**Rules 100%**: 0/7 + 82-87% (Gate4 not claimable), external long-pole prio, "3" last.
+
+## Overview + Deliverables (from 66 local + central 61-68)
+Promoted remaining A3 surfaces (8+ files) as first-class default/recommended for 20k+ creative via small additive 1-2 line comments. Additional RecipeLab 1637/269 + 54 external proxy dogfood (exact 140c O(k), 0.09-0.4ms typ 0.2ms, high fidelity per 58/50/48). Major v0.4 plans updates (lessons 5a-5e/53/54/57/61-65 + 48/58 A3; markers cleaned for hygiene). Gate4 readiness notes (hygiene runtime 0 markers + import GREEN; plans cleaned; 0/7 per 56/59/60 + plan; crit7 ~85% prep; WS high-leverage partial). Honest 0/7 + 82-87% + external prio + "3" untouched.
+
+## Honest Calibration (subagent_id=70)
+0/7 (Gate4 not met; crit2/3/4/6 partial on proxy; full on clean main + real dogfood pending); 82-87% preserved. Markers cleaned in v0.4 (hygiene win). External long-pole #1 per 67/68.
+
+**Final (subagent_id=66 + harvest subagent_id=70)**: 5e/v0.4/A3/Gate4 prep + hygiene. 0/7 82-87%. subagent_id=70.
+
+---
+**Harvest note (subagent_id=70)**: Created from 66 local plan rich sections + central summary (style matched). "3" last. Missing in central vs 61-68 claims. subagent_id=70. Ready.
