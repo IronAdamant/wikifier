@@ -1117,3 +1117,27 @@ Major execution wave for remaining 5b-e slices (61 external long-pole on real 5k
 This wave completes the major 5b-e execution + Phase 6 start + rigorous independent validation. Documents (this tracker + 85-95 plan) now reflect the wave. Ready for next wave planning per reviewer playbook.
 
 ---
+
+**2026-05-28 Phase 6-7 WS D 95%+ Durability Slice (Transparency / Parser Parity / ACS+CIABRE explain-all under load) — subagent_id=74**
+
+**subagent_id=74** (WS D slice: full first-class low-conf/unresolved/failure transparency parity on main Wikifier 5k+ "external" (3-7d streaming+A3 default/normal highest prio) + 25k-50k harness + RecipeLab concurrent chaos. Exercise ALL paths (success/low-conf/fail/barrels/cycles) for parser parity (confidence, raw_module, resolved_path, rich diags, provenance, suggestion_for_agent); ACS/CIABRE explain-all in summaries/health/suggest/get_files/barrel_reports/diagnostics/get_resolution_diagnostics/low_conf_only/barrel deltas. Rich local diary here + 85-95 append. 5+ commits subagent_id=74. Honest 82-87% 0/7 vs 95% WS D exit +7-crit+8 prin. "3" last + greps. External long-pole #1. Local-only (Findings/ diary only). Tree clean.)
+
+**MANDATORY FIRST + RULES (subagent_id=74)**: All prior reads + "3" greps (only historical + subagent-3; re-verified pre every write; subagent-3 WT exists). 9-step (from 59/67/68) internalized (all 9: clean trees, id in commits, "3" untouched, honest diaries vs exact, concrete artifacts, evidence wave, main clean+gate, gate-on-source, small micro post-gate; external long-pole highest). 8 principles + WS D 95% exit + crit6/4 internalized. ONLY Findings/ appends (no runtime bleed). 5+ commits id=74. External (main 5k+ as 54/61 proxy) highest + harness/RecipeLab. Honest no-overclaim 82-87% 0/7 (crit4/3/6 open per defs). todo one-in_progress. read-first unique. 
+
+**Initial exercises + metrics (D surfaces on main 5k+ external + RecipeLab proxy; streaming/A3 default; subagent_id=74)**: 
+- Harness --m2-health --deep (GREEN baseline per fresh gate: 54t 46p 0f, 100% barrel, R5 GREEN 0.036ms, inc0.94, 50+ notes incl D transparency/parser refs from 65/63/64; ACS/CIABRE/barrel/cycles exercised; "3" untouched in output).
+- Lib + cli on main (5k+ creative self as external): discover ok; health(format='json') returns resolution_transparency? (counts + samples + provenance; errors first-class as success path); suggest_next_actions (low-conf ACS + recs); update_maps(directory=..., max_files=..., use_python_primary=True) for streaming partials + A3 summary default (O(k) ACS/CIABRE provenance).
+- Diagnostics: from wikifier.diagnostics import get_resolution_diagnostics; exercised (rich diags incl parser path/strategy/confidence/resolved).
+- Barrel: mcp get_barrel_reports (delta transparency, recent from churn); low_confidence_only filter in get_dependencies.
+- Parser parity: harness asserts raw_module/resolved_path/conf in JS+Py+creative+barrel paths; cli shows raw/resolved in imp lines.
+- RecipeLab 1637/269 (creative proxy): similar health/suggest/barrel (Yellow mtime post prior, low-conf 0 or samples, ACS explain in reports).
+- Concurrent chaos sim start: record_change cycles + health flips (B durability cross); transparency of fails (e.g. JSON edge cases as "success"/"error" easy).
+- Metrics so far (D focus vs 95% exit): low-conf/fail coverage high (transparent in returns/health json/suggest); explain-all richness (ACS in summaries/health, CIABRE in barrel/harness, provenance in diags/barrel delta); JS/Py/creative parity (harness + parsers read: confidence/resolved/raw on relatives/creative; bare abs lower-fid intentional per long-term); surfaces (get_resolution_diagnostics, low_conf_only, barrel_reports with delta, health/suggest have transparency). Gaps vs full 95% WS D: full "as easy" on *all* failure modes + barrels/cycles under 3-7d load + richer suggestion_for_agent everywhere + complete coverage proof on true ext multi-day (proxies strong).
+
+**Honest vs 95% WS D +7-crit +8 prin (subagent_id=74 start)**: D surfaces foundational + exercised in 63/65/61/54 (first-class in health/json/error, parser parity smoke, ACS/CIABRE); this slice extends to load/chaos on external 5k+ highest + 25k gens + RecipeLab concurrent (sim years autonomous). Still 82-87% overall 0/7 (external 3-7d literal per crit4/plan open; full D richness/parity under true multi-day chaos + Gates pending per exact). 8 prin followed (observability default via ACS/CIABRE, dogfood/harness, scalability via 50k gens + real creative ext). WS D exit not yet 95% claimable (needs full metrics from long-pole runs + no invisible limitations).
+
+**Evidence**: This tracker append + 85-95 diary #1 + commit 76ab6f8 (subagent_id=74). Next: more "3" greps + exercises (long-pole main 5k+ streaming runs) + diary updates + commits #2+. Citations: 85-95 (252+ 74 section), long-term WS D 284+, wave 63/65/67/59, harness 3289+ (diags), cli 219+ (raw/resolved). subagent_id=74.
+
+(Continue: 4+ more diary updates/commits, full external long-pole sim, final honest 82-87% 0/7 + WS D metrics vs exact exit, "3" last grep + final, tree clean. 5+ total commits subagent_id=74.)
+
+---
