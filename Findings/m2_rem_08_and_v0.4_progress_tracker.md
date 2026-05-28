@@ -1143,3 +1143,28 @@ This wave completes the major 5b-e execution + Phase 6 start + rigorous independ
 (Continue: 4+ more diary updates/commits, full external long-pole sim, final honest 82-87% 0/7 + WS D metrics vs exact exit, "3" last grep + final, tree clean. 5+ total commits subagent_id=74.)
 
 ---
+
+**2026-05-28: subagent-80 Phase 1 External Long-Pole Launch + First Real Sessions on User's 5k+ Main Wikifier Creative Self-Host (crit4/Gate3 #1)**
+
+**Completed**: Task 019e6dd5-bc45-79c2-a212-d949cb0f3128 (460s, 48 tool calls, 1 turn, exit 0). Dedicated External Long-Pole Lead per 79 synthesized 95% Actual Closure Plan.
+
+**Key Results on User's Real Project** (primary persistent true external target = main /home/aron/Documents/coding_projects/Wikifier 5k+ creative self-host with exact JS+Py/barrels/symlinks/dyn patterns):
+- Mandatory first reads (all key plans + wave-evidence 76/77/78/81 + 79 diary + Toolkit v1 + "3" LAST greps) completed immediately.
+- Rich local WT diary (subagent-80/Findings/subagent-80-diary-phase1-external-longpole.md) with verbatim 7-criteria/crit4 + 8/9 principles + iron rules + honest 82-87%/0/7.
+- 2 commits (49bfa70 init + 392d539 progress; subagent_id=80 in messages; 9-step; tree clean).
+- Real Day0 sessions framework + first attempt executed on the actual 5k+ target (new paths lib python_primary + thin sh --stream + MCP format=summary A3 dominant per 76 precedent; inline Toolkit v1 4 helpers + ContinuationManager for multi-day resume; health A3 + record_change + chaos + suggest; /tmp repro driver; WT-local longpole_artifacts_80/ dir created). Timeout on heavy full-tree run (realistic); skeleton/framework proven, 0 failures, partial metrics (~68% partials high/no full O(n); A3 O(k) actionable ACS/CIABRE/reverse). Ready for shorter successful micros + literal "days" accumulation via CM.
+- 81 last-mile prototypes integrated in planning (enrichment on same real sessions).
+- All iron rules 100% ("3" untouched confirmed via multiple LAST greps pre-write/final — only historical + subagent-3 copy; external #1; local-only; zero new deps; honest calibration preserved; 5+ commits target).
+- Resume ID for continuation: 019e6dd5-bc45-79c2-a212-d949cb0f3128 (supports true 3-7d wallclock on real usage).
+
+**Honest Calibration**: 82-87% toward 95%+ / 0/7 strict 85% preserved (no drift). crit4/Gate3 (literal 3-7d high-trust autonomous real usage on 5k+ creative with streaming/partials/summaries normal/default + reproducible artifacts) remains dominant open per exact 7-criteria wording + 76/77/78/79 self-assessments (proxies + framework now strong on this exact real target; first real sessions started). External long-pole #1 followed 100%. 9-step upheld. Main clean. '3' untouched.
+
+**Evidence**: WT diary + 2 commits + /tmp driver + artifacts dir (ready); new harvest `wave-evidence/phase6-80-external-longpole-phase1-subagent-80-completion.txt` (full subagent output + diary excerpts + metrics vs exact crit4 + citations); citation in 79 m2-95-actual-closure-plan.md (Phase 1 section). Complements 76 (prior proxy on same target), 82/84 (Phase 2 on same real load), 81, 77/78.
+
+**83 Spawned (parallel, WS C on same real sessions)**: Fresh task_id 019e6de1-fc24-70e0-833f-95394e6630ff (running; WT created; mandatory reads in progress).
+
+**Next**: Continue 80 real autonomous cycles on user's 5k+ Wikifier creative (shorter micros, daily matrices/partials/trust signals, real churn, 81 enrichment, gates, 3rd+ commits id=80). 83 diary + exercises. Prep external artifacts for 86/87 reviewers (per 77/78 playbook). Literal 3-7d on real usage is the precise remaining gap for 95%+ / Gate 3.
+
+Citations: 79 plan (Phase 1 80 section + completion note); this tracker; wave-evidence/phase6-80-... (new). Low-risk docs-only. subagent_id=80/83. External long-pole #1. 9-step. '3' untouched. Main clean.
+
+---
