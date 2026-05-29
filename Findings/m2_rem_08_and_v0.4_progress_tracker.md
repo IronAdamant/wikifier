@@ -6,23 +6,36 @@
 
 ---
 
-## 1. Overall Milestone Status
+## 1. Overall Milestone Status (Rebuilt 2026-05-28)
 
-- [x] **M1 – Core Reliability** (Health matrix, locking, journaling, record-change, validate, MCP consistency, etc.)
-- [-] **M2 – Dependency Intelligence** (`update-maps`, parsers, library.md, Gap #1)
-  - [x] Gap #1 foundational work (substantially closed at 89–93%)
-  - [-] Remaining last-mile items in Gap #1
-  - [-] `update-maps` Performance & UX at Scale (now the dominant blocker)
-- [~] **M3 – Agent Interface & Ergonomics** (Python library, strengthened protocol) *(Workstream E: design + v0.4 protocol + MV skeleton [x] in m2-full-closure plan; Agent 6 active completing extraction to clean public API, conformance harness, CLI/MCP thin consumers, doc merges + dogfood. See E resumption section.)*
-- [ ] **M4 – State Management & Scale**
-- [ ] **M5 – Final Polish & Release**
+**User Clarified Structure**:
+- **M1–M4**: Feature building and technical gap closure phases.
+- **M5**: Broad dogfooding on the user's prepared real-world projects.
+
+See the new `Findings/Milestones-Overview.md` for the full rebuilt high-level structure and current assessment.
+
+### High-Level Status
+- [x] **M1 – Core Reliability** (Health matrix, locking, journaling, record-change, basic MCP/daemon consistency, self-hosting hygiene). Complete.
+- [-] **M2 – Dependency Intelligence** (Streaming/partials/reverse, health durability, journal/compaction, transparency/ACS+CIABRE, v0.4 thin library + protocol, richer summaries as normal path, full shell parity for new paths).
+  - Core streaming engine (`generate_update_events` / `run_update_stream` + PartialResultV1 + reverse maintenance) now on main and heavily exercised in real usage.
+  - Significant real-usage feature completion and gap closure delivered by the 80 (Phase 1 external long-pole) + 82/83/84/85 (Phase 2 B/C/D/E durability) swarm on the actual 5k+ main Wikifier creative self-host target under sustained load.
+  - Gap #1 foundational items (barrels, cycles, ACS, creative coverage) largely complete and GREEN.
+  - **Current focus**: Finish remaining M2 feature items (full thin-shell parity for streaming paths, richer summaries as default, last-mile durability/observability polish) while continuing to use real usage on the 5k+ target as high-value feedback.
+- [~] **M3 – Agent Interface & Ergonomics** (Clean public Python library + rigorous v0.4+ testable Agent Protocol). Foundations in place; some real usage demonstrated. Heavy work after M2 core is stable.
+- [ ] **M4 – State Management & Long-Term Scale** (Years of autonomous multi-agent load, advanced compaction, full 50k+ creative resilience).
+- [ ] **M5 – Final Polish, Dogfooding & Release**. Not started. This is where broad dogfooding across the user's prepared real projects and final strict validation (old 7-criteria + long-term exits) will occur.
+
+**Note on Previous Scoring**: The rigid 82–87% / 0/7 strict 85% language (driven by the old 7-criteria, especially literal multi-day external long-pole) is de-emphasized during M2–M4 feature building. It was creating paralysis. M5 is the appropriate phase for that level of final scoring.
+
+**Explicit Rule (2026-05-29)**: M1 is complete. M2–M4 are feature addition / creation / refinement / hardening phases only. **No dogfooding of any kind on the Wikifier project itself is permitted until M5**. This includes running `--m2-health --deep`, sustained autonomous sessions, or any heavy self-validation on the Wikifier source tree. All such activity is deferred to M5. During M2–M4, "actual 95%" refers to feature completeness and quality under the long-term principles, not final 7-criteria / M5 dogfood scoring.
 
 **Current Phase**: Three micro-steps (Generator body, CLI wiring, MCP streaming params) completed by subagents in worktrees and fully/successfully integrated + verified on main (2026-05-27). Plans updated. M2 streaming foundation now on main. Ready for broader verification / --m2-health / final closure.  
 **Rule**: No M3 until M2 is solid.  
 
 **Primary Reference for Remaining Work**:
-- `Findings/m2-wave3-final-push-plan.md` (focused Wave 3 execution plan to reach 95%+)
-- `Findings/m2-full-closure-longterm-scalable-plan.md` (master plan with accurate post-Wave-2 status)
+- `Findings/m2-phased-to-95-agent-plan.md` (new phased execution plan using 8 agents per phase: 80-85 → 86-90 → 91-95, with explicit rule against dogfooding the Wikifier project itself until M5)
+- `Findings/m2-full-closure-longterm-scalable-plan.md` (master long-term scalable architecture and A-E 95%+ exits)
+- `Findings/Milestones-Overview.md` (high-level rebuilt milestone framing)
 
 ---
 
@@ -1188,6 +1201,16 @@ Citations: 79 plan (Phase 1 80 section + completion note); this tracker; wave-ev
 **Process**: Low-risk docs-only harvest + citations (79 plan + this tracker). subagent_id=85/80. External long-pole #1. 9-step. '3' untouched. Main clean.
 
 Next for E/Phase 2: Full loop with record_change on 80-driven real load; MCP thin audit; 81 integration; 5th+ commit id=85; gates; harvest updates; 86/87 prep (external artifacts #1).
+
+**Major Re-alignment Note (2026-05-28, per user clarification)**: 
+M1–M4 = Feature building and technical gap closure phases. 
+M5 = Broad dogfooding on the user's real-world projects (multiple projects already prepared for this). 
+
+The previous heavy focus on the strict 7-criteria (especially crit4 literal 3–7d external long-pole as the dominant blocker for 85%) was creating paralysis during active feature development. The 80/82/83/84/85 swarm on the user's real 5k+ main Wikifier creative self-host represents meaningful M2 feature completion and real-usage exercising, not final M5 validation. 
+
+Going forward, M2/M3/M4 tracking should focus on "are the features built and the technical gaps closed?" rather than strict 0/7 scoring against the old 85% criteria. Heavy validation and dogfooding scoring is deferred to M5.
+
+---
 
 **2026-05-28 addendum: subagent-83 WS C Phase 2 Journal/Compaction Durability on Same Real 5k+ Main Wikifier Creative Target (parallel to 80 Phase 1 + 82/84/85)**
 

@@ -38,7 +38,11 @@ Significant progress on detailed per-Workstream A–E durability and external lo
 
 **Current honest calibration** (per the 7 exact 85% criteria + long-term scalable plan): **82–87% toward 95%+**, **0/7 strict 85%**. The dominant remaining gap is the literal multi-day (3–7 d) high-trust autonomous external long-pole on real 5k+ creative monorepos with the new paths as the unquestioned normal/default (crit4/Gate3), as confirmed by 76/77/78 and prior reviewers. Proxies are strong; literal wallclock multi-day high-trust autonomous execution remains open.
 
+**Re-alignment Note (late 2026-05-28)**: Per explicit user direction, M1–M4 are the feature-building and technical gap-closing phases. M5 is reserved for broad dogfooding across multiple real-world projects the user has already prepared. The 80/82/83/84/85 swarm work on the real 5k+ main Wikifier creative self-host represents meaningful M2 feature completion and real-usage exercising during the building phase, not final M5 validation. The previous strict 0/7 scoring pressure is being de-emphasized while features are still being completed.
+
 See `Findings/m2-85-to-95-agent-swarm-plan.md`, the updated tracker, `wave-evidence/`, and the long-term scalable plan for full details. All work under strict discipline ("3" untouched, main clean, honest no-overclaim).
+
+**Hygiene note**: A direct addition of the External Long-Pole Execution Toolkit v1 to `wikifier/gap1_validation_harness.py` on main (without full 9-step gate + reviewer) was identified during a full project review and has been reverted to keep main clean for continued M2 feature work. The code remains available in the appropriate worktree for proper future introduction.
 
 ### What's New in v0.3.2
 
