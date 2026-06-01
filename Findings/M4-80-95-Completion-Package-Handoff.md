@@ -136,4 +136,39 @@ All visible work (E6) traceable, harvestable, and defensible under the 9 Guiding
 
 **subagent_id=m4-80-95-e6 — Phase harvest (visible/early) ready for E8 swarm synthesis + M5.** Good visible E6 work under full discipline equips next with honest foundation + concrete M5 handoff package + WT artifacts + documented long-term limitations + migration guides + explicit multi-month real-project dogfood scope. All content respects iron rules, M5 boundary, and 9 Guiding Principles. Accurate, honest, no overclaim. 75-85%+ calibration on visible contribution (strong on synthesis/handoff/M5 clarity/"3" protection; gaps in full E* execution noted transparently).
 
+---
+
+## Known Long-Term Limitations, Migration Guides, and What M5 Must Still Dogfood at Literal Multi-Month Autonomous Scale on Real User Projects (E6 Central Synthesis; subagent_id=m4-80-95-e6)
+
+**Synthesized from (mandatory full reads of 6 key files + D6 patterns + M3 C8 model + E* visible + 8-step/9GP application; honest, no overclaim)**:
+
+**1. Known Long-Term Limitations (5-10yr viability lens; GP#1/2/4/5/6/7/9; forcing fn = 50k+ creative concurrent years-scale + M5 literal multi-month on real user projects)**:
+- **Compaction & State Boundedness at Literal Years (WA1/2)**: D6 patterns + E1 prototypes provide reversible/bounded policies (B1 manifests V1 + stdlib priority + O(changed) proofs on harness 25k-50k+ accel sims); however, full production hardening + 99%+ success under *literal* high-churn concurrent MA+daemon+human on real 50k+ barrels/dyn/ws/symlinks for 3-18+ months wallclock not yet executed (E1 plans + E3 to deliver; proxy harness timeouts on deep runs noted in bg task log). Growth curves post-1000+ cycles, recovery <5min 0 corruption under real LLM-evolved edits unproven at scale.
+- **Long-Horizon Observability (WA4)**: Rich ACS/CIABRE/journal intent from priors + D3 plans; useful after "months" sim data per D6; but real multi-month query performance/trend usefulness on 1M+ events from concurrent real-user 50k+ projects (with human edits mixed) not harvested yet (E2/E3/E5 to wire; obs may "go dark" after real 6mo without further compaction/aggregation polish).
+- **Resilience/Recovery/Health under Sustained Concurrent (WA3)**: Health.py + E2 hardening + D2 stories; MA chaos in harness 25k+ proven in priors; but literal daemon+human+agent chaos over months on real external 50k+ (with partials/"3" fidelity under churn) is M5 territory per plan/checklist M5 boundary.
+- **Versioning/Migration (WA5)**: Contracts V1 + D3/E2 additive policy sketched in priors/D6; detection/migration for long-lived installs planned; but full tested migration under LLM progress (e.g. V2 shapes after 2-5yr agent evolution) + backward compat on real user installs with years of journal data unproven at 50k+ creative (E2 to complete; risk of drift if not).
+- **"3" Sacred Partial/Continuation at Extreme Long-Term (cross)**: 100% harness:3109 + O(scope) in priors/E1 plans; safe elevation only (no touch); but literal multi-month autonomous partial resume fidelity under real user high-churn + human concurrent edits on 50k+ not dogfooded (M5 only; harness proxy only).
+- **Spectrum Edge Cases**: Tiny zero-ceremony preserved; but creative monorepo (heavy barrels + dyn/cond + ws + symlinks + high churn) long-term (years) under real concurrent load has proxy evidence only (E3 to prove on designated externals).
+- **General**: No self-dogfood (M5 boundary); evidence on allowed only (harness/RecipeLab/externals); bg harness --m2-health --deep timed out (proxy for deep long-term stress limits).
+
+**2. Migration Guides (high-level for E8/M5; from plan WA5 + D6 patterns + m3-03 8-step + contracts V1 additive precedent)**:
+- All M4 state (journal, compaction manifests, health histories, session traces) use additive versioned shapes in contracts.py (from_dict/to_dict defensive + _version field; see priors B1 manifests V1, PartialResultV1).
+- Detection: On load, check version; migrate via pure stdlib helpers (no new deps).
+- Policy: "Frozen contracts" + explicit migration path per GP#5; document in E2 patterns + E5 final docs.
+- For installs running years: Safe compaction + provenance in all events enables replay/migrate without loss.
+- Example (per D6): Extend B1 manifest V1 with policy fields additively; reversible undo for rollback during migration.
+- E5/E2 to deliver full tested policy + examples (harness + RecipeLab only).
+- Long-term (5-10yr): Support LLM-driven agent evolution by version bumps without breaking partial/"3" resume or obs queries.
+
+**3. What M5 Must Still Dogfood at Literal Multi-Month Autonomous Scale on Real User Projects (explicit per 90-95% DoD item 3 + plan WA6 + 60-80 recs + E6 role + M5 boundary verbatim)**:
+- **Literal multi-month (3-18+ wallclock) autonomous "set & forget" operation** on user-prepared real 50k+ creative monorepos (with all target patterns: barrels, dyn/cond imports, workspaces, symlinks, high churn, mixed languages) under sustained concurrent load (multiple autonomous agents + background daemons + occasional human edits).
+- Full integration/wiring of E1 final compaction policies + E2 obs/versioning + E3 heavy metrics (boundedness curves over real time, compaction 99%+ success post real months, obs queries useful after 3-6mo real data, recovery <5min 0 corruption on "3"/partials/MA paths) into E5 patterns + this handoff.
+- Real-user 50k+ external designated creatives (beyond harness/RecipeLab proxies): multi-month runs with rich harvestable evidence (no manual intervention, state bounded, intent queryable, health fresh, no drift/corruption).
+- Final 95%+ usefulness scoring on long-term feature-building lens + 5-10yr viability gate (including under evolving LLM/agent capabilities).
+- M5-only: Broad dogfood on user's real projects; post-gate citations to README/living plans.
+- E3/E1/E2/E5/E8 to deliver the evidence bundle; E4/E7 ultimate hygiene/REV1 sign-off; E6/E8 update this handoff with real M5 results pre final gate.
+- Harness/RecipeLab remain primary for accel stress; externals for real duration.
+
+**This section fulfills E6 role mandate for "Clear documentation of known long-term limitations, migration guides, and what M5 must still dogfood at literal multi-month autonomous scale on real user projects" + 90-95% DoD handoff artifact item. 8-step/9GP applied (spectrum: M5 real 50k+ creative as forcing; zero-dep: .md only; long-term: 5-10yr explicit; validation: allowed only; exits: measurable M5 scope; MA/"3"/obs/versioning mapped). Full harvestable for E8 + M5. subagent_id=m4-80-95-e6**
+
 *End of M4 80-95% Central Completion Package & Handoff. subagent_id=m4-80-95-e6. Accurate, honest, no overclaim. Ready for E8 synthesis + M5 dogfood gate.*
