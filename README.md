@@ -42,6 +42,18 @@ Significant progress on detailed per-Workstream A–E durability and external lo
 
 See `Findings/m2-85-to-95-agent-swarm-plan.md`, the updated tracker, `wave-evidence/`, and the long-term scalable plan for full details. All work under strict discipline ("3" untouched, main clean, honest no-overclaim).
 
+### M3 – Agent Interface & Ergonomics (Feature-Building Complete)
+
+The M3 phase — polished public Python library surface, rigorous testable Agent Protocol (v0.5 baseline with mandatory long-running/swarm/MA + daemon + human behaviors), complete versioning + additive migrations, thin-consumer parity (≥0.92 fidelity), and comprehensive agent-builder documentation + patterns across the full scalability spectrum (tiny scripts to 50k+ creative monorepos with barrels, dynamic/conditional imports, workspaces, symlinks) — is now complete as a pure feature-building phase under the 9 Guiding Principles.
+
+- Central deliverable: `Findings/M3-80-95-Completion-Package-Handoff.md` (exact C8/B8 model; verbatim 9 Guiding Principles + 80%/90-95% DoD; FRESH LAST "3" hygiene with multiple verbatim 0-def grep logs on active non-guardian code; full evidence index with absolute paths to all E1-E8 / F1-F8 / G1-G4 swarm artifacts + C5 heavy 50k+ creative validation on allowed targets only; honest 48-55%+ calibration).
+- Sacred partials/continuation ("3" / test_partial_continuation_workflow_25k deep-proof track at harness:3109) elevated as the natural scalable ergonomics path for 50k+ creative work via safe citation and pattern replication only — the implementation track itself remains untouched.
+- Strict execution: zero new dependencies, main source 100% clean, M5 boundary absolute (all serious validation on harness M3 suites + RecipeLab + user-designated external creative monorepos; no sustained dogfood on the Wikifier project itself).
+
+See `Findings/Milestones-Overview.md` (now updated with 80-95% closure + Gamma coordination) and the original plan/checklist in `Findings/m3-*.md`.
+
+**Next up**: M4 – State Management & Long-Term Scale (years-scale autonomous load, advanced compaction, full 50k+ creative monorepo resilience under concurrent agents/daemons/humans).
+
 **Hygiene note**: A direct addition of the External Long-Pole Execution Toolkit v1 to `wikifier/gap1_validation_harness.py` on main (without full 9-step gate + reviewer) was identified during a full project review and has been reverted to keep main clean for continued M2 feature work. The code remains available in the appropriate worktree for proper future introduction.
 
 ### What's New in v0.3.2
