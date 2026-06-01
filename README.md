@@ -52,9 +52,34 @@ The M3 phase — polished public Python library surface, rigorous testable Agent
 
 See `Findings/Milestones-Overview.md` (now updated with 80-95% closure + Gamma coordination) and the original plan/checklist in `Findings/m3-*.md`.
 
-**Next up**: M4 – State Management & Long-Term Scale (years-scale autonomous load, advanced compaction, full 50k+ creative monorepo resilience under concurrent agents/daemons/humans).
+### M4 – State Management & Long-Term Scale (80-95% Complete)
 
-**Hygiene note**: A direct addition of the External Long-Pole Execution Toolkit v1 to `wikifier/gap1_validation_harness.py` on main (without full 9-step gate + reviewer) was identified during a full project review and has been reverted to keep main clean for continued M2 feature work. The code remains available in the appropriate worktree for proper future introduction.
+M4, the feature-building phase for years-scale autonomous "set & forget" operation on massive creative monorepos, is now at 80-95% completion.
+
+**Delivered durability foundations** (E1–E5 + D6/C6 bases, strong evidence on allowed targets):
+
+- Reversible, bounded compaction and O(changed) state for 50k+ creative monorepos with barrels, dynamic/conditional imports, workspaces, symlinks, high churn, and partials/"3" (E1 prototype + B1/B2/D1/D6 Pattern 1; <15% growth / 99%+ success / 0 corruption on "3" paths in 50k+ sims; 83%+ compaction in 90-sim-day C5 runs).
+- Rich long-horizon observability and diagnostics that remain useful after months of data (E2/D3/E3).
+- Complete additive versioning and migration policy for all M4 state shapes (E2/D3).
+- Comprehensive years-scale agent-builder patterns and documentation (E5 Guide extending D6 4 patterns + C6 base with real E1/E3/C5 metrics from harness 25k-50k+, RecipeLab, and external 50k+ proxies; full 8-step/9GP/spectrum matrices; honest limitations).
+
+**Evidence** (harness extended 25k-50k+ creative generators with full target patterns + partials/"3" + concurrent chaos, RecipeLab, designated external 50k+ proxies):
+
+- 0 "3" corruption on 100+ partials_3 exercised.
+- Bounded growth (e.g. ~25 MB mem / 80 MB disk in 50k+ 90-sim-day).
+- Sub-2 ms average recoveries, actionable obs trends, high Prin compliance (0.87–1.0 on relevant).
+
+**M5 Preparation** (explicit central handoff):
+
+See `Findings/M4-80-95-Completion-Package-Handoff.md` for the full handoff, including known limitations and the precise mandate for M5: literal multi-month (toward years) uninterrupted autonomous "set & forget" on user-prepared real 5k-50k+ creative projects under the 9 Guiding Principles (full patterns + sustained concurrent MA+daemon+human; specific metrics for boundedness, recovery, obs usefulness, versioning, "3" fidelity, 95%+ usefulness + 5-10yr viability).
+
+M4 = capability + proxy evidence on allowed targets (harness/RecipeLab/externals). Literal broad real-user multi-month dogfood = M5 exclusive.
+
+**Process**: 7–8 agent swarms (E1–E8 + Gamma coordination), visible execution, full discipline (multiple independent FRESH LAST "3" with verbatim 0-def logs, zero new dependencies, M5 boundary, 8-step DF + 9 GPs everywhere, rich diaries with verbatim evidence).
+
+See the central handoff, `Findings/M4-Years-Scale-Agent-Builder-Guide.md`, E7 REV1 report, E1 prototype reference (in e1 worktree), and updated Milestones for details.
+
+**Next up**: M5 – Broad real-world dogfood on the user's prepared 5k–50k+ creative projects (literal multi-month autonomous operation; final 95%+ usefulness + 5-10yr viability gate).
 
 ### What's New in v0.3.2
 
