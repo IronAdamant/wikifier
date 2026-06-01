@@ -117,9 +117,31 @@ See `Findings/m3-agent-interface-ergonomics-plan.md` for the full plan.
 ---
 ### M4 – State Management & Long-Term Scale
 
-**Focus**: Years of autonomous multi-agent load, advanced compaction, full 50k+ creative monorepo resilience, richer observability.
+**Focus**: Years of autonomous multi-agent load, advanced compaction, full 50k+ creative monorepo resilience (barrels + dyn/cond imports + workspaces + symlinks + high churn + partials/"3" under sustained concurrent MA + daemon + human operation), richer long-horizon observability, and long-term versioning/migration policy.
 
-**Status**: Significant foundations from M2 (event sourcing, compaction hooks, bounded structures, real usage data from 80-85 swarm). Most heavy lifting here.
+**Status**: Planning complete (2026-06-02). M3 feature-building execution fully wrapped (80-95% multiple concurrent swarms + Gamma central handoff + README + Milestones updates pushed). Significant foundations from M2 (event sourcing, compaction hooks, bounded structures, real usage data from 80-85/86-90 swarms) + M3 ergonomic surfaces now exist. Most heavy lifting for years-scale durability and long-term state management remains here.
+
+**Guiding Constraints** (per user direction and carried from M3):
+- Long-term focus (5–10+ year viability for autonomous agents) and full scalability spectrum first (tiny scripts remain delightful; 50k+ creative monorepos with all target patterns are the forcing function).
+- Actual usefulness as close to 95% on the long-term feature-building lens.
+- Feature creation, addition, and refinement only.
+- **Zero new dependencies** as the primary lens for all new state, compaction, health, and observability logic (pure stdlib + existing patterns).
+- **No dogfooding** on the Wikifier project itself (harness extended long-term suites + RecipeLab + user-designated external creative monorepos only).
+- Same (or stricter) discipline as M2–M4: "3" sacred with explicit FRESH LAST greps (0 def on active non-guardian code), 8-step DF + 9 GPs in every decision, rich evidence on allowed targets only, main .py 100% clean until M5, subagent_id everywhere, central handoff model.
+- Honest calibration.
+
+See:
+- `Findings/m4-state-management-longterm-scale-plan.md` (full vision, 9 GPs alignment with zero-dep primary emphasis, 6 Work Areas, 8-step DF application, phased approach, exit criteria)
+- `Findings/m4-state-management-longterm-scale-checklist.md` (executable progressive 20/40/60/80/90-95% DoD with measurable criteria per Work Area)
+- `Findings/M3-80-95-Completion-Package-Handoff.md` (explicit M4 prioritized recommendations from M3 closure)
+
+**Execution Model**: 6–8 agent swarms per major sub-phase in isolated worktrees, rich local diaries, central handoffs (C8/B8 style), REV1 oversight. All serious validation on allowed targets only.
+
+**M3 → M4 Transition Note**: M3 (Agent Interface & Ergonomics) is now feature-building complete. The polished library, v0.5 protocol baseline, long-running ergonomics, thin parity, versioning, and comprehensive agent-builder patterns (including sacred "3" elevation via safe citation only) provide the ergonomic foundation. M4 makes the underlying state durable and trustworthy for years of autonomous operation on the hardest 50k+ creative targets.
+
+---
+
+### M5 – Final Polish, Dogfooding & Release
 
 ---
 
