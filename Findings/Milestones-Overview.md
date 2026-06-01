@@ -134,8 +134,9 @@ See:
 - `Findings/m4-state-management-longterm-scale-plan.md` (full vision, 9 GPs alignment with zero-dep primary emphasis, 6 Work Areas, 8-step DF application, phased approach, exit criteria)
 - `Findings/m4-state-management-longterm-scale-checklist.md` (executable progressive 20/40/60/80/90-95% DoD with measurable criteria per Work Area)
 - `Findings/M3-80-95-Completion-Package-Handoff.md` (explicit M4 prioritized recommendations from M3 closure)
+- `Findings/m4-first-swarms-0-20-prompts.md` + `m4-20-40-first-swarms-prompts.md` + `m4-40-60-first-swarms-prompts.md` + `m4-60-80-first-swarms-prompts.md` + `m4-80-95-first-swarms-prompts.md` (ready-to-launch swarm prompts for all 5 phases)
 
-**Execution Model**: 6–8 agent swarms per major sub-phase in isolated worktrees, rich local diaries, central handoffs (C8/B8 style), REV1 oversight. All serious validation on allowed targets only.
+**Execution Model**: 6–8 agent swarms per major sub-phase in isolated worktrees, rich local diaries, central handoffs (C8/B8 style), REV1 oversight. All serious validation on allowed targets only. Prompts for 0-20% swarm ready to launch.
 
 **M3 → M4 Transition Note**: M3 (Agent Interface & Ergonomics) is now feature-building complete. The polished library, v0.5 protocol baseline, long-running ergonomics, thin parity, versioning, and comprehensive agent-builder patterns (including sacred "3" elevation via safe citation only) provide the ergonomic foundation. M4 makes the underlying state durable and trustworthy for years of autonomous operation on the hardest 50k+ creative targets.
 
