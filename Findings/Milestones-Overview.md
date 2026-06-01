@@ -138,6 +138,8 @@ See:
 
 **Execution Model**: 6–8 agent swarms per major sub-phase in isolated worktrees, rich local diaries, central handoffs (C8/B8 style), REV1 oversight. All serious validation on allowed targets only. Prompts for 0-20% swarm ready to launch.
 
+**0-20% Progress (as of 2026-06-02)**: Swarm launched (M4-01–06). M4-01 (Journal & Compaction Auditor), M4-03 (Long-Term Lens & 8-Step DF), M4-05 (Evidence/Harness Strategy), and M4-06 (Coordinator) completed with rich WT artifacts. Central `Findings/M4-0-20-Completion-Package-Handoff.md` synthesized (20% DoD status 35-45%+, WA1 audit + 20% proposal from M4-01, full 8-step matrices + swarm guidance from M4-03, evidence strategy + harness extensions from M4-05, FRESH "3" hygiene 0-def by all, honest calib). Equips 20-40% swarm for rapid 40% milestone. M4-02/04 still active (expected per discovery design). All iron rules upheld (zero-dep primary, "3" sacred, M5 boundary).
+
 **M3 → M4 Transition Note**: M3 (Agent Interface & Ergonomics) is now feature-building complete. The polished library, v0.5 protocol baseline, long-running ergonomics, thin parity, versioning, and comprehensive agent-builder patterns (including sacred "3" elevation via safe citation only) provide the ergonomic foundation. M4 makes the underlying state durable and trustworthy for years of autonomous operation on the hardest 50k+ creative targets.
 
 ---
