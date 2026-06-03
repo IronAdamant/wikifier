@@ -758,6 +758,11 @@ def _get_monitored_roots(root: Path) -> List[Path]:
                 if line and not line.startswith("#"):
                     cand = (root / line).resolve()
                     if cand.exists():
+                        try:
+                            if not str(cand.resolve()).startswith(str(root.resolve())):
+                                continue  # M5: only accept monitored under the project root (defensive for abs/rel mix)
+                        except Exception:
+                            pass
                         roots.append(cand)
             if roots:
                 return roots
@@ -803,6 +808,10 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
             if _ic_mod is not None:
                 try:
                     dirty = _ic_mod.compute_files_needing_reparse(root, cands, full_rebuild=False) or []
+                    # M5 external dogfood guard: never let outside-root paths (from bad cands/monitored/cwd mix)
+                    # into dirty or health. This + health.py prune prevents pollution in alt/consistency/cloned targets.
+                    root_res = root.resolve()
+                    dirty = [p for p in (dirty or []) if str(Path(p).resolve()).startswith(str(root_res))]
                     cache = _ic_mod.load_cache(root) or {}
                     barrel_stale = _ic_mod.invalidate_stale_barrel_entries(
                         cache, root, changed_files=[str(p) for p in dirty]
@@ -811,7 +820,7 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                     for rel in barrel_stale:
                         if rel:
                             pp = (root / rel).resolve()
-                            if pp.exists() and str(pp) not in seen:
+                            if pp.exists() and str(pp) not in seen and str(pp).startswith(str(root_res)):
                                 dirty.append(pp)
                                 seen.add(str(pp))
                     result["barrel_invalidation_summary"] = _ic_mod.get_barrel_cache_summary(cache) or {}
@@ -820,11 +829,15 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
 
             changed_count = 0
             if _health_mod is not None:
+                root_res = root.resolve()
                 for p in (dirty or [])[:200]:  # bounded for skeleton safety at scale
                     try:
-                        rel = str(p.relative_to(root))
+                        pr = Path(p).resolve()
+                        if not str(pr).startswith(str(root_res)):
+                            continue
+                        rel = str(pr.relative_to(root_res))
                     except Exception:
-                        rel = str(p)
+                        continue
                     _health_mod.upsert_entry(
                         root, rel, "🟡 Yellow",
                         "mtime changed since last check-changes (Python primary auto-detected)"

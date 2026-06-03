@@ -70,6 +70,56 @@ def _timestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _normalize_to_relative(root: Path, file_key: str) -> str:
+    """Return a canonical relative-to-root key if the path is under root; else the original key.
+    Used to prevent persisting out-of-tree 'pollution' entries (from prior cross-cwd runs,
+    relative monitored in wrong cwd, or MCP/CLI external dogfood). Makes external targets
+    (recipelab_alt, consistencyhub, cloned_*) have clean scoped health immediately.
+    """
+    try:
+        p = Path(file_key)
+        r = root.resolve()
+        if p.is_absolute():
+            try:
+                p = p.resolve()
+            except Exception:
+                pass
+            if str(p).startswith(str(r)):
+                return str(p.relative_to(r))
+            return file_key  # outside -> will be filtered by _entry_is_under_root
+        # relative key
+        full = (root / p).resolve()
+        if str(full).startswith(str(r)):
+            return str(full.relative_to(r))
+        return file_key
+    except Exception:
+        return file_key
+
+
+def _entry_is_under_root(root: Path, file_key: str) -> bool:
+    """Return True only for entries whose path (abs or rel) resolves under the project root.
+    Filters pollution from other trees (e.g. worktrees, main wikifier source during dogfood).
+    Uses relative_to (raises on not-under) for correctness even on prefix-overlap cases like
+    "root/home/..." treating bad relative key.
+    Heuristic: keys that look like fs-absolute (start home/ or many parts) are resolved as absolute.
+    """
+    try:
+        p = Path(file_key)
+        r = root.resolve()
+        key_str = str(file_key)
+        if p.is_absolute() or key_str.startswith(("home/", "/home/", "Users/", "/Users/")) or len(p.parts) > 6:
+            # treat as absolute fs path (common when str(p) was stored for outside files)
+            if not p.is_absolute():
+                p = Path("/") / p
+            p = p.resolve()
+        else:
+            p = (root / p).resolve()
+        _ = p.relative_to(r)
+        return True
+    except Exception:
+        return False  # not under -> drop (M5 external dogfood hygiene)
+
+
 def _normalize_health_entry_local(entry: Dict[str, Any]) -> Dict[str, Any]:
     """Local fallback (when contracts import unavailable) for B1 durable additive migration.
     Mirrors contracts.normalize_health_entry exactly. Idempotent."""
@@ -210,6 +260,12 @@ def load_health(root: Path) -> Dict[str, Any]:
         data["entries"] = normalized_entries
         if version < 2:
             data["version"] = 2  # mark for future save; additive, no breakage
+        # M5 dogfood fix: immediately drop any out-of-tree pollution entries persisted from
+        # prior bad cross-project or cwd-mismatched runs (e.g. worktree paths in external targets).
+        # Views (get_*) will be clean; next save will persist pruned json.
+        entries = data.get("entries", {}) or {}
+        pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
+        data["entries"] = pruned
         return data
 
     # Migration path: if JSON doesn't exist but MD does
@@ -226,6 +282,10 @@ def load_health(root: Path) -> Dict[str, Any]:
                 norm[k] = _normalize_health_entry_local(v)
         migrated["entries"] = norm
         migrated["version"] = 2
+        # M5: prune pollution on migrate too (same as json path)
+        entries = migrated.get("entries", {}) or {}
+        pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
+        migrated["entries"] = pruned
         return migrated
 
     # Fresh project (start at v2 with Health B fields ready)
@@ -253,6 +313,12 @@ def _do_save_health(root: Path, health_data: Dict[str, Any]) -> None:
     json_path = _get_health_path(root)
     health_data["last_updated"] = _timestamp()
     health_data["version"] = 2  # B durable: ensure v2 on every save (additive fields)
+
+    # M5: always prune out-of-tree on save so target's file_health.json stays clean forever
+    if "entries" in health_data:
+        entries = health_data.get("entries") or {}
+        pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
+        health_data["entries"] = pruned
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(health_data, f, indent=2, ensure_ascii=False)
@@ -333,6 +399,10 @@ def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> No
     Only freshness-aware paths (mark-green, record via new helpers) mutate those.
     Always normalize to guarantee schema.
     """
+    # M5 dogfood: normalize key to relative-under-root; drop outside pollution writes immediately.
+    file = _normalize_to_relative(root, file)
+    if not _entry_is_under_root(root, file):
+        return
     health = load_health(root)
     existing = health.get("entries", {}).get(file, {})
     # Start from normalized existing to keep B fields
@@ -763,6 +833,8 @@ def get_files_needing_attention(root: Path, status_filter: Optional[str] = None,
     result = []
 
     for file_path, entry in health.get("entries", {}).items():
+        if not _entry_is_under_root(root, file_path):
+            continue
         if directory:
             if not file_path.startswith(directory.rstrip('/') + '/'):
                 continue
@@ -1051,6 +1123,8 @@ def get_healable_stubs(root: Path, min_wiki_length: int = 350, directory: Option
     candidates = []
 
     for rel_path, entry in health.get("entries", {}).items():
+        if not _entry_is_under_root(root, rel_path):
+            continue
         if directory:
             if not rel_path.startswith(directory.rstrip('/') + '/'):
                 continue
@@ -1099,6 +1173,8 @@ def get_healing_statistics(root: Path) -> Dict[str, Any]:
     already_green_with_good_wiki = 0
 
     for rel_path, entry in entries.items():
+        if not _entry_is_under_root(root, rel_path):
+            continue
         status = entry.get("status", "")
         is_initial_stub = "Initial stub" in status
 

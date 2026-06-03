@@ -221,6 +221,12 @@ Wikifier resolves the project root using this strict priority. Agents should fol
 
 When the MCP server is started via `wikifier-mcp` (or through `.mcp.json`), it will usually auto-detect correctly if you `cd` into the project first. For maximum reliability on external dogfooding, always pass `project_root` or set the env var.
 
+**M5 dogfood note (2026-06)**: For immediate clean operation on prepared external targets (RecipeLab_alt, ConsistencyHub, cloned_sample_projects etc.):
+- Use *absolute* paths in the target's `monitored_paths.txt` (e.g. `/full/path/to/target/src` or specific subdirs). This makes CLI/MCP/sh resolution cwd-independent.
+- Always pass `project_root=` (MCP/library) or `WIKIFIER_PROJECT_ROOT=` (env) or `cd` + local launcher.
+- The Python/MCP backend now strictly scopes dirty detection, health views, barrel reports, and auto-prunes any out-of-tree entries on load/save (prevents cross-project pollution in health matrices during multi-target dogfood).
+- `wikifier init` + `check-changes` + `health` / MCP `get_project_status` / `get_barrel_reports` now work cleanly per target.
+
 This packaging + targeting story was a major focus of M2-Rem-06 to eliminate the friction reported during RecipeLab_alt and self-dogfood.
 
 ---

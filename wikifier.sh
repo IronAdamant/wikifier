@@ -109,10 +109,21 @@ timestamp() {
 
 # Read monitored paths (one per line, ignore comments/blank)
 get_monitored_paths() {
+    local base="$PROJECT_ROOT"
     if [[ -f "$MONITORED_PATHS_FILE" ]]; then
-        grep -vE '^\s*(#|$)' "$MONITORED_PATHS_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+        grep -vE '^\s*(#|$)' "$MONITORED_PATHS_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            if [[ "$line" = /* ]]; then
+                mon="$line"
+            else
+                mon="$base/$line"
+            fi
+            # Resolve to absolute for cwd-independent use (e.g. MCP sh fallback, external dogfood from any cwd)
+            mon=$(realpath -m "$mon" 2>/dev/null || echo "$mon")
+            echo "$mon"
+        done
     else
-        echo "."
+        echo "$(realpath -m "$base" 2>/dev/null || echo "$base")"
     fi
 }
 
