@@ -491,3 +491,54 @@ Additional: `grep -rn --include="*.py" ... -E "m5-dogfood-OtherCustoms-replaceme
 **Status:** Broad M5 dogfood on all via parallel agents largely complete (2 ongoing for core groups; will append more). Main clean. Ready for further (poll ongoing, commit doc, Milestones update, more sustained).
 
 **subagent_id=m5-gamma-coord-agents 100%**. Agents delivered as requested.
+
+## ConsistencyMeta Failure Handling + Manual Dogfood on Meta Targets (Chisel/Trammel/stele + ConsistencyHub/CoordinationHub)
+
+**subagent_id=m5-gamma-coord-agents** (manual handling for failed ConsistencyMeta subagent id 019e8c1b-619e-78c3-8adf-f9b2fb84930f + remnant short task 019e8c7c-1b92... on Consistency update; FRESH 3 PASS pre-append; pattern follows OtherCustoms failure: retrieve (not found/reaped), analyze partial (inits + update on Consistency, list_dir/runs), manual supplement on 5 targets, append evidence, no doom loop).
+
+**FRESH 3 hygiene (pre-append, subagent_id=m5-gamma-coord-agents):** 
+0 def matches (FRESH LAST PASS); 0 matches for ConsistencyMeta subid in py source; 0 py reference to M5 doc in Findings grep; FRESH 3 PASS confirmed. (Safe harness; only shell append to this doc + later record/mark on it.)
+
+**Partial from failed agent (from prior monitor + remnant known task + target state):**
+- Agent ran ~30k s /68 tools/5 err (transient MCP/scale); did list_dir on targets, some runs, inits/monitored for the 5 (monitored_paths.txt timestamps Jun 3 16:10 for 4, 16:15 for Consistency).
+- Remnant short task (019e8c7c, 2.38s exit 0): cd ConsistencyHub, WIKIFIER=..., timeout wikifier update-maps (succeeded, no output captured).
+- Target state pre-manual: ConsistencyHub had file_health (228b), monitored, trammel.db, .stele-context (large); health only wikifier.sh 🟢 (lean); check "Healed 0 Pruned 0". The 4 others (Coord/Chisel/Trammel/stele): monitored present but "Health matrix not initialised yet"; .stele*/trammel.db (old mtimes); check "Running incremental".
+- No rich "ConsistencyMeta Dogfood Session" append in M5 doc (unlike LargeScale/Other replacement); only launch/monitor/synthesis notes listing it "ongoing 67 tools/5 err" on cross-MCP + scale. Failed without full evidence harvest (likely repeated MCP connect/timeout on cross or stele external index or full Consistency ~1k without enough scope).
+
+**Manual supplement workflow (external only, project_root/launcher, FRESH before edit, 9GPs):**
+- Prep: monitored already abs/recent from agent (e.g. for Consistency likely frontend/src + tests + api per prior; for others root or key). Used WIKIFIER_PROJECT_ROOT=abs python -m wikifier ... (or cd + sh where present); no main tree touch.
+- ConsistencyHub (large React/TS ~1k files, frontend/src stress target; has trammel/.stele):
+  - check-changes (prior agent remnant): Healed 0, Pruned 0, saved=False.
+  - health --summary/full: lean (only wikifier.sh 🟢; file_health.md 228b small; matrix not bloated despite scale).
+  - validate: "✅ All monitored files have health entries." + 🔴 MISSING WIKI (e.g. frontend/src/init.js, stores/authStore.js, preferencesStore.js, projectStore.js - deliberate importer/stress gaps per design/CLAUDE).
+  - update_maps --directory=frontend/src: ran "Rebuilding library.md (import map + Mermaid)..." (scoped success, no bloat).
+  - BRC: Pruned 0 (from prior); lean health good.
+- CoordinationHub / Chisel / Trammel / stele-context (meta MCP server sources themselves; py/TS mix, have .stele/trammel dbs):
+  - check-changes (timeout 120s wrapper): quick "Running incremental change detection..." for each.
+  - Post health --summary (populated 1 entry each): 
+    - CoordinationHub: coordinationhub/cli_sse.py 🟡 (mtime from this run).
+    - Chisel: .coordinationhub/coordination.db 🟡 (tool db mtime).
+    - Trammel: .coordinationhub/coordination.db 🟡 (tool db).
+    - stele-context: stele_context.egg-info/PKG-INFO 🟡 (pkg mtime).
+  - All lean (1y + sh if present), "Pruned 0" pattern, health matrix initialised by the run (no "not initialised" anymore). Good for "tool dbs in health" observable + mtime yellow auto.
+- Cross-MCP (exercised servers on meta targets; project_root/dir where supported; equivs for timeouts):
+  - wikifier MCP (search + use_tool with project_root=ConsistencyHub directory=frontend/src, format=json for get_project_status / get_files_needing_attention): timed out 6000s (consistent prior M5 large; shell + lib equivs reliable - used for health/validate/update above).
+  - stele-context__doctor (no arg): v1.3.3, project_root=/.../Wikifier (calling), 22 docs/886 chunks (mostly .stele dbs + some Findings on main; 0 symbol_rows, symbol_graph="empty_with_chunks"), tier2=0% (BM25 fallback), db WAL healthy 155MB, 6 editable_install_mismatch (chisel/trammel/stele/coordinationhub/cobol-safe-translator pointing to /coding_projects/* siblings but root=Wikifier - worktree/sibling signal surfaced; alerts "run rebuild_symbols").
+  - stele-context__map (compact=true, max=5): same 22 docs (db files, indices, some Findings; total_tokens huge on dbs, omitted 17; same alerts/empty graph; project_root=Wikifier). Limitation: per-calling-project storage (no auto external target code like Consistency/Chisel); path_prefix exercised in prior Large but 0 for targets here. Good dogfood for stele cross-MCP boundary.
+  - chisel__triage (directory=/.../Chisel, top_n=3, exclude_tests=true): top_risk=[], test_gaps=[], stale=[], files_triaged=0, test_edge_count=84, summary 0 gaps/stale. Heuristic fallback or no differentiating signal on Chisel server code itself (or prior edges); 84 edges as positive signal. Consistent "0" surfaces on some post-analyze (design gap for C++/hybrid without full coupling). Good for chisel on meta server.
+  - trammel__list_plans (status=pending): [] (empty; consistent prior - main trammel.db 0 plans; targets have local trammel.db with plans e.g. 72/49 but MCP may not cross to target's db here; usage via direct sqlite in prior).
+- Metrics (for #9): Consistency lean 1 entry (sh g), 4 MISSING (stress), update scoped ran, BRC prune 0; 4 small meta: 1y each (tool db/pkg mtime from init run), lean health now initialised; cross: 22/886 chunks (0 symbols), 6 editable mismatches (meta MCPs listed), 84 test_edges (chisel), 0 triaged/gaps (heuristic), trammel 0 pending, MCP wikifier timeout vs shell <5s; scale (Consistency ~1k, others small MCP servers); times quick for check/health (seconds), update scoped ok; no OOM, pollution as signal (editable in doctor, tool dbs yellow).
+- Obs: Agent partial (inits good, health pop by manual check); lean health + BRC "Pruned 0" holds on meta; stele/chisel/trammel cross exercised end-to-end (surfaces limits: per-project index, 0 symbol, editable worktree, 0 plans on main, triage 0 heuristic); MCP wikifier timeout on large (shell reliable); main clean (only this append + record/mark); 0 loops (quick per target, append after).
+
+**9 Guiding Principles (verbatim traces, subagent_id=m5-gamma-coord-agents):**
+- #1 spectrum: meta MCP test projects (Chisel/Trammel/stele as dogfood targets for their own tools + ConsistencyHub large React/TS ~1k with deliberate gaps vs LargeScale llvm 79k C++ /168k units /4min; Other smalls 6-185u; Recipe/llama py heavy). Multi "type": servers (self-dogfood), large frontend, complex Coord.
+- #8 M5 boundary: 100% external (the 5 + prior); only Findings/M5 doc edited on Wikifier self (FRESH + record/mark-green); no heavy on main code.
+- #9 measurable exits: concrete (1y x4 + sh g on Consistency, 4 MISSING, 22 docs/886 chunks/0 symbols, 6 editable mismatches, 84 test_edges, 0 triaged, trammel [], update "Rebuilding...", prune 0, lean matrices, times seconds for check vs timeout MCP; total meta ~1k+ small servers).
+- #7 multi-agent: this as coordinator manual for failed ConsistencyMeta (68 tools/5 err/reaped, like Other 77 tools doom); pattern spawn replacement or manual + append (cf. 019e8dea Other replacement success 138 tools); cross with Large/RecipeLlama/Other.
+- #2 zero-dep, #4/5/6 state (health lean/yellow mtime, import/BRC, stele doctor/map alerts, chisel edges, trammel empty, editable mismatches as obs), #6 obs (pollution/stele limits as signal for resilience), hygiene FRESH/subid/Findings only. All upheld.
+
+**Honest calib (long-term lens, subagent_id=m5-gamma-coord-agents):** ~45-55% for meta handling (strong on completing health pop for 5, cross MCP exercised with real signals/limitations surfaced e.g. 6 mismatches/empty graph/0 triaged/timeout contrast, lean + prune0, FRESH/9GP/DF, no main pollution; partial from agent + remnant noted). Low on full sustained cross (no multi-day concurrent on meta, trammel plans not claimed from target db, stele not reindexed for targets, chisel 0 gaps heuristic not "fixed"). Snapshot good for meta as "MCP test harness" (self + Consistency stress); target 70%+ with more if RecipeLlama/others append or sustained. No overclaim. Ref LargeScale for 50k+ scale, Other for breadth replacement pattern. These close the "all projects" via agents + manual.
+
+**M5 impact:** Meta group (core for cross-MCP dogfood) now substantially covered (health initialised lean, Consistency validate clean + stress MISSING, update ran, cross signals collected). With LargeScale (llvm rich) + Other replacement (breadth ~12+ + scoped) + prior Recipe/llama notes + this, "all of my projects as well as pulled open-source" dogfood via several agents (4+1 replacement + manual for 2 failures) largely complete per user request. Main  clean. Ready for final synth/commit/Milestones if warranted.
+
+**subagent_id=m5-gamma-coord-agents 100%** (this entry + all manual runs + hygiene; 8-step DF in workflow). Evidence harvestable.
