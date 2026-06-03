@@ -8,7 +8,29 @@
 
 Wikifier turns any codebase (tiny scripts → large monorepos) into a living, token-efficient map that LLMs/agents operate autonomously.
 
-### What's New in v0.3.3
+### M5 Broad Real-World Dogfood Complete — 85-90%+ (June 2026)
+
+The M5 phase (broad real-world dogfood on the user's prepared external 5k–50k+ creative projects) has been fully executed.
+
+**Execution ("same as before")**:
+- 4 parallel background subagents covering all targets: RecipeLab/alt (BRC ~20+ named services/chains exact reproduction), ConsistencyHub + CoordinationHub + core MCPs (Chisel/Trammel/stele-context cross), ~18+ other customs + scoped OSS (Babylon.js etc.), LargeScale (llvm-project heavily scoped subs ~79k files in llvm/ + clang/lib, ~540k total monitored when expanded, plus worktree consistency copy).
+- Full workflows on externals only (WIKIFIER_PROJECT_ROOT / project_root= always, absolute monitored_paths, scoped --directory where needed, python-primary for large streaming, cross chisel/stele/trammel where applicable).
+- Strict protocols: FRESH 3 hygiene before every Findings edit, `record-change` + `mark-green`, subagent_id tagging, 9 Guiding Principles (esp. #1 spectrum, #7 multi-agent, #8 M5 boundary, #9 measurable), 8-step DF traces, honest calibration, zero self-dogfood on Wikifier source, main tree 100% clean.
+
+**Key Evidence & Outcomes** (see `Findings/` for full):
+- `M5-Dogfood-Progress.md` (1192 lines): full diaries from all 4 agents + launch/status/synth notes. Subid counts: 5/6/10/15.
+- `M5-Dogfood-Assessment-Report.md`, `p6_real_world_validation_report.md`, `M5.1-cross-hardening-analysis.md`.
+- Main health: 4+ 🟢 on M5 keys (Progress, Milestones, Assessment, p6, M5.1-cross, wikifier.sh). Targets: lean "Pruned 0", expected BRC/MISSING as designed stress (alt BRC signals exact match prior snapshot), no cross-pollution after M5.1 fixes.
+- Highlights: alt BRC ~20+ from named (AdversarialScaffoldGenerator etc.), llama core 5673u/8e (new py edges), Consistency 82162 edges + stele self 108 docs/30k sym/6 mismatches + target trammel plans, Other breadth with 185u/22g Rust etc. + Babylon 0-miss + graceful large-batch timeout handling, Large 79k+ C++ (python-primary streaming success on 5k dir, 0 sub-entries in health, chisel C++ 0% observed vs prior 168k u/4min, stele path-prefix exercised, barrel 0 on pure C++).
+- Honest calibration (per Assessment-Report): **85-90%+** toward actual 95%+ / 5-10yr viability ("as close as possible without [literal more] dogfooding"). 7-criteria and 9 GPs upheld with rich measurable evidence. Remaining gaps require M5.3: literal multi-month (≥72h concurrent MA+daemon on 3+ targets: alt/Consistency/llvm-llama priority) for full "3" 0-corr under churn, obs after months, full OSS depth, central 95% scoring (see 10 DoD + M5.3 plan in Assessment).
+
+**M5.1/M5.2 Hardening** (using existing snapshot data only, no new dogfood during phases): MCP reliability (timeouts/caching), health.py auto-prune + under-root scoping for external, cli resilience, cross-MCP analysis + safe fixes (chisel/stele/trammel), agent doom-loop handling patterns. Artifacts produced.
+
+See the final synth in `Findings/M5-Dogfood-Progress.md` and full Assessment-Report for metrics, 9GP/DF traces, gaps/DoD, M5.3 plan.
+
+**Next**: M5.3 literal sustained multi-month dogfood on 3+ prepared targets for the true 95%+/5-10yr gates.
+
+### What's New in v0.3.3 (Historical — Gap #1)
 
 **Gap #1 (Dependency Intelligence) is now at 95%+ "set & forget" on large messy monorepos — Swarm Complete**
 
@@ -79,7 +101,7 @@ M4 = capability + proxy evidence on allowed targets (harness/RecipeLab/externals
 
 See the central handoff, `Findings/M4-Years-Scale-Agent-Builder-Guide.md`, E7 REV1 report, E1 prototype reference (in e1 worktree), and updated Milestones for details.
 
-**Next up**: M5 – Broad real-world dogfood on the user's prepared 5k–50k+ creative projects (literal multi-month autonomous operation; final 95%+ usefulness + 5-10yr viability gate).
+**M5 status (June 2026)**: Broad real-world dogfood round complete (see new top-level M5 section above). 85-90%+ achieved "as close as possible without (more) dogfooding". M5.3 (literal multi-month sustained on 3+ targets) remains for the final 95%+/5-10yr gate per the Assessment-Report DoD.
 
 ### What's New in v0.3.2
 
@@ -221,13 +243,15 @@ Wikifier resolves the project root using this strict priority. Agents should fol
 
 When the MCP server is started via `wikifier-mcp` (or through `.mcp.json`), it will usually auto-detect correctly if you `cd` into the project first. For maximum reliability on external dogfooding, always pass `project_root` or set the env var.
 
-**M5 dogfood note (2026-06)**: For immediate clean operation on prepared external targets (RecipeLab_alt, ConsistencyHub, cloned_sample_projects etc.):
-- Use *absolute* paths in the target's `monitored_paths.txt` (e.g. `/full/path/to/target/src` or specific subdirs). This makes CLI/MCP/sh resolution cwd-independent.
-- Always pass `project_root=` (MCP/library) or `WIKIFIER_PROJECT_ROOT=` (env) or `cd` + local launcher.
-- The Python/MCP backend now strictly scopes dirty detection, health views, barrel reports, and auto-prunes any out-of-tree entries on load/save (prevents cross-project pollution in health matrices during multi-target dogfood).
-- `wikifier init` + `check-changes` + `health` / MCP `get_project_status` / `get_barrel_reports` now work cleanly per target.
+**M5 dogfood note (2026-06)**: Broad real-world dogfood round ("same as before") across all prepared external targets (RecipeLab/alt, ConsistencyHub + meta MCPs, 18+ customs, scoped OSS incl. Babylon, llvm-project 79k+ C++ heavily scoped subs + worktree) completed successfully with 4 parallel subagents.
 
-This packaging + targeting story was a major focus of M2-Rem-06 to eliminate the friction reported during RecipeLab_alt and self-dogfood.
+- All targets used absolute `monitored_paths.txt` + `project_root=` / `WIKIFIER_PROJECT_ROOT=` + launcher.
+- Python/MCP backend + M5.1 scoping/prune fixes prevented pollution; lean health + "Pruned 0" held; BRC/MISSING as designed stress signals reproduced exactly.
+- Full evidence (diaries, 9GP traces, calibs 35-65%, 85-90%+ overall) in `Findings/M5-Dogfood-Progress.md` (1192 lines) + Assessment-Report.
+
+The external robustness (abs paths, scoping, python-primary for 50k+) is now battle-tested at real 5k-79k+ creative scale.
+
+This packaging + targeting story (plus M5.1 external hardening) was a major focus to eliminate friction for multi-target dogfood. See the M5 section above for summary and Findings for details.
 
 ---
 
