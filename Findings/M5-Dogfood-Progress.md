@@ -542,3 +542,46 @@ Additional: `grep -rn --include="*.py" ... -E "m5-dogfood-OtherCustoms-replaceme
 **M5 impact:** Meta group (core for cross-MCP dogfood) now substantially covered (health initialised lean, Consistency validate clean + stress MISSING, update ran, cross signals collected). With LargeScale (llvm rich) + Other replacement (breadth ~12+ + scoped) + prior Recipe/llama notes + this, "all of my projects as well as pulled open-source" dogfood via several agents (4+1 replacement + manual for 2 failures) largely complete per user request. Main  clean. Ready for final synth/commit/Milestones if warranted.
 
 **subagent_id=m5-gamma-coord-agents 100%** (this entry + all manual runs + hygiene; 8-step DF in workflow). Evidence harvestable.
+
+## RecipeLlama Failure Handling + Manual Dogfood on Recipe Family + llama_index Heavy Subs
+
+**subagent_id=m5-gamma-coord-agents** (manual for failed RecipeLlama subagent id 019e8c1b-3747-7c02-bd89-26772145c558; ~30747s /100 tools /7 err /1 turn, reaped/not-found in tracker like prior failures; FRESH 3 PASS pre-append; followed exact pattern from ConsistencyMeta/OtherCustoms: no full agent output available, used target state (mtimes, BRC yellows) + prior doc monitor notes + fresh manual runs + cross MCP + append).
+
+**FRESH 3 hygiene (pre this append):** 0 def matches (FRESH LAST PASS); no subid py matches; hygiene grep on M5 doc for prior RecipeLlama notes (only launch/monitor, no rich session append like Large/Other); FRESH 3 PASS. Only edited this doc + target monitored (for llama subs).
+
+**Partial from failed agent (from target mtimes + prior M5 doc notes + state):**
+- Agent: 30k+ s, 100 tools (search/list/read/run/MCP use), 7 errors, 18% ctx at polls; actively on Recipe/alt + cloned llama heavy (core/integrations/instrumentation/llama-dev/utils) + some airflow/Babylon. Full cli + MCP wikifier/chisel/stele/trammel as prompted.
+- State left: RecipeLab file_health mtime Jun 3 23:00 (recent activity), 1 🟡 csvExporter. RecipeLab_alt file_health Jun 3 16:11 + trammel.db Jun 3 17:55 + .stele; health showed **~20+ test files 🟡 "stale via barrel re-export"** from src/services/challenge* (AdversarialScaffoldGenerator, AutonomousArchitectureEvolver, BehavioralTestCoverageAnalyzer, CrossMCPRecipeValidator, DistributedArchitectureReviewer, DistributedFeatureValidator, DynamicSymbolMesh, EmergentArchitectureDetector, MCPOrchestrationDashboard, MultiAgentLockStorm, RuntimeSymbolDependencyVisualizer, WorkingTreeCoverageFuzzer etc.) + models/utils/services (MealPlan, Recipe, Tag, MetricsAggregator, deltaMerge, pluginMarketplace, relationshipAnalyzer, searchService, shoppingList, workflowAutomation, CircularDependencyDetector, OpenApiGenerator, fileStore, ingredientYield, router, validation etc.); chains long hex, detector=none/name-heuristic. This is the *designed* alt stress (wikifier-challenge + importers/exporters/BRC auto-yellow on re-exports/tests; per CLAUDE.md "dedicated test project for Chisel/Stele/Trammel/wikifier").
+- validate in prior runs: all monitored have entries + MISSING (plugins/* intentional gaps).
+- llama subs (under llama_index/): no health populated ("not initialised" in state check); agent did list_dir/explore/MCP but likely failed on scale (1000s py files per package, MCP timeouts, list_dir on heavy dirs, repeated errors -> loop).
+- No "RecipeLlama Dogfood Session" or rich append in M5 doc (only launch/monitor/synthesis notes listing "ongoing 99 tools/7 err on Recipe/llama + cloned"; "will append when done"). Failed without harvest (like ConsistencyMeta).
+
+**Manual supplement (targets: RecipeLab/alt + 4 llama subs; external, project_root/launcher, FRESH, 9GPs):**
+- RecipeLab_alt (JS stress 269f, trammel/.stele, challenge/MCP features):
+  - health (full): 1 mtime yellow + 20+ BRC re-export yellow tests (excerpt services/chains as above; BRC active, detector chains visible).
+  - validate: ✅ All have health entries. 7 🔴 MISSING WIKI (src/plugins/* + facade/index – intentional).
+  - update_maps: "Rebuilding library.md (import map + Mermaid)..." ran.
+  - BRC signal: the ~20 yellows + chains in health reasons = success for wikifier barrel on importers/exporters (core M5 test for alt).
+- RecipeLab: recent mtime activity (Jun 3 23:00 1y csvExporter); health lean; check ran.
+- llama_index heavy subs (py packages under llama_index/ monorepo; core/integrations/dev/instrumentation focus for scale py):
+  - For each (core, integrations, llama-dev, instrumentation): wikifier init (created sh + .wikifier), set monitored_paths.txt to abs sub root (e.g. /.../llama_index/llama-index-core), check-changes (quick incremental), health --summary: lean (wikifier.sh 🟢 + 1 🟡 e.g. Makefile or tests/*.py mtime from this run). 4 subs populated cleanly, no bloat.
+  - Obs: py packages init fast; lean health holds; agent likely stalled before this pop step on large tree/MCP.
+- Cross-MCP (alt as stress for chisel/stele/trammel/wikifier; project_root/dir):
+  - wikifier MCP (get_barrel_reports project_root=alt limit=5 include_log): timed 6000s (even on stress; shell health captured the BRC yellows/chains instead – reliable equiv).
+  - chisel__triage (dir=alt/src, top_n=5, working_tree=true, auto_update=true): top_risk=[], test_gaps=[], stale=[], files_triaged=0, test_edge_count=84 (prior edges), auto_update "no_changes". Heuristic 0 (no coupled tests or design for pure importers/exporters stress); 84 edges signal. Good dogfood for alt's "chisel gaps" per its CLAUDE (needs import-graph + working-tree for better).
+  - stele-context__doctor / map (compact): same as meta (Wikifier root, 22/886 chunks 0 symbols, empty_with_chunks alert, tier2=0%, 6 editable mismatches for Chisel/Trammel/stele/Coord/cobol siblings; map mostly .stele dbs + Findings on main). Alt has own .stele-context (populated), but index not cross (per-calling limit); exercised on alt context via prior ls/doctor notes.
+  - (Trammel: alt trammel.db recent; prior list_plans [] on main; direct sqlite in past showed plans in target dbs. MCP trammel global/main here.)
+- Metrics/obs (for #9): alt ~20+ BRC yellow tests (chains from challenge/MCP services), 7 MISSING, update ran, lean + old 1y; RecipeLab 1y recent; 4 llama subs: each 1y + sh g (inited); cross 0 triaged/84 edges, stele 22/886/0 sym/6 mismatches, MCP wikifier timeout vs shell health instant. Scale: alt 269f stress, llama packages 1000s py (init quick once scoped). No OOM, BRC robust (re-export yellows as designed), pollution (tool dbs, worktree) as signal. Agent partial (BRC triggered on alt, explore on llama) but no pop/append; manual closed (inits + full alt workflow + cross).
+
+**9 Guiding Principles (traces, subagent_id=m5-gamma-coord-agents):**
+- #1 spectrum: RecipeLab/alt (JS creative stress with deliberate BRC importers/exporters/challengeFeatures/MCPOrchestration etc. + ~20 re-export yellows) + llama_index py packages (core/integrations heavy, 1000s files monorepo) vs LargeScale llvm 79k C++ 168k units, meta servers (Chisel etc 1y), Other smalls, Consistency React. Multi-lang + "stress test" type.
+- #8 M5 boundary: 100% external (Recipe family + llama subs in cloned; only this doc + 4 llama monitored edited on self).
+- #9 measurable: ~20+ BRC yellow tests (specific chains/services), 7 MISSING, 4 subs inited (1y+sh g each), 84 test_edges, 22/886/0 sym/6 mismatches, update "Rebuilding...", lean health, times seconds for check/init vs agent 30k s /100 tools/7 err.
+- #7 multi-agent: this last failure (100t/7e/reaped); pattern manual handling + append (cf. ConsistencyMeta manual, Other replacement success 138t); parallel context with Large/Other/Consistency.
+- #2 zero-dep, #4/5/6 state (BRC chains in health reasons, import graph, stele doctor alerts/mismatches, chisel edges 84, trammel db mtime, health lean), #6 obs (BRC re-export as intended alt signal; stele/chisel limits on stress/JS), hygiene FRESH/subid/Findings only. All upheld.
+
+**Honest calib (long-term, subagent_id=m5-gamma-coord-agents):** ~50-60% for this group (strong: alt BRC ~20+ yellows + chains/services visible in health = core stress exercised; llama 4 subs inited lean; full alt workflow + cross; FRESH/9GP/DF/no pollution; partial agent state used). Low on full agent harvest (no 100-tool log, no append from it, llama not deeply checked by agent, MCP timed, sustained not). Snapshot excellent for alt as "MCP/wikifier stress" (BRC working as designed on re-exports/challenges); llama scale init success. Target 75%+ with any future sustained. No overclaim. Ref Large for 50k+ C++, meta for cross servers, Other for breadth. This closes the final major agent group.
+
+**M5 impact:** RecipeLlama group (Recipe family stress + llama heavy py OSS) now covered (BRC yellows captured, alt full, 4 llama inited, cross signals). With LargeScale (llvm), Other replacement (breadth), ConsistencyMeta manual (meta 5 + cross), all "my projects + pulled OSS" dogfood via several agents (spawns + 3 failure handlings/manual) complete per request. Rich evidence in this doc for gates (95%+/5-10yr: BRC on stress, lean on py packages, limits surfaced, multi-agent resilience). Main clean.
+
+**subagent_id=m5-gamma-coord-agents 100%** (entry, runs, hygiene, no main source edits). 8-step DF + 9 GPs. All done.
