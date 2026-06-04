@@ -345,9 +345,9 @@ Full reference → [`skills/run.md`](skills/run.md)
 
 ## Quick Links
 
-- [spec.md](spec.md) — Immutable user requirements
-- [Basis-v0.3.md](Basis-v0.3.md) — Implementation reference & data formats
-- [TRADEOFFS.md](TRADEOFFS.md) — Why we made the design choices we did
+- [docs/spec.md](docs/spec.md) — Immutable user requirements
+- [docs/Basis-v0.3.md](docs/Basis-v0.3.md) — Implementation reference & data formats
+- [docs/TRADEOFFS.md](docs/TRADEOFFS.md) — Why we made the design choices we did
 - [index.html](index.html) — Open this in a browser for the live dashboard
 
 ## Differentiation

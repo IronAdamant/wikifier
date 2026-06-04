@@ -2,9 +2,11 @@ include wikifier/scripts/*
 include README.md
 include LICENSE
 include CONTRIBUTING.md
-include spec.md
-include Basis-v0.3.md
-include TRADEOFFS.md
+include docs/spec.md
+include docs/Basis-v0.3.md
+include docs/TRADEOFFS.md
+include docs/RELEASE_NOTES.md
+include docs/v0.4-*.md
 include skills/run.md
 include index.html
 include diagnostics.html

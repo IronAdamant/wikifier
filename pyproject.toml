@@ -55,7 +55,7 @@ package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["wikifier*", "index.html", "diagnostics.html"]
+include = ["wikifier*", "index.html", "diagnostics.html", "docs/*"]
 
 [tool.setuptools.package-data]
 wikifier = ["scripts/*"]
