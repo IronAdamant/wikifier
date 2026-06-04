@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wikifier"
-version = "4.0.0"
+version = "4.0.1"
 description = "Agent-first, zero-dependency, self-maintaining codebase documentation & change tracking system"
 readme = "README.md"
 license = {text = "MIT"}

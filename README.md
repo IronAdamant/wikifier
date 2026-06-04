@@ -43,6 +43,13 @@ See the final synth in `Findings/M5-Dogfood-Progress.md` and full Assessment-Rep
 
 **v4.0 Release**: M5 (broad real-world dogfood 85-90%+) is complete, including M5.1/M5.2 hardening for MCP reliability and external use, M5.3 sustained foundations (monitors, subagents, agent-to-agent wiki scope), and recent MCP/skills updates. With zero-dependency explicitly enforced, the agent-to-agent wiki model (token-efficient lookup + autonomous updates) mature, and full protocol in skills/run.md v0.5, this is the 4.0 release.
 
+**v4.0.1 (2026-06)**: Post-4.0 cleanup + small robustness (patch level; no major addition or scope change — remains 4.x per direction). 
+- `health.py`: `_coerce_root` (accepts str | Path for `load_health`/`save_health`/`upsert_entry` etc.; direct Python lib use with WIKIFIER_PROJECT_ROOT or "." now robust, no TypeError). Added `SUPERSEDED_PATTERNS` + prune logic (load/migrate/save/upsert) to aggressively drop superseded historical wiki-notes (e.g. early M5.3 "Cycle1 evidence" from before full gate) while preserving explicit 🔴 Red "DELETED" audit records as intentional, observable markers for agents.
+- `pending_updates.md`: cleaned (removed full `grep --help` preamble corruption from prior diagnostics; only real audit + mtime notes remain).
+- Repo: removed tracked + fs junk (old `test-js-flat/`, `Findings/wave-evidence/*` subagent/phase diaries) via rm + `git rm --cached`; lingering monitors killed (safe pids); launcher banners/headers (`wikifier.sh`, `scripts/wikifier.sh`) now consistently v4.0.
+- Monitored paths + health matrix kept lean/specific (no broad `.` or external pollution). Main health: 4+ 🟢 on core (README, mcp/*, wikifier.sh, --help, M5 Findings) + 1 intentional 🔴 Red audit + unrelated mtime Yellow.
+- Version to 4.0.1. All under M5 protocols (FRESH before this README edit, record+mark, subid, zero-dep, main clean, external-only for any dogfood). See cleanup commit 4c37dd5 + `health --summary`.
+
 ### Historical (pre-v4.0)
 
 #### What's New in v0.3.3 (Gap #1)
