@@ -43,6 +43,13 @@ import re
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 
+# Module-level compiled regexes for small repeated speed win on every parse (docstring strip + dynamic import detectors).
+# Zero behavior change.
+_DOCSTRING_RE1 = re.compile(r'"""[\s\S]*?"""')
+_DOCSTRING_RE2 = re.compile(r"'''[\s\S]*?'''")
+_DYN_IMPORT_RE = re.compile(r'(?P<call>(?:importlib\.)?import_module)\s*\(', re.MULTILINE)
+_DYN_DUNDER_RE = re.compile(r'(?P<call>__import__)\s*\(', re.MULTILINE)
+
 # Diagnostics & Failure Transparency (Limitation #5) - same robust import pattern as JS parser
 try:
     from . import diagnostics
@@ -249,8 +256,8 @@ def _strip_docstrings(content: str) -> str:
     strings well), but it is good enough for v0.4 and keeps us zero-dependency.
     """
     # Remove """...""" and '''...''' (non-greedy, handles both single and double)
-    content = re.sub(r'"""[\s\S]*?"""', '', content)
-    content = re.sub(r"'''[\s\S]*?'''", '', content)
+    content = _DOCSTRING_RE1.sub('', content)
+    content = _DOCSTRING_RE2.sub('', content)
     return content
 
 
@@ -304,8 +311,8 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
     dynamic_imports: List[Dict[str, Any]] = []
     if _extract_candidate_literals is not None and _apply_dynamic_registry is not None:
         dyn_patterns = [
-            (re.compile(r'(?P<call>(?:importlib\.)?import_module)\s*\(', re.MULTILINE), "import_module"),
-            (re.compile(r'(?P<call>__import__)\s*\(', re.MULTILINE), "dunder_import"),
+            (_DYN_IMPORT_RE, "import_module"),
+            (_DYN_DUNDER_RE, "dunder_import"),
         ]
         for pat, ptype in dyn_patterns:
             for match in pat.finditer(content):

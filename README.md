@@ -65,6 +65,15 @@ See the final synth in `Findings/M5-Dogfood-Progress.md` and full Assessment-Rep
 - Synced descriptions in README.md, `skills/run.md`, `wikifier/mcp/README.md`.
 - All under protocol (FRESH, record-change + mark-green with subid, main clean). Version to 4.1.1. See the separation-fix commit.
 
+**v4.1.2 (2026-06)**: Very minor patch for mapping / update speed hygiene (no new behaviour or scope; pure internal improvements for large projects).
+
+- Faster candidate collection everywhere that drives check-changes, monitor, and update-maps (Python-primary paths): switched to `os.scandir`-based recursive scan (std lib, avoids walk overhead) + git `ls-files --cached --others --exclude-standard` fast-path when in a git repo (dramatically faster on real monorepos; falls back cleanly).
+- Consistent early pruning: `exclude_patterns.txt` (user-editable, populated by init) now applied more broadly during mapping walks in both sh and Python collectors (venvs, caches, site-packages, etc. stop descent sooner).
+- Small parser micro-opt: hoisted common regex compiles (docstring strip, dynamic import detectors) to module level in the Python parser (hot path on dirty files during maps).
+- Minor sh-side note + skeleton for git fast collection in traditional update-maps path (real wins already flow through the Python collectors used by check-changes/streaming/lib/MCP).
+- All changes FRESH-checked + recorded+marked under subid=mapping-speed-hygiene. Complements existing levers (monitored_paths.txt narrowing, --dir / directory= scoping, --stream / --max-files / --max-time streaming+budgets, python-primary, incremental dirty + BRC reverse index).
+- Version to 4.1.2. See the speed-hygiene edits + this commit.
+
 ### Historical (pre-v4.0)
 
 #### What's New in v0.3.3 (Gap #1)

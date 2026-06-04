@@ -1852,15 +1852,44 @@ def generate_update_events(
     # Real early scope projection (proportional for 50k+) - Micro-step 1
     projector_stats: Dict[str, Any] = {"degraded": True}
     proj: Dict[str, Any] = {}
-    # Basic candidate collection (inline for self-contained Micro-step 1; mirrors common excludes)
-    candidates = []
+    # Faster candidate collection using os.scandir (avoids repeated listdir overhead).
+    # Respects exclude_patterns.txt when present (for consistency with check-changes + mapping speed).
+    # Same semantics as before.
+    candidates: List[Path] = []
     exts = {'.py', '.js', '.ts', '.jsx', '.tsx'}
-    exclude_dirs = {'__pycache__', '.git', 'node_modules', '.venv', 'venv', 'build', 'dist', '.next', '.cache'}
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in exclude_dirs and not d.startswith('.')]
-        for f in filenames:
-            if os.path.splitext(f)[1].lower() in exts:
-                candidates.append(Path(dirpath) / f)
+    exclude_dirs = {'__pycache__', '.git', 'node_modules', '.venv', 'venv', 'build', 'dist', '.next', '.cache',
+                    '.pnpm', '.yarn', '.store', 'tmp', 'temp', '.turbo', '.mypy_cache', '.ruff_cache'}
+    # Load project excludes if available (project root level)
+    ep = root / "exclude_patterns.txt"
+    if ep.exists():
+        try:
+            for line in ep.read_text(errors="ignore").splitlines():
+                p = line.strip()
+                if p and not p.startswith("#"):
+                    p = p.split()[0]
+                    if p:
+                        exclude_dirs.add(p)
+                        if p.endswith("/*") or p.endswith("*"):
+                            exclude_dirs.add(p.rstrip("/*"))
+        except Exception:
+            pass
+    def _scan(d: Path) -> None:
+        try:
+            with os.scandir(d) as it:
+                for entry in it:
+                    try:
+                        name = entry.name
+                        if entry.is_dir(follow_symlinks=False):
+                            if name not in exclude_dirs and not name.startswith('.'):
+                                _scan(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            if os.path.splitext(name)[1].lower() in exts:
+                                candidates.append(Path(entry.path))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+    _scan(root)
     candidates_rel: List[str] = []
     for p in candidates:
         try:

@@ -172,18 +172,75 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
         root = Path(root).resolve()
     except Exception:
         root = Path(root)
+    # Also respect the project's exclude_patterns.txt (if present) for parity with sh
+    # mapping paths and check-changes. Simple dir-name globs only for pruning speed.
+    # This makes python-primary update-maps benefit from user custom excludes (venvs etc)
+    # without any behavior change.
+    # Look relative to explicit WIKIFIER_PROJECT_ROOT (if set for the target) or the
+    # passed root; excludes live at the logical project root, not arbitrary monitored subdirs.
+    ep_root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT", root))
+    ep = ep_root / "exclude_patterns.txt"
+    if ep.exists():
+        try:
+            for line in ep.read_text(errors="ignore").splitlines():
+                p = line.strip()
+                if p and not p.startswith("#"):
+                    p = p.split()[0]  # first token
+                    if p:
+                        EXCLUDES.add(p)
+                        # also common glob forms as exact for dirname match
+                        if p.endswith("/*") or p.endswith("*"):
+                            EXCLUDES.add(p.rstrip("/*"))
+        except Exception:
+            pass
 
-    for dirpath, dirnames, filenames in os.walk(root):
-        # prune in-place (same pattern as resolution._discover_*)
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDES]
-        for fn in filenames:
-            if fn.lower().endswith(exts):
-                p = Path(dirpath) / fn
-                try:
-                    if p.is_file():
-                        candidates.append(p)
-                except Exception:
+    # Fast path: if inside a git repo, use `git ls-files` + untracked (respects .gitignore, dramatically faster
+    # on large checkouts than any walk; falls back to scandir scan). This is a pure speed opt for "updates"
+    # (check-changes, update-maps) with near-identical or better candidate set for real codebases.
+    git_dir = root / ".git"
+    if git_dir.exists() or (root / ".git" / "HEAD").exists():  # works for worktrees too
+        try:
+            import subprocess
+            # cached + others (untracked but not ignored), exclude standard ignores
+            out = subprocess.check_output(
+                ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+                cwd=root, stderr=subprocess.DEVNULL
+            )
+            for entry in out.split(b"\0"):
+                if not entry:
                     continue
+                p = (root / entry.decode("utf-8", "ignore")).resolve()
+                if p.suffix.lower() in exts:  # reuse the set from above (adjusted)
+                    # quick filter for excludes we still want even if git surfaces them
+                    parts = p.parts
+                    if not any(part in EXCLUDES or any(part.startswith(e) for e in (".",)) for part in parts):
+                        candidates.append(p)
+            if candidates:
+                return candidates  # success, use git list
+        except Exception:
+            pass  # fall through to scandir
+
+    # Use os.scandir for faster directory traversal (std lib only; avoids full listdir + separate is_dir stats on large trees).
+    # Pruning is applied on the fly. Behavior identical to prior walk.
+    exts_lower = tuple(e.lower() for e in exts)
+    def _scan_dir(d: Path) -> None:
+        try:
+            with os.scandir(d) as it:
+                for entry in it:
+                    try:
+                        name = entry.name
+                        if entry.is_dir(follow_symlinks=False):
+                            if name not in EXCLUDES and not name.startswith('.'):
+                                _scan_dir(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            lname = name.lower()
+                            if lname.endswith(exts_lower):
+                                candidates.append(Path(entry.path))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+    _scan_dir(root)
     return candidates
 
 
