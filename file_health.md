@@ -11,6 +11,6 @@
 | Findings/M5.1-cross-hardening-analysis.md | 🟢 Green | 2026-06-04 06:49:30 AEST | Wiki summary verified accurate after change. |
 | --help | 🟢 Green | 2026-06-04 06:50:01 AEST | Wiki summary verified accurate after change. |
 | M5.3 Cycle1 evidence append: 3 subs spawned+running (alt BRC20 named, trammel48, consist/llvm metrics, 72h gate start, FRESH3, 9GPs/DoD maps, subid=m5.3-coord-agents) | 🔴 Red | 2026-06-04 15:44:23 AEST | DELETED — Historical early M5.3 launch note from coord sub (pre full alt gate pass + sustained monitors). Superseded by complete agent records in M5-Dogfood-Progress.md (alt sub 1356s exit0 gate claim, 2 other subs rich, monitors running). Cleaned as part of post-M5 skills/MCP refresh. |
-| README.md | 🟢 Green | 2026-06-04 18:37:19 AEST | Org cleanup: .md moved to docs/, links updated. subagent_id=structure-cleanup |
+| README.md | 🟢 Green | 2026-06-04 18:42:16 AEST | v4.1.0 release note added for docs reorg + minor bump. FRESH+record. subagent_id=release-v4.1 |
 | wikifier/mcp/server.py | 🟢 Green | 2026-06-04 15:43:58 AEST | M5-refreshed docstring accurately describes the agent-to-agent wiki scope, M5 dogfood evidence, hardening, and sustained use. Pending cleared. |
 | wikifier/mcp/README.md | 🟢 Green | 2026-06-04 18:37:21 AEST | Org cleanup. subagent_id=structure-cleanup |
