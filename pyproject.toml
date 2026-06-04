@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wikifier"
 version = "4.1.2"
-description = "Agent-first, zero-dependency, self-maintaining codebase documentation & change tracking system"
+description = "Zero-dependency agent-to-agent codebase wiki for LLMs and AI agents. Autonomously maintained via record-change and mark-green for token-efficient lookup of files, dependencies, health, and summaries — across tiny scripts to 50k+ monorepos. Optional MCP server with rich tools for agents."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -17,7 +17,9 @@ maintainers = [
 requires-python = ">=3.8"
 keywords = [
     "wiki", "documentation", "llm", "agent", "mcp", "codebase", 
-    "health-matrix", "zero-dependency", "shell"
+    "health-matrix", "zero-dependency", "shell", "token-efficient", 
+    "autonomous", "record-change", "mark-green", "agent-wiki", 
+    "llm-tools", "dependency-graph", "monorepo"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
