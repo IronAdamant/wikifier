@@ -2682,11 +2682,14 @@ EOT
                 log "   (Copied launcher wikifier.sh into target for direct ./ use)"
             fi
         fi
-        # Copy human dashboards (index.html for main view + tree, diagnostics.html for deep human refactors)
-        for html in index.html diagnostics.html; do
+        # Copy human dashboard: only index.html (clean, data-driven viewer for *this target's* agent wiki).
+        # diagnostics.html (Wikifier maintainer/refactor hub with its own architecture + file map) is not
+        # copied — it would show the wrong tree (Wikifier's, not the host project) and be stale here.
+        # Open diagnostics.html from the Wikifier source if you are refactoring or porting the tool itself.
+        for html in index.html; do
             if [[ -f "$self_dir/$html" && ! -f "$PROJECT_ROOT/$html" ]]; then
                 if cp "$self_dir/$html" "$PROJECT_ROOT/$html" 2>/dev/null; then
-                    log "   (Copied human dashboard $html into target — open in browser for visual wiki + exports)"
+                    log "   (Copied human dashboard $html into target — open in browser for the project's wiki chart + files + descriptions)"
                 fi
             fi
         done
@@ -2696,7 +2699,7 @@ EOT
 
     log "✅ Wikifier initialised in $target_dir . Edit monitored_paths.txt to point at your real codebase (or subdirs for monorepos)."
     log "   Recommended: export WIKIFIER_PROJECT_ROOT=$target_dir  (or cd there and use ./wikifier.sh)"
-    log "   Human layer: open index.html in browser for live health + Mermaid tree (auto-refreshes with monitor). Use copy buttons to export text snapshots for LLMs or team investigation."
+    log "   Human layer: open index.html in browser for this project's code structure chart + files + descriptions (auto-refreshes with monitor). Use the copy buttons for clean text exports (tree + snapshot) to LLMs or teammates."
 }
 
 cmd_cycles() {

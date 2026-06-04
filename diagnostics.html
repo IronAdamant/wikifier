@@ -73,10 +73,10 @@
                 <div class="section-header mb-3">1. Architecture at a Glance (condensed from frozen P1)</div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
                     <div>
-                        <div class="font-semibold text-emerald-300 mb-1">Two-Page Model</div>
+                        <div class="font-semibold text-emerald-300 mb-1">Two-Page Model (current)</div>
                         <ul class="text-xs text-slate-300 space-y-0.5 ml-4 list-disc">
-                            <li><strong>index.html</strong> — Fast main dashboard (&lt;30-45KB): health pills, compact command launcher, intel cards, R1 summaries. Entry for agents + humans.</li>
-                            <li><strong>diagnostics.html</strong> — Heavy depth (&lt;55KB): full matrices, exhaustive maps, this human dev hub.</li>
+                            <li><strong>index.html</strong> — Clean *human* investigation view (copied to every target). Prominent code structure chart (Mermaid) as hero, "Files &amp; descriptions" with short wiki summaries, folder browser, copy buttons for tree + snapshot. Purely data-driven from the *host project's* file_health + library.md. Generic for any project.</li>
+                            <li><strong>diagnostics.html</strong> — This heavy maintainer/refactor/porter hub. Wikifier's own architecture, exhaustive command map, porting checklist, *this tool's* source tree with purposes. Not copied to targets (would show the wrong folder).</li>
                         </ul>
                         <div class="mt-2 text-[10px]"><a href="Findings/v1_visual_layer_architecture.md" class="text-amber-400 underline">Full frozen P1 arch doc →</a></div>
                     </div>
@@ -102,32 +102,42 @@
                     <div class="text-[10px] px-2 py-0.5 bg-amber-900/30 border border-amber-700 rounded text-amber-300">Human Refactor / Port View</div>
                 </div>
 
-                <p class="text-xs text-slate-400 mb-3">Starting from the root. Key files and their one-line purpose (sourced from high-quality <code>*.wiki.md</code> files created during development + agent analysis). This is the map humans reach for when planning refactors or ports.</p>
+                <p class="text-xs text-amber-300 mb-2 font-semibold">⚠ This map describes the Wikifier *tool's own source* (for people refactoring or porting Wikifier itself). It is *not* the file tree or wiki of whatever project you may have opened this file in.</p>
+                <p class="text-xs text-slate-400 mb-3">Key implementation files + one-line purposes (from *.wiki.md + current structure after org + human layer work). For the *current project's* agent wiki (chart + files + descriptions), use index.html after running <code>wikifier update-maps</code> / <code>check-changes</code> in that project. diagnostics.html is deliberately not copied into target project roots.</p>
 
                 <div class="bg-slate-950 border border-slate-700 rounded-2xl p-4 font-mono text-[13px] leading-[1.35] text-slate-300 overflow-x-auto">
-wikifier/<br>
-├── <span class="text-amber-300">contracts.py</span> ................ <span class="text-slate-400">Frozen shared contracts for all Gap #1 phases (rich metadata shapes, versioning, defensive decoding)</span><br>
-├── <span class="text-emerald-300">health.py</span> ................... <span class="text-slate-400">Documentation Health Matrix (SSOT) + auto-healing + JSON + Markdown dual store</span><br>
-├── <span class="text-emerald-300">import_cache.py</span> ............. <span class="text-slate-400">Rich persistent dependency cache + cycle detection (Tarjan) + barrel resolutions</span><br>
-├── <span class="text-emerald-300">locking.py</span> .................. <span class="text-slate-400">Project-level advisory locking for safe concurrent agents + monitor</span><br>
-├── <span class="text-sky-300">resolution.py</span> ................ <span class="text-slate-400">Central modern resolution engine (package.json exports, tsconfig, monorepos)</span><br>
+/ (Wikifier source root)<br>
+├── <span class="text-emerald-300">index.html</span> ................ <span class="text-slate-400">Clean human investigation dashboard (chart hero + files+short-descriptions + folder browser + copy exports). Data-driven from host project's artifacts. Copied to targets.</span><br>
+├── <span class="text-amber-300">diagnostics.html</span> ............ <span class="text-slate-400">This page — heavy maintainer/refactor hub (arch, full maps, porting checklist, *this* tool's tree). Wikifier source only.</span><br>
+├── <span class="text-sky-300">wikifier.sh</span> (+.ps1/.bat) ... <span class="text-slate-400">Launcher + init (copies only the human index.html to targets) + all cmd_*</span><br>
 │<br>
-├── parsers/<br>
-│   ├── <span class="text-violet-300">python.py</span> ............... <span class="text-slate-400">Rich Python import parser (relative, metadata, confidence)</span><br>
-│   ├── <span class="text-violet-300">javascript.py</span> ........... <span class="text-slate-400">JS/TS parser with barrel following, conditional/dynamic classification, confidence</span><br>
-│   ├── <span class="text-violet-300">bree.py</span> .................. <span class="text-slate-400">Barrel re-export expansion engine (BREE)</span><br>
-│   └── <span class="text-violet-300">cdia.py</span> .................. <span class="text-slate-400">Conditional &amp; Dynamic Import Analysis (CDIA)</span><br>
+├── <span class="text-emerald-300">wikifier/</span> (the package)<br>
+│   ├── <span class="text-amber-300">cli.py</span> .................. <span class="text-slate-400">CLI entry, init, copy_human_dashboards (now index.html only), health wrappers, runCommand surface</span><br>
+│   ├── <span class="text-emerald-300">health.py</span> ............... <span class="text-slate-400">Health matrix SSOT (load/upsert, _coerce_root for str|Path/MCP, SUPERSEDED_PATTERNS prune for lean agent view, BRC)</span><br>
+│   ├── <span class="text-amber-300">contracts.py</span> ............. <span class="text-slate-400">Frozen P1 shared shapes (versioned _vN, dataclasses, RICH_KEYS, defensive decode)</span><br>
+│   ├── <span class="text-emerald-300">locking.py</span> .............. <span class="text-slate-400">Advisory project locks for concurrent agents + monitor (fcntl + mkdir fallback)</span><br>
+│   ├── <span class="text-sky-300">resolution.py</span> ............ <span class="text-slate-400">Canonical path resolution (exports, tsconfig, workspace, bare heuristic)</span><br>
+│   ├── <span class="text-emerald-300">import_cache.py</span> ........ <span class="text-slate-400">Dep graph, Tarjan cycles, barrel reports, import analysis cache</span><br>
+│   ├── <span class="text-teal-300">diagnostics.py</span> .......... <span class="text-slate-400">Aggregates, reports, health helpers</span><br>
+│   ├── <span class="text-teal-300">daemon.py</span> ................ <span class="text-slate-400">Monitor daemon (30s heartbeat, incremental check-changes)</span><br>
+│   │<br>
+│   ├── <span class="text-violet-300">parsers/</span><br>
+│   │   ├── python.py (+.wiki.md) ... Rich Python import parser (relatives, metadata, confidence)<br>
+│   │   ├── javascript.py (+.wiki.md) JS/TS + barrel following + CDIA<br>
+│   │   ├── bree.py ................ Barrel re-export expansion (BREE)<br>
+│   │   └── cdia.py ................ Conditional &amp; dynamic import analysis<br>
+│   │<br>
+│   └── <span class="text-rose-300">mcp/</span><br>
+│       └── server.py (+.wiki.md) . 23 @mcp.tool() (thin to lib/CLI for heavy ops; project_root= support; external-safe)<br>
 │<br>
-├── mcp/<br>
-│   └── <span class="text-rose-300">server.py</span> ............... <span class="text-slate-400">MCP server — 22 tools exposing the full Wikifier surface to agents</span><br>
-│<br>
-├── <span class="text-teal-300">diagnostics.py</span> .............. <span class="text-slate-400">Project diagnostics, aggregates, and health helpers</span><br>
-├── <span class="text-teal-300">gap1_validation_harness.py</span> .. <span class="text-slate-400">Regression test harness for Gap #1 dependency intelligence</span><br>
-└── <span class="text-slate-400">cli.py / __main__.py</span> ........ <span class="text-slate-400">Cross-platform entry points + launcher</span>
+├── <span class="text-sky-300">skills/run.md</span> .............. <span class="text-slate-400">Mandatory agent protocol (FRESH, record-change + mark-green, human layer note, 9GPs/DF)</span><br>
+├── <span class="text-slate-400">README.md</span> .................. <span class="text-slate-400">Intended use (agent-to-agent primary), human layer (secondary), init examples</span><br>
+├── <span class="text-slate-400">pyproject.toml</span> + MANIFEST.in <span class="text-slate-400">Zero-dep declaration, packaging (includes the two .html for distribution)</span><br>
+└── docs/ ........................ <span class="text-slate-400">Historical non-core .md moved here (structure cleanup); still shipped</span>
                 </div>
 
                 <div class="mt-2 text-[10px] text-slate-400">
-                    Clickable links to full wiki docs where available: 
+                    Useful *.wiki.md (next to sources): 
                     <a href="wikifier/health.py.wiki.md" class="text-amber-400 hover:underline">health.py.wiki.md</a> • 
                     <a href="wikifier/parsers/python.py.wiki.md" class="text-amber-400 hover:underline">python.py.wiki.md</a> • 
                     <a href="wikifier/parsers/javascript.py.wiki.md" class="text-amber-400 hover:underline">javascript.py.wiki.md</a> • 
@@ -137,7 +147,7 @@ wikifier/<br>
 
             <!-- 3. Porting Checklist -->
             <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-6 human-section">
-                <div class="section-header mb-3">2. Porting Checklist (ready-to-use for real work)</div>
+                <div class="section-header mb-3">3. Porting Checklist (ready-to-use for real work)</div>
                 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
                     <!-- Port Wikifier core -->

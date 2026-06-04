@@ -560,7 +560,7 @@ def main():
     os.environ["WIKIFIER_USE_CANONICAL"] = "1" if use_canonical else "0"
 
     # Human sub-project: ensure dashboards are in the target (for MCP + human investigation)
-    # (index.html for visual health/tree + copy-paste exports; works alongside agent MCP use)
+    # index.html = clean human view (chart + files + descriptions + copies); diagnostics.html for technical depth. Works alongside agent MCP/CLI use. No effect on agent SSOT or tools.
     if project_root:
         try:
             copy_human_dashboards(str(project_root))
@@ -1101,11 +1101,15 @@ def health(
 # Update __init__.py to surface these at package level for `from wikifier import ...`.
 
 # Human Investigation Layer (secondary sub-project)
-# The HTML dashboards (index.html for live health + Mermaid tree + copy exports,
-# diagnostics.html for deep human refactors) are copied into target projects by init.
-# This lets humans investigate existing/new projects visually, read "what things look like"
-# (wiki summaries + tree), copy-paste text for LLMs, while agent-to-agent (MCP/text/MD files)
-# remains the primary token-saving purpose. The HTML lives in the project folder alongside MCP.
+# Only index.html (the clean human wiki viewer) is copied into target projects by init.
+# It provides the prominent code structure chart (Mermaid), "Files & descriptions" list with
+# short summaries, folder browser, and copy buttons for the *target project's* agent-maintained
+# wiki (data-driven from its file_health.* + library.md after check-changes + update-maps).
+# diagnostics.html is the Wikifier-specific heavy maintainer/refactor/porter hub (architecture,
+# full command map, porting checklist, this project's own source tree with purposes). It is
+# *not* copied to foreign project roots — it would point at the wrong folder and be stale for
+# the host project. Maintainers open it from the Wikifier source checkout or installed package.
+# This separation keeps the human view relevant to the project the user is actually in.
 def copy_human_dashboards(target_dir: str) -> None:
     """Copy the static human dashboards into the target project root (if not present).
     Works for both source runs and installed package (via importlib.resources).
@@ -1116,7 +1120,7 @@ def copy_human_dashboards(target_dir: str) -> None:
     try:
         from importlib.resources import files
         pkg_files = files("wikifier")  # package root may have them via include
-        for name in ("index.html", "diagnostics.html"):
+        for name in ("index.html",):  # only the generic human wiki viewer for the *target*; diagnostics.html is Wikifier maintainer-only
             try:
                 src = pkg_files.joinpath(name)
                 if src.is_file():
@@ -1130,7 +1134,7 @@ def copy_human_dashboards(target_dir: str) -> None:
     # Fallback: if running from source tree with htmls next to cli
     try:
         here = Path(__file__).parent.parent  # repo root when editable
-        for name in ("index.html", "diagnostics.html"):
+        for name in ("index.html",):
             src = here / name
             if src.exists():
                 dst = Path(target_dir) / name

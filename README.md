@@ -56,6 +56,15 @@ See the final synth in `Findings/M5-Dogfood-Progress.md` and full Assessment-Rep
 - Updated all references/links in README.md, index.html (the dashboard), MANIFEST.in, and pyproject.toml.
 - This is a pure organisational improvement to make the project easier to navigate (especially for the human investigation layer via the dashboards, while keeping agent-to-agent primary via the text files and tools). No changes to monitored_paths.txt (still only tracks the key agent-wiki files), no impact on functionality or the health matrix.
 
+**v4.1.1 (2026-06)**: Very minor patch for human investigation layer separation (enforcement + hygiene; no new behaviour or scope).
+
+- Enforced correct deployment: `wikifier init` (cli.py + wikifier.sh) now copies *only* `index.html` (the clean, data-driven human wiki viewer for the *target project's* agent-maintained wiki: chart, files+descriptions, copies). `diagnostics.html` (Wikifier's own maintainer/refactor/porter hub with architecture, full maps, porting checklist and *this tool's* source tree) is no longer copied into target roots — it was causing "stale" + "pointing at wrong folder" (Wikifier tree instead of the actual project) when opened after `update-maps` in external projects (e.g. RecipeLab_alt).
+- Updated `index.html` template: "For maintainers" link is now a safe informative span (with tooltip) so copied instances in targets don't have broken links.
+- Refreshed `diagnostics.html` content: added prominent disclaimer that the file map is for Wikifier *tool* refactors only (not host project); updated tree to current layout (post-structure org, human layer split, health robustness); fixed Two-Page description and section numbering.
+- Added guidance in the human dashboard: old `diagnostics.html` in project roots (from prior inits) can be safely deleted.
+- Synced descriptions in README.md, `skills/run.md`, `wikifier/mcp/README.md`.
+- All under protocol (FRESH, record-change + mark-green with subid, main clean). Version to 4.1.1. See the separation-fix commit.
+
 ### Historical (pre-v4.0)
 
 #### What's New in v0.3.3 (Gap #1)
@@ -325,14 +334,14 @@ This section was significantly strengthened during M2-Rem-06 based on dogfood fe
 - **Semantic Change Logging** — `record-change "file" "I did X because Y"` (the "why", not just the "what")
 - **Background Heartbeat Monitor** — Passive `monitor &` loop keeps everything fresh while you sleep
 - **Automated Journal + Categorized Issues** — Dated entries + `Logged_issues/{simple,moderate,high,critical}/...`
-- **Human Investigation Dashboard (secondary layer)** — `index.html` (copied by init into your project) with live health matrix, Mermaid dep tree, per-file wiki summaries, and copy-paste text exports (tree + snapshots) for humans + LLMs. `diagnostics.html` for deep refactors/porters. Auto-refreshes with monitor; primary agent use is still the text files + tools.
+- **Human Investigation Dashboard (secondary layer)** — `index.html` (copied by init into your project root). Clean human view: prominent code structure chart (Mermaid dependency tree) as hero, "Files & descriptions" list with short summaries ("what the code is about"), simple folder browser, and easy copy buttons for the tree text + full snapshot (tree + files + descriptions) ready for pasting to LLMs or sharing. Auto-refreshes when monitor runs. `diagnostics.html` for technical details / refactors. The .md files + tools remain primary for agents.
 - **First-Class MCP Server** — Run `wikifier-mcp` to expose Wikifier as a proper MCP server with rich tools (`get_dependents`, `get_project_status`, `suggest_next_actions`, etc.), resources, and prompts. Works great with Claude Desktop, Cline, Cursor, and other MCP clients.
 - **Legacy Skills Interface** — `skills/run.md` still available for simpler shell-based agent setups.
 - **True Zero Dependencies** — Pure Bash + PowerShell. Works on any machine, no Docker, no Node, no Python packages.
 
 **Primary: agent-to-agent wiki (token-saving).** Agents/LLMs use the text files (file_health.md, library.md, *.wiki.md) + MCP/CLI/tools directly for lookup + autonomous updates (see skills/run.md).
 
-**Secondary: human investigation layer.** Run `wikifier init` on any project (new or existing). The HTML dashboards (index.html + diagnostics.html) are copied into the project root. Open `index.html` in a browser for visual health matrix + Mermaid tree diagram (auto-refreshes key parts when monitor runs). Use the copy buttons to export clean text (tree source, health, snapshot with summaries) for pasting to LLMs, sharing with team, or your own investigation — without dumping full source.
+**Secondary: human investigation layer.** Run `wikifier init` on any project (new or existing). Only `index.html` (the clean human wiki viewer) is copied into the project root. Open it (via local server recommended) to see the project's own code structure chart (Mermaid), "Files & descriptions" with short summaries from the agent wiki, folder browser, and copy buttons for tree text + snapshot. `diagnostics.html` (Wikifier's maintainer/refactor hub with its own architecture + source tree) is *not* copied — it would point at the wrong folder and be irrelevant/stale for the host project. If you have an old copy, you can delete it. Primary agent-to-agent use is always the text files + MCP/CLI.
 
 This enables humans to investigate projects (existing or new) while agents/MCP keep the wiki current. The .md files remain the SSOT for agents.
 
