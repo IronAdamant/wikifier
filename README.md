@@ -50,6 +50,12 @@ See the final synth in `Findings/M5-Dogfood-Progress.md` and full Assessment-Rep
 - Monitored paths + health matrix kept lean/specific (no broad `.` or external pollution). Main health: 4+ 🟢 on core (README, mcp/*, wikifier.sh, --help, M5 Findings) + 1 intentional 🔴 Red audit + unrelated mtime Yellow.
 - Version to 4.0.1. All under M5 protocols (FRESH before this README edit, record+mark, subid, zero-dep, main clean, external-only for any dogfood). See cleanup commit 4c37dd5 + `health --summary`.
 
+**v4.1.0 (2026-06)**: Minor bump for project structure cleanup and reorganisation (no behaviour changes).
+
+- Organised documentation: moved historical and non-core `.md` files (Basis-v0.3.md, spec.md, TRADEOFFS.md, RELEASE_NOTES.md, the v0.4 execution plans) into a new `docs/` folder. Root directory is now much cleaner, containing only the essential files: README.md, CHANGELOG.md, CONTRIBUTING.md, the core wiki state files (file_health.md, library.md, pending_updates.md), and .mcp.json.wiki.md.
+- Updated all references/links in README.md, index.html (the dashboard), MANIFEST.in, and pyproject.toml.
+- This is a pure organisational improvement to make the project easier to navigate (especially for the human investigation layer via the dashboards, while keeping agent-to-agent primary via the text files and tools). No changes to monitored_paths.txt (still only tracks the key agent-wiki files), no impact on functionality or the health matrix.
+
 ### Historical (pre-v4.0)
 
 #### What's New in v0.3.3 (Gap #1)
