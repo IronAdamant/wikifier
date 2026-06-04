@@ -1,4 +1,4 @@
-# Wikifier v0.3
+# Wikifier v4.0
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://img.shields.io/pypi/v/wikifier.svg)](https://pypi.org/project/wikifier/)
@@ -7,6 +7,19 @@
 **Agent-first • Zero-dependency • LLM-operated codebase wiki**
 
 Wikifier turns any codebase (tiny scripts → large monorepos) into a living, token-efficient map that LLMs/agents operate autonomously.
+
+### Intended Use: Agent-to-Agent Wiki (Token-Saving Only)
+
+This is meant **strictly** as an agent-to-agent wiki layer.
+
+- Primary purpose: save tokens for agents/LLMs.
+- You (the agent) can look up files quickly via the health matrix / file wikis / barrels / incremental status instead of reading full sources.
+- Autonomously update wiki summaries and create new ones as you work (edit source → `record-change` → update the wiki entry → `mark-green`).
+- Create new wiki-maintained files/docs as needed during agent sessions.
+- Workflow for agents: `wikifier check-changes`, read the small `file_health.md` + `pending_updates.md`, prioritise, edit, `record-change`, `mark-green`, `update-maps` when relevant.
+- **It shouldn't be used for anything more than that.** Not a general human documentation system, not an IDE replacement, not for broad non-agent use.
+
+See the LLM workflow in `--help` and `skills/run.md` for the exact loop. All M5+ evidence was produced by agents operating in exactly this mode.
 
 ### M5 Broad Real-World Dogfood Complete — 85-90%+ (June 2026)
 
@@ -28,9 +41,11 @@ The M5 phase (broad real-world dogfood on the user's prepared external 5k–50k+
 
 See the final synth in `Findings/M5-Dogfood-Progress.md` and full Assessment-Report for metrics, 9GP/DF traces, gaps/DoD, M5.3 plan.
 
-**Next**: M5.3 literal sustained multi-month dogfood on 3+ prepared targets for the true 95%+/5-10yr gates.
+**v4.0 Release**: M5 (broad real-world dogfood 85-90%+) is complete, including M5.1/M5.2 hardening for MCP reliability and external use, M5.3 sustained foundations (monitors, subagents, agent-to-agent wiki scope), and recent MCP/skills updates. With zero-dependency explicitly enforced, the agent-to-agent wiki model (token-efficient lookup + autonomous updates) mature, and full protocol in skills/run.md v0.5, this is the 4.0 release.
 
-### What's New in v0.3.3 (Historical — Gap #1)
+### Historical (pre-v4.0)
+
+#### What's New in v0.3.3 (Gap #1)
 
 **Gap #1 (Dependency Intelligence) is now at 95%+ "set & forget" on large messy monorepos — Swarm Complete**
 

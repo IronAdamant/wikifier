@@ -1,111 +1,76 @@
-# Pending Updates
+Usage: grep [OPTION]... PATTERNS [FILE]...
+Search for PATTERNS in each FILE.
+Example: grep -i 'hello world' menu.h main.c
+PATTERNS can contain multiple patterns separated by newlines.
 
-(no pending items)
+Pattern selection and interpretation:
+  -E, --extended-regexp     PATTERNS are extended regular expressions
+  -F, --fixed-strings       PATTERNS are strings
+  -G, --basic-regexp        PATTERNS are basic regular expressions
+  -P, --perl-regexp         PATTERNS are Perl regular expressions
+  -e, --regexp=PATTERNS     use PATTERNS for matching
+  -f, --file=FILE           take PATTERNS from FILE
+  -i, --ignore-case         ignore case distinctions in patterns and data
+      --no-ignore-case      do not ignore case distinctions (default)
+  -w, --word-regexp         match only whole words
+  -x, --line-regexp         match only whole lines
+  -z, --null-data           a data line ends in 0 byte, not newline
 
-- Logged_issues/moderate/backend/health-matrix-flakiness.md: LLM/agent edit — Initial issue created for Milestone 1 - Core Reliability.
-- Logged_issues/moderate/other/python-library-design.md: LLM/agent edit — Created focused design issue for the Python library API (split from previous broad issue).
-- Logged_issues/moderate/other/python-library-initial-implementation.md: LLM/agent edit — Created implementation issue for initial Python library (split from previous broad issue).
-- Logged_issues/v0.4-roadmap.md: LLM/agent edit — Updated v0.4 roadmap to reference the new Milestone 1 task list.
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed significant progress on M1-C1: validate command now correctly uses exclude patterns and has improved structure.
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-B1: Journal writing is now atomic.
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-A2: Health matrix writes are now idempotent.
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-A5: mark-green now reliably clears pending entries with improved logic and logging.
-- test/json-test.md: LLM/agent edit — Testing JSON output for M1-B2
-- test/json-test.md: File was deleted. Consider removing wiki entry or marking archival.
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-B2 and M1-B3: JSON output + better validation for record commands.
-- test/journal-format.md: LLM/agent edit — Testing standardized journal format with separator (M1-B4)
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-B4: Journal entries now use consistent '---' separator.
-- Logged_issues/moderate/backend/m1-core-reliability-tasks.md: LLM/agent edit — Completed M1-A3 and M1-A4: Exit codes standardized + better error messages for health operations.
-- Logged_issues/v0.4-roadmap.md: LLM/agent edit — Updated roadmap to reference the new M2 task list.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Made significant robustness improvements to the Python parser during M2-02 refinement.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued M2-02 refinement: Better relative import resolution and multi-line support.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued M2-02 refinement: Better relative import logic and testability.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued M2-02 polish: Better relative resolution and testability.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Light polish on M2-02: Better comments and long-term maintainability notes.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Light polish on M2-02: Added easy-to-run test helper and validation cases.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Final light polish on M2-02: Added limitations, performance notes, and extensibility comments.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Final light polish on M2-02: Added flow comment and minor readability improvements.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Small improvement to M2-02: Parser now outputs JSON when invoked from shell.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Started integration of Python parser into update-maps.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — First integration of Python parser into update-maps completed.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Advanced M2 integration: Real edge drawing logic added to update-maps.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Advanced M2 integration: Better edge resolution + improved graph readability.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Improved output presentation in update-maps (D).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on M2-03 (JS parser) + M2-05 / M2-07 (better edges + output).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on M2-03, M2-05, and M2-07 (A + B + C).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — M2-02: Final light polish completed.
-- v0.4-execution-plan.md: LLM/agent edit — Created comprehensive v0.4 Execution Plan with checkbox tracking for all milestones and tasks.
-- Logged_issues/v0.4-roadmap.md: LLM/agent edit — Linked to the new detailed v0.4-execution-plan.md.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on M2-05 and M2-07 (edge resolution + output quality).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Progress on A1 (JS parser), B1 (edge resolution), C1 (output quality).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A2 (JS parser), B2 (edge resolution), C2 (output quality).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A3 (JS parser), B3 (edge resolution), C3 (output quality).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A4 (JS parser), B4 (edge resolution), C4 (output quality).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A5 (JS parser), B5 (edge resolution), C5 (output quality).
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A6, B6, C6.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A7, B7, C7.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A8, B8, C8.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A9, B9, C9.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A10, B10, C10.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A11, B11, C11.
-- Logged_issues/high/import/m2-dependency-intelligence-tasks.md: LLM/agent edit — Continued progress on A12, B12, C12.
-- v0.4-Execution-Plan.md: LLM/agent edit — Added 'Current Focus Summary' section at the top for quick session context restoration.
-- v0.4-Execution-Plan.md: LLM/agent edit — User confirmed: Continue parallel A/B/C grinding on M2 before evaluating against Success Markers.
-- src/internal/wikifier-stress/synthetic-dep-graph/churnA.js: LLM/agent edit — Heavy churn test file 0
-- src/internal/wikifier-stress/synthetic-dep-graph/churnB.js: LLM/agent edit — Heavy churn test file 1
-- src/internal/wikifier-stress/synthetic-dep-graph/churnC.js: LLM/agent edit — Heavy churn test file 2
-- wikifier.sh: LLM/agent edit — Added basic profiling harness (WIKIFIER_PROFILE=1) with phase timings for file collection, first-pass, table generation, and per-language reparse. Also added cache clearing for the JS parser memoization when profiling.
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-- skills/run.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/m2-full-closure-longterm-scalable-plan.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/m2_rem_08_combined_dogfood_findings_open.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/v1_visual_layer_architecture.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/r3_large_scale_dogfooding_report.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/p6_real_world_validation_report.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/m2_rem_08_dogfood_gaps_closed.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/gap1_polish_hardening_wave_closure_report.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/gap1_final_r8_closure_report.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/v1_visual_layer_wave_closure_report.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/gap1_deep_barrel_invalidation_longterm_strategy.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/gap1_prewave0_shared_contracts_open.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/gap1_dependency_intelligence_4phase_roadmap_open.md: Auto-detected modification — review and run mark-green after wiki update
-- Findings/m2_rem_08_and_v0.4_progress_tracker.md: Auto-detected modification — review and run mark-green after wiki update
-- index.html: Auto-detected modification — review and run mark-green after wiki update
-- .mcp.json: Auto-detected modification — review and run mark-green after wiki update
-- test-js-flat/utils/helpers.js: Auto-detected modification — review and run mark-green after wiki update
-- test-js-flat/services/mealPlannerService.js: Auto-detected modification — review and run mark-green after wiki update
-- test-js-flat/src/main.js: Auto-detected modification — review and run mark-green after wiki update
-- test-js-flat/test_end_to_end_confidence.sh: Auto-detected modification — review and run mark-green after wiki update
-- test-js-flat/monitored_paths.txt: Auto-detected modification — review and run mark-green after wiki update
-- wikifier.ps1: Auto-detected modification — review and run mark-green after wiki update
-- RELEASE_NOTES.md: Auto-detected modification — review and run mark-green after wiki update
-- file_health.md: Auto-detected modification — review and run mark-green after wiki update
-- v0.4-Execution-Plan.md: Auto-detected modification — review and run mark-green after wiki update
-- v0.4-execution-plan.md: Auto-detected modification — review and run mark-green after wiki update
-- CONTRIBUTING.md: Auto-detected modification — review and run mark-green after wiki update
-- .github/ISSUE_TEMPLATE/feature_request.md: Auto-detected modification — review and run mark-green after wiki update
-- .github/ISSUE_TEMPLATE/wiki_health.md: Auto-detected modification — review and run mark-green after wiki update
-- .github/ISSUE_TEMPLATE/agent_finding.md: Auto-detected modification — review and run mark-green after wiki update
-- .github/ISSUE_TEMPLATE/bug_report.md: Auto-detected modification — review and run mark-green after wiki update
-- .github/ISSUE_TEMPLATE/config.yml: Auto-detected modification — review and run mark-green after wiki update
-- .github/workflows/publish.yml: Auto-detected modification — review and run mark-green after wiki update
-- TRADEOFFS.md: Auto-detected modification — review and run mark-green after wiki update
-- .gitignore: Auto-detected modification — review and run mark-green after wiki update
-- wikifier.sh: Auto-detected modification — review and run mark-green after wiki update
-- scripts/publish.sh: Auto-detected modification — review and run mark-green after wiki update
-- .stele-context/stele_context.db-shm: Auto-detected modification — review and run mark-green after wiki update
-- .stele-context/stele_context.db-wal: Auto-detected modification — review and run mark-green after wiki update
-- .stele-context/indices/hnsw_index.json.zlib: Auto-detected modification — review and run mark-green after wiki update
-- .stele-context/indices/hnsw_index.json.zlib.lock: Auto-detected modification — review and run mark-green after wiki update
-- .stele-context/stele_context.db: Auto-detected modification — review and run mark-green after wiki update
->>>>>>> agent-3-health-reliability
-=======
->>>>>>> agent-4-journal
-=======
->>>>>>> agent-7-harness-final
-=======
->>>>>>> agent-6-library-final
+Miscellaneous:
+  -s, --no-messages         suppress error messages
+  -v, --invert-match        select non-matching lines
+  -V, --version             display version information and exit
+      --help                display this help text and exit
+
+Output control:
+  -m, --max-count=NUM       stop after NUM selected lines
+  -b, --byte-offset         print the byte offset with output lines
+  -n, --line-number         print line number with output lines
+      --line-buffered       flush output on every line
+  -H, --with-filename       print file name with output lines
+  -h, --no-filename         suppress the file name prefix on output
+      --label=LABEL         use LABEL as the standard input file name prefix
+  -o, --only-matching       show only nonempty parts of lines that match
+  -q, --quiet, --silent     suppress all normal output
+      --binary-files=TYPE   assume that binary files are TYPE;
+                            TYPE is 'binary', 'text', or 'without-match'
+  -a, --text                equivalent to --binary-files=text
+  -I                        equivalent to --binary-files=without-match
+  -d, --directories=ACTION  how to handle directories;
+                            ACTION is 'read', 'recurse', or 'skip'
+  -D, --devices=ACTION      how to handle devices, FIFOs and sockets;
+                            ACTION is 'read' or 'skip'
+  -r, --recursive           like --directories=recurse
+  -R, --dereference-recursive  likewise, but follow all symlinks
+      --include=GLOB        search only files that match GLOB (a file pattern)
+      --exclude=GLOB        skip files that match GLOB
+      --exclude-from=FILE   skip files that match any file pattern from FILE
+      --exclude-dir=GLOB    skip directories that match GLOB
+  -L, --files-without-match  print only names of FILEs with no selected lines
+  -l, --files-with-matches  print only names of FILEs with selected lines
+  -c, --count               print only a count of selected lines per FILE
+  -T, --initial-tab         make tabs line up (if needed)
+  -Z, --null                print 0 byte after FILE name
+
+Context control:
+  -B, --before-context=NUM  print NUM lines of leading context
+  -A, --after-context=NUM   print NUM lines of trailing context
+  -C, --context=NUM         print NUM lines of output context
+  -NUM                      same as --context=NUM
+      --group-separator=SEP  print SEP on line between matches with context
+      --no-group-separator  do not print separator for matches with context
+      --color[=WHEN],
+      --colour[=WHEN]       use markers to highlight the matching strings;
+                            WHEN is 'always', 'never', or 'auto'
+  -U, --binary              do not strip CR characters at EOL (MSDOS/Windows)
+
+When FILE is '-', read standard input.  If no FILE is given, read standard
+input, but with -r, recursively search the working directory instead.  With
+fewer than two FILEs, assume -h.  Exit status is 0 if any line is selected,
+1 otherwise; if any error occurs and -q is not given, the exit status is 2.
+
+Report bugs to: bug-grep@gnu.org
+GNU grep home page: <https://www.gnu.org/software/grep/>
+General help using GNU software: <https://www.gnu.org/gethelp/>
+- M5.3 Cycle1 evidence append: 3 subs spawned+running (alt BRC20 named, trammel48, consist/llvm metrics, 72h gate start, FRESH3, 9GPs/DoD maps, subid=m5.3-coord-agents): LLM/agent edit — --file
+- M5.3 Cycle1 evidence append: 3 subs spawned+running (alt BRC20 named, trammel48, consist/llvm metrics, 72h gate start, FRESH3, 9GPs/DoD maps, subid=m5.3-coord-agents): File was deleted. Consider removing wiki entry or marking archival.

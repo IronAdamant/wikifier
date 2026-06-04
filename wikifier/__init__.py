@@ -62,4 +62,4 @@ from .contracts import (
     compute_acs_confidence,
 )
 
-__version__ = "0.3.3"
+__version__ = "4.0.0"
