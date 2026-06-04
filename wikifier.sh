@@ -2669,21 +2669,34 @@ EOT
     # Seed a first health entry for the tool itself
     upsert_health "wikifier.sh" "🟢 Green" "Core CLI implemented and documented."
 
-    # R6 UX: auto-copy launcher wikifier.sh into target (full-featured copy when running from source)
+    # R6 UX: auto-copy launcher wikifier.sh + human dashboards into target
+    # (the HTMLs provide the human investigation layer: live health matrix + Mermaid tree diagram,
+    #  export/copy text for LLM/human use, while agent-to-agent remains the primary via MCP/text files)
     if [[ "$do_copy" == true ]]; then
         local self_script="${BASH_SOURCE[0]:-$0}"
+        local self_dir
+        self_dir="$(dirname "$self_script")"
         if [[ -f "$self_script" && ! -f "$PROJECT_ROOT/wikifier.sh" ]]; then
             if cp "$self_script" "$PROJECT_ROOT/wikifier.sh" 2>/dev/null; then
                 chmod +x "$PROJECT_ROOT/wikifier.sh" 2>/dev/null || true
                 log "   (Copied launcher wikifier.sh into target for direct ./ use)"
             fi
         fi
+        # Copy human dashboards (index.html for main view + tree, diagnostics.html for deep human refactors)
+        for html in index.html diagnostics.html; do
+            if [[ -f "$self_dir/$html" && ! -f "$PROJECT_ROOT/$html" ]]; then
+                if cp "$self_dir/$html" "$PROJECT_ROOT/$html" 2>/dev/null; then
+                    log "   (Copied human dashboard $html into target — open in browser for visual wiki + exports)"
+                fi
+            fi
+        done
     fi
 
     PROJECT_ROOT="$old_project"
 
     log "✅ Wikifier initialised in $target_dir . Edit monitored_paths.txt to point at your real codebase (or subdirs for monorepos)."
     log "   Recommended: export WIKIFIER_PROJECT_ROOT=$target_dir  (or cd there and use ./wikifier.sh)"
+    log "   Human layer: open index.html in browser for live health + Mermaid tree (auto-refreshes with monitor). Use copy buttons to export text snapshots for LLMs or team investigation."
 }
 
 cmd_cycles() {

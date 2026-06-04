@@ -7,6 +7,7 @@ include Basis-v0.3.md
 include TRADEOFFS.md
 include skills/run.md
 include index.html
+include diagnostics.html
 global-exclude *.pyc
 global-exclude __pycache__
 prune .github

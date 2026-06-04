@@ -559,6 +559,14 @@ def main():
     # Wave 4: expose use_canonical to sh 3d blocks + on-demand (MCP/CLI cycles) via env for public surface
     os.environ["WIKIFIER_USE_CANONICAL"] = "1" if use_canonical else "0"
 
+    # Human sub-project: ensure dashboards are in the target (for MCP + human investigation)
+    # (index.html for visual health/tree + copy-paste exports; works alongside agent MCP use)
+    if project_root:
+        try:
+            copy_human_dashboards(str(project_root))
+        except Exception:
+            pass
+
     # Wave 5: Optional explicit CLI flag for Python-primary path (run_full_update direct, no sh).
     # Usage: wikifier update-maps --python-primary [--full] [--target ...]
     # Enables packaged/external full-update without any shell fragility; daemon/MCP can use same.
@@ -1091,3 +1099,42 @@ def health(
 # End of Workstream E library skeleton additions.
 # (nullcontext imported at module top for use in lock_ctx defaults.)
 # Update __init__.py to surface these at package level for `from wikifier import ...`.
+
+# Human Investigation Layer (secondary sub-project)
+# The HTML dashboards (index.html for live health + Mermaid tree + copy exports,
+# diagnostics.html for deep human refactors) are copied into target projects by init.
+# This lets humans investigate existing/new projects visually, read "what things look like"
+# (wiki summaries + tree), copy-paste text for LLMs, while agent-to-agent (MCP/text/MD files)
+# remains the primary token-saving purpose. The HTML lives in the project folder alongside MCP.
+def copy_human_dashboards(target_dir: str) -> None:
+    """Copy the static human dashboards into the target project root (if not present).
+    Works for both source runs and installed package (via importlib.resources).
+    Called by sh init; exposed for Python bootstrap too.
+    """
+    import shutil
+    from pathlib import Path
+    try:
+        from importlib.resources import files
+        pkg_files = files("wikifier")  # package root may have them via include
+        for name in ("index.html", "diagnostics.html"):
+            try:
+                src = pkg_files.joinpath(name)
+                if src.is_file():
+                    dst = Path(target_dir) / name
+                    if not dst.exists():
+                        shutil.copy(src, dst)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # Fallback: if running from source tree with htmls next to cli
+    try:
+        here = Path(__file__).parent.parent  # repo root when editable
+        for name in ("index.html", "diagnostics.html"):
+            src = here / name
+            if src.exists():
+                dst = Path(target_dir) / name
+                if not dst.exists():
+                    shutil.copy(src, dst)
+    except Exception:
+        pass

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wikifier v0.3 — Live Dashboard</title>
+    <title>Wikifier — Human Investigation Dashboard (agent wiki viewer + text exports)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
@@ -89,7 +89,7 @@
                 </div>
                 <div>
                     <span class="font-display text-3xl font-semibold tracking-tighter">Wikifier</span>
-                    <span class="text-emerald-400 font-mono text-sm ml-1.5 align-super">v0.3</span>
+                    <span class="text-emerald-400 font-mono text-sm ml-1.5 align-super">Human Layer (v4+)</span>
                 </div>
                 <div class="px-3 py-1 bg-slate-900 border border-slate-700 rounded-full text-xs text-emerald-400 font-medium flex items-center gap-x-1.5">
                     <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
@@ -103,7 +103,7 @@
             
             <div class="flex items-center gap-x-2 text-sm">
                 <div class="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-slate-400 font-mono text-xs">
-                    ZERO DEP • PURE SHELL
+                    ZERO DEP • AGENT PRIMARY + HUMAN VIEWER
                 </div>
                 <a href="skills/run.md" class="text-[10px] px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300 hover:text-emerald-300" title="Full agent protocol &amp; mandatory workflow">Protocol</a>
                 <a href="wikifier/mcp/README.md" class="text-[10px] px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300 hover:text-indigo-300" title="MCP tools surface + setup">MCP</a>
@@ -217,6 +217,20 @@
                     <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-4 min-h-[260px]">
                         <div class="text-xs text-slate-400 mb-2">Loading Mermaid diagram from library.md...</div>
                         <div id="mermaid-diagram"></div>
+                    </div>
+                    <!-- Human export layer: copy tree/snapshot for pasting to LLMs or team investigation.
+                         Primary remains agent-to-agent (text files + MCP are SSOT for agents).
+                         This lets humans visually investigate + export the wiki view (tree + summaries). -->
+                    <div class="mt-3 flex flex-wrap gap-2 text-[10px]">
+                        <button onclick="copyMermaidSource()" 
+                                class="px-2 py-1 rounded bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-800">
+                            📋 Copy Mermaid source (text)
+                        </button>
+                        <button onclick="copyProjectSnapshot()" 
+                                class="px-2 py-1 rounded bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800">
+                            📋 Copy snapshot (tree + health + pending for LLM)
+                        </button>
+                        <span class="text-[9px] text-slate-500 self-center">Export the agent wiki view (not raw code) for human + LLM use</span>
                     </div>
                 </div>
 
@@ -590,10 +604,11 @@ wikifier/<br>
             container.innerHTML = md.split('\n').slice(0, 8).join('\n').replace(/</g,'&lt;') || 'No entries.';
         }
 
-        // Mermaid diagram - enhanced with R1 scale note detection
+        // Mermaid diagram - enhanced with R1 scale note detection + cache-bust for auto-reload
         async function loadMermaid() {
             const container = document.getElementById('mermaid-diagram');
-            const md = await safeFetch('library.md', '');
+            // Bust cache so file changes (from monitor/agents) are picked up on poll
+            const md = await safeFetch('library.md?cb=' + Date.now(), '');
             if (!md) {
                 container.innerHTML = `<div class="text-xs text-amber-400 p-4">library.md not found. Run update-maps.</div>`;
                 return;
@@ -619,6 +634,46 @@ wikifier/<br>
             } else {
                 container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span>.</div>`;
             }
+        }
+
+        // Human export helpers: copy clean text for pasting to LLMs/humans.
+        // These pull from the loaded data (same as agents see via get_file_wiki / health / library).
+        async function copyMermaidSource() {
+            const md = window.libraryMdCache || await safeFetch('library.md?cb=' + Date.now(), '');
+            const match = md.match(/```mermaid\n([\s\S]*?)```/);
+            const src = match ? match[1].trim() : 'No mermaid found. Run update-maps first.';
+            await navigator.clipboard.writeText(src);
+            const btns = document.querySelectorAll('button');
+            // brief feedback on any matching button
+            btns.forEach(b => { if (b.textContent.includes('Mermaid')) { const t = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=t, 1200); }});
+        }
+
+        async function copyProjectSnapshot() {
+            const health = document.getElementById('health-summary') ? document.getElementById('health-summary').innerText : '';
+            const md = window.libraryMdCache || await safeFetch('library.md?cb=' + Date.now(), '');
+            const match = md.match(/```mermaid\n([\s\S]*?)```/);
+            const mermaidSrc = match ? match[1].trim() : '(run update-maps for tree)';
+            const pending = document.getElementById('pending-content') ? document.getElementById('pending-content').innerText.slice(0, 800) : '';
+            const snap = `# Wikifier Human Snapshot (agent wiki view)
+
+## Health Overview
+${health}
+
+## Dependency Tree (Mermaid)
+\`\`\`mermaid
+${mermaidSrc}
+\`\`\`
+
+## Pending (top)
+${pending}
+
+---
+Generated from local file_health.md + library.md + pending_updates.md.
+Paste into LLM for investigation (saves tokens vs full sources). Agent SSOT = the .md files + MCP tools.
+`;
+            await navigator.clipboard.writeText(snap);
+            const btns = document.querySelectorAll('button');
+            btns.forEach(b => { if (b.textContent.includes('snapshot')) { const t = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=t, 1200); }});
         }
 
         // Dependency Intelligence cards - scale defensive, section based, richer extraction
@@ -793,6 +848,12 @@ wikifier/<br>
                 loadHealthMatrix();
                 loadPending();
                 if (Math.random() < 0.3) loadMonitorStatus();
+                // Human layer: also refresh tree diagram + intel for "live" feel when monitor updates files
+                // (Mermaid can be heavy on large projects; this + cache-bust keeps it fresh without full reload)
+                if (Math.random() < 0.5) {
+                    loadMermaid();
+                    loadDependencyIntelligence();
+                }
             }, 32000);
 
             // Keyboard: r=refresh, /=focus command filter (arch spec)

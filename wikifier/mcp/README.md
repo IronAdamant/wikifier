@@ -82,7 +82,11 @@ wikifier-mcp --project-root /absolute/path/to/your/monorepo
 
 Per-tool overrides still work for multi-project agents. The CLI, MCP runner, and shell now consistently separate script location from project state (WIKIFIER_PROJECT_ROOT), making large external monorepos far smoother.
 
-See also root README "Using Wikifier on External Projects" and "Intended Use" (strictly agent-to-agent wiki for token saving). M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon support for sustained agent use. Post-4.0.1 hygiene: `health.py` now supports direct `str | Path` roots via `_coerce_root` (robust for library + per-tool MCP consumers) and auto-prunes superseded historical wiki-note entries (e.g. early M5.3 launch notes) while preserving intentional 🔴 Red audit records for lean, trustworthy agent lookup (see main health matrix and the superseded prune logic).
+See also root README "Using Wikifier on External Projects" and "Intended Use" (primary: strictly agent-to-agent wiki for token saving via tools/text files; secondary: human investigation).
+
+M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon support for sustained agent use. Post-4.0.1 hygiene: `health.py` now supports direct `str | Path` roots via `_coerce_root` (robust for library + per-tool MCP consumers) and auto-prunes superseded historical wiki-note entries (e.g. early M5.3 launch notes) while preserving intentional 🔴 Red audit records for lean, trustworthy agent lookup (see main health matrix and the superseded prune logic).
+
+**Human layer in MCP projects**: `wikifier init --target` (or equivalent) copies `index.html` (live health + Mermaid tree + copy/export buttons) and `diagnostics.html` into the project root — the same folder MCP runs against. Humans open the local HTML to visually investigate the wiki state the agents/MCP are maintaining, with auto-refresh (poll when monitor runs) and one-click copy of tree source / health / full text snapshot for pasting to LLMs or sharing. This enables human devs to explore existing/new projects and work directly with LLMs using the compact wiki view (tree diagram + "what code files look like" via summaries), while agent-to-agent via MCP remains primary. The HTML is a viewer/exporter on top of the text artifacts.
 
 
 ## High-Value Tools

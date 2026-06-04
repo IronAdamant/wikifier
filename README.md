@@ -175,7 +175,7 @@ wikifier init
 wikifier check-changes
 ```
 
-Then open `index.html` in your browser for the live dashboard.
+Then (after init) open `index.html` in your browser for the live (human) dashboard — health matrix, Mermaid tree, and export/copy text for LLM use. It lives inside your project folder alongside the MCP setup.
 
 ---
 
@@ -319,12 +319,16 @@ This section was significantly strengthened during M2-Rem-06 based on dogfood fe
 - **Semantic Change Logging** — `record-change "file" "I did X because Y"` (the "why", not just the "what")
 - **Background Heartbeat Monitor** — Passive `monitor &` loop keeps everything fresh while you sleep
 - **Automated Journal + Categorized Issues** — Dated entries + `Logged_issues/{simple,moderate,high,critical}/...`
-- **Beautiful Static Dashboard** — `index.html` with live health lights, Mermaid graphs, and one-click command reference
+- **Human Investigation Dashboard (secondary layer)** — `index.html` (copied by init into your project) with live health matrix, Mermaid dep tree, per-file wiki summaries, and copy-paste text exports (tree + snapshots) for humans + LLMs. `diagnostics.html` for deep refactors/porters. Auto-refreshes with monitor; primary agent use is still the text files + tools.
 - **First-Class MCP Server** — Run `wikifier-mcp` to expose Wikifier as a proper MCP server with rich tools (`get_dependents`, `get_project_status`, `suggest_next_actions`, etc.), resources, and prompts. Works great with Claude Desktop, Cline, Cursor, and other MCP clients.
 - **Legacy Skills Interface** — `skills/run.md` still available for simpler shell-based agent setups.
 - **True Zero Dependencies** — Pure Bash + PowerShell. Works on any machine, no Docker, no Node, no Python packages.
 
-**This is agent-first.** LLMs operate the system via shell commands. Humans just watch the dashboard.
+**Primary: agent-to-agent wiki (token-saving).** Agents/LLMs use the text files (file_health.md, library.md, *.wiki.md) + MCP/CLI/tools directly for lookup + autonomous updates (see skills/run.md).
+
+**Secondary: human investigation layer.** Run `wikifier init` on any project (new or existing). The HTML dashboards (index.html + diagnostics.html) are copied into the project root. Open `index.html` in a browser for visual health matrix + Mermaid tree diagram (auto-refreshes key parts when monitor runs). Use the copy buttons to export clean text (tree source, health, snapshot with summaries) for pasting to LLMs, sharing with team, or your own investigation — without dumping full source.
+
+This enables humans to investigate projects (existing or new) while agents/MCP keep the wiki current. The .md files remain the SSOT for agents.
 
 ## Core Commands
 
