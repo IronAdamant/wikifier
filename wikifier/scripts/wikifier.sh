@@ -1,5 +1,5 @@
 #!/bin/bash
-# wikifier.sh — Wikifier v0.3 Core CLI (Zero-Dependency)
+# wikifier.sh — Wikifier v4.0 Core CLI (Zero-Dependency)
 # Agent-first shell tool for codebase documentation health & semantic change tracking.
 #
 # Usage:
@@ -1946,7 +1946,7 @@ _try_resolve_bare_internal_import() {
 
 cmd_help() {
     cat << 'EOF'
-Wikifier v0.3 — Agent-First Codebase Wiki (Zero Dependencies)
+Wikifier v4.0 — Agent-First Codebase Wiki (Zero Dependencies)
 
 Usage: wikifier <command> [arguments]
 

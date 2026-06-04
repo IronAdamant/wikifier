@@ -62,7 +62,24 @@ HEALTH_MD = "file_health.md"
 PENDING_MD = "pending_updates.md"
 
 
-def _get_health_path(root: Path) -> Path:
+def _coerce_root(root) -> Path:
+    """Coerce str or Path to resolved Path. Supports direct lib calls with str (e.g. load_health('.')) and CLI/MCP which pass Path."""
+    if isinstance(root, Path):
+        return root.resolve()
+    return Path(str(root)).expanduser().resolve()
+
+
+# Post-v4.0 + M5.3 gate complete + cleanup hygiene:
+# Aggressively prune superseded historical wiki-note entries (e.g. early "M5.3 Cycle1 evidence append (from early coord, before alt gate pass)")
+# that survive under-root checks because they live under "Findings/" but are not maintained agent reference docs (Progress etc).
+# These pollute the health matrix / pending_updates that agents use for token-efficient lookup.
+# Keep real M5 docs (Progress, Milestones, Assessment, p6, M5.1-cross) + current gate/4.0 records.
+# Explicit Red "DELETED" audit records from record-deletion are intentionally kept (1 non-Green historical marker is useful/observable).
+SUPERSEDED_PATTERNS = ["m5.3 cycle1", "cycle1 evidence append", "early m5.3 launch note", "m5.3 cycle1 evidence"]
+
+
+def _get_health_path(root: "str | Path") -> Path:
+    root = _coerce_root(root)
     return root / HEALTH_JSON
 
 
@@ -235,7 +252,7 @@ def get_stale_wikis(root: Path, directory: Optional[str] = None, limit: int = 20
     return sorted(results, key=lambda x: (-x.get("confidence", 0.0), x["file"]))
 
 
-def load_health(root: Path) -> Dict[str, Any]:
+def load_health(root: "str | Path") -> Dict[str, Any]:
     """
     Load the health matrix from file_health.json.
     Falls back to migrating from file_health.md if JSON does not exist.
@@ -245,6 +262,7 @@ def load_health(root: Path) -> Dict[str, Any]:
     so old data + new code is always safe and observable-ready.
     Top-level version bumped to 2 on next save.
     """
+    root = _coerce_root(root)
     json_path = _get_health_path(root)
 
     if json_path.exists():
@@ -266,6 +284,17 @@ def load_health(root: Path) -> Dict[str, Any]:
         # Views (get_*) will be clean; next save will persist pruned json.
         entries = data.get("entries", {}) or {}
         pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
+        # Post-v4.0 superseded historical prune (see SUPERSEDED_PATTERNS at top).
+        # Leave explicit Red DELETED audit records (they are the agent-visible archival marker).
+        for k in list(pruned.keys()):
+            kl = str(k).lower()
+            if any(p in kl for p in SUPERSEDED_PATTERNS):
+                ent = pruned.get(k, {})
+                status = str(ent.get("status", ""))
+                reason = str(ent.get("reason", "")).lower()
+                if status.startswith("🔴") and ("deleted" in reason or "superseded" in reason):
+                    continue  # keep the audit Red
+                del pruned[k]
         data["entries"] = pruned
         return data
 
@@ -286,6 +315,16 @@ def load_health(root: Path) -> Dict[str, Any]:
         # M5: prune pollution on migrate too (same as json path)
         entries = migrated.get("entries", {}) or {}
         pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
+        # Post-v4.0 superseded historical prune (see SUPERSEDED_PATTERNS at top).
+        for k in list(pruned.keys()):
+            kl = str(k).lower()
+            if any(p in kl for p in SUPERSEDED_PATTERNS):
+                ent = pruned.get(k, {})
+                status = str(ent.get("status", ""))
+                reason = str(ent.get("reason", "")).lower()
+                if status.startswith("🔴") and ("deleted" in reason or "superseded" in reason):
+                    continue
+                del pruned[k]
         migrated["entries"] = pruned
         return migrated
 
@@ -297,11 +336,12 @@ def load_health(root: Path) -> Dict[str, Any]:
     }
 
 
-def save_health(root: Path, health_data: Dict[str, Any]) -> None:
+def save_health(root: "str | Path", health_data: Dict[str, Any]) -> None:
     """Save health data to file_health.json and regenerate the Markdown view.
 
     Uses file locking (M2-Rem-07) to prevent concurrent corruption.
     """
+    root = _coerce_root(root)
     if locking:
         with locking.file_lock(root):
             _do_save_health(root, health_data)
@@ -309,8 +349,9 @@ def save_health(root: Path, health_data: Dict[str, Any]) -> None:
         _do_save_health(root, health_data)
 
 
-def _do_save_health(root: Path, health_data: Dict[str, Any]) -> None:
+def _do_save_health(root: "str | Path", health_data: Dict[str, Any]) -> None:
     """Internal save without locking."""
+    root = _coerce_root(root)
     json_path = _get_health_path(root)
     health_data["last_updated"] = _timestamp()
     health_data["version"] = 2  # B durable: ensure v2 on every save (additive fields)
@@ -319,6 +360,16 @@ def _do_save_health(root: Path, health_data: Dict[str, Any]) -> None:
     if "entries" in health_data:
         entries = health_data.get("entries") or {}
         pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
+        # Post-v4.0 superseded historical prune (see SUPERSEDED_PATTERNS at top).
+        for k in list(pruned.keys()):
+            kl = str(k).lower()
+            if any(p in kl for p in SUPERSEDED_PATTERNS):
+                ent = pruned.get(k, {})
+                status = str(ent.get("status", ""))
+                reason = str(ent.get("reason", "")).lower()
+                if status.startswith("🔴") and ("deleted" in reason or "superseded" in reason):
+                    continue
+                del pruned[k]
         health_data["entries"] = pruned
 
     with open(json_path, "w", encoding="utf-8") as f:
@@ -379,12 +430,13 @@ def _generate_markdown(root: Path, health_data: Dict[str, Any]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
-def upsert_entry(root: Path, file: str, status: str, reason: str = "") -> None:
+def upsert_entry(root: "str | Path", file: str, status: str, reason: str = "") -> None:
     """Add or update a health entry for a file.
 
     Uses file locking (M2-Rem-07) to prevent race conditions when multiple
     agents or humans are writing at the same time.
     """
+    root = _coerce_root(root)
     if locking:
         with locking.file_lock(root):
             _do_upsert_entry(root, file, status, reason)
@@ -392,7 +444,7 @@ def upsert_entry(root: Path, file: str, status: str, reason: str = "") -> None:
         _do_upsert_entry(root, file, status, reason)
 
 
-def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> None:
+def _do_upsert_entry(root: "str | Path", file: str, status: str, reason: str = "") -> None:
     """Internal upsert without locking.
 
     M2 Health B durable: preserve existing wiki freshness fields (hash, meaningful_edit,
@@ -404,6 +456,11 @@ def _do_upsert_entry(root: Path, file: str, status: str, reason: str = "") -> No
     file = _normalize_to_relative(root, file)
     if not _entry_is_under_root(root, file):
         return
+    # Post-v4.0: skip superseded historical names (unless this is explicitly recording a Red DELETED audit).
+    kl = file.lower()
+    if any(p in kl for p in SUPERSEDED_PATTERNS):
+        if not (status.startswith("🔴") and ("deleted" in reason.lower() or "superseded" in reason.lower())):
+            return
     health = load_health(root)
     existing = health.get("entries", {}).get(file, {})
     # Start from normalized existing to keep B fields

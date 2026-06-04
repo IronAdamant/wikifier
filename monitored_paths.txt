@@ -1,22 +1,23 @@
 # monitored_paths.txt — Paths Wikifier will watch for changes
 # One path per line. Can be relative or absolute.
-# Default "." means "the directory containing this wikifier project".
+# We list *only* the specific files for which we maintain wiki summaries (agent-to-agent use).
+# No bare "." or broad dirs, to avoid "MISSING WIKI ENTRY" for source .py, trammel.db, test files, etc.
+# See M5.1 health pruning for external safety.
 
-.
+# Core documented files for the agent-to-agent wiki (zero-dep, LLM-operated)
+# Specific files only: we maintain wiki summaries for these, not every source file.
+skills/run.md
+README.md
+Findings/M5-Dogfood-Progress.md
+Findings/M5-Dogfood-Assessment-Report.md
+Findings/Milestones-Overview.md
+Findings/p6_real_world_validation_report.md
+Findings/M5.1-cross-hardening-analysis.md
+wikifier.sh
+wikifier/mcp/README.md
+wikifier/mcp/server.py
 
-# MCP server configuration (important for agent integration)
-.mcp.json
-wikifier/mcp/
-
-# Example for documenting another project:
-# ../my-main-application/src
-# ../my-main-application/tests
-# ../my-main-application/docs
-
-# --- Dogfood target: RecipeLab_alt (non-trivial JS codebase for Wikifier MCP stress test) ---
-# Using symlink for clean relative paths in health matrix and library.md
-recipe-lab-dogfood/src
-recipe-lab-dogfood/tests
-recipe-lab-dogfood/public
-recipe-lab-dogfood/data
-recipe-lab-dogfood/src/internal/mcp-stress
+# Note: No broad dirs like "wikifier/" (would require entries for all .py), no pyproject/.mcp.json unless wiki'd, no external dogfood.
+# For external dogfood on other projects (e.g. RecipeLab_alt): always use WIKIFIER_PROJECT_ROOT=/absolute/path/to/target
+# and put absolute paths (no ../) in that target's monitored_paths.txt.
+# This was fixed in M5.1 to prevent pollution in main health (see health.py _entry_is_under_root).

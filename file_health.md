@@ -2,7 +2,7 @@
 
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
-| skills/run.md | 🟢 Green | 2026-06-04 15:51:29 AEST | Final post-edit mark: Agent Protocol v0.5 fully updated and current for zero-dep project + M5 agent-to-agent wiki usage. mtime from record synced. |
+| skills/run.md | 🟡 Yellow | 2026-06-04 16:55:42 AEST | mtime changed since last check-changes (auto-detected) |
 | Findings/Milestones-Overview.md | 🟢 Green | 2026-06-04 07:32:09 AEST | M5.3 sustained plan + kickoff appended (verbatim from Assessment). subagent_id=m5-gamma-coord-agents. FRESH 3. |
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-06-04 08:01:45 AEST | M5.3 alt sub completed exit0 1356s + gate pass for alt per M5.3/DoD (BRC19 stable named exact, rec x5+ ~3s, 0corr, growth0, claims4+/1v, chisel10823e/12g, stele270, FRESH/subid/9GP/8DF/calib85-92% record+mark; sim part; 2 subs prior; coord handled; gate active; BRC19; plan.md green). FRESH 3 + subid. subagent_id=m5-gamma-coord-agents. |
 | wikifier.sh | 🟢 Green | 2026-06-04 00:45:30 AEST | Core CLI implemented and documented. |
