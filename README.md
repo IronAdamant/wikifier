@@ -6,36 +6,34 @@
 
 **Agent-to-Agent Codebase Wiki — Token-Efficient • Autonomous • Zero-Dependency**
 
-Wikifier gives **AI agents and LLMs** a living, queryable map of any codebase (tiny scripts to 50k+ monorepos) so they can look up files, imports, health, and summaries **without loading full source into context**.
+Wikifier gives AI agents and LLMs a living, queryable map of any codebase — from tiny scripts to 50k+ file monorepos — so they can look up files, imports, health status, and summaries without dumping full source into context.
 
-It is a **token-saving agent-operated wiki layer**. Agents autonomously maintain it using a strict workflow (see below). Primary purpose: save tokens for LLMs/agents doing real work on codebases.
+The goal is token efficiency. It works as a token-saving agent-operated wiki layer that agents maintain themselves through a strict but lightweight workflow. Primary purpose: help LLMs and agents work on real codebases without wasting context on raw files they don't need right now.
 
-### For AI Agents and LLMs: Token-Saving Codebase Wiki
+Key capabilities flow naturally from this:
+- Fast, targeted lookup through small `file_health.md`, `library.md` (with Mermaid dependency graphs and summaries), per-file `*.wiki.md` notes, health matrix, barrel reports, and incremental status.
+- Autonomous maintenance: after editing source, agents use `record-change "the why"` (this is mandatory) to log intent, then `mark-green` once the wiki entry is updated.
+- Support for creating new wiki entries or docs on the fly during agent work.
+- Works great with or without MCP. There's an optional `wikifier-mcp` server that provides rich tools such as `get_project_status`, `get_dependencies`, `get_file_wiki`, `suggest_next_actions`, and `check_changes`.
+- Handles large projects well thanks to incremental updates, directory scoping, and streaming modes. Everything is zero-dependency (pure Python + Bash).
 
-- Fast lookup via small `file_health.md`, `library.md` (Mermaid dep graph + summaries), per-file `*.wiki.md`, health matrix, barrels, and incremental status — instead of dumping entire files.
-- Autonomous updates: edit source → `record-change "the why"` (mandatory) → update the wiki entry → `mark-green`.
-- Create new wiki entries/docs as you work.
-- Works with or without MCP. Optional `wikifier-mcp` server exposes rich tools (`get_project_status`, `get_dependencies`, `get_file_wiki`, `suggest_next_actions`, `check_changes`, etc.).
-- Incremental + scoped + streaming for large projects. Zero dependencies (pure Python + Bash).
+**Mandatory agent protocol** (the exact loop agents should follow): `check-changes` → read the compact `file_health.md` + `pending_updates.md` → prioritize → edit → `record-change` → `mark-green` → `update-maps` when imports or structure change. The full LLM-ready details and examples live in `skills/run.md` (v0.5).
 
-**Mandatory agent protocol** (exact loop): `check-changes` → read health + pending → prioritize → edit → `record-change` → `mark-green` → `update-maps` when structure changes. Full details and LLM-ready workflow in `skills/run.md` (v0.5).
+This entire project (including all the M5 dogfood evidence) was built and operated by agents using exactly this mode. It is deliberately **not** a general-purpose human documentation tool or IDE replacement — agent-to-agent first, always.
 
-This project was built and dogfooded by agents operating exactly in this mode. It is **not** a general human docs system or IDE tool. Agent-to-agent first.
+See `--help`, `skills/run.md`, and the MCP README for concrete usage.
 
-See `--help`, `skills/run.md`, and the MCP README for usage.
+### Intended Use: Strictly Agent-to-Agent (Token-Saving)
 
-### Intended Use: Agent-to-Agent Wiki (Token-Saving Only)
+This is meant **strictly** as an agent-to-agent wiki layer for token saving:
 
-This is meant **strictly** as an agent-to-agent wiki layer.
+- Primary purpose: save tokens for agents/LLMs by letting them consult the health matrix, file wikis, barrels, and incremental status instead of re-reading full sources.
+- Agents autonomously keep everything current: edit source → `record-change "the why"` → update the corresponding wiki entry → `mark-green`.
+- You can create new wiki-maintained files or docs as part of your agent sessions.
+- Typical workflow: run `wikifier check-changes`, read the small `file_health.md` + `pending_updates.md`, prioritize (🔴 then 🟡), do the work, record the change with intent, mark it green, and run `update-maps` when the dependency picture shifts.
+- **It shouldn't be used for anything more than that.** Not general human docs, not an IDE, not for broad non-agent use.
 
-- Primary purpose: save tokens for agents/LLMs.
-- You (the agent) can look up files quickly via the health matrix / file wikis / barrels / incremental status instead of reading full sources.
-- Autonomously update wiki summaries and create new ones as you work (edit source → `record-change` → update the wiki entry → `mark-green`).
-- Create new wiki-maintained files/docs as needed during agent sessions.
-- Workflow for agents: `wikifier check-changes`, read the small `file_health.md` + `pending_updates.md`, prioritise, edit, `record-change`, `mark-green`, `update-maps` when relevant.
-- **It shouldn't be used for anything more than that.** Not a general human documentation system, not an IDE replacement, not for broad non-agent use.
-
-See the LLM workflow in `--help` and `skills/run.md` for the exact loop. All M5+ evidence was produced by agents operating in exactly this mode.
+The exact loop and LLM workflow are documented in `--help` and `skills/run.md`. All the real-world M5+ evidence in `Findings/` was produced by agents following this protocol precisely.
 
 ### Status & Recent Changes
 
@@ -58,66 +56,6 @@ Full history moved to `docs/` and `Findings/`. The project stays deliberately le
 ---
 
 ## 🚀 Installation
-
-**Recommended — via pip:**
-
-```bash
-pip install wikifier
-```
-
-Then run:
-
-```bash
-wikifier init
-wikifier check-changes
-```
-
-Then (after init) open `index.html` in your browser for the live (human) dashboard — health matrix, Mermaid tree, and export/copy text for LLM use. It lives inside your project folder alongside the MCP setup.
-
----
-
-**Alternative — from source:**
-
-```bash
-git clone https://github.com/IronAdamant/wikifier.git
-cd wikifier
-chmod +x wikifier.sh
-./wikifier.sh init
-./wikifier.sh check-changes
-```
-
-### Mandatory Rule for Every LLM / Grok Build Session (Protocol v0.4)
-
-**Authoritative spec**: See `skills/run.md` (Wikifier Agent Protocol v0.4) + the full library surface design in `Findings/m2-full-closure-longterm-scalable-plan.md` (Workstream E).
-
-Copy this (or the exact block from skills/run.md) into the **start of every new prompt**:
-
-```text
-You are now operating inside a Wikifier v0.4 managed codebase (Agent Protocol v0.4).
-
-FIRST ACTIONS (mandatory):
-1. If the Wikifier MCP server is connected, prefer its tools (get_project_status, check_changes, suggest_next_actions).
-2. Else if the `wikifier` Python package is importable, prefer the direct library API:
-     from wikifier import check_changes, health, record_change, mark_green, suggest_next_actions, update_maps, discover_project_root
-     check_changes()
-     h = health(format="json")  # or "summary"
-     ... perform edit ...
-     record_change("path/to/file", "concise semantic reason (why, not what)")
-     ... update wiki summary ...
-     mark_green("path/to/file")
-     if imports_or_structure_changed:
-         update_maps(directory="src/", use_python_primary=True)
-     suggest_next_actions(format="json")
-     health(format="json")
-3. Otherwise fall back to shell: wikifier check-changes
-... (see full mandatory workflow, I/O contracts, error handling, and scaling in skills/run.md)
-```
-
-**Python Library (clean public API, zero-dep)**: The preferred path for agents (when importable). Provides structured dicts, auto-locking, Python-primary paths for the full mandatory loop with no shell. See `__init__.py`, `cli.py` (Workstream E funcs), and the design doc. Submodule power access (e.g. `from wikifier.health import ...`) remains available.
-
-> **Note**: This rule applies per-project. When using Wikifier on an external codebase (not the Wikifier repo itself), the agent should be told which project root to operate on (via `WIKIFIER_PROJECT_ROOT`, `--project-root`, or the `project_root` parameter on MCP tools / library calls). The library + protocol make sessions low-ambiguity across models.
-
----
 
 ## Installation & Quick Start (for Agents & Humans)
 
