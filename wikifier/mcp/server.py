@@ -13,7 +13,9 @@ and skills/run.md v0.5).
 M5 dogfood (external 5k-79k+ projects incl. alt BRC stress ~19-20 named,
 Consistency ~1k, llvm 79k+ C++) + M5.1 hardening (external root discovery,
 60s timeouts + actionable errors, health pruning, CLI parity) + M5.3
-sustained (monitors/daemons for 30s heartbeat "Pruned 0") inform the
+sustained (monitors/daemons for 30s heartbeat "Pruned 0") + post-4.0.1
+health hygiene (_coerce_root for str|Path roots in direct calls, 
+SUPERSEDED_PATTERNS prune for lean matrix while keeping audit Reds) inform the
 reliability.
 
 Run with:

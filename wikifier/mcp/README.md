@@ -82,7 +82,7 @@ wikifier-mcp --project-root /absolute/path/to/your/monorepo
 
 Per-tool overrides still work for multi-project agents. The CLI, MCP runner, and shell now consistently separate script location from project state (WIKIFIER_PROJECT_ROOT), making large external monorepos far smoother.
 
-See also root README "Using Wikifier on External Projects" and "Intended Use" (strictly agent-to-agent wiki for token saving). M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon support for sustained agent use.
+See also root README "Using Wikifier on External Projects" and "Intended Use" (strictly agent-to-agent wiki for token saving). M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon support for sustained agent use. Post-4.0.1 hygiene: `health.py` now supports direct `str | Path` roots via `_coerce_root` (robust for library + per-tool MCP consumers) and auto-prunes superseded historical wiki-note entries (e.g. early M5.3 launch notes) while preserving intentional 🔴 Red audit records for lean, trustworthy agent lookup (see main health matrix and the superseded prune logic).
 
 
 ## High-Value Tools
@@ -130,12 +130,24 @@ This is currently the recommended way to integrate Wikifier with modern AI codin
 
 ## Client Configuration Examples
 
-Example configuration files for popular MCP clients (Claude Desktop, Cline, Cursor, etc.) are available in the `client-configs/` folder.
+MCP clients (Claude Desktop, Cline, Cursor, etc.) are configured to launch the server with proper project targeting.
 
-### Quick Claude Desktop Setup
+**Recommended for external/agent-to-agent use** (M5+ lesson): run via environment or flag so the server knows the target root:
 
-1. Copy the example from `client-configs/claude-desktop.json`.
-2. Merge it into your Claude Desktop configuration file.
-3. Restart Claude Desktop.
+```json
+{
+  "mcpServers": {
+    "wikifier": {
+      "command": "wikifier-mcp",
+      "args": [],
+      "env": {
+        "WIKIFIER_PROJECT_ROOT": "/absolute/path/to/your/project"
+      }
+    }
+  }
+}
+```
 
-See `client-configs/README.md` for detailed instructions and examples for other clients.
+Per-tool `project_root` overrides also work for multi-project agents. See "Targeting a Specific Project" above and `skills/run.md` for the full agent protocol (always pass explicit root for externals, fall back to CLI on large/BRC targets).
+
+No bundled client-configs/ examples in this release (historical references removed for cleanliness); use the patterns above + the tool list in this doc. For advanced setups, consult the MCP client docs and the Wikifier health matrix for current state.

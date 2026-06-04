@@ -48,6 +48,7 @@ Never skip record-change — it is the semantic audit trail (journal + health + 
 - Scope: token-efficient agent-to-agent wiki only (see README "Intended Use").
 - Sustained: monitors + subagents for 72h+ gate (M5.3).
 - See health matrix for current Green/Yellow state of M5 agent records (Progress, Assessment, etc.).
+- Post-4.0.1 health hygiene (in wikifier/health.py): `_coerce_root` makes direct library calls robust with plain str roots (e.g. `health(".")` or `load_health(".")` now work without TypeError; used by agents/MCP consumers). `SUPERSEDED_PATTERNS` + prune keeps the matrix lean by dropping old superseded historical notes (e.g. early M5.3 "Cycle1" entries) while preserving explicit 🔴 Red "DELETED" audit records (intentional, observable for agents). Main health example: one such Red + unrelated mtime Yellows are normal.
 ```
 
 **Packaging / External (M5 strengthened)**: After pip install, use global `wikifier` / `wikifier-mcp` or `from wikifier import ...`. For user projects: `WIKIFIER_PROJECT_ROOT=/abs/path/to/target wikifier ...` or pass project_root to every call/MCP tool. Bootstrap with `wikifier init`. Absolute paths in monitored_paths.txt required for externals. Python library + CLI preferred for reliability on large/BRC scale.
@@ -240,4 +241,4 @@ Core imports (all zero-dep for main paths; support project_root= for external/ag
 
 All support `project_root=...` and return structured data (plus side-effecting state files for human review).
 
-See README.md "Intended Use" for the strict agent-to-agent wiki scope (token saving for lookup + autonomous update/create of wiki entries only). M5 dogfood validated this on real external projects with the exact patterns above.
+See README.md "Intended Use" for the strict agent-to-agent wiki scope (token saving for lookup + autonomous update/create of wiki entries only). M5 dogfood validated this on real external projects with the exact patterns above. Recent 4.0.1 hygiene (health coerce + superseded prune) further improves reliability of the matrix for agents doing direct lookups/updates.
