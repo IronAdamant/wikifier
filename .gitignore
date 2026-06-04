@@ -40,3 +40,33 @@ pip-wheel-metadata/
 twine.log
 .pypirc
 
+# Test targets and temporary dogfood projects (not part of the main tool)
+test-*/
+test-js-flat/
+test-js-flat/**
+
+# Historical agent swarm evidence, diaries, prompts, cross-analysis (M2-M4 detailed work products; high-level M5 summaries and core docs are kept in repo)
+Findings/wave-evidence/
+Findings/phase-*-prompts.md
+Findings/m*-diary*.md
+Findings/subagent-*-diary*.md
+Findings/plan_subagent-*.md
+Findings/m*-checklist*.md
+Findings/*-cross-analysis*.txt
+Findings/M4-*-E*.md
+Findings/M4-*-REV*.md
+Findings/M5-phase1-*.txt
+
+# Local runtime and test dbs/journals (journals are local-only after bootstrap; see comments above)
+journal/2026/06/
+trammel.db
+.stele-context/indices/
+.stele-context/stele_context.db-shm
+.stele-context/stele_context.db-wal
+.stele-context/*.lock
+.stele-context/indices/*.lock
+
+# .wikifier runtime state for the main project (already partially covered, but ensure full runtime dirs)
+.wikifier/
+.wikifier/**
+

@@ -1,11 +1,15 @@
-# Wikifier Agent Protocol v0.4
+# Wikifier Agent Protocol v0.5 (M5 Update)
 
 **Formerly "Wikifier Skills & Commands". This is the authoritative, versioned specification for agent behavior when using Wikifier.**
 
-**Version**: v0.4 (M2 Full Closure — Workstream E slice)  
-**Date**: 2026-05-26  
-**Status**: Active. Supersedes informal v0.3 skills guidance.  
-**See also**: The public Python library surface design + I/O contracts in `Findings/m2-full-closure-longterm-scalable-plan.md` (Workstream E section).
+**Version**: v0.5 (M5 Post-Dogfood + Hardening + Sustained Update)  
+**Date**: 2026-06-04  
+**Status**: Active. Supersedes v0.4.  
+**See also**: `README.md` (Intended Use section: strictly agent-to-agent wiki for token saving), M5-Dogfood-Assessment-Report.md, M5-Dogfood-Progress.md, and the library in wikifier/.
+
+**Core design**: Token-efficient agent-to-agent wiki. Agents use it to look up files (health matrix + file wikis + BRC + stele chunks instead of full sources), autonomously update wiki summaries, and create new ones as work progresses. **It should not be used for anything more than that.** 
+
+This protocol + the Python package + MCP server form the bridge for consistent, low-ambiguity agent operation on real external projects.
 
 **This file + the `wikifier` Python package (`from wikifier import ...`) together form the M2/M3 bridge for consistent, low-ambiguity agent operation.**
 
@@ -16,37 +20,37 @@
 **Copy this exact block into the system prompt or the very first instruction of every new LLM session that uses Wikifier:**
 
 ```
-You are now operating inside a Wikifier v0.4 managed codebase (Agent Protocol v0.4).
+You are now operating inside a Wikifier v0.5 managed codebase (Agent Protocol v0.5 — M5 update).
 
-FIRST ACTIONS (mandatory):
-1. If the Wikifier MCP server is connected in this session, prefer using its tools (especially get_project_status, check_changes, and suggest_next_actions).
-2. Else if the `wikifier` Python package is importable in the environment (pip install or source), prefer the direct library API for the core loop:
-     from wikifier import check_changes, health, record_change, mark_green, suggest_next_actions, update_maps
-     check_changes()
-     h = health(format="json")  # or "summary"
-     ... perform edit ...
-     record_change("path/to/file", "concise semantic reason (why, not what)")
-     ... update wiki summary ...
-     mark_green("path/to/file")
-     if imports_or_structure_changed:
-         update_maps(directory="src/", use_python_primary=True)  # scoped, Python primary
-     suggest_next_actions(format="json")
-     health(format="json")  # re-validate
-3. Otherwise fall back to shell: wikifier check-changes
-4. Immediately read: file_health.md (or health json) and pending_updates.md
-5. Prioritise ALL 🔴 Red files, then 🟡 Yellow files.
-6. For ANY edit: record_change (via library, MCP, or wikifier record-change) — never skip.
-7. After wiki summary update: mark_green.
-8. If imports changed significantly: update_maps (scoped preferred).
-9. Re-validate health + consult suggest_next_actions before finishing session.
+This is strictly an agent-to-agent wiki for token saving: quick file lookup (health matrix + file wikis + BRC + stele instead of full sources), autonomous wiki summary updates, and creation of new wiki entries as you work. It should not be used for anything more.
 
-Never skip the record_change step — it creates the semantic audit trail the project depends on (journal + health + pending).
+FIRST ACTIONS (mandatory, post-M5 hardened):
+1. If the Wikifier MCP server is connected, prefer its tools (get_project_status, get_file_wiki, check_changes, get_barrel_reports, suggest_next_actions, etc.). Always pass project_root= for external/user projects (e.g. RecipeLab_alt, ConsistencyHub, llvm subs).
+2. If MCP times out or is unavailable (common on BRC-heavy ~20+ yellow or 50k+ scale like alt/Consistency/llvm per M5 dogfood), fall back immediately to reliable CLI/library:
+     WIKIFIER_PROJECT_ROOT=/path/to/target python -m wikifier check-changes
+     python -m wikifier health --summary   # or format=json/summary for machine use (token-efficient lookup)
+     ... perform edit on source ...
+     python -m wikifier record-change "path/to/file" "concise semantic reason (why, not what). Include subid if agent work."
+     ... write/update the wiki summary for the file ...
+     python -m wikifier mark-green "path/to/file" "Reason for Green (e.g. after autonomous agent update)."
+     if imports changed: python -m wikifier update-maps --directory=src/  # Python-primary for large
+     python -m wikifier health --summary
+3. For sustained agent work: launch `python -m wikifier monitor` (or wikifier.sh monitor) in bg / daemon for 30s "Pruned 0 / No new" heartbeat + auto BRC healing. Use .last_check + health for observability.
+4. Immediately consult the small health matrix (file_health.md or health --summary) + pending_updates.md. Prioritise 🔴 then 🟡. Use this for quick reference instead of full file reads to save tokens.
+5. For edits to agent-maintained docs (e.g. this protocol, README, Findings/M5-*.md): precede with FRESH 3 hygiene (grep for 0 def matches on the target .md), use record-change + mark-green.
+6. Always pass explicit project_root / WIKIFIER_PROJECT_ROOT for any external or multi-project work (M5 lesson: absolute monitored_paths.txt, no pollution).
+7. Re-validate with health + suggest_next_actions (or equivalent) at end of turn/session. Use monitor for long-running.
 
-Note: When working on an external project (not the Wikifier source itself), the effective project root may be set via `WIKIFIER_PROJECT_ROOT`, the `--project-root` flag, the `project_root` parameter on MCP tools, or the `project_root=` kwarg to all library functions (which use the hardened discover_project_root()).
+Never skip record-change — it is the semantic audit trail (journal + health + pending + BRC).
 
-**Packaging note (M2-Rem-06)**: After `pip install wikifier` or `pip install wikifier[mcp]`, use the global `wikifier` and `wikifier-mcp` commands or `from wikifier import ...` directly. Bootstrap external projects with `wikifier init --target /path/to/repo`. The same root-targeting rules apply whether you installed via pip or are running from source. The Python library is the preferred path for production agent use.
+**M5+ notes (2026-06)**: 
+- External projects: always explicit root. CLI is battle-tested fallback (M5.1 MCP reliability: 60s timeout + better errors; M5 dogfood on alt BRC exact named services, 79k llvm, etc.).
+- Scope: token-efficient agent-to-agent wiki only (see README "Intended Use").
+- Sustained: monitors + subagents for 72h+ gate (M5.3).
+- See health matrix for current Green/Yellow state of M5 agent records (Progress, Assessment, etc.).
+```
 
-For large or massive repositories, **strongly prefer the Python library or MCP server** (`wikifier-mcp`) over raw shell for structured output and Python-primary paths. Use `health(..., directory=..., format="summary"|"json")` and directory-aware tools heavily. Follow the prescriptive scaling patterns in README.md (Small / Medium / Large / Massive tiers) + the library design in the M2 closure plan. The incremental cache + locking (M2-Rem-07) makes this practical at 50k+ files.
+**Packaging / External (M5 strengthened)**: After pip install, use global `wikifier` / `wikifier-mcp` or `from wikifier import ...`. For user projects: `WIKIFIER_PROJECT_ROOT=/abs/path/to/target wikifier ...` or pass project_root to every call/MCP tool. Bootstrap with `wikifier init`. Absolute paths in monitored_paths.txt required for externals. Python library + CLI preferred for reliability on large/BRC scale.
 
 ## Concurrency & Locking (M2-Rem-07)
 
@@ -153,34 +157,37 @@ See the full design, mandatory workflow example, and M2 exit criteria in the pla
 | `wikifier init` | — | Bootstrap config files if they are missing. |
 | `wikifier help` | — | Full command reference. |
 
-## MCP Server (Primary Interface in Grok Build)
+## MCP Server (Primary Interface — M5 Hardened)
 
-This project has a **first-class MCP server** registered via `.mcp.json`.
+This project exposes a first-class MCP server (wikifier-mcp or python -m wikifier.mcp.server).
 
-When working in Grok Build on this project:
+**M5.1+ reality (from dogfood on external 5k-79k+ projects)**: MCP tools are preferred when available (get_project_status, get_file_wiki, get_barrel_reports for deep BRC, check_changes, record_change, mark_green, suggest_next_actions, health equivalents, etc.). **Always pass project_root= (or use WIKIFIER_PROJECT_ROOT env)** for external/user projects (RecipeLab_alt BRC stress, ConsistencyHub, llvm subs, etc.). 
 
-- If the **Wikifier MCP server** is connected (you will see tools like `get_project_status`, `get_dependents`, `suggest_next_actions`, `update_maps`, `record_change`, etc.), **prefer using the MCP tools** over shelling out to `wikifier` commands.
-- The MCP server offers richer, structured, and more agent-friendly access (especially dependency intelligence and project status tools).
-- The legacy shell commands (`wikifier check-changes`, `wikifier record-change`, etc.) remain fully supported as a fallback.
+MCP can timeout on large/BRC-heavy targets (M5 alt ~19-20 named yellows from challengeFeatures re-exports, Consistency ~1k, llvm 168k+ units). In that case, **immediately fall back to CLI/library** (python -m wikifier health --summary or the library health(..., format="summary")) — these are reliable and were the workhorse in M5 sustained/monitor work.
 
-High-value MCP tools available:
-- `get_project_status()` — Best first tool call
-- `suggest_next_actions()`
-- `get_dependents(file)` / `get_dependencies(file)`
-- `get_file_wiki(file)`
-- `record_change`, `check_changes`, `update_maps`, `mark_green`, etc.
+The server implements hardened external discovery (delegates to cli.py discover_project_root / _get_effective_root), 60s timeouts, actionable errors, and parity with library.
 
-If the Wikifier MCP tools are **not** visible in the current session, fall back to the shell commands documented below.
+Legacy shell (`wikifier check-changes` etc.) and direct `wikifier-mcp` remain full fallbacks.
 
-## MCP / Tool Exposure Recommendations (Legacy)
+See `wikifier/mcp/server.py` (updated M5.1 for reliability + external) and `wikifier/mcp/README.md`.
 
-For reference, Wikifier can also be run directly:
+High-value for agents (token-saving lookup + autonomous update):
+- get_project_status / health equivalents
+- get_file_wiki(file) — the direct "look up this file's wiki summary"
+- get_barrel_reports (deep BRC for importers on re-export stress)
+- record_change + mark_green (the autonomous update cycle)
+- check_changes + suggest_next_actions
 
+## MCP / Tool Exposure Recommendations
+
+For reference, run:
 ```bash
 wikifier-mcp
+# or
+python -m wikifier.mcp.server
 ```
 
-See `wikifier/mcp/README.md` for details.
+The MCP tools are the primary structured interface for agents. Use them with explicit project_root for all non-self work.
 
 ## Best Practices for Agents
 
@@ -223,9 +230,14 @@ wikifier record-change "src/api/client.py" "Switched to httpx.AsyncClient becaus
 wikifier mark-green "src/api/client.py" "Purpose + import summary updated to reflect httpx usage and retry logic."
 ```
 
-This protocol (v0.4) + the Python library make Wikifier a first-class, low-ambiguity citizen in any LLM-driven development workflow across models and environments. The design ensures the mandatory loop is executable with minimal deviation.
+This protocol (v0.5) + the zero-dependency Python library (core has no deps; MCP is optional via `pip install wikifier[mcp]`) make Wikifier a first-class, low-ambiguity citizen in any LLM-driven development workflow across models and environments. The design ensures the mandatory loop is executable with minimal deviation.
 
-## Quick Reference — Library Surface (v0.4)
-See the complete design + example in `Findings/m2-full-closure-longterm-scalable-plan.md`.
-Core imports: `from wikifier import check_changes, record_change, health, mark_green, suggest_next_actions, update_maps, discover_project_root, run_full_update`
+**Explicitly zero-dependency by design** (see pyproject.toml: dependencies = [] ; MCP via optional extra only). All core agent operations (health matrix for token-saving lookup, record-change/mark-green for autonomous wiki updates, check-changes, etc.) work with plain Python + the installed package or source — no external services or heavy deps required.
+
+## Quick Reference — Library Surface (v0.5, M5-updated)
+Core imports (all zero-dep for main paths; support project_root= for external/agent-to-agent use):
+`from wikifier import check_changes, record_change, health, mark_green, suggest_next_actions, update_maps, discover_project_root, run_full_update`
+
 All support `project_root=...` and return structured data (plus side-effecting state files for human review).
+
+See README.md "Intended Use" for the strict agent-to-agent wiki scope (token saving for lookup + autonomous update/create of wiki entries only). M5 dogfood validated this on real external projects with the exact patterns above.

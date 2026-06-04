@@ -475,6 +475,8 @@ def run_full_update(
             "use_canonical": use_canonical,
             "note": "Wave 5 partial: error during Python-primary (deeper pipeline); "
                     "falling back to sh path recommended for full update.",
+            # M5.1 hardening (gap5 agent scale resilience from report ONLY: 2/4 agents failed "doom loop detected (repeated errors)" on scale/large/MCP e.g. RecipeLlama ~100 tools/7 err /30k+s reaped, ConsistencyMeta ~68t/5e/30ks; no auto backoff/scope/early partial evidence; DoD#5: 2+ full 50k+ w/ 0 doom, auto-scope key dirs, 1-2 retries transient, append partial on err before fail. Small improvement here in incremental (run_full_update) error handling: surfaces repeated-error hint for callers (subagents). #2 zero-dep, #7 multi-agent context (parallel 4+ replacement/manual pattern), #8 boundary (wikifier/cli only; no target dogfood), #9 using exact 100 tools/7 err, 168k u/1363 chains/4min/20+ BRC y/84 edges/6 mismatches/40-65% calibs from reports, honest calib ~30-40% visible contrib to M5.1 code part (ref 9GP#1 spectrum alt BRC+llama+llvm+meta).
+            "agent_resilience_hint_m5.1": "for repeated errors/doom loops (per M5 report): caller subagents use directory=/abs/sub or max_files budget on >10k (e.g. llvm/alt), 1-2 retries + sleep backoff on transient MCP/list_dir, append partial evidence/journal before fail (see also A2 partials in update_maps). 8-step DF + 9GP traces in diary.",
         })
 
     if verbose:

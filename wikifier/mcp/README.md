@@ -1,16 +1,33 @@
 # Wikifier MCP Server (Rich Edition)
 
-Wikifier now provides a powerful, first-class **MCP server** using the Model Context Protocol.
+Wikifier provides a powerful, first-class **MCP server** using the Model Context Protocol.
 
-This allows AI coding agents to treat Wikifier as a native, transparent, and conservative codebase memory system.
+**This is explicitly part of the agent-to-agent wiki system** (see root README "Intended Use" and skills/run.md v0.5): for token-efficient file lookup (via health matrix, get_file_wiki, BRC reports, etc.), autonomous updates to wiki summaries, and creation of new wiki entries as agents work. Core Wikifier is **zero-dependency** (see pyproject.toml: dependencies = [] ; only optional `mcp` extra for the server). MCP support is opt-in and does not affect the zero-dep guarantee for agents using the library or CLI.
 
-## Installation
+This allows AI coding agents to treat Wikifier as a native, transparent, and conservative codebase memory system for the strict agent-to-agent wiki use case.
+
+## Installation (Zero-Dependency Core + Optional MCP)
+
+The entire project is **explicitly zero-dependency** by design:
+
+```toml
+# pyproject.toml
+dependencies = []  # Zero-dependency by default. MCP support is optional.
+[project.optional-dependencies]
+mcp = ["mcp>=1.0.0"]
+```
 
 ```bash
+# Core (zero-dep, always):
+pip install wikifier
+
+# With MCP server (optional extra):
 pip install wikifier[mcp]
 # Development:
 pip install -e ".[mcp]"
 ```
+
+Core library + CLI work with zero deps for health matrix, record-change, etc. MCP is only for the server/tools exposure.
 
 ## Running
 
@@ -20,13 +37,15 @@ wikifier-mcp
 python -m wikifier.mcp.server
 ```
 
-### Targeting a Specific Project (External Dogfooding) — Packaging Notes (M2-Rem-06)
+### Targeting a Specific Project (External / Agent-to-Agent Use) — M5+ Notes
 
-After `pip install wikifier[mcp]`, `wikifier-mcp` is a global console script. It works on **any** external codebase.
+After `pip install wikifier` (zero-dep core) or `wikifier[mcp]`, `wikifier-mcp` is a global console script. It works on **any** external codebase.
+
+**M5 dogfood validated (alt BRC stress, ConsistencyHub, llvm 79k+ C++ subs, many customs):** always use explicit root targeting for user/external projects. Core remains zero-dep; MCP optional.
 
 **Options for pointing the MCP server at the right project (priority order):**
 
-1. **Environment variable** (most reliable across sessions):
+1. **Environment variable** (most reliable across sessions, especially daemons/monitors):
    ```bash
    WIKIFIER_PROJECT_ROOT=/absolute/path/to/your/project wikifier-mcp
    ```
@@ -39,13 +58,13 @@ After `pip install wikifier[mcp]`, `wikifier-mcp` is a global console script. It
 3. **Auto-discovery**:
    Walks upward from CWD for `monitored_paths.txt` or `.wikifier/`.
 
-4. **Per-tool `project_root` parameter**:
+4. **Per-tool `project_root` parameter** (MCP agents):
    You can override on individual calls even if the server was started against a different root:
    ```json
    { "get_dependents": { "file": "src/foo.js", "project_root": "/path/to/project" } }
    ```
 
-**First-time external / monorepo project bootstrap after pip install** (R6 hardened):
+**First-time external / monorepo project bootstrap** (M5-hardened, zero-dep):
 ```bash
 # 1. Bootstrap directly (auto-creates markers, .wikifier/, optionally copies launcher)
 wikifier init --target /absolute/path/to/your/monorepo
@@ -53,17 +72,17 @@ wikifier init --target /absolute/path/to/your/monorepo
 # 2. (Optional) set for session or rely on auto-discovery + per-call project_root
 export WIKIFIER_PROJECT_ROOT=/absolute/path/to/your/monorepo
 
-# 3. Run commands (CLI now propagates --target/--project-root automatically)
+# 3. Run commands (CLI now propagates --target/--project-root automatically; zero-dep core)
 wikifier check-changes
 
-# 4. Start MCP (now reliably uses installed launcher + PROJECT_ROOT; no more sh-not-found)
+# 4. Start MCP (reliably uses installed launcher + PROJECT_ROOT)
 wikifier-mcp --project-root /absolute/path/to/your/monorepo
 # or simply: WIKIFIER_PROJECT_ROOT=... wikifier-mcp
 ```
 
-Per-tool overrides still work for multi-project agents. The CLI, MCP runner, and shell now consistently separate script location from project state (WIKIFIER_PROJECT_ROOT), making large external pnpm/yarn/TS monorepos far smoother with fewer manual steps (no manual sh copy or repeated exports needed for basic flow).
+Per-tool overrides still work for multi-project agents. The CLI, MCP runner, and shell now consistently separate script location from project state (WIKIFIER_PROJECT_ROOT), making large external monorepos far smoother.
 
-This closes the external bootstrap gaps from P6/R3 dogfooding (RecipeLab_alt etc.). See also root README "Using Wikifier on External Projects".
+See also root README "Using Wikifier on External Projects" and "Intended Use" (strictly agent-to-agent wiki for token saving). M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon support for sustained agent use.
 
 
 ## High-Value Tools
@@ -95,9 +114,13 @@ This closes the external bootstrap gaps from P6/R3 dogfooding (RecipeLab_alt etc
 - `find_architectural_smells`
 - `understand_codebase_structure`
 
-## Philosophy
+## Philosophy (Agent-to-Agent Wiki, Zero-Dep Core)
 
-- **Conservative by default** — prioritizes accuracy and trustworthiness over completeness.
+- **Strictly agent-to-agent wiki for token saving** (per root README "Intended Use" and skills/run.md v0.5): quick file lookup via the health matrix / get_file_wiki / BRC / stele chunks (instead of dumping full sources into context), autonomous updates to wiki summaries, and creation of new wiki-maintained files/entries as agents work. It should not be used for anything more.
+
+- **Zero-dependency by design** — core (health matrix, record-change, check-changes, library, CLI) has no runtime dependencies (see pyproject.toml). MCP server/tools are optional via the `[mcp]` extra only. This keeps the agent wiki layer lightweight and portable for any environment.
+
+- **Conservative by default** — prioritizes accuracy and trustworthiness over completeness. Agents should prefer `format="summary"` or `"json"` + `directory=` scoping on large projects, and fall back to CLI when MCP times out (M5 reality on BRC-heavy or 50k+ targets).
 - **Highly transparent** — agents can see resolution stats, health, and limitations.
 - **Agent-native** — high-level tools (`get_project_status`, `suggest_next_actions`, `get_dependents`) are first-class citizens.
 - **Concurrency safe** (M2-Rem-07) — critical state files are protected by file locking so multiple agents + background monitors can safely operate in parallel.

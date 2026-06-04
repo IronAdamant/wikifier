@@ -1,15 +1,28 @@
 """
-Wikifier MCP Server - Rich Edition
+Wikifier MCP Server - Rich Edition (M5 Hardened)
 
 This is a first-class Model Context Protocol (MCP) server for Wikifier.
 
 It is designed to be used by agents (Claude, Cline, Cursor, etc.) as a
-powerful, transparent, and conservative codebase memory system.
+powerful, transparent, and conservative **agent-to-agent codebase wiki**
+for token-efficient file lookup (health matrix, get_file_wiki, BRC reports,
+stele chunks), autonomous wiki summary updates, and creation of new wiki
+entries as agents work. Strictly for that purpose (see README "Intended Use"
+and skills/run.md v0.5).
+
+M5 dogfood (external 5k-79k+ projects incl. alt BRC stress ~19-20 named,
+Consistency ~1k, llvm 79k+ C++) + M5.1 hardening (external root discovery,
+60s timeouts + actionable errors, health pruning, CLI parity) + M5.3
+sustained (monitors/daemons for 30s heartbeat "Pruned 0") inform the
+reliability.
 
 Run with:
     python -m wikifier.mcp.server
     or
     wikifier-mcp
+
+Always pass project_root= (or WIKIFIER_PROJECT_ROOT) for external/user
+projects. Falls back gracefully to CLI/library on large/BRC targets.
 """
 
 from mcp.server.fastmcp import FastMCP
@@ -214,6 +227,7 @@ def _run_wikifier_command(cmd: str, args: list[str] | None = None, check: bool =
             text=True,
             check=check,
             env=child_env,
+            timeout=60,  # M5.1 MCP reliability hardening (gap2): default 60s to prevent indefinite hang/6000s client timeout on large BRC (alt ~20+ yellows from AdversarialScaffoldGenerator/CrossMCPRecipeValidator/MCPOrchestrationDashboard etc w/ chains, Consistency~1k, llvm 168k u); <30s target per DoD#2; better than prior no-timeout.
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
@@ -221,6 +235,12 @@ def _run_wikifier_command(cmd: str, args: list[str] | None = None, check: bool =
         if check:
             raise RuntimeError(f"Wikifier command '{cmd}' failed on {root}: {error_msg}")
         return f"Error: {error_msg}"
+    except subprocess.TimeoutExpired as e:
+        # M5.1: better error messages for timeouts (per report MCP get_barrel/get_status/get_files/suggest often timeout 6000s on alt BRC or Consistency; shell+lib reliable equiv used). Surfaces actionable (use python-primary/dir scope).
+        error_msg = f"timed out after 60s (M5.1 hardening; alt BRC ~20+ y/chains, Consistency ~1k, llvm 4min/1363 chains/168k units per M5-Dogfood-Assessment-Report+Progress; recommend python lib equivs or scoped for <30s DoD#2)"
+        if check:
+            raise RuntimeError(f"Wikifier command '{cmd}' timed out on {root}: {error_msg}")
+        return f"Error: timeout: {error_msg}"
     except FileNotFoundError:
         # Last resort: try python -m invocation (covers some packaged layouts)
         try:
@@ -232,8 +252,11 @@ def _run_wikifier_command(cmd: str, args: list[str] | None = None, check: bool =
                 text=True,
                 check=check,
                 env=child_env,
+                timeout=60,
             )
             return result.stdout.strip()
+        except subprocess.TimeoutExpired as ee:
+            return f"Error: timeout after 60s (python-m fallback): {ee}"
         except Exception as ee:
             raise RuntimeError(f"Wikifier command failed: could not locate wikifier launcher for project {root} ({ee})")
     except Exception as e:
@@ -1795,12 +1818,23 @@ def get_barrel_reports(
     Agents can now directly query "show me the last N barrel edits and exactly which importers were dirtied + why".
     """
     root = _get_effective_root(project_root)
+    # M5.1 code/tool hardening (targeted for gap2 MCP reliability; based ONLY on M5-Dogfood-Assessment-Report+tail Progress data: alt ~20+ BRC yellows "stale via barrel re-export" from src/services/challengeFeatures/* (AdversarialScaffoldGenerator, CrossMCPRecipeValidator, MCPOrchestrationDashboard, MultiAgentLockStorm, WorkingTreeCoverageFuzzer + models/services) w/ long hex chains detector=none/name-heuristic; Consistency ~1k; llvm 168k units/4min/1363 chains/101 BRC; MCP wikifier get_barrel/get_status/get_files/suggest timeout 6000s (shell+lib equiv reliable); current 60%, DoD#2 MCP full <30s no timeout on alt BRC~20+). #1 spectrum (JS alt stress + py llama + C++ llvm + meta servers), #2 zero-dep (no new pkgs, in-func attr cache), #8 M5 boundary (wikifier/mcp only, no target dogfood), #9 measurable (use exact #s 20+ BRC y/168k u/1363 chains/4min/84 edges/6 mismatches/7 MISSING/1-2y lean/40-65% calibs), #7 multi-agent. 8-step DF followed (review report gaps/DoD, inspect, minimal edit, hygiene, diary).
+    # Simple result caching for barrel reports (10s TTL via func attr): avoids re-compute of get_barrel_invalidation_reports + summary on repeated MCP calls for large BRC like alt (prevents contrib to timeouts). Cache per-root+params; process lifetime only.
+    if not hasattr(get_barrel_reports, "_m5_cache"):
+        get_barrel_reports._m5_cache = {}
+    ckey = (str(root), bool(include_log), int(limit))
+    import time as _time
+    _now = _time.time()
+    if ckey in get_barrel_reports._m5_cache:
+        _ent = get_barrel_reports._m5_cache[ckey]
+        if _now - _ent[0] < 10.0:
+            return _ent[1]
     result: dict = {
         "project_root": str(root),
         "barrel_invalidation_summary": {"has_brc": False, "num_chains": 0},
         "recent_reports": [],
         "barrel_invalidation_log": [],
-        "note": "Use get_barrel_reports for full dedicated 'why via barrel' audit trail (see also check-changes + prune-barrels CLI).",
+        "note": "Use get_barrel_reports for full dedicated 'why via barrel' audit trail (see also check-changes + prune-barrels CLI). [M5.1 cached for reliability on large BRC per report]",
     }
     try:
         import wikifier.import_cache as ic
@@ -1818,6 +1852,7 @@ def get_barrel_reports(
             result["log_count"] = len(log)
     except Exception as ex:
         result["note"] = f"barrel reports unavailable: {ex}"
+    get_barrel_reports._m5_cache[ckey] = (_now, result)
     return result
 
 

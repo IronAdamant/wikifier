@@ -107,7 +107,8 @@ def _entry_is_under_root(root: Path, file_key: str) -> bool:
         p = Path(file_key)
         r = root.resolve()
         key_str = str(file_key)
-        if p.is_absolute() or key_str.startswith(("home/", "/home/", "Users/", "/Users/")) or len(p.parts) > 6:
+        # M5.1 hardening (gaps 2/3/5 health/cli for external abs paths; ONLY from M5-Dogfood-Assessment-Report.md full + Progress tail last100 + key: "without pollution or "path does not exist"" on alt/Recipe/Consistency/llama/llvm after abs monitored_paths.txt + health auto-prune out-of-root + ./wikifier.sh + CLI guards + python-primary w/ dir/max; ~20+ BRC y on alt from AdversarialScaffoldGenerator/CrossMCPRecipeValidator/MCPOrchestrationDashboard etc w/ chains; stele 6 mismatches; chisel 84 edges/0; llvm 168k u/4min/1363 chains; agent 100t/7e doom; current 60%; 8 gaps 10 DoD; 1-2y lean "Pruned 0" everywhere. Added /coding_projects/ + / for sibling cross (Chisel/Trammel/stele/Coord) + general abs; if not already fixed history. #2 zero-dep, #8 boundary (wikifier/health only), #9 measurable exact #s, #1 spectrum, #7 MA context.
+        if p.is_absolute() or key_str.startswith(("home/", "/home/", "Users/", "/Users/", "/coding_projects/", "coding_projects/", "/")) or len(p.parts) > 5:
             # treat as absolute fs path (common when str(p) was stored for outside files)
             if not p.is_absolute():
                 p = Path("/") / p

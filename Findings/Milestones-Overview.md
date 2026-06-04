@@ -200,3 +200,45 @@ M5 snapshot largely complete per user "all projects via several agents" request.
 
 **M5.2 Closeout (subagent_id=m5-phase2-synthesizer; 2026-06-04 post synthesis)**: M5.2 complete at **85-90%** (final; as close as possible without dogfooding per Assessment phases: M5.1 assumed hardening + M5.2 full synth). See: full M5 viability report (9GPs+7-crit 85-90% scoring w/ exact #s e.g. 20+ BRC y alt AdversarialScaffoldGenerator/CrossMCPRecipeValidator/MCPOrchestrationDashboard/etc chains, llvm 168k units/4min/1363 chains, 84 edges/6 mismatches/0/7 MISSING/1-2y lean/40-65% calibs/100 tools/7 err/482k/1537e from the two .md) appended to /home/aron/Documents/coding_projects/Wikifier/Findings/M5-Dogfood-Assessment-Report.md ; updated /home/aron/Documents/coding_projects/Wikifier/Findings/p6_real_world_validation_report.md (85-90%+ claim "as close w/o dogfooding", evidence bundle abs refs to M5-Progress 587l + tail + Assessment + metrics); this Milestones. "M5 snapshot + hardening complete". M5.3 Sustained Validation Plan (literal multi-month on 3+ targets alt/Consistency/llvm-llama to prove all 10 DoD/8 gaps e.g. 72h+ 0-corr, MCP<30s, chisel>=3 act, stele 50+ target chunks, "3" 0-loss 20+ cycles, 95%+ scoring) in Assessment viability section. Ready for M5.3 per DoD 1/8/9/10. subagent_id=m5-phase2-synthesizer 100% (9GP/8-step DF/honest calib/FRESH/record/mark applied to all M5.2 work).
 
+## M5.3 Sustained Validation (Literal Multi-Month Concurrent MA+Daemon for 95%+ / 5-10yr Gate)
+
+**Status (post M5 dogfood round + M5.2 85-90% closeout, 2026-06-04)**: Ready. Current ceiling 85-90% "as close as possible without (additional) dogfooding" per Assessment-Report. M5.3 is the required **literal sustained layer** to hit true 95%+ usefulness + 5-10yr viability on real prepared 5k-50k+ creative projects (per M5 mandate, DoD 1/8/9/10, gap1/8, agent notes in Progress: "needs literal sustained concurrent MA+daemon over weeks/months for ... '3' 0-corruption"; "low on full sustained").
+
+**From M5-Dogfood-Assessment-Report.md (exact M5.3 Sustained Validation Plan)**:
+
+M5.3 (post 85-90% closeout): **literal multi-month (e.g. 4-12 weeks concurrent MA+daemon no-human, with periodic human light per DoD)** on **3+ prepared targets** (priority:
+1. alt/RecipeLab_alt for BRC~20+ stress/chisel/stele cross
+2. ConsistencyHub ~1k for scale cross-MCP
+3. llvm sub or llama heavy for 50k+ C++/py).
+
+Must collect/prove **exact metrics for 7-criteria + close 8 gaps/10 DoD to 95%+** (FRESH diffs, health, logs, hashes, reports; subid/9GP/DF/calib <20% gap).
+
+**Detailed DoD/Gap Mappings (verbatim from plan)**:
+- **DoD1 / gap1 (Sustained MA / longterm obs)**: >=72h (extend to weeks/months) concurrent multi-agent + daemon (no human) on the 3 targets; 0 corruption (health/journal/partials FRESH+hash verify every 24h); <5% growth/day (mem/disk/journal from baseline e.g. llvm 168k u lean); recovery <5min from 10+ kill/restart (timed, with auto backoff from M5.1); collect boundedness curves over time, obs trends (BRC yellows/chains stable or drop post M5.1 fixes on alt ~20+ named services).
+- **DoD2 / gap2 (MCP full reliability)**: wikifier__get_barrel_reports (with chains) / get_project_status / get_files_needing_attention / suggest_next_actions <30s success (no 6000s timeout) on alt (BRC ~20+), Consistency, 1 llama sub; logs + FRESH runs in evidence; use on 3+ targets during sustained.
+- **DoD3 / gap3 (Chisel utility on stress)**: alt/src (and others) triage/risk/test_gaps surfaces >=3 real actionable gaps (with suggest_tests output, working_tree); after remediation/doc in target, measurable drop in BRC yellows (from ~20+ on named services) or +test_edges/coverage on re-export chains (from 84 edges baseline); vs current 0 heuristic.
+- **DoD4 / gap4 (Stele external coverage)**: target reindex or cross-view succeeds for alt + Consistency + 1 llama (>=50 new chunks/docs from *target* code (vs current 0 on externals, main 22/886 only), find_references works on 5+ target symbols (vs current 0 sym/not_found), doctor shows target project_root with content (vs always Wikifier root +6 mismatches)); resolve 6 editable mismatches.
+- **DoD5 / gap5 (Agent scale resilience)**: 2+ full runs on 50k+ (llvm or full llama) complete with 0 "doom loop"/repeated err (vs current 2/4 fails 100t/7e etc); agent auto-scopes to key dirs, 1-2 retries on transient, appends partial evidence on error before fail (M5.1 hardening); during sustained MA.
+- **DoD6 / gap6 (OSS depth)**: lean health (<30 entries, 1-2y max, sh g) + active BRC + check-changes <10s + validate "all have entries" on full linux kernel subdir + rust stdlib sub + 1 more large OSS (e.g. full Babylon or airflow core) (vs current scoped only + llvm heavy; note large 93k/59k in data).
+- **DoD7 / gap7 (Trammel dogfood integration)**: >=3 plans from alt/Consistency/Trammel local .db claimed/recorded/verified/completed via trammel MCP or direct in sessions; usage_stats reflect the activity (vs current 0 on main, plans in target dbs 72/49 but not surfaced).
+- **DoD8 / gap1+8 ("3"/durability under churn)**: journal compaction + historical queries + partial continuation 100% 0-loss (FRESH verify + no lost health/journal data + hash) over 20+ (extend 50+) real edit cycles on 2 targets (alt + Consistency or llvm); under concurrent MA churn (edits via agents); prove no corruption post M5.1.
+- **DoD9 (9 GPs + 7-criteria 95%)**: Update M5 viability report (this + M5.3 append) scoring all 9 GPs + 7-criteria at >=95% with concrete #s/links from sustained (e.g. BRC y reduced from 20+ on named, 168k u sustained lean, new stele chunks 50+, 0 mismatches, recovery <5min xN, obs trends after 1-2mo, "3" 0-corr 50 cycles, 9GP #9 with 100k+ units/months data); honest calib <20% gap; use FRESH/DF.
+- **DoD10 (p6/M5 final gate)**: p6_real_world_validation_report.md (and/or this viability) updated with 95%+ overall on real prepared; all 8 gaps closed or documented as known lims with clear plan/timeline; full evidence bundle + FRESH/9GP traces from M5.3 runs.
+
+**Execution notes for M5.3 (verbatim)**: Use 3+ targets **concurrent**; **daemon** for continuous; **trammel plans** for driven churn; collect **daily metrics** (growth, rec times, BRC counts/chains on alt named, stele/chisel outputs, "3" FRESH+hash, health lean); append to Progress/Assessment with subid/FRESH/9GP/DF/calib; **main clean**; after 72h+ first gate, extend months; produce final 95%+ report. This is what "M5 mandate gap: needs *literal sustained concurrent MA over weeks/months* for compaction, obs, recovery, "3" 0-corruption under churn" and "To actual 95%+ / 5-10yr" in Assessment requires. No short-cuts.
+
+**Hygiene/Process (same as prior M5 work)**: All main-tree activity (diaries, report updates) in Findings/ only; FRESH 3 (exact) before edits; record-change + mark-green; subagent_id everywhere; 9 GPs/8-step DF/honest calib; external-only (targets with project_root); "3" sacred (safe cites only).
+
+**Current State (from this Milestones post-dogfood + M5.2 closeout)**: 85-90% (M5 snapshot broad coverage + M5.1 hardening + M5.2 synth). Evidence harvestable in M5-Progress (1192 lines, 4 agent diaries + synths), Assessment-Report (gaps/DoD/M5.3 plan + 9GP/7-crit scoring), p6, M5.1-cross. Main 4+ 🟢. Ready for M5.3 per DoD.
+
+**First Practical Steps (suggested kickoff)**:
+1. Prep the 3 priority targets (confirm/update abs monitored_paths.txt; ensure trammel plans active for churn/edits; .chisel/.stele populated if cross wanted; wikifier.sh + state clean per prior dogfood).
+2. Launch initial **72h gate** (DoD1): concurrent sustained MA (multiple agents or long-running) + daemon/monitor on alt + Consistency + one llvm/llama sub. Use WIKIFIER_PROJECT_ROOT. Drive churn via trammel claims on targets.
+3. Daily/periodic evidence: health (summary/json), barrel reports (alt named chains), chisel/stele outputs, "3" FRESH+hash on journals/health, growth/recovery timings, obs trends. Append rich diary to M5-Progress (FRESH first) with subid/9GP/DF/calib.
+4. After 72h success (0 corr, <5%gr/day, <5min rec x10+, MCP<30s etc.): extend to weeks/months; add full OSS depth (linux/rust sustained if prepped); collect "months" obs, 20+ "3" cycles under real concurrent edits, trammel claims, etc.
+5. Produce final deliverables: update M5 viability in Assessment + p6 with 95%+ scoring (new sustained #s), close gaps/DoD, central 95% report.
+6. Maintain main clean (only Findings protocol); use subagents for harvest/coordination (like this round).
+
+See full verbatim plan + mappings in `Findings/M5-Dogfood-Assessment-Report.md` (M5.3 section) + "M5 Post-Dogfood Assessment" + "M5.2 Closeout" in this file. Also final synth in M5-Progress.
+
+**subagent_id=m5-gamma-coord-agents 100%**. M5.3 is the literal sustained work that closes to 95%+ per mandate. Ready when you are (e.g. "launch 72h on the 3 targets").
