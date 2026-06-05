@@ -16,6 +16,6 @@
 | wikifier/mcp/README.md | 🟢 Green | 2026-06-05 10:52:06 AEST | Wiki summary verified accurate after change. |
 | wikifier/cli.py | 🟢 Green | 2026-06-05 09:00:20 AEST | Wiki summary verified accurate after change. |
 | diagnostics.html | 🟢 Green | 2026-06-05 08:33:20 AEST | Wiki summary verified accurate after change. |
-| index.html | 🟢 Green | 2026-06-05 10:43:29 AEST | Wiki summary verified accurate after change. |
+| index.html | 🟢 Green | 2026-06-05 11:41:11 AEST | Wiki summary verified accurate after change. |
 | wikifier/import_cache.py | 🟢 Green | 2026-06-05 08:59:41 AEST | wikifier/parsers/python.py |
 | wikifier/parsers/python.py | 🟢 Green | 2026-06-05 08:59:51 AEST | Wiki summary verified accurate after change. |

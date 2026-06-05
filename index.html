@@ -125,15 +125,21 @@
                 </div>
             </div>
 
-            <!-- Quick actions: buttons for the main commands (copy to clipboard so user can run in terminal) -->
+            <!-- Quick actions: buttons for the main commands.
+                 Why copy + wait, not direct execute?
+                 This page is a pure static client-side viewer (no server, no privileged code, zero runtime deps).
+                 Browser JS cannot execute host shell commands (security sandbox + design choice for portability and simplicity).
+                 The buttons prepare the exact command and immediately start live monitoring so the results appear automatically once you run the command in your terminal.
+                 This is the intended model: human view on top of agent-executed tools.
+            -->
             <div class="mb-4 px-1">
-              <div class="text-[10px] text-slate-400 mb-1">Quick actions — click to copy the command, paste &amp; run in your terminal (this folder), then refresh the page</div>
+              <div class="text-[10px] text-slate-400 mb-1">Quick actions — click to copy the command + start live auto-update. Paste &amp; run in your terminal (this folder); the page will detect changes and refresh the view automatically.</div>
               <div class="flex flex-wrap gap-2">
-                <button onclick="copyCommandForRun('check-changes')" 
+                <button onclick="copyAndWaitForUpdate('check-changes')" 
                         class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
                   <span>Check for changes</span>
                 </button>
-                <button onclick="copyCommandForRun('update-maps')" 
+                <button onclick="copyAndWaitForUpdate('update-maps')" 
                         class="px-3 py-1.5 text-sm rounded-xl bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-emerald-300 flex items-center gap-x-2">
                   <span>Rebuild structure map</span>
                 </button>
@@ -151,7 +157,7 @@
                         <span class="font-semibold text-lg">Code structure</span>
                         <span class="ml-2 text-xs text-slate-500">(imports &amp; dependencies — rebuilt from your code)</span>
                     </div>
-                    <button onclick="runCommand('update-maps')" 
+                    <button onclick="copyAndWaitForUpdate('update-maps')" 
                             class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">Rebuild tree</button>
                 </div>
                 <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-5 min-h-[340px]">
@@ -180,7 +186,7 @@
                                oninput="filterFilesList()" onkeydown="if(event.key==='Enter')filterFilesList()">
                         <button onclick="filterFilesList()" 
                                 class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700">Filter</button>
-                        <button onclick="runCommand('check-changes')" 
+                        <button onclick="copyAndWaitForUpdate('check-changes')" 
                                 class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">
                             Update data
                         </button>
@@ -361,7 +367,7 @@
                 listEl.innerHTML = `<div class="px-5 py-8 text-center">
                     <div class="text-sm text-slate-400">No files in the wiki yet.</div>
                     <div class="mt-3">
-                        <button onclick="copyCommandForRun('check-changes &amp;&amp; update-maps', 'wikifier check-changes &amp;&amp; wikifier update-maps')" 
+                        <button onclick="copyAndWaitForUpdate('check-changes &amp;&amp; update-maps', 'wikifier check-changes &amp;&amp; wikifier update-maps')" 
                                 class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium">
                             📋 Copy first-time setup command
                         </button>
@@ -550,7 +556,7 @@
                     <div class="font-semibold mb-1">No structure map yet</div>
                     <div class="text-slate-400">This project hasn't had its import/dependency tree generated yet.</div>
                     <div class="mt-3">
-                        <button onclick="copyCommandForRun('update-maps')" 
+                        <button onclick="copyAndWaitForUpdate('update-maps')" 
                                 class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium w-full sm:w-auto">
                             📋 Copy command &amp; run wikifier update-maps (first time)
                         </button>
@@ -559,7 +565,7 @@
                 </div>`;
 
                 // "Automatically on the first run": if this is the very first time the user sees the empty map state in this browser session,
-                // auto-copy the command for them so it feels automatic, with clear feedback.
+                // auto-copy the command AND activate live wait/poll mode so once they run it, the tree appears automatically.
                 if (!sessionStorage.getItem('wikifier_first_map_auto_copied')) {
                     sessionStorage.setItem('wikifier_first_map_auto_copied', '1');
                     setTimeout(() => {
@@ -570,6 +576,9 @@
                             note.textContent = '✓ update-maps command auto-copied for first run — paste it in your terminal now.';
                             const emptyBox = container.querySelector('div');
                             if (emptyBox) emptyBox.appendChild(note);
+                            // Also start the live wait/poll immediately for the "auto" feel
+                            // (user still needs to execute the command in terminal)
+                            copyAndWaitForUpdate('update-maps', 'wikifier update-maps'); // this will re-copy but mainly starts the banner + poll
                         }).catch(() => {});
                     }, 300);
                 }
@@ -684,6 +693,75 @@ Open index.html in the project for the live visual version.
             if (cmd.includes('check') || cmd.includes('health')) setTimeout(() => loadHealthMatrix && loadHealthMatrix(), 800);
             if (cmd.includes('update')) setTimeout(() => loadMermaid && loadMermaid(), 800);
             if (cmd.includes('monitor')) setTimeout(() => loadMonitorStatus && loadMonitorStatus(true), 600);
+        }
+
+        // Enhanced: copy + enter "live waiting" mode with aggressive polling until data appears.
+        // This makes buttons feel like they "trigger" an update (user still runs the copied command in terminal).
+        let waitPollInterval = null;
+        function copyAndWaitForUpdate(cmd, fullText) {
+            const full = fullText || `wikifier ${cmd}`;
+            navigator.clipboard.writeText(full).then(() => {
+                // Show waiting banner
+                let banner = document.getElementById('wait-banner');
+                if (!banner) {
+                    banner = document.createElement('div');
+                    banner.id = 'wait-banner';
+                    banner.className = `fixed top-4 left-1/2 -translate-x-1/2 bg-blue-900 border border-blue-700 px-4 py-2 rounded-2xl text-sm z-50 flex items-center gap-3 shadow-lg`;
+                    document.body.appendChild(banner);
+                }
+                banner.innerHTML = `
+                    <span>Waiting for <code class="bg-black/40 px-1 rounded">${full}</code> to produce data... (auto-polling)</span>
+                    <button onclick="stopWaitPoll(); this.closest('.fixed').remove(); window.location.reload()" class="text-xs underline">I ran it — refresh now</button>
+                `;
+
+                // Clear any old poll
+                if (waitPollInterval) clearInterval(waitPollInterval);
+
+                let attempts = 0;
+                const maxAttempts = 40; // ~2 minutes at 3s intervals
+                waitPollInterval = setInterval(() => {
+                    attempts++;
+                    // Reload the relevant views
+                    if (cmd.includes('update') || cmd.includes('map')) {
+                        loadMermaid();
+                    }
+                    if (cmd.includes('check') || cmd.includes('health')) {
+                        loadHealthMatrix();
+                    }
+                    loadMonitorStatus();
+
+                    // Check if data appeared
+                    const hasMap = !!window.libraryMdCache && window.libraryMdCache.includes('```mermaid');
+                    const hasFiles = window.healthData && window.healthData.length > 0;
+
+                    if ((cmd.includes('update') && hasMap) || (cmd.includes('check') && hasFiles) || (hasMap && hasFiles)) {
+                        stopWaitPoll();
+                        if (banner.parentNode) banner.parentNode.removeChild(banner);
+                        // Show success toast
+                        const success = document.createElement('div');
+                        success.className = `fixed bottom-4 right-4 bg-emerald-900 border border-emerald-700 px-4 py-2 rounded-2xl text-sm z-50`;
+                        success.textContent = '✓ Data updated! View refreshed.';
+                        document.body.appendChild(success);
+                        setTimeout(() => { if (success.parentNode) success.parentNode.removeChild(success); }, 3000);
+                        // Force full reload of views
+                        loadMermaid();
+                        loadHealthMatrix();
+                    } else if (attempts >= maxAttempts) {
+                        stopWaitPoll();
+                        if (banner.parentNode) banner.parentNode.removeChild(banner);
+                    }
+                }, 3000); // aggressive 3s poll while waiting
+            }).catch(() => {
+                // fallback
+                copyCommandForRun(cmd, full);
+            });
+        }
+
+        function stopWaitPoll() {
+            if (waitPollInterval) {
+                clearInterval(waitPollInterval);
+                waitPollInterval = null;
+            }
         }
 
         // Legacy / existing buttons still work via the improved helper
