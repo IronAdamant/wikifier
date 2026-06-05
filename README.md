@@ -42,16 +42,15 @@ M5 broad real-world dogfood (85-90%+) on multiple external 5k–50k+ creative pr
 Recent focus (v4.1.x):
 - Human investigation layer separation (only the clean `index.html` viewer is deployed to targets; `diagnostics.html` is maintainer-only).
 - Mapping & update speed hygiene (faster candidate collection with scandir + git fast-path, consistent excludes, parser micro-opts).
-- Human dashboard UX: prominent Quick actions toolbar with copy-to-clipboard buttons for main commands (check-changes, update-maps, monitor &); big primary buttons in empty states for first-time setup; auto-copy of `wikifier update-maps` command on first render of "no structure map yet" (session-guarded) so it feels automatic on first run of a fresh project.
-- mcp and skills docs sync: updated the human layer descriptions in `skills/run.md` and `wikifier/mcp/README.md` (and cli.py comment) to accurately reflect the new dashboard command buttons, empty-state CTAs, and first-run auto-copy behavior. See v4.1.4 notes.
+- Human dashboard UX: prominent Quick actions toolbar with copy buttons for main commands (check-changes, update-maps, monitor &); big primary buttons in empty states for first-time setup; session-guarded auto-copy of `wikifier update-maps` on first "no structure map yet" render; live-wait model (buttons copy + immediately show fixed waiting banner + aggressive 3s auto-poll so chart/files auto-appear after terminal execution, with "I ran it — refresh now" link and success toast). Explanatory "why copy" note in UI (static viewer sandbox security; design choice for zero-dep; copy+live is the provided auto). Accepted as "Good enough".
+- mcp and skills docs sync: updated the human layer descriptions in `skills/run.md` and `wikifier/mcp/README.md` to accurately reflect the delivered copy + live-wait UX (banner, 3s poll, I-ran-it, first-run auto-wait, security rationale). See latest notes below. (This sync followed the "Good enough" acceptance of the model.)
 
 Full history moved to `docs/` and `Findings/`. The project stays deliberately lean and agent-first.
 
-**v4.1.4 (2026-06)**: mcp and skills docs sync for latest human dashboard UX (very minor polish; no behaviour change).
-- Updated "Human investigation layer" section in `skills/run.md` and "Human layer in MCP projects" in `wikifier/mcp/README.md` to describe the Quick actions toolbar, prominent first-time command buttons in empty states, and session-guarded auto-copy of update-maps on first no-map render.
-- Minor update to cli.py comment on copy_human_dashboards for accuracy.
-- Ensures docs accurately describe what humans see in the secondary viewer after init, without altering agent protocol, MCP tools, or core behavior.
-- All under FRESH + record+mark-green (subid=human-dashboard-commands). Complements the v4.1.3 dashboard template changes.
+**v4.1.4 (2026-06)**: mcp and skills docs sync for live-wait human dashboard UX (final polish to secondary viewer; no behaviour change or version bump this pass).
+- Extended human layer sections in `skills/run.md` (v0.5) and `wikifier/mcp/README.md` ("Human layer in MCP projects") + root README recent focus to fully document the delivered model after "Good enough" acceptance: Quick actions toolbar buttons (now copyAndWaitForUpdate), prominent primary buttons in empty states, session-guarded first-run auto-copy of update-maps + immediate live-wait activation, injected waiting banner ("Waiting for `...` ... (auto-polling every 3s)"), "I ran it — refresh now" link, 3s aggressive poll that auto-detects artifact writes (library.md / health) and refreshes views + success toast without further clicks, and the inline explanatory note on why copy+wait (pure static zero-dep viewer; browser security sandbox prevents direct host exec from JS; copy + live-wait + fast poll is the auto provided so results appear automatically post terminal run).
+- FRESH 3 hygiene (grep 0 def code matches on targets) + record-change (with subid=human-layer-live-wait-sync) + mark-green preceded/ followed the edits per protocol.
+- Complements v4.1.3 (buttons + first auto-copy landing in index.html) and keeps agent SSOT / MCP / CLI primary and unchanged. No core features added.
 
 **v4.1.3 (2026-06)**: Human dashboard command buttons + first-run update-maps UX (very minor polish to the secondary human investigation layer).
 - Added visible "Quick actions" bar with easy one-click copy buttons for the primary commands available to humans using the dashboard (check-changes, update-maps, start monitor). Feedback includes exact pasteable command + "run in this project folder then Refresh" guidance + manual refresh link.
@@ -110,7 +109,7 @@ Full protocol, examples, and LLM workflow: `skills/run.md` (read this first as a
 - Autonomous maintenance: `record-change` (the "why") + `mark-green`.
 - Incremental + scoped + resumable for large codebases.
 - Optional MCP server with 23+ tools for agents.
-- Secondary clean `index.html` dashboard (after init) for humans browsing the agent's wiki (chart + file descriptions + copyable snapshots).
+- Secondary clean `index.html` dashboard (after init) for humans browsing the agent's wiki (prominent Mermaid chart + files with short descriptions + folder browser + Quick actions copy+live-wait buttons that make updates appear automatically after terminal run).
 - True zero dependencies.
 
 See `skills/run.md` for the exact agent contract and `wikifier/mcp/README.md` for MCP setup.
