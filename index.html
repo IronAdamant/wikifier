@@ -125,6 +125,25 @@
                 </div>
             </div>
 
+            <!-- Quick actions: buttons for the main commands (copy to clipboard so user can run in terminal) -->
+            <div class="mb-4 px-1">
+              <div class="text-[10px] text-slate-400 mb-1">Quick actions — click to copy the command, paste &amp; run in your terminal (this folder), then refresh the page</div>
+              <div class="flex flex-wrap gap-2">
+                <button onclick="copyCommandForRun('check-changes')" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
+                  <span>Check for changes</span>
+                </button>
+                <button onclick="copyCommandForRun('update-maps')" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-emerald-300 flex items-center gap-x-2">
+                  <span>Rebuild structure map</span>
+                </button>
+                <button onclick="copyCommandForRun('monitor &amp;')" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
+                  <span>Start background monitor</span>
+                </button>
+              </div>
+            </div>
+
             <!-- HERO: The Chart / Tree (what humans see first and clearly) -->
             <div class="mb-8 bg-slate-900 border border-slate-800 rounded-3xl p-6">
                 <div class="flex items-center justify-between mb-3">
@@ -341,7 +360,13 @@
             if (!rows || rows.length === 0) {
                 listEl.innerHTML = `<div class="px-5 py-8 text-center">
                     <div class="text-sm text-slate-400">No files in the wiki yet.</div>
-                    <div class="text-xs mt-2 text-slate-500">Run <code class="bg-slate-900 px-1">wikifier check-changes &amp;&amp; wikifier update-maps</code> in this project folder, then refresh.</div>
+                    <div class="mt-3">
+                        <button onclick="copyCommandForRun('check-changes &amp;&amp; update-maps', 'wikifier check-changes &amp;&amp; wikifier update-maps')" 
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium">
+                            📋 Copy first-time setup command
+                        </button>
+                    </div>
+                    <div class="mt-2 text-xs text-slate-500">Run <code class="bg-slate-900 px-1">wikifier check-changes &amp;&amp; wikifier update-maps</code> in this project folder, then refresh.</div>
                 </div>`;
                 return;
             }
@@ -524,10 +549,30 @@
                 container.innerHTML = `<div class="text-sm p-4 bg-slate-900 border border-slate-700 rounded">
                     <div class="font-semibold mb-1">No structure map yet</div>
                     <div class="text-slate-400">This project hasn't had its import/dependency tree generated yet.</div>
-                    <div class="mt-2 text-xs">Run this in the project folder:</div>
-                    <code class="block mt-1 p-2 bg-slate-950 rounded text-emerald-300">wikifier update-maps</code>
-                    <div class="mt-1 text-[10px] text-slate-500">Then refresh this page. The chart will show your codebase structure.</div>
+                    <div class="mt-3">
+                        <button onclick="copyCommandForRun('update-maps')" 
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium w-full sm:w-auto">
+                            📋 Copy command &amp; run wikifier update-maps (first time)
+                        </button>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400">Run the copied command in your terminal <strong>inside this project folder</strong>, then refresh this page (or wait for the ~30s auto update). This is the recommended first step when you open the dashboard in a new project.</div>
                 </div>`;
+
+                // "Automatically on the first run": if this is the very first time the user sees the empty map state in this browser session,
+                // auto-copy the command for them so it feels automatic, with clear feedback.
+                if (!sessionStorage.getItem('wikifier_first_map_auto_copied')) {
+                    sessionStorage.setItem('wikifier_first_map_auto_copied', '1');
+                    setTimeout(() => {
+                        navigator.clipboard.writeText('wikifier update-maps').then(() => {
+                            // non-intrusive note that we helped
+                            const note = document.createElement('div');
+                            note.className = 'mt-2 text-[10px] text-emerald-400';
+                            note.textContent = '✓ update-maps command auto-copied for first run — paste it in your terminal now.';
+                            const emptyBox = container.querySelector('div');
+                            if (emptyBox) emptyBox.appendChild(note);
+                        }).catch(() => {});
+                    }, 300);
+                }
                 return;
             }
             window.libraryMdCache = md;
@@ -611,16 +656,39 @@ Open index.html in the project for the live visual version.
         // Agents and technical users: use the .md files directly, diagnostics.html, MCP, or CLI.)
 
         // Lightweight runCommand for the human dashboard (only the two we surface prominently)
-        function runCommand(cmd) {
-            const msg = document.createElement('div');
-            msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-2xl text-xs flex items-center gap-2 z-50`;
-            msg.innerHTML = `Run <code>wikifier ${cmd}</code> (or <code>./wikifier.sh ${cmd}</code>) in this folder`;
-            document.body.appendChild(msg);
-            setTimeout(()=>{msg.style.opacity=0;setTimeout(()=>msg.remove(),900)},1600);
+        // Helper to copy a ready-to-paste command and give clear next-step feedback
+        function copyCommandForRun(cmd, fullText) {
+            const full = fullText || `wikifier ${cmd}`;
+            navigator.clipboard.writeText(full).then(() => {
+                const msg = document.createElement('div');
+                msg.className = `fixed bottom-4 right-4 bg-emerald-900 border border-emerald-700 px-4 py-3 rounded-2xl text-sm z-50 max-w-xs`;
+                msg.innerHTML = `
+                    <div class="font-medium">Copied to clipboard:</div>
+                    <code class="block mt-1 bg-black/40 px-2 py-1 rounded text-emerald-300 break-all">${full}</code>
+                    <div class="mt-2 text-xs text-emerald-200">Paste &amp; run it in the terminal <strong>inside this project folder</strong>, then click <span class="underline">Refresh</span> above (or wait ~30s).</div>
+                    <button onclick="this.closest('.fixed').remove(); window.location.reload()" class="mt-2 text-xs underline">Refresh dashboard now</button>
+                `;
+                document.body.appendChild(msg);
+                // auto remove after a while if user doesn't interact
+                setTimeout(() => { if (msg.parentNode) msg.parentNode.removeChild(msg); }, 12000);
+            }).catch(() => {
+                // Fallback for browsers that block clipboard
+                const msg = document.createElement('div');
+                msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-3 py-2 rounded-2xl text-xs z-50`;
+                msg.innerHTML = `Run this in the terminal: <code class="bg-black/40 px-1">${full}</code>`;
+                document.body.appendChild(msg);
+                setTimeout(()=>{ if (msg.parentNode) msg.parentNode.removeChild(msg); }, 4000);
+            });
 
-            if (cmd.includes('check') || cmd.includes('health')) setTimeout(() => loadHealthMatrix && loadHealthMatrix(), 600);
-            if (cmd.includes('update')) setTimeout(() => loadMermaid && loadMermaid(), 500);
-            if (cmd.includes('monitor')) setTimeout(() => loadMonitorStatus && loadMonitorStatus(true), 400);
+            // Optimistic: after user likely ran it, the next poll will pick it up
+            if (cmd.includes('check') || cmd.includes('health')) setTimeout(() => loadHealthMatrix && loadHealthMatrix(), 800);
+            if (cmd.includes('update')) setTimeout(() => loadMermaid && loadMermaid(), 800);
+            if (cmd.includes('monitor')) setTimeout(() => loadMonitorStatus && loadMonitorStatus(true), 600);
+        }
+
+        // Legacy / existing buttons still work via the improved helper
+        function runCommand(cmd) {
+            copyCommandForRun(cmd);
         }
 
         // Boot: only what the human view needs (chart + files+descs + tree + monitor). Poll for live feel.

@@ -2,7 +2,7 @@
 
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
-| skills/run.md | 🟡 Yellow | 2026-06-05 09:09:40 AEST | mtime changed since last check-changes (auto-detected) |
+| skills/run.md | 🟡 Yellow | 2026-06-05 10:43:28 AEST | mtime changed since last check-changes (auto-detected) |
 | Findings/Milestones-Overview.md | 🟢 Green | 2026-06-04 07:32:09 AEST | M5.3 sustained plan + kickoff appended (verbatim from Assessment). subagent_id=m5-gamma-coord-agents. FRESH 3. |
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-06-04 08:01:45 AEST | M5.3 alt sub completed exit0 1356s + gate pass for alt per M5.3/DoD (BRC19 stable named exact, rec x5+ ~3s, 0corr, growth0, claims4+/1v, chisel10823e/12g, stele270, FRESH/subid/9GP/8DF/calib85-92% record+mark; sim part; 2 subs prior; coord handled; gate active; BRC19; plan.md green). FRESH 3 + subid. subagent_id=m5-gamma-coord-agents. |
 | wikifier.sh | 🟢 Green | 2026-06-05 09:00:46 AEST | Wiki summary verified accurate after change. |
@@ -16,6 +16,6 @@
 | wikifier/mcp/README.md | 🟢 Green | 2026-06-05 08:33:10 AEST | Wiki summary verified accurate after change. |
 | wikifier/cli.py | 🟢 Green | 2026-06-05 09:00:20 AEST | Wiki summary verified accurate after change. |
 | diagnostics.html | 🟢 Green | 2026-06-05 08:33:20 AEST | Wiki summary verified accurate after change. |
-| index.html | 🟢 Green | 2026-06-05 08:33:31 AEST | Wiki summary verified accurate after change. |
+| index.html | 🟢 Green | 2026-06-05 10:43:29 AEST | Wiki summary verified accurate after change. |
 | wikifier/import_cache.py | 🟢 Green | 2026-06-05 08:59:41 AEST | wikifier/parsers/python.py |
 | wikifier/parsers/python.py | 🟢 Green | 2026-06-05 08:59:51 AEST | Wiki summary verified accurate after change. |
