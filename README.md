@@ -42,9 +42,16 @@ M5 broad real-world dogfood (85-90%+) on multiple external 5k–50k+ creative pr
 Recent focus (v4.1.x):
 - Human investigation layer separation (only the clean `index.html` viewer is deployed to targets; `diagnostics.html` is maintainer-only).
 - Mapping & update speed hygiene (faster candidate collection with scandir + git fast-path, consistent excludes, parser micro-opts).
-- Human dashboard UX: prominent Quick actions toolbar with copy-to-clipboard buttons for main commands (check-changes, update-maps, monitor &); big primary buttons in empty states for first-time setup; auto-copy of `wikifier update-maps` command on first render of "no structure map yet" (session-guarded) so it feels automatic on first run of a fresh project. See v4.1.3 notes.
+- Human dashboard UX: prominent Quick actions toolbar with copy-to-clipboard buttons for main commands (check-changes, update-maps, monitor &); big primary buttons in empty states for first-time setup; auto-copy of `wikifier update-maps` command on first render of "no structure map yet" (session-guarded) so it feels automatic on first run of a fresh project.
+- mcp and skills docs sync: updated the human layer descriptions in `skills/run.md` and `wikifier/mcp/README.md` (and cli.py comment) to accurately reflect the new dashboard command buttons, empty-state CTAs, and first-run auto-copy behavior. See v4.1.4 notes.
 
 Full history moved to `docs/` and `Findings/`. The project stays deliberately lean and agent-first.
+
+**v4.1.4 (2026-06)**: mcp and skills docs sync for latest human dashboard UX (very minor polish; no behaviour change).
+- Updated "Human investigation layer" section in `skills/run.md` and "Human layer in MCP projects" in `wikifier/mcp/README.md` to describe the Quick actions toolbar, prominent first-time command buttons in empty states, and session-guarded auto-copy of update-maps on first no-map render.
+- Minor update to cli.py comment on copy_human_dashboards for accuracy.
+- Ensures docs accurately describe what humans see in the secondary viewer after init, without altering agent protocol, MCP tools, or core behavior.
+- All under FRESH + record+mark-green (subid=human-dashboard-commands). Complements the v4.1.3 dashboard template changes.
 
 **v4.1.3 (2026-06)**: Human dashboard command buttons + first-run update-maps UX (very minor polish to the secondary human investigation layer).
 - Added visible "Quick actions" bar with easy one-click copy buttons for the primary commands available to humans using the dashboard (check-changes, update-maps, start monitor). Feedback includes exact pasteable command + "run in this project folder then Refresh" guidance + manual refresh link.
