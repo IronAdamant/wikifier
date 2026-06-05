@@ -1160,8 +1160,10 @@ def health(
 # Human Investigation Layer (secondary sub-project)
 # Only index.html (the clean human wiki viewer) is copied into target projects by init.
 # It provides the prominent code structure chart (Mermaid), "Files & descriptions" list with
-# short summaries, folder browser, and copy buttons for the *target project's* agent-maintained
-# wiki (data-driven from its file_health.* + library.md after check-changes + update-maps).
+# short summaries, folder browser, copy buttons for tree/snapshot, a "Quick actions" toolbar
+# with copy buttons for main commands (check-changes, update-maps, monitor &), and prominent
+# buttons + session-guarded auto-copy of update-maps in empty states for easy first-run setup.
+# (data-driven from its file_health.* + library.md after check-changes + update-maps).
 # diagnostics.html is the Wikifier-specific heavy maintainer/refactor/porter hub (architecture,
 # full command map, porting checklist, this project's own source tree with purposes). It is
 # *not* copied to foreign project roots — it would point at the wrong folder and be stale for
