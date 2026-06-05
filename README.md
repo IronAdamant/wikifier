@@ -41,9 +41,17 @@ M5 broad real-world dogfood (85-90%+) on multiple external 5k–50k+ creative pr
 
 Recent focus (v4.1.x):
 - Human investigation layer separation (only the clean `index.html` viewer is deployed to targets; `diagnostics.html` is maintainer-only).
-- Mapping & update speed hygiene (faster candidate collection with scandir + git fast-path, consistent excludes, parser micro-opts). See v4.1.2 notes below.
+- Mapping & update speed hygiene (faster candidate collection with scandir + git fast-path, consistent excludes, parser micro-opts).
+- Human dashboard UX: prominent Quick actions toolbar with copy-to-clipboard buttons for main commands (check-changes, update-maps, monitor &); big primary buttons in empty states for first-time setup; auto-copy of `wikifier update-maps` command on first render of "no structure map yet" (session-guarded) so it feels automatic on first run of a fresh project. See v4.1.3 notes.
 
 Full history moved to `docs/` and `Findings/`. The project stays deliberately lean and agent-first.
+
+**v4.1.3 (2026-06)**: Human dashboard command buttons + first-run update-maps UX (very minor polish to the secondary human investigation layer).
+- Added visible "Quick actions" bar with easy one-click copy buttons for the primary commands available to humans using the dashboard (check-changes, update-maps, start monitor). Feedback includes exact pasteable command + "run in this project folder then Refresh" guidance + manual refresh link.
+- Enhanced empty states ("No structure map yet", "No files yet") with prominent primary buttons for the relevant commands (update-maps prioritized, combined first-time setup for files).
+- "Automatically on first run": when the no-map empty state first appears in a browser session, the `wikifier update-maps` command is auto-copied (guarded by sessionStorage) with a note, making the recommended first action feel automatic. Buttons + instructions guide the user to run in terminal and refresh/poll.
+- Existing "Rebuild tree" / "Update data" buttons now use the improved copy+feedback UX. Keeps the clean human view (no dense agent internals).
+- All under protocol (FRESH, record+mark-green with subid=human-dashboard-commands). No new features or scope change. Complements the existing copy snapshot buttons and guidance.
 
 **v4.1.2 (2026-06)**: Speed improvements for updates on large projects (scandir/git fast-path in collectors, richer early pruning via `exclude_patterns.txt`, regex hoisting in parsers). Complements scoping, streaming budgets, and incremental dirty + barrel reverse index. No behaviour change.
 
