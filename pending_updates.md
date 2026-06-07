@@ -10,3 +10,7 @@
 - skills/run.md: Auto-detected modification — review and run mark-green after wiki update
 - skills/run.md: Auto-detected modification — review and run mark-green after wiki update
 - skills/run.md: Auto-detected modification — review and run mark-green after wiki update
+- skills/run.md: Auto-detected modification — review and run mark-green after wiki update
+- skills/run.md: Auto-detected modification — review and run mark-green after wiki update
+- skills/run.md: Auto-detected modification — review and run mark-green after wiki update
+- skills/run.md: Auto-detected modification — review and run mark-green after wiki update

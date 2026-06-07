@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Wiki</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --font-sans: 'Inter', system_ui, sans-serif;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, -apple-system, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', sans-serif;
+            font-weight: 600;
+        }
+
+        .health-green { color: #10b981; }
+        .health-yellow { color: #eab308; }
+        .health-red { color: #ef4444; }
+
+        .matrix-table {
+            font-size: 0.875rem;
+        }
+
+        .status-pill {
+            font-size: 0.75rem;
+            padding: 1px 9px;
+            border-radius: 9999px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .section-header {
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        pre {
+            font-size: 0.75rem;
+        }
+
+        .command-btn {
+            transition: all 0.1s ease;
+        }
+        .command-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        .wikifier-header {
+            background: linear-gradient(90deg, #0f172a 0%, #1e2937 100%);
+        }
+
+        .intel-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            transition: transform 0.1s ease, border-color 0.1s ease;
+        }
+        .intel-card:hover {
+            border-color: #475569;
+            transform: translateY(-1px);
+        }
+        .intel-severity-critical { color: #f87171; font-weight: 600; }
+        .intel-severity-high { color: #fb923c; font-weight: 600; }
+        .intel-severity-medium { color: #fbbf24; font-weight: 600; }
+        .intel-severity-low { color: #4ade80; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header: clean for humans -->
+        <div class="border-b border-slate-800 px-8 py-5 flex items-center justify-between bg-slate-900">
+            <div class="flex items-center gap-x-3">
+                <div class="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
+                    <span class="text-slate-950 font-bold text-xl tracking-tighter">W</span>
+                </div>
+                <div>
+                    <span class="font-display text-2xl font-semibold tracking-tighter">Project Wiki</span>
+                </div>
+                <div class="px-3 py-1 bg-slate-800 border border-slate-700 rounded-full text-xs text-slate-400 font-medium">
+                    Human view • Agent-maintained
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-x-2">
+                <button onclick="window.location.reload()" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors flex items-center gap-x-2">
+                    <span>Refresh</span>
+                </button>
+                <span class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 cursor-help" title="diagnostics.html is the Wikifier maintainer/refactor hub (full architecture, porting checklist, command map, this tool's own source tree). It lives in the Wikifier source (not auto-copied into project wikis). For this project's agent wiki, you are in the right place. Clone or open diagnostics.html from your Wikifier checkout if refactoring the tool itself.">For maintainers</span>
+            </div>
+        </div>
+
+        <div class="px-8 py-8">
+            <!-- Clean minimal status for humans -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="font-display text-3xl tracking-tighter font-semibold">Project structure &amp; notes</h1>
+                    <p class="text-slate-400 mt-0.5 text-sm">Visual summaries from the agent-maintained wiki • Updated automatically</p>
+                </div>
+                
+                <div class="flex items-center gap-x-3">
+                    <div id="health-summary" 
+                         class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2 text-sm">
+                        <!-- Populated by JS: clean pills only -->
+                    </div>
+                    <div id="monitor-status" 
+                         class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-1.5 text-xs text-slate-400 font-mono cursor-pointer"
+                         onclick="loadMonitorStatus(true)" title="Click to check last update time">
+                        <!-- Populated by JS: simple "Updated Xm ago" -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick actions: buttons for the main commands.
+                 Why copy + wait, not direct execute?
+                 This page is a pure static client-side viewer (no server, no privileged code, zero runtime deps).
+                 Browser JS cannot execute host shell commands (security sandbox + design choice for portability and simplicity).
+                 The buttons prepare the exact command and immediately start live monitoring so the results appear automatically once you run the command in your terminal.
+                 This is the intended model: human view on top of agent-executed tools.
+            -->
+            <div class="mb-4 px-1">
+              <div class="text-[10px] text-slate-400 mb-1">Quick actions — click to copy the command + start live auto-update. Paste &amp; run in your terminal (this folder); the page will detect changes and refresh the view automatically.</div>
+              <div class="flex flex-wrap gap-2">
+                <button onclick="copyAndWaitForUpdate('check-changes')" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
+                  <span>Check for changes</span>
+                </button>
+                <button onclick="copyAndWaitForUpdate('update-maps')" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-emerald-300 flex items-center gap-x-2">
+                  <span>Rebuild structure map</span>
+                </button>
+                <button onclick="copyCommandForRun('monitor &amp;')" 
+                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
+                  <span>Start background monitor</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- HERO: The Chart / Tree (what humans see first and clearly) -->
+            <div class="mb-8 bg-slate-900 border border-slate-800 rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <span class="font-semibold text-lg">Code structure</span>
+                        <span class="ml-2 text-xs text-slate-500">(imports &amp; dependencies — rebuilt from your code)</span>
+                    </div>
+                    <button onclick="copyAndWaitForUpdate('update-maps')" 
+                            class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">Rebuild tree</button>
+                </div>
+                <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-5 min-h-[340px]">
+                    <div id="mermaid-diagram" class="mermaid"></div>
+                </div>
+                <div class="mt-4 flex flex-wrap gap-x-3 gap-y-2">
+                    <button onclick="copyMermaidSource()" 
+                            class="px-4 py-2 rounded-2xl bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-800 text-sm flex items-center gap-x-2">
+                        📋 Copy structure as text
+                    </button>
+                    <button onclick="copyProjectSnapshot()" 
+                            class="px-4 py-2 rounded-2xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800 text-sm flex items-center gap-x-2">
+                        📋 Copy full snapshot (tree + files + descriptions)
+                    </button>
+                    <span class="text-xs text-slate-500 self-center">Paste directly into docs, emails, or LLM chats — no raw source needed.</span>
+                </div>
+            </div>
+
+            <!-- Files & Descriptions: clean list, desc front and center -->
+            <div class="mb-8">
+                <div class="flex items-center justify-between mb-3 px-1">
+                    <div class="font-semibold text-lg">Files &amp; descriptions</div>
+                    <div class="flex items-center gap-x-2">
+                        <input id="health-dir-filter" type="text" placeholder="Filter path e.g. src/ or frontend/" 
+                               class="text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-1 w-60 font-mono"
+                               oninput="filterFilesList()" onkeydown="if(event.key==='Enter')filterFilesList()">
+                        <button onclick="filterFilesList()" 
+                                class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700">Filter</button>
+                        <button onclick="copyAndWaitForUpdate('check-changes')" 
+                                class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">
+                            Update data
+                        </button>
+                    </div>
+                </div>
+
+                <div id="health-scale-note" class="hidden text-[10px] mb-2 px-2 py-1 bg-amber-900/20 text-amber-300 border border-amber-800 rounded"></div>
+                
+                <div id="files-list" class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden divide-y divide-slate-800">
+                    <!-- Populated by JS as clean rows: path + short desc (from wiki) + status -->
+                </div>
+
+                <!-- Clean full description viewer (appears on row click; human friendly, easy copy) -->
+                <div id="file-desc-viewer" class="hidden mt-3 p-4 bg-slate-950 border border-slate-700 rounded-2xl text-sm">
+                    <div class="flex justify-between items-start mb-2">
+                        <div id="file-desc-path" class="font-mono text-xs text-emerald-400"></div>
+                        <button onclick="hideFileDesc()" class="text-xs text-slate-500 hover:text-slate-300">✕</button>
+                    </div>
+                    <div id="file-desc-body" class="text-slate-200 leading-relaxed text-sm whitespace-pre-wrap max-h-[160px] overflow-auto pr-2"></div>
+                    <div class="mt-3">
+                        <button onclick="copyFileDesc()" class="text-xs px-3 py-1 rounded-lg bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800">Copy full note</button>
+                    </div>
+                </div>
+
+                <div class="mt-3 text-xs text-slate-500 px-2">
+                    Short descriptions are from the agent wiki. Click any row to see the full note and copy it easily.
+                </div>
+            </div>
+
+            <!-- Simple derived folder tree (human file browser feel, from health paths) -->
+            <div class="mb-8">
+                <div class="font-semibold text-sm mb-2 px-1 text-slate-400">Browse by folder</div>
+                <div id="dir-tree" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-sm max-h-[160px] overflow-auto font-mono leading-snug">
+                    <!-- Populated by JS from health file paths -->
+                </div>
+            </div>
+
+            <!-- Minimal human guidance only (no agent contract, no jargon) -->
+            <div class="text-xs text-slate-400 border-t border-slate-800 pt-4">
+                <strong>Keep it fresh:</strong> In this project folder run <code class="bg-slate-900 px-1 py-px rounded">wikifier check-changes &amp;&amp; wikifier update-maps</code> then Refresh above.<br>
+                For continuous updates: <code class="bg-slate-900 px-1 py-px rounded">wikifier monitor &amp;</code> in another terminal. For best auto-reload feel, run <code class="bg-slate-900 px-1 py-px rounded">python -m http.server 8000</code> and open http://localhost:8000/index.html.<br>
+                <span class="text-slate-500">If an old <code>diagnostics.html</code> is present (from earlier inits), you can safely delete it — only this page is needed for the project wiki view. The detailed maintainer view for hacking on Wikifier itself lives in the Wikifier source tree.</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#10b981');
+        }
+
+        // ==================== V1-P7 DATA & INTEGRATION WIRING (production-grade, defensive, scale-aware) ====================
+        // All vanilla JS. Zero new runtime deps. Consumes generated artifacts primarily.
+        // window.healthData, window.scaleMode etc exposed for other agents / future diagnostics.html
+        window.healthData = [];
+        window.libraryMdCache = '';
+        window.scaleMode = false;
+        const HEALTH_RENDER_CAP = 180; // R1 scale: never flood DOM; filter narrows first
+
+        // Defensive fetch helper (timeout-ish via AbortController if supported)
+        async function safeFetch(path, fallbackText = '') {
+            try {
+                const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+                const timer = ctrl ? setTimeout(() => ctrl.abort(), 12000) : null;
+                const res = await fetch(path, ctrl ? {signal: ctrl.signal} : {});
+                if (timer) clearTimeout(timer);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return await res.text();
+            } catch (e) {
+                console.warn('[Wikifier wiring] fetch failed for', path, e.message);
+                return fallbackText;
+            }
+        }
+
+        // Robust health row parser (supports both .md table and JSON structure)
+        function parseHealthMd(md) {
+            const rows = [];
+            const lines = md.split('\n');
+            let inTable = false;
+            for (let line of lines) {
+                line = line.trim();
+                if (line.includes('| File | Status') || line.includes('|File|Status')) { inTable = true; continue; }
+                if (!inTable) continue;
+                if (line.startsWith('|---') || line.startsWith('| ---')) continue;
+                if (!line.startsWith('|')) { inTable = false; continue; }
+                const parts = line.split('|').map(p => p.trim()).filter(Boolean);
+                if (parts.length >= 4) {
+                    rows.push({
+                        file: parts[0] || '',
+                        status: parts[1] || '🟡 Yellow',
+                        updated: parts[2] || '',
+                        reason: (parts[3] || '') + (parts[4] ? ' | ' + parts[4] : '')
+                    });
+                }
+            }
+            return rows;
+        }
+
+        // Clean a reason string for human display: keep the intent, drop agent subid/FRESH noise
+        function cleanReasonForHuman(reason) {
+            if (!reason) return 'No description yet.';
+            let r = reason.replace(/\bsubid=[^\s]+/gi, '').replace(/FRESH[^.]*\./gi, '').replace(/\s+/g, ' ').trim();
+            // Take first sentence-ish or first 140 chars for the short desc
+            const first = r.split(/[.!?]\s/)[0] || r;
+            if (first.length > 160) return first.slice(0, 157) + '…';
+            return first || 'No description yet.';
+        }
+
+        // Core load: prefers JSON, fallback MD. Now renders to human files-list + dir-tree.
+        async function loadHealthMatrix(dirFilter = '') {
+            const listEl = document.getElementById('files-list');
+            const summary = document.getElementById('health-summary');
+            const scaleNote = document.getElementById('health-scale-note');
+            
+            if (listEl) listEl.innerHTML = `<div class="px-5 py-8 text-center text-slate-500 text-xs">Loading files &amp; descriptions...</div>`;
+            if (scaleNote) scaleNote.classList.add('hidden');
+
+            let rows = [];
+            let usedJson = false;
+
+            try {
+                const jsonText = await safeFetch('file_health.json');
+                if (jsonText && jsonText.trim().startsWith('{')) {
+                    const data = JSON.parse(jsonText);
+                    const entries = (data && data.entries) || {};
+                    for (const [file, entry] of Object.entries(entries)) {
+                        rows.push({
+                            file,
+                            status: entry.status || '🟡 Yellow',
+                            updated: entry.last_updated || '',
+                            reason: entry.reason || ''
+                        });
+                    }
+                    usedJson = true;
+                }
+            } catch (e) { /* fall to md */ }
+
+            if (rows.length === 0) {
+                const md = await safeFetch('file_health.md', '');
+                if (md) rows = parseHealthMd(md);
+            }
+
+            window.healthData = rows;
+
+            const filterVal = dirFilter || (document.getElementById('health-dir-filter')?.value || '');
+            renderFilesList(rows, filterVal);
+            renderDirTree(rows, filterVal);
+
+            // Clean summary pills (no scale jargon)
+            let green = 0, yellow = 0, red = 0;
+            rows.forEach(r => {
+                if (r.status.includes('Green') || r.status.includes('🟢')) green++;
+                else if (r.status.includes('Yellow') || r.status.includes('🟡')) yellow++;
+                else red++;
+            });
+            if (summary) {
+                if (rows.length === 0) {
+                    summary.innerHTML = `<div class="text-xs text-amber-400 px-3 py-1">No files indexed yet. Run <code class="bg-slate-900 px-1">wikifier check-changes</code></div>`;
+                } else {
+                    summary.innerHTML = `
+                        <div class="flex items-center gap-x-1.5">
+                            <div class="px-2.5 py-0.5 rounded-2xl bg-emerald-900/30 text-emerald-400 flex items-center gap-x-1 text-sm"><span>🟢</span><span class="font-semibold">${green}</span></div>
+                            <div class="px-2.5 py-0.5 rounded-2xl bg-yellow-900/30 text-yellow-400 flex items-center gap-x-1 text-sm"><span>🟡</span><span class="font-semibold">${yellow}</span></div>
+                            <div class="px-2.5 py-0.5 rounded-2xl bg-red-900/30 text-red-400 flex items-center gap-x-1 text-sm"><span>🔴</span><span class="font-semibold">${red}</span></div>
+                            <div class="text-[10px] text-slate-400 ml-1">${rows.length} files</div>
+                        </div>`;
+                }
+            }
+        }
+
+        function renderFilesList(rows, dirFilter = '') {
+            const listEl = document.getElementById('files-list');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+
+            if (!rows || rows.length === 0) {
+                listEl.innerHTML = `<div class="px-5 py-8 text-center">
+                    <div class="text-sm text-slate-400">No files in the wiki yet.</div>
+                    <div class="mt-3">
+                        <button onclick="copyAndWaitForUpdate('check-changes &amp;&amp; update-maps', 'wikifier check-changes &amp;&amp; wikifier update-maps')" 
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium">
+                            📋 Copy first-time setup command
+                        </button>
+                    </div>
+                    <div class="mt-2 text-xs text-slate-500">Run <code class="bg-slate-900 px-1">wikifier check-changes &amp;&amp; wikifier update-maps</code> in this project folder, then refresh.</div>
+                </div>`;
+                return;
+            }
+
+            let filtered = rows;
+            const f = (dirFilter || '').trim().toLowerCase();
+            if (f) {
+                filtered = rows.filter(r => (r.file || '').toLowerCase().includes(f));
+            }
+
+            const toRender = filtered.slice(0, 220); // human cap; filter narrows
+
+            toRender.forEach(r => {
+                const row = document.createElement('div');
+                row.className = 'px-4 py-2.5 hover:bg-slate-950 cursor-pointer flex items-start gap-x-3 group';
+                row.onclick = () => showFileDescription(r.file, r.reason, r.status);
+
+                let statusDot = '🟡';
+                if (r.status.includes('Green') || r.status.includes('🟢')) statusDot = '🟢';
+                else if (r.status.includes('Red') || r.status.includes('🔴')) statusDot = '🔴';
+
+                const shortDesc = cleanReasonForHuman(r.reason);
+
+                row.innerHTML = `
+                    <div class="pt-0.5 text-lg leading-none w-5 shrink-0">${statusDot}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-mono text-xs text-slate-200 group-hover:text-emerald-300 truncate">${r.file}</div>
+                        <div class="text-xs text-slate-400 mt-0.5 leading-snug pr-2">${shortDesc}</div>
+                    </div>
+                    <div class="opacity-0 group-hover:opacity-60 text-[10px] text-slate-500 self-center shrink-0">click for full</div>
+                `;
+                listEl.appendChild(row);
+            });
+
+            if (filtered.length === 0 && f) {
+                listEl.innerHTML = `<div class="px-5 py-4 text-xs text-slate-400">No matches for "${f}". Clear the filter or try a broader path.</div>`;
+            }
+        }
+
+        function filterFilesList() {
+            const val = document.getElementById('health-dir-filter')?.value || '';
+            if (window.healthData && window.healthData.length) {
+                renderFilesList(window.healthData, val);
+                renderDirTree(window.healthData, val);
+            } else {
+                loadHealthMatrix(val);
+            }
+        }
+
+        // New clean human file description viewer (no agent jargon)
+        let currentDescFile = '';
+        let currentDescText = '';
+
+        function showFileDescription(file, reason, status) {
+            const viewer = document.getElementById('file-desc-viewer');
+            const pathEl = document.getElementById('file-desc-path');
+            const bodyEl = document.getElementById('file-desc-body');
+            if (!viewer || !pathEl || !bodyEl) return;
+
+            currentDescFile = file;
+            currentDescText = reason || 'No wiki note recorded yet for this file.';
+
+            pathEl.textContent = `${file}  ${status || ''}`;
+            // Show cleaned full reason (drop only the noisiest tokens)
+            let display = (reason || 'No description.').replace(/\bsubid=[^\s,]+/gi, '').replace(/\(FRESH LAST PASS[^)]*\)/gi, '').trim();
+            bodyEl.textContent = display;
+
+            viewer.classList.remove('hidden');
+            // scroll into view lightly
+            viewer.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        function hideFileDesc() {
+            const viewer = document.getElementById('file-desc-viewer');
+            if (viewer) viewer.classList.add('hidden');
+        }
+
+        function copyFileDesc() {
+            if (!currentDescText) return;
+            navigator.clipboard.writeText(currentDescText).then(() => {
+                const btns = document.querySelectorAll('#file-desc-viewer button');
+                btns.forEach(b => {
+                    if (b.textContent.includes('Copy')) {
+                        const t = b.textContent;
+                        b.textContent = '✓ Copied';
+                        setTimeout(() => { b.textContent = t; }, 1100);
+                    }
+                });
+            }).catch(() => {});
+        }
+
+        // Simple folder tree derived from health paths (groups by top-level dir)
+        function renderDirTree(rows, dirFilter = '') {
+            const treeEl = document.getElementById('dir-tree');
+            if (!treeEl) return;
+
+            if (!rows || rows.length === 0) {
+                treeEl.innerHTML = '<span class="text-slate-500 text-xs">No files yet.</span>';
+                return;
+            }
+
+            const groups = {};
+            rows.forEach(r => {
+                const f = r.file || '';
+                const top = f.includes('/') ? f.split('/')[0] : '(root)';
+                if (!groups[top]) groups[top] = [];
+                groups[top].push(f);
+            });
+
+            const f = (dirFilter || '').trim().toLowerCase();
+            let html = '';
+            Object.keys(groups).sort().forEach(dir => {
+                const files = groups[dir];
+                const matchCount = f ? files.filter(p => p.toLowerCase().includes(f)).length : files.length;
+                if (f && matchCount === 0) return;
+                html += `<div class="mb-0.5"><span class="text-emerald-400">${dir}/</span> <span class="text-slate-500">(${matchCount})</span></div>`;
+                // show up to 3 example files under it (clickable to filter)
+                const examples = files.slice(0, 3);
+                examples.forEach(ex => {
+                    const short = ex.split('/').pop();
+                    html += `<div class="pl-3 text-[11px] text-slate-400 hover:text-emerald-300 cursor-pointer" onclick="document.getElementById('health-dir-filter').value='${ex.split('/').slice(0,2).join('/')}';filterFilesList();">↳ ${short}</div>`;
+                });
+                if (files.length > 3) html += `<div class="pl-3 text-[10px] text-slate-500">… +${files.length-3} more</div>`;
+            });
+            treeEl.innerHTML = html || '<span class="text-slate-500">No matching folders.</span>';
+        }
+
+        // (legacy showWikiPurpose + old pane removed; human view uses showFileDescription + #file-desc-viewer now)
+
+        // Monitor status: simple human-friendly "last updated" indicator.
+        async function loadMonitorStatus(forceRefresh = false) {
+            const el = document.getElementById('monitor-status');
+            if (!el) return;
+
+            const tsText = await safeFetch('.wikifier_staging/.last_check', '');
+            const ts = (tsText || '').trim();
+
+            if (!ts) {
+                el.innerHTML = `<span class="text-slate-500 text-xs">No monitor heartbeat yet (run <code>monitor &</code> for live updates)</span>`;
+                return;
+            }
+
+            try {
+                // Be very defensive with the timestamp string
+                const cleaned = ts.replace(/[A-Z].*$/, '').trim(); // drop timezone junk
+                const d = new Date(cleaned);
+                if (isNaN(d.getTime())) throw new Error('bad date');
+
+                const ageMin = Math.round((Date.now() - d.getTime()) / 60000);
+                if (ageMin < 0 || ageMin > 100000) { // obviously bogus
+                    el.innerHTML = `<span class="text-amber-400 text-xs">Heartbeat file present but unreadable</span>`;
+                    return;
+                }
+
+                const isFresh = ageMin < 5;
+                const label = ageMin < 1 ? 'just now' : `${ageMin}m ago`;
+                el.innerHTML = `<span class="${isFresh ? 'text-emerald-400' : 'text-amber-400'}">Updated ${label}</span>`;
+                el.title = isFresh ? 'Monitor is keeping the wiki fresh' : 'Monitor may not be running — data could be stale';
+            } catch(e) {
+                el.innerHTML = `<span class="text-slate-500 text-xs">Monitor status unavailable</span>`;
+            }
+        }
+
+        // Fetch and render health matrix (entrypoint kept for compat) - now delegates to robust impl
+        async function loadHealthMatrixCompat() {
+            await loadHealthMatrix();
+        }
+
+        // ==================== CONTINUED V1-P7 WIRING: legacy load* upgraded + new scale-aware surfaces ====================
+
+        // (loadPending / loadJournal / old journal+pending sections removed from human view — agents use the .md + MCP/CLI directly)
+
+        // Mermaid diagram (kept; cache-bust for monitor-driven reloads)
+        async function loadMermaid() {
+            const container = document.getElementById('mermaid-diagram');
+            // Bust cache so file changes (from monitor/agents) are picked up on poll
+            const md = await safeFetch('library.md?cb=' + Date.now(), '');
+            if (!md) {
+                container.innerHTML = `<div class="text-sm p-4 bg-slate-900 border border-slate-700 rounded">
+                    <div class="font-semibold mb-1">No structure map yet</div>
+                    <div class="text-slate-400">This project hasn't had its import/dependency tree generated yet.</div>
+                    <div class="mt-3">
+                        <button onclick="copyAndWaitForUpdate('update-maps')" 
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium w-full sm:w-auto">
+                            📋 Copy command &amp; run wikifier update-maps (first time)
+                        </button>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400">Run the copied command in your terminal <strong>inside this project folder</strong>, then refresh this page (or wait for the ~30s auto update). This is the recommended first step when you open the dashboard in a new project.</div>
+                </div>`;
+
+                // "Automatically on the first run": if this is the very first time the user sees the empty map state in this browser session,
+                // auto-copy the command AND activate live wait/poll mode so once they run it, the tree appears automatically.
+                if (!sessionStorage.getItem('wikifier_first_map_auto_copied')) {
+                    sessionStorage.setItem('wikifier_first_map_auto_copied', '1');
+                    setTimeout(() => {
+                        navigator.clipboard.writeText('wikifier update-maps').then(() => {
+                            // non-intrusive note that we helped
+                            const note = document.createElement('div');
+                            note.className = 'mt-2 text-[10px] text-emerald-400';
+                            note.textContent = '✓ update-maps command auto-copied for first run — paste it in your terminal now.';
+                            const emptyBox = container.querySelector('div');
+                            if (emptyBox) emptyBox.appendChild(note);
+                            // Also start the live wait/poll immediately for the "auto" feel
+                            // (user still needs to execute the command in terminal)
+                            copyAndWaitForUpdate('update-maps', 'wikifier update-maps'); // this will re-copy but mainly starts the banner + poll
+                        }).catch(() => {});
+                    }, 300);
+                }
+                return;
+            }
+            window.libraryMdCache = md;
+
+            // Gentle note if the map was intentionally summarized for very large codebases
+            if (md.includes('LARGE_SCALE') || md.includes('ScaleNote')) {
+                // still render what we have; the note (if any) is already in the markdown
+            }
+
+            const match = md.match(/```mermaid\n([\s\S]*?)```/);
+            if (match && match[1]) {
+                container.innerHTML = `<pre class="mermaid">${match[1]}</pre>`;
+                if (window.mermaid) {
+                    try {
+                        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+                        await mermaid.run({ nodes: [container.querySelector('.mermaid')] });
+                    } catch(e) { /* ignore render err */ }
+                }
+            } else {
+                container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid diagram found in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span> then refresh.</div>`;
+            }
+        }
+
+        // Human export helpers: copy clean text for pasting to LLMs/humans.
+        // These pull from the loaded data (same as agents see via get_file_wiki / health / library).
+        async function copyMermaidSource() {
+            const md = window.libraryMdCache || await safeFetch('library.md?cb=' + Date.now(), '');
+            const match = md.match(/```mermaid\n([\s\S]*?)```/);
+            const src = match ? match[1].trim() : 'No mermaid found. Run update-maps first.';
+            await navigator.clipboard.writeText(src);
+            const btns = document.querySelectorAll('button');
+            // brief feedback on any matching button
+            btns.forEach(b => { if (b.textContent.includes('Mermaid')) { const t = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=t, 1200); }});
+        }
+
+        async function copyProjectSnapshot() {
+            const health = document.getElementById('health-summary') ? document.getElementById('health-summary').innerText.replace(/\s+/g, ' ').trim() : '';
+            const md = window.libraryMdCache || await safeFetch('library.md?cb=' + Date.now(), '');
+            const match = md.match(/```mermaid\n([\s\S]*?)```/);
+            const mermaidSrc = match ? match[1].trim() : '(no tree yet — run wikifier update-maps)';
+
+            // Build clean list of files + short human descriptions from current data
+            let filesSection = '';
+            if (window.healthData && window.healthData.length) {
+                const top = window.healthData.slice(0, 80);
+                filesSection = top.map(r => {
+                    const d = cleanReasonForHuman(r.reason);
+                    return `- \`${r.file}\`: ${d}`;
+                }).join('\n');
+                if (window.healthData.length > 80) filesSection += `\n... +${window.healthData.length - 80} more files (see the page for the rest)`;
+            } else {
+                filesSection = '(Run wikifier check-changes to populate file list + descriptions)';
+            }
+
+            const snap = `# Project structure snapshot
+
+## Dependency tree
+\`\`\`mermaid
+${mermaidSrc}
+\`\`\`
+
+## Health summary
+${health || '(no health data yet)'}
+
+## Files & descriptions (short)
+${filesSection}
+
+---
+Generated from this project's agent wiki (file_health + library.md).  
+Open index.html in the project for the live visual version.
+`;
+            await navigator.clipboard.writeText(snap);
+            const btns = document.querySelectorAll('button');
+            btns.forEach(b => { if ((b.textContent || '').toLowerCase().includes('snapshot')) { const t = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=t, 1200); }});
+        }
+
+        // (loadDependencyIntelligence + intel cards removed from main human view; the Mermaid chart + file descriptions are the focus)
+
+        // (All command surface, intel cards, pending, journal, and their render functions removed from the human dashboard.
+        // Humans see: the chart + files with descriptions + simple folder browser + copy buttons.
+        // Agents and technical users: use the .md files directly, diagnostics.html, MCP, or CLI.)
+
+        // Lightweight runCommand for the human dashboard (only the two we surface prominently)
+        // Helper to copy a ready-to-paste command and give clear next-step feedback
+        function copyCommandForRun(cmd, fullText) {
+            const full = fullText || `wikifier ${cmd}`;
+            navigator.clipboard.writeText(full).then(() => {
+                const msg = document.createElement('div');
+                msg.className = `fixed bottom-4 right-4 bg-emerald-900 border border-emerald-700 px-4 py-3 rounded-2xl text-sm z-50 max-w-xs`;
+                msg.innerHTML = `
+                    <div class="font-medium">Copied to clipboard:</div>
+                    <code class="block mt-1 bg-black/40 px-2 py-1 rounded text-emerald-300 break-all">${full}</code>
+                    <div class="mt-2 text-xs text-emerald-200">Paste &amp; run it in the terminal <strong>inside this project folder</strong>, then click <span class="underline">Refresh</span> above (or wait ~30s).</div>
+                    <button onclick="this.closest('.fixed').remove(); window.location.reload()" class="mt-2 text-xs underline">Refresh dashboard now</button>
+                `;
+                document.body.appendChild(msg);
+                // auto remove after a while if user doesn't interact
+                setTimeout(() => { if (msg.parentNode) msg.parentNode.removeChild(msg); }, 12000);
+            }).catch(() => {
+                // Fallback for browsers that block clipboard
+                const msg = document.createElement('div');
+                msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-3 py-2 rounded-2xl text-xs z-50`;
+                msg.innerHTML = `Run this in the terminal: <code class="bg-black/40 px-1">${full}</code>`;
+                document.body.appendChild(msg);
+                setTimeout(()=>{ if (msg.parentNode) msg.parentNode.removeChild(msg); }, 4000);
+            });
+
+            // Optimistic: after user likely ran it, the next poll will pick it up
+            if (cmd.includes('check') || cmd.includes('health')) setTimeout(() => loadHealthMatrix && loadHealthMatrix(), 800);
+            if (cmd.includes('update')) setTimeout(() => loadMermaid && loadMermaid(), 800);
+            if (cmd.includes('monitor')) setTimeout(() => loadMonitorStatus && loadMonitorStatus(true), 600);
+        }
+
+        // Enhanced: copy + enter "live waiting" mode with aggressive polling until data appears.
+        // This makes buttons feel like they "trigger" an update (user still runs the copied command in terminal).
+        let waitPollInterval = null;
+        function copyAndWaitForUpdate(cmd, fullText) {
+            const full = fullText || `wikifier ${cmd}`;
+            navigator.clipboard.writeText(full).then(() => {
+                // Show waiting banner
+                let banner = document.getElementById('wait-banner');
+                if (!banner) {
+                    banner = document.createElement('div');
+                    banner.id = 'wait-banner';
+                    banner.className = `fixed top-4 left-1/2 -translate-x-1/2 bg-blue-900 border border-blue-700 px-4 py-2 rounded-2xl text-sm z-50 flex items-center gap-3 shadow-lg`;
+                    document.body.appendChild(banner);
+                }
+                banner.innerHTML = `
+                    <span>Waiting for <code class="bg-black/40 px-1 rounded">${full}</code> to produce data... (auto-polling)</span>
+                    <button onclick="stopWaitPoll(); this.closest('.fixed').remove(); window.location.reload()" class="text-xs underline">I ran it — refresh now</button>
+                `;
+
+                // Clear any old poll
+                if (waitPollInterval) clearInterval(waitPollInterval);
+
+                let attempts = 0;
+                const maxAttempts = 40; // ~2 minutes at 3s intervals
+                waitPollInterval = setInterval(() => {
+                    attempts++;
+                    // Reload the relevant views
+                    if (cmd.includes('update') || cmd.includes('map')) {
+                        loadMermaid();
+                    }
+                    if (cmd.includes('check') || cmd.includes('health')) {
+                        loadHealthMatrix();
+                    }
+                    loadMonitorStatus();
+
+                    // Check if data appeared
+                    const hasMap = !!window.libraryMdCache && window.libraryMdCache.includes('```mermaid');
+                    const hasFiles = window.healthData && window.healthData.length > 0;
+
+                    if ((cmd.includes('update') && hasMap) || (cmd.includes('check') && hasFiles) || (hasMap && hasFiles)) {
+                        stopWaitPoll();
+                        if (banner.parentNode) banner.parentNode.removeChild(banner);
+                        // Show success toast
+                        const success = document.createElement('div');
+                        success.className = `fixed bottom-4 right-4 bg-emerald-900 border border-emerald-700 px-4 py-2 rounded-2xl text-sm z-50`;
+                        success.textContent = '✓ Data updated! View refreshed.';
+                        document.body.appendChild(success);
+                        setTimeout(() => { if (success.parentNode) success.parentNode.removeChild(success); }, 3000);
+                        // Force full reload of views
+                        loadMermaid();
+                        loadHealthMatrix();
+                    } else if (attempts >= maxAttempts) {
+                        stopWaitPoll();
+                        if (banner.parentNode) banner.parentNode.removeChild(banner);
+                    }
+                }, 3000); // aggressive 3s poll while waiting
+            }).catch(() => {
+                // fallback
+                copyCommandForRun(cmd, full);
+            });
+        }
+
+        function stopWaitPoll() {
+            if (waitPollInterval) {
+                clearInterval(waitPollInterval);
+                waitPollInterval = null;
+            }
+        }
+
+        // Legacy / existing buttons still work via the improved helper
+        function runCommand(cmd) {
+            copyCommandForRun(cmd);
+        }
+
+        // Boot: only what the human view needs (chart + files+descs + tree + monitor). Poll for live feel.
+        function boot() {
+            initTailwind();
+
+            loadHealthMatrix();
+            loadMermaid();
+            loadMonitorStatus();
+
+            // ~32s poll so the dashboard feels live when the monitor or agents write updates
+            setInterval(() => {
+                loadHealthMatrix();
+                if (Math.random() < 0.6) loadMermaid();
+                if (Math.random() < 0.4) loadMonitorStatus();
+            }, 32000);
+
+            // Simple keyboard: r refreshes the visible human bits
+            document.addEventListener('keydown', function(e) {
+                if (e.key.toLowerCase() === 'r' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                    loadHealthMatrix();
+                    loadMermaid();
+                }
+            });
+
+            // no console noise for humans
+        }
+
+        window.onload = boot;
+        // Minimal expose (for diagnostics.html or power users who open console)
+        window.wikifierHumanView = { loadHealthMatrix, filterFilesList, loadMermaid, loadMonitorStatus, copyMermaidSource, copyProjectSnapshot };
+    </script>
+</body>
+</html>

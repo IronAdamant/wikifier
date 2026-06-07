@@ -441,3 +441,543 @@ Proceeding... (subagents running in background for parallel prep of phase 1 list
 - Phase 6: No change (human secondary preserved per "Good enough"; live-wait optional).
 - All ritual: FRESH 3 + record (subid=simplification-cruft-phase-1 + follow) + mark-green. check-changes/validate/health/MCP/tiny smoke run. Subagents used for enum (phase1 full list), packaging analysis (phase2), verify harness.
 - Full details/subagent outputs/references in this file + git history. No rules violated. Repo leaner, main clean, packaging healthier, docs current.
+
+## SIMP-VERIFY for phase=post-all @ 2026-06-07T12:50:56.778622
+
+**Overall: FAIL**
+
+### FRESH 3 (on touched .md)
+- file_health.md: def=0 class=0 fresh=3 codeblock=0 pass=True
+- Findings/Milestones-Overview.md: def=0 class=0 fresh=26 codeblock=0 pass=True
+- README.md: def=0 class=0 fresh=2 codeblock=0 pass=True
+- CHANGELOG.md: def=0 class=0 fresh=0 codeblock=0 pass=True
+- skills/run.md: def=0 class=0 fresh=1 codeblock=1 pass=False
+- wikifier/mcp/README.md: def=0 class=0 fresh=0 codeblock=0 pass=True
+- SIMPLIFICATION_PLAN_AND_LOG.md: def=0 class=0 fresh=12 codeblock=1 pass=False
+
+### wikifier cmds
+- check-changes: ret=1 | [wikifier] Running incremental change detection... | 
+- health_summary: ret=0 | Health Summary: |   🟢 Green: 17 |   🟡 Yellow: 1 |   🔴 Red:   1 |   Total:    19 | 
+- validate: ret=0 | [wikifier] Validating that every monitored file has a health entry... | [wikifier] ✅ All monitored files have health ent
+- update-maps: ret=1 | [wikifier] Rebuilding library.md (import map + Mermaid)... | 
+
+### MCP via python (json surfaces)
+- get_project_status: ok type=dict
+- suggest_next_actions: ok type=dict
+- get_barrel_reports: ok type=dict
+- get_incremental_status: ok type=dict
+- check_changes: ok type=dict
+
+### Tiny test: /tmp/simp-test-post-all-125101 pass=True
+  ls extras=[] missing=[]
+  copy-sim artifacts_updated=True pending_delta=yes
+
+### Packaged: pass=False help_ret=1 init_ret=2
+
+### git: clean_enough=False unexpected=[' M file_health.md', ' M pending_updates.md', '?? wikifier/index.html']
+
+### Health lean: bloat_greens=1 (pass=False) total_green=17 core_approx=9
+  bloat samples: ['--help']
+
+### Baseline diffs: {"findings_delta": 0, "logged_delta": -13, "check-changes_ret_delta": 0, "health_summary_ret_delta": 0, "validate_ret_delta": 0, "update-maps_ret_delta": 0, "bloat_green_delta": 0, "git_unexpected_now": [" M file_health.md", " M pending_updates.md", "?? wikifier/index.html"]}
+
+**Full report JSON (for diff/repro):**
+```json
+{
+  "phase": "post-all",
+  "timestamp": "2026-06-07T12:50:56.778622",
+  "touched": [
+    "file_health.md",
+    "Findings/Milestones-Overview.md",
+    "README.md",
+    "CHANGELOG.md",
+    "skills/run.md",
+    "wikifier/mcp/README.md",
+    "SIMPLIFICATION_PLAN_AND_LOG.md"
+  ],
+  "fresh3": {
+    "file_health.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 3,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/file_health.md"
+    },
+    "Findings/Milestones-Overview.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 26,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/Findings/Milestones-Overview.md"
+    },
+    "README.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 2,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/README.md"
+    },
+    "CHANGELOG.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 0,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/CHANGELOG.md"
+    },
+    "skills/run.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 1,
+      "codeblock_count": 1,
+      "pass": false,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/skills/run.md"
+    },
+    "wikifier/mcp/README.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 0,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/wikifier/mcp/README.md"
+    },
+    "SIMPLIFICATION_PLAN_AND_LOG.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 12,
+      "codeblock_count": 1,
+      "pass": false,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/SIMPLIFICATION_PLAN_AND_LOG.md"
+    }
+  },
+  "wikifier_cmds": {
+    "check-changes": {
+      "ret": 1,
+      "out": "[wikifier] Running incremental change detection... | ",
+      "full_stdout_len": 51,
+      "full_stderr_len": 0
+    },
+    "health_summary": {
+      "ret": 0,
+      "out": "Health Summary: |   \ud83d\udfe2 Green: 17 |   \ud83d\udfe1 Yellow: 1 |   \ud83d\udd34 Red:   1 |   Total:    19 | ",
+      "full_stdout_len": 72,
+      "full_stderr_len": 199
+    },
+    "validate": {
+      "ret": 0,
+      "out": "[wikifier] Validating that every monitored file has a health entry... | [wikifier] \u2705 All monitored files have health entries. | ",
+      "full_stdout_len": 124,
+      "full_stderr_len": 0
+    },
+    "update-maps": {
+      "ret": 1,
+      "out": "[wikifier] Rebuilding library.md (import map + Mermaid)... | ",
+      "full_stdout_len": 59,
+      "full_stderr_len": 0
+    }
+  },
+  "mcp_python": {
+    "get_project_status": {
+      "ok": true,
+      "type": "dict",
+      "value": {
+        "total_files": 0,
+        "green": 0,
+        "yellow": 0,
+        "red": 0,
+        "pending_updates": 12,
+        "last_check": null,
+        "health_score": "Good"
+      }
+    },
+    "suggest_next_actions": {
+      "ok": true,
+      "type": "dict",
+      "value": {
+        "project_root": "/home/aron/Documents/coding_projects/Wikifier",
+        "directory": ".",
+        "red": 1,
+        "yellow": 1,
+        "suggestions": [
+          "1. Tackle the 1 \ud83d\udd34 Red file(s) first \u2014 they are highest priority.",
+          "2. Review the 1 \ud83d\udfe1 Yellow files.",
+          "3. Run `update_maps()` if structure or imports have changed.",
+          "4. Use `get_dependents()` on core or frequently changed files.",
+          "5. Review the journal for recent activity."
+        ]
+      }
+    },
+    "get_barrel_reports": {
+      "ok": true,
+      "type": "dict",
+      "value": {
+        "project_root": "/home/aron/Documents/coding_projects/Wikifier",
+        "barrel_invalidation_summary": {
+          "num_chains": 454,
+          "num_indexed_barrels": 442,
+          "v1_canonical_chains": 454,
+          "partial_chains": 0,
+          "node_identity_version": "v1",
+          "has_brc": true,
+          "version": "bree-v2-wave2"
+        },
+        "recent_reports": [
+          {
+            "importer": "tmp/gap1_perf_scale_o56r1aqy/barrels/index.js",
+            "triggering_barrels": [
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf0",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf1",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf10",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf11",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf12",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf13",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf14",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf15",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf16",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf17",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf18",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf19",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf2",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf20",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf21",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf22",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf23",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf24",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf25",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf26",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf27",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf28",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf29",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf3",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf30",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf31",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf32",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf33",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf34",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf35",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf36",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf37",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf38",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf39",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf4",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf40",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf41",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf42",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf43",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf44",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf45",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf46",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf47",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf48",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf49",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf5",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf6",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf7",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf8",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf9"
+            ],
+            "chain_ids": [
+              "016fdb8229e4c9b7",
+              "082787dc2119e739",
+              "09a66edd8220bac5",
+              "0bdc734c5f23f617",
+              "0befc870812bab74",
+              "1ad36df24d40462b",
+              "1b9a5f5301b1a17c",
+              "2377a7f0abbdd0ce",
+              "360484dec66e0537",
+              "39dee42418bbd726",
+              "45e20679ca60cbd3",
+              "49f1ef545624600b",
+              "49f45da561541
+```
+
+---
+
+## Phase 2 subagent (019e9ff7-3858-7203-88f7-64ccdf805086) completed (324s, 53 tools)
+Full report details: packaging analysis confirmed stale state in wikifier/scripts/ (exclude, file_health, library, monitored, pending, journal/05/, .wikifier_staging/ with old .last_check/mtimes).
+- Safe rm list executed above (only launchers remain).
+- Applied fixes via search_replace:
+  - pyproject.toml: removed static version (dynamic only from __init__), cleaned packages.find to ["wikifier*"], package-data to ["scripts/*", "index.html"].
+  - MANIFEST.in: added prunes for wikifier/scripts/journal and .wikifier_staging.
+  - cli.py: updated copy_human_dashboards fallback/comments for new layout (html under wikifier/ for resources).
+  - wikifier.sh (root + packaged scripts/ copy): robust cand_dir for copy, added/ensured only index.html copy block.
+- Created wikifier/index.html (exact root copy) for proper package resources (importlib.resources.files("wikifier").joinpath("index.html") now works for wheels/editable; root index.html untouched for this project's use).
+- References to stales: minimal/harmless (mostly historical or Phase 1 targets; no active hard-deps in core logic; MANIFEST/scripts/* wildcard now clean post-rm).
+- Smoke/verification: python layout/import OK (version dynamic, script_path=launcher only, resources finds index.html), copy_human_dashboards produces dashboard, pip -e + init smoke (no state pollution in targets post-rm), get_script_path correct.
+- Ritual: no .md touched by this subagent (configs/code only; subid=simplification-packaging-phase-2).
+- Test plan in report: post-rm wheel/sdist check, tiny init ls (expect only index.html + init seeds at root, no scripts/ leaks), etc.
+- All hygiene problems addressed while preserving copy discipline (only index.html), zero-dep, agent-to-agent (packaged launchers + lib for externals).
+
+
+## SIMP-VERIFY for phase=post-all @ 2026-06-07T12:51:54.421002
+
+**Overall: FAIL**
+
+### FRESH 3 (on touched .md)
+- file_health.md: def=0 class=0 fresh=3 codeblock=0 pass=True
+- Findings/Milestones-Overview.md: def=0 class=0 fresh=26 codeblock=0 pass=True
+- README.md: def=0 class=0 fresh=2 codeblock=0 pass=True
+- CHANGELOG.md: def=0 class=0 fresh=0 codeblock=0 pass=True
+- skills/run.md: def=0 class=0 fresh=1 codeblock=1 pass=False
+- wikifier/mcp/README.md: def=0 class=0 fresh=0 codeblock=0 pass=True
+- SIMPLIFICATION_PLAN_AND_LOG.md: def=0 class=0 fresh=13 codeblock=1 pass=False
+
+### wikifier cmds
+- check-changes: ret=1 | [wikifier] Running incremental change detection... | 
+- health_summary: ret=0 | Health Summary: |   🟢 Green: 17 |   🟡 Yellow: 1 |   🔴 Red:   1 |   Total:    19 | 
+- validate: ret=0 | [wikifier] Validating that every monitored file has a health entry... | [wikifier] ✅ All monitored files have health ent
+- update-maps: ret=1 | [wikifier] Rebuilding library.md (import map + Mermaid)... | 
+
+### MCP via python (json surfaces)
+- get_project_status: ok type=dict
+- suggest_next_actions: ok type=dict
+- get_barrel_reports: ok type=dict
+- get_incremental_status: ok type=dict
+- check_changes: ok type=dict
+
+### Tiny test: /tmp/simp-test-post-all-125159 pass=True
+  ls extras=[] missing=[]
+  copy-sim artifacts_updated=True pending_delta=yes
+
+### Packaged: pass=False help_ret=1 init_ret=2
+
+### git: clean_enough=False unexpected=[' M SIMPLIFICATION_PLAN_AND_LOG.md', ' M file_health.md', ' M pending_updates.md', ' D wikifier/scripts/exclude_patterns.txt', ' D wikifier/scripts/file_health.md', ' D wikifier/scripts/journal/2026/05/16.md', ' D wikifier/scripts/journal/2026/05/17.md', ' D wikifier/scripts/library.md', ' D wikifier/scripts/monitored_paths.txt', ' D wikifier/scripts/pending_updates.md', '?? wikifier/index.html']
+
+### Health lean: bloat_greens=1 (pass=False) total_green=17 core_approx=9
+  bloat samples: ['--help']
+
+### Baseline diffs: {"findings_delta": 0, "logged_delta": 0, "check-changes_ret_delta": 0, "health_summary_ret_delta": 0, "validate_ret_delta": 0, "update-maps_ret_delta": 0, "bloat_green_delta": 0, "git_unexpected_now": [" M SIMPLIFICATION_PLAN_AND_LOG.md", " M file_health.md", " M pending_updates.md", " D wikifier/sc
+
+**Full report JSON (for diff/repro):**
+```json
+{
+  "phase": "post-all",
+  "timestamp": "2026-06-07T12:51:54.421002",
+  "touched": [
+    "file_health.md",
+    "Findings/Milestones-Overview.md",
+    "README.md",
+    "CHANGELOG.md",
+    "skills/run.md",
+    "wikifier/mcp/README.md",
+    "SIMPLIFICATION_PLAN_AND_LOG.md"
+  ],
+  "fresh3": {
+    "file_health.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 3,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/file_health.md"
+    },
+    "Findings/Milestones-Overview.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 26,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/Findings/Milestones-Overview.md"
+    },
+    "README.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 2,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/README.md"
+    },
+    "CHANGELOG.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 0,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/CHANGELOG.md"
+    },
+    "skills/run.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 1,
+      "codeblock_count": 1,
+      "pass": false,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/skills/run.md"
+    },
+    "wikifier/mcp/README.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 0,
+      "codeblock_count": 0,
+      "pass": true,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/wikifier/mcp/README.md"
+    },
+    "SIMPLIFICATION_PLAN_AND_LOG.md": {
+      "exists": true,
+      "def_count": 0,
+      "class_count": 0,
+      "fresh_count": 13,
+      "codeblock_count": 1,
+      "pass": false,
+      "path": "/home/aron/Documents/coding_projects/Wikifier/SIMPLIFICATION_PLAN_AND_LOG.md"
+    }
+  },
+  "wikifier_cmds": {
+    "check-changes": {
+      "ret": 1,
+      "out": "[wikifier] Running incremental change detection... | ",
+      "full_stdout_len": 51,
+      "full_stderr_len": 0
+    },
+    "health_summary": {
+      "ret": 0,
+      "out": "Health Summary: |   \ud83d\udfe2 Green: 17 |   \ud83d\udfe1 Yellow: 1 |   \ud83d\udd34 Red:   1 |   Total:    19 | ",
+      "full_stdout_len": 72,
+      "full_stderr_len": 199
+    },
+    "validate": {
+      "ret": 0,
+      "out": "[wikifier] Validating that every monitored file has a health entry... | [wikifier] \u2705 All monitored files have health entries. | ",
+      "full_stdout_len": 124,
+      "full_stderr_len": 0
+    },
+    "update-maps": {
+      "ret": 1,
+      "out": "[wikifier] Rebuilding library.md (import map + Mermaid)... | ",
+      "full_stdout_len": 59,
+      "full_stderr_len": 0
+    }
+  },
+  "mcp_python": {
+    "get_project_status": {
+      "ok": true,
+      "type": "dict",
+      "value": {
+        "total_files": 0,
+        "green": 0,
+        "yellow": 0,
+        "red": 0,
+        "pending_updates": 14,
+        "last_check": null,
+        "health_score": "Good"
+      }
+    },
+    "suggest_next_actions": {
+      "ok": true,
+      "type": "dict",
+      "value": {
+        "project_root": "/home/aron/Documents/coding_projects/Wikifier",
+        "directory": ".",
+        "red": 1,
+        "yellow": 1,
+        "suggestions": [
+          "1. Tackle the 1 \ud83d\udd34 Red file(s) first \u2014 they are highest priority.",
+          "2. Review the 1 \ud83d\udfe1 Yellow files.",
+          "3. Run `update_maps()` if structure or imports have changed.",
+          "4. Use `get_dependents()` on core or frequently changed files.",
+          "5. Review the journal for recent activity."
+        ]
+      }
+    },
+    "get_barrel_reports": {
+      "ok": true,
+      "type": "dict",
+      "value": {
+        "project_root": "/home/aron/Documents/coding_projects/Wikifier",
+        "barrel_invalidation_summary": {
+          "num_chains": 454,
+          "num_indexed_barrels": 442,
+          "v1_canonical_chains": 454,
+          "partial_chains": 0,
+          "node_identity_version": "v1",
+          "has_brc": true,
+          "version": "bree-v2-wave2"
+        },
+        "recent_reports": [
+          {
+            "importer": "tmp/gap1_perf_scale_o56r1aqy/barrels/index.js",
+            "triggering_barrels": [
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf0",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf1",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf10",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf11",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf12",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf13",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf14",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf15",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf16",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf17",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf18",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf19",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf2",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf20",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf21",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf22",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf23",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf24",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf25",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf26",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf27",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf28",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf29",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf3",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf30",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf31",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf32",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf33",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf34",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf35",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf36",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf37",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf38",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf39",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf4",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf40",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf41",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf42",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf43",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf44",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf45",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf46",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf47",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf48",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf49",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf5",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf6",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf7",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf8",
+              "tmp/gap1_perf_scale_o56r1aqy/barrels/leaf9"
+            ],
+            "chain_ids": [
+              "016fdb8229e4c9b7",
+              "082787dc2119e739",
+              "09a66edd8220bac5",
+              "0bdc734c5f23f617",
+              "0befc870812bab74",
+              "1ad36df24d40462b",
+              "1b9a5f5301b1a17c",
+              "2377a7f0abbdd0ce",
+              "360484dec66e0537",
+              "39dee42418bbd726",
+              "45e20679ca60cbd3",
+              "49f1ef545624600b",
+              "49f45da561541
+```
+
+---

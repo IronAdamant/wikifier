@@ -2,7 +2,7 @@
 
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
-| skills/run.md | 🟡 Yellow | 2026-06-07 12:50:18 AEST | mtime changed since last check-changes (auto-detected) |
+| skills/run.md | 🟡 Yellow | 2026-06-07 12:51:55 AEST | mtime changed since last check-changes (auto-detected) |
 | Findings/Milestones-Overview.md | 🟢 Green | 2026-06-07 12:47:32 AEST | Phase 1 narrative trim + prune complete. subid=simplification-cruft-phase-1. |
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-06-04 08:01:45 AEST | M5.3 alt sub completed exit0 1356s + gate pass for alt per M5.3/DoD (BRC19 stable named exact, rec x5+ ~3s, 0corr, growth0, claims4+/1v, chisel10823e/12g, stele270, FRESH/subid/9GP/8DF/calib85-92% record+mark; sim part; 2 subs prior; coord handled; gate active; BRC19; plan.md green). FRESH 3 + subid. subagent_id=m5-gamma-coord-agents. |
 | wikifier.sh | 🟢 Green | 2026-06-07 12:48:45 AEST | Core CLI implemented and documented. |
