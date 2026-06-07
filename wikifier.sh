@@ -2707,9 +2707,18 @@ EOT
         # diagnostics.html (Wikifier maintainer/refactor hub with its own architecture + file map) is not
         # copied — it would show the wrong tree (Wikifier's, not the host project) and be stale here.
         # Open diagnostics.html from the Wikifier source if you are refactoring or porting the tool itself.
+        # Phase 2 hygiene: html now lives under wikifier/index.html (for package resources + resources.files("wikifier"))
+        # so when sh is the packaged one (in scripts/ subdir) look ../ ; source root sh still finds sibling at root.
         for html in index.html; do
-            if [[ -f "$self_dir/$html" && ! -f "$PROJECT_ROOT/$html" ]]; then
-                if cp "$self_dir/$html" "$PROJECT_ROOT/$html" 2>/dev/null; then
+            found=""
+            for cand_dir in "$self_dir" "$(dirname "$self_dir" 2>/dev/null || echo "$self_dir")" "$self_dir/.." ; do
+                if [[ -f "$cand_dir/$html" ]]; then
+                    found="$cand_dir/$html"
+                    break
+                fi
+            done
+            if [[ -n "$found" && ! -f "$PROJECT_ROOT/$html" ]]; then
+                if cp "$found" "$PROJECT_ROOT/$html" 2>/dev/null; then
                     log "   (Copied human dashboard $html into target — open in browser for the project's wiki chart + files + descriptions)"
                 fi
             fi

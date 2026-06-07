@@ -3,10 +3,6 @@ include README.md
 include LICENSE
 include CONTRIBUTING.md
 include docs/spec.md
-include docs/Basis-v0.3.md
-include docs/TRADEOFFS.md
-include docs/RELEASE_NOTES.md
-include docs/v0.4-*.md
 include skills/run.md
 include index.html
 include diagnostics.html
@@ -17,3 +13,5 @@ prune journal
 prune Logged_issues
 prune .wikifier_staging
 prune .chisel
+prune wikifier/scripts/journal
+prune wikifier/scripts/.wikifier_staging

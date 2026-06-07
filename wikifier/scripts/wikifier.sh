@@ -2653,15 +2653,35 @@ EOT
     # Seed a first health entry for the tool itself
     upsert_health "wikifier.sh" "🟢 Green" "Core CLI implemented and documented."
 
-    # R6 UX: auto-copy launcher wikifier.sh into target (full-featured copy when running from source)
+    # R6 UX: auto-copy launcher wikifier.sh + human dashboards into target
+    # (the HTML provides the human investigation layer; only index.html is copied.
+    # Phase 2 packaging: robust lookup supports sh living in wikifier/scripts/ (packaged) by checking ../index.html
+    # as well as sibling (for source root sh). diagnostics.html never copied to targets.)
     if [[ "$do_copy" == true ]]; then
         local self_script="${BASH_SOURCE[0]:-$0}"
+        local self_dir
+        self_dir="$(dirname "$self_script")"
         if [[ -f "$self_script" && ! -f "$PROJECT_ROOT/wikifier.sh" ]]; then
             if cp "$self_script" "$PROJECT_ROOT/wikifier.sh" 2>/dev/null; then
                 chmod +x "$PROJECT_ROOT/wikifier.sh" 2>/dev/null || true
                 log "   (Copied launcher wikifier.sh into target for direct ./ use)"
             fi
         fi
+        # Copy only index.html (Phase 2: clean; already only this in cli copy_human_dashboards)
+        for html in index.html; do
+            found=""
+            for cand_dir in "$self_dir" "$(dirname "$self_dir" 2>/dev/null || echo "$self_dir")" "$self_dir/.." ; do
+                if [[ -f "$cand_dir/$html" ]]; then
+                    found="$cand_dir/$html"
+                    break
+                fi
+            done
+            if [[ -n "$found" && ! -f "$PROJECT_ROOT/$html" ]]; then
+                if cp "$found" "$PROJECT_ROOT/$html" 2>/dev/null; then
+                    log "   (Copied human dashboard $html into target — open in browser for the project's wiki chart + files + descriptions)"
+                fi
+            fi
+        done
     fi
 
     PROJECT_ROOT="$old_project"

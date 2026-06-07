@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wikifier"
-version = "4.1.4"
 description = "Zero-dependency agent-to-agent codebase wiki for LLMs and AI agents. Autonomously maintained via record-change and mark-green for token-efficient lookup of files, dependencies, health, and summaries — across tiny scripts to 50k+ monorepos. Optional MCP server with rich tools for agents."
 readme = "README.md"
 license = {text = "MIT"}
@@ -57,10 +56,10 @@ package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["wikifier*", "index.html", "diagnostics.html", "docs/*"]
+include = ["wikifier*"]
 
 [tool.setuptools.package-data]
-wikifier = ["scripts/*"]
+wikifier = ["scripts/*", "index.html"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["*.pyc", "__pycache__"]

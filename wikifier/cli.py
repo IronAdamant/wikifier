@@ -1178,8 +1178,8 @@ def copy_human_dashboards(target_dir: str) -> None:
     from pathlib import Path
     try:
         from importlib.resources import files
-        pkg_files = files("wikifier")  # package root may have them via include
-        for name in ("index.html",):  # only the generic human wiki viewer for the *target*; diagnostics.html is Wikifier maintainer-only
+        pkg_files = files("wikifier")  # now ships index.html inside the wikifier/ package dir (Phase 2 packaging hygiene); resources finds it for installed wheels too
+        for name in ("index.html",):  # only the generic human wiki viewer for the *target*; diagnostics.html is Wikifier maintainer-only (never copied)
             try:
                 src = pkg_files.joinpath(name)
                 if src.is_file():
@@ -1190,11 +1190,20 @@ def copy_human_dashboards(target_dir: str) -> None:
                 pass
     except Exception:
         pass
-    # Fallback: if running from source tree with htmls next to cli
+    # Fallback: source tree (editable or direct); support both legacy root layout and html now under wikifier/ package dir
     try:
-        here = Path(__file__).parent.parent  # repo root when editable
+        here = Path(__file__).parent  # wikifier/ dir (preferred post-Phase2; contains index.html for proper package data)
         for name in ("index.html",):
             src = here / name
+            if src.exists():
+                dst = Path(target_dir) / name
+                if not dst.exists():
+                    shutil.copy(src, dst)
+                continue  # prefer the inner one if present
+        # also try grandparent for root-level copy in source tree (this project's own dashboard location)
+        here2 = Path(__file__).parent.parent
+        for name in ("index.html",):
+            src = here2 / name
             if src.exists():
                 dst = Path(target_dir) / name
                 if not dst.exists():
