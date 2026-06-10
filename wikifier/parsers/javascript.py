@@ -1862,6 +1862,9 @@ _reexport_cache: dict[str, list[dict]] = {}
 # W10: boolean "does this file contain any re-export?" probe results
 # (see _file_has_reexports); cleared together with _reexport_cache.
 _reexport_probe_cache: dict[str, bool] = {}
+# Leaf-explosion policy: per-file "names this module exports" harvest results
+# (see _harvest_export_names); cleared together with _reexport_cache.
+_export_names_cache: dict[str, frozenset] = {}
 
 
 def _clear_parse_cache() -> None:
@@ -1871,6 +1874,200 @@ def _clear_parse_cache() -> None:
 def _clear_reexport_cache() -> None:
     _reexport_cache.clear()
     _reexport_probe_cache.clear()
+    _export_names_cache.clear()
+
+
+# =============================================================================
+# Barrel-leaf explosion policy
+#
+# A single `import { X } from "big-barrel"` against an `export *` barrel used
+# to emit one edge per reachable leaf — 778 edges for a 2-symbol import on
+# Babylon.js's @dev/core, ~107 edges/file repo-wide. The entry-barrel edge is
+# always the true filesystem dependency; the leaves are a refinement, so they
+# are (1) routed by the names the statement actually imports when possible,
+# else (2) capped, with the selection reported on the first emitted edge —
+# truncation is never silent.
+# =============================================================================
+
+_EXPORT_DECL_RE = re.compile(
+    r'export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?'
+    r'(?:const|let|var|function\*?|class|enum|interface|type|namespace)\s+([A-Za-z_$][\w$]*)'
+)
+_EXPORT_BRACE_RE = re.compile(r'export\s*(?:type\s*)?\{([^}]*)\}')
+_EXPORT_DEFAULT_RE = re.compile(r'export\s+default\b')
+
+
+def _barrel_leaf_cap() -> int:
+    """Max leaves emitted per barrel import site when name routing fails.
+
+    Tunable via WIKIFIER_BARREL_LEAF_CAP (0 = unlimited / legacy behavior).
+    Read dynamically so tests and agents can adjust without re-import.
+    """
+    try:
+        return max(0, int(os.environ.get("WIKIFIER_BARREL_LEAF_CAP", "24")))
+    except ValueError:
+        return 24
+
+
+def _harvest_export_names(file_path: str) -> frozenset:
+    """Best-effort set of names a module exports (regex-based, memoized).
+
+    Covers declarations (const/class/function/enum/interface/type/...),
+    brace exports including re-exports (`export { a, b as c } from ...` —
+    the public name is the alias side), and `export default`. `export *`
+    contributes nothing (the names are unknowable without recursion); a
+    leaf reached only through `export *` chains simply won't match and the
+    caller falls back to the cap.
+    """
+    cached = _export_names_cache.get(file_path)
+    if cached is not None:
+        return cached
+    names: set = set()
+    try:
+        text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        text = ""
+    if text:
+        for m in _EXPORT_DECL_RE.finditer(text):
+            names.add(m.group(1))
+        for m in _EXPORT_BRACE_RE.finditer(text):
+            for part in m.group(1).split(","):
+                part = re.sub(r'^\s*type\s+', '', part.strip())
+                if " as " in part:
+                    part = part.split(" as ")[-1].strip()
+                if part and part != "default":
+                    names.add(part)
+        if _EXPORT_DEFAULT_RE.search(text):
+            names.add("default")
+    result = frozenset(names)
+    _export_names_cache[file_path] = result
+    return result
+
+
+def _extract_imported_names(stmt: str) -> Optional[list]:
+    """Names a statement imports, as exported by the target module.
+
+    `import { a, b as c, type d } from "x"` -> ["a", "b", "d"] (left side of
+    `as` — that's the name the barrel exports). Default imports contribute
+    "default"; destructured require contributes the left side of `:`.
+    Returns None when routing is impossible: namespace (`import * as ns`),
+    side-effect, and dynamic imports may use anything from the module.
+    """
+    s = stmt or ""
+    if re.search(r'import\s*\(', s) or re.match(r'\s*import\s+[\'"]', s):
+        return None
+    if re.search(r'import\s+\*\s+as\s+', s):
+        return None
+    names: list = []
+    m = re.search(r'(?:import|export)\s*(?:type\s*)?\{([^}]*)\}', s)
+    if m:
+        for part in m.group(1).split(","):
+            part = re.sub(r'^\s*type\s+', '', part.strip())
+            left = part.split(" as ")[0].strip() if " as " in part else part
+            if left:
+                names.append(left)
+    if re.match(r'\s*import\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s*(?:,|\s+from)', s):
+        names.append("default")
+    rm = re.search(r'(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require', s)
+    if rm:
+        for part in rm.group(1).split(","):
+            left = part.split(":")[0].strip()
+            if left:
+                names.append(left)
+    return names or None
+
+
+def _select_barrel_leaves(
+    followed: List[Dict[str, Any]],
+    imported_names: Optional[list],
+    entry_prepended: bool,
+    entry_resolved_path: Optional[str] = None,
+    importer_path: Optional[Path] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Apply the leaf-explosion policy to a barrel expansion result.
+
+    The entry edge is always kept — whether it was prepended by the caller
+    (index 0) or arrived inside the expansion itself (matched against
+    entry_resolved_path; a pure `export *` barrel exports no harvestable
+    names, so name routing must never be allowed to drop it). Leaves are
+    deduped by resolved_path (BREE can reach the same leaf via multiple hop
+    paths), then name-routed when the statement names symbols and >=1 leaf's
+    harvested exports intersect them, then capped at _barrel_leaf_cap().
+    Returns (selected, selection_meta); selection_meta is None when nothing
+    was dropped.
+    """
+    entry_abs = None
+    if entry_resolved_path and importer_path is not None:
+        try:
+            entry_abs = _abs_resolved_target(importer_path, entry_resolved_path)
+        except Exception:
+            entry_abs = None
+
+    entry = None
+    leaves: List[Dict[str, Any]] = []
+    seen_rp: set = set()
+    for idx, rec in enumerate(followed):
+        rp = rec.get("resolved_path") if isinstance(rec, dict) else None
+        is_entry = entry_prepended and idx == 0
+        if not is_entry and rp and entry_resolved_path:
+            is_entry = rp == entry_resolved_path or (
+                entry_abs is not None
+                and importer_path is not None
+                and _abs_resolved_target(importer_path, rp) == entry_abs
+            )
+        if is_entry:
+            if entry is None:
+                entry = rec
+            continue  # entry duplicates add nothing
+        if rp:
+            if rp in seen_rp:
+                continue
+            seen_rp.add(rp)
+        leaves.append(rec)
+
+    total = len(leaves)
+    if total == 0:
+        return ([entry] if entry is not None else list(followed)), None
+
+    mode = None
+    if imported_names:
+        wanted = set(imported_names)
+        matched = []
+        for leaf in leaves:
+            rp = leaf.get("resolved_path") if isinstance(leaf, dict) else None
+            if not rp:
+                continue
+            # resolved_path is usually project-relative; absolutize so the
+            # export-name harvest reads the real file regardless of cwd.
+            rp_abs = None
+            if importer_path is not None:
+                try:
+                    rp_abs = _abs_resolved_target(importer_path, rp)
+                except Exception:
+                    rp_abs = None
+            if _harvest_export_names(str(rp_abs or rp)) & wanted:
+                matched.append(leaf)
+        if matched:
+            leaves = matched
+            mode = "name-match"
+
+    truncated = False
+    cap = _barrel_leaf_cap()
+    if cap and len(leaves) > cap:
+        leaves = leaves[:cap]
+        truncated = True
+        mode = f"{mode}+capped" if mode else "capped"
+
+    selection = None
+    if len(leaves) < total:
+        selection = {
+            "mode": mode or "name-match",
+            "leaves_total": total,
+            "leaves_emitted": len(leaves),
+            "truncated": truncated,
+        }
+    out = ([entry] + leaves) if entry is not None else leaves
+    return out, selection
 
 
 def _extract_barrel_reexports(filepath: str) -> list[dict]:
@@ -2219,6 +2416,7 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                 # only leaves were emitted, hiding the consumer -> entry-barrel
                 # dependency whenever expansion succeeded. Skipped when expansion
                 # already terminated on the entry file itself (no duplicate).
+                _entry_prepended = False
                 if not ptype.startswith("export_") and resolved_path:
                     _root_abs = _abs_resolved_target(path, resolved_path)
                     _root_already_present = False
@@ -2241,7 +2439,22 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                             "conditional_context": None,
                             "barrel_detector": (followed[0].get("barrel_detector") if isinstance(followed[0], dict) else None) or "bree",
                         }] + list(followed)
-                for f in followed:
+                        _entry_prepended = True
+
+                # Leaf-explosion policy: route the expanded leaves by the names
+                # this statement actually imports (precise), else cap. The
+                # selection metadata lands on the first emitted edge below so
+                # truncation is observable, never silent.
+                _stmt_names = _extract_imported_names(original)
+                followed, _leaf_selection = _select_barrel_leaves(
+                    followed,
+                    _stmt_names,
+                    entry_prepended=_entry_prepended,
+                    entry_resolved_path=resolved_path,
+                    importer_path=path,
+                )
+
+                for _leaf_idx, f in enumerate(followed):
                     depth = f.get("barrel_depth", 1)
 
                     # Confidence propagation through barrels
@@ -2285,7 +2498,8 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                         "is_relative": is_relative,
                         "level": level if is_relative else 0,
                         "alias": None,
-                        "imported_names": [],
+                        "imported_names": list(_stmt_names or []),
+                        **({"barrel_leaf_selection": _leaf_selection} if (_leaf_selection and _leaf_idx == 0) else {}),
                         "original_statement": original,
                         "statement_type": ptype,
                         "resolved_path": f.get("resolved_path"),
@@ -2360,7 +2574,7 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                 "is_relative": is_relative,
                 "level": level if is_relative else 0,
                 "alias": None,
-                "imported_names": [],
+                "imported_names": list(_extract_imported_names(original) or []),
                 "original_statement": original,
                 "statement_type": ptype,
                 "resolved_path": resolved_path,

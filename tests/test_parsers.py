@@ -153,5 +153,63 @@ class TestJavaScriptParser(TempProjectTestCase):
         self.assertEqual(edge.get("resolution_confidence"), "high")
 
 
+class TestBarrelLeafExplosionPolicy(TempProjectTestCase):
+    """Leaf-explosion policy: name routing + reported cap.
+
+    A named import through an `export *` barrel must emit the entry edge plus
+    only the leaves that export the requested names (precision); imports with
+    no usable names (side-effect/namespace/dynamic) fall back to a cap whose
+    truncation is reported via barrel_leaf_selection — never silent.
+    """
+
+    LEAVES = 30
+
+    def setUp(self):
+        super().setUp()
+        lines = []
+        for i in range(self.LEAVES):
+            self.write(f"big/leaf{i}.js", f"export const thing{i} = {i};\n")
+            lines.append(f"export * from './leaf{i}.js';")
+        self.write("big/index.js", "\n".join(lines) + "\n")
+        self.write("named.js", "import { thing7 } from './big';\n")
+        self.write("nameless.js", "import * as big from './big';\n")
+
+    def _parse(self, rel):
+        self.reset_js_parser_state()
+        from wikifier.parsers.javascript import parse_javascript_imports
+        return parse_javascript_imports(str(self.root / rel))
+
+    def test_named_import_routes_to_defining_leaf(self):
+        edges = self._parse("named.js")
+        paths = [e.get("resolved_path") for e in edges]
+        self.assertIn("big/index.js", paths, "entry-barrel edge must be kept")
+        self.assertIn("big/leaf7.js", paths, "the leaf defining thing7 must be kept")
+        self.assertLessEqual(
+            len(edges), 4,
+            f"name routing should drop non-matching leaves, got {len(edges)}: {paths}",
+        )
+        edge = find_edge(edges, raw_module="./big")
+        self.assertIn("thing7", edge.get("imported_names") or [])
+
+    def test_nameless_import_is_capped_with_reported_selection(self):
+        import os
+        old = os.environ.get("WIKIFIER_BARREL_LEAF_CAP")
+        os.environ["WIKIFIER_BARREL_LEAF_CAP"] = "5"
+        try:
+            edges = self._parse("nameless.js")
+        finally:
+            if old is None:
+                os.environ.pop("WIKIFIER_BARREL_LEAF_CAP", None)
+            else:
+                os.environ["WIKIFIER_BARREL_LEAF_CAP"] = old
+        barrel_edges = [e for e in edges if e.get("via_barrel")]
+        self.assertLessEqual(len(barrel_edges), 6, "cap must bound emission (entry + 5 leaves)")
+        sels = [e.get("barrel_leaf_selection") for e in edges if e.get("barrel_leaf_selection")]
+        self.assertTrue(sels, "truncation must be reported via barrel_leaf_selection")
+        self.assertTrue(sels[0].get("truncated"))
+        self.assertEqual(sels[0].get("leaves_emitted"), 5)
+        self.assertEqual(sels[0].get("leaves_total"), self.LEAVES)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

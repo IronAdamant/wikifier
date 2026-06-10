@@ -381,6 +381,7 @@ def _pair_from_parser_edge(edge: Dict[str, Any], root: Path) -> Optional[Dict[st
         "confidence_score", "confidence_reasons", "confidence_explanation",
         "barrel_v2", "resolution_metadata", "strategy", "cdia_v1",
         "conditional_analysis", "dynamic_analysis", "diagnostic",
+        "imported_names", "barrel_leaf_selection",
     ):
         v = edge.get(k)
         if v not in (None, "", [], {}):

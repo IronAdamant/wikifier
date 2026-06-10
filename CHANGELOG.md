@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Barrel-leaf edge explosion**: a named import through an `export *` barrel emitted one
+  edge per reachable leaf (Babylon.js: 778 edges for a 2-symbol import; ~107 edges/file
+  repo-wide). Leaves are now deduped and **routed by the names the statement actually
+  imports** (regex export-name harvest per leaf, memoized); imports with no usable names
+  (namespace/side-effect/dynamic) fall back to a cap (`WIKIFIER_BARREL_LEAF_CAP`,
+  default 24, 0 = legacy unlimited) with the selection reported on the first emitted edge
+  (`barrel_leaf_selection: {mode, leaves_total, leaves_emitted, truncated}`) — truncation
+  is never silent. The entry-barrel edge (the true file dependency) is always kept.
+  Babylon 300-file sample: 24,408 → 3,230 edges; the worst single file: 990 → 55.
+  Projects with small barrels are unaffected (RecipeLab_alt: identical 671 edges).
+- `imported_names` is now actually populated on JS/TS edges (the contract documented it
+  but the parser always emitted `[]`); persisted to the cache along with
+  `barrel_leaf_selection`.
+- Out-of-tree resolution: `_get_project_root_fallback` now enforces that the resolution
+  root contains the file being parsed (nearest-marker walk from the importer otherwise) —
+  fixed all 6 long-standing package.json "exports" self-test failures; the exports logic
+  itself was already correct. In-tree behavior verified identical via A/B run.
+- Stale hardcoded versions removed from launcher banners (`wikifier help` now reads the
+  package version at runtime); publish workflow actions bumped to Node 24-ready majors.
+
 ## [4.2.0] - 2026-06-10
 
 **Real-world dogfood sweep (Wikifier itself, RecipeLab_alt, 8 large open-source projects
