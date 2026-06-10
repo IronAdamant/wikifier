@@ -27,6 +27,7 @@ table (500-row cap), circular dependencies, ACS risk snapshot, reverse
 dependencies, barrel expansions, and conditional/dynamic intelligence.
 """
 
+import json
 import os
 import re
 from pathlib import Path
@@ -83,6 +84,10 @@ def _collect_edges(cache: Dict[str, Any]) -> List[Tuple[str, str, str, str, bool
         resolved = str(pair.get("resolved") or "").strip()
         if not raw and not resolved:
             continue
+        if "\n" in raw or "\n" in resolved:
+            # Parser artifact (e.g. comment/doc text captured as a dynamic
+            # specifier) — never let multi-line "modules" become graph nodes.
+            continue
         internal = bool(resolved)
         target = resolved if internal else raw
         conf = _pair_confidence(pair)
@@ -108,7 +113,10 @@ def _sanitize_node_id(name: str) -> str:
 
 def _node_label(path: str) -> str:
     base = os.path.basename(path.rstrip("/")) or path
-    return base.replace('"', "'")
+    # Labels must never carry newlines/quotes/brackets — garbage raw modules
+    # once leaked multi-line comment text into the rendered graph.
+    base = re.sub(r"\s+", " ", base).replace('"', "'").replace("[", "(").replace("]", ")")
+    return (base[:48] + "…") if len(base) > 49 else base
 
 
 def _top_level_group(path: str) -> str:
@@ -470,6 +478,147 @@ def _generate_conditional_dynamic_section(cache: Dict[str, Any]) -> List[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# File tree (the primary human/agent view of project shape)
+# ---------------------------------------------------------------------------
+
+def _clean_reason(reason: str) -> Optional[str]:
+    """Normalise a health reason into a short description, or None for
+    auto-yellow boilerplate (it describes the tracking system, not the file)."""
+    reason = re.sub(r"\s+", " ", str(reason or "")).strip()
+    if not reason or reason.startswith("mtime changed") or "auto-detected" in reason:
+        return None
+    return (reason[:90] + "…") if len(reason) > 91 else reason
+
+
+def _load_health_descriptions(root: Path) -> Dict[str, str]:
+    """file -> short description, from file_health.json or file_health.md.
+
+    Projects maintained through the shell workflow only have the .md table
+    (the JSON is written by the Python health module), so both are read.
+    """
+    desc: Dict[str, str] = {}
+    try:
+        with open(root / "file_health.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        entries = data.get("entries", data) if isinstance(data, dict) else {}
+        for file, e in entries.items():
+            r = _clean_reason((e or {}).get("reason"))
+            if r:
+                desc[str(file)] = r
+    except Exception:
+        pass
+    if desc:
+        return desc
+    try:  # .md fallback: | File | Status | Last Updated | Reason / Intent |
+        with open(root / "file_health.md", "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line.startswith("|") or line.startswith("|--") or "| File | Status" in line:
+                    continue
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) >= 6 and parts[1]:
+                    r = _clean_reason(parts[4])
+                    if r:
+                        desc[parts[1]] = r
+    except Exception:
+        pass
+    return desc
+
+
+TREE_DIR_FILE_CAP = 40      # files listed per directory before "… +N more"
+TREE_TOTAL_LINE_CAP = 900   # hard ceiling so huge monorepos stay readable
+
+
+def _generate_tree_section(root: Path, cache: Dict[str, Any]) -> List[str]:
+    """Indented file tree of parsed + wiki-tracked files, with descriptions.
+
+    The Mermaid graph shows *dependencies* (which reads as soup at monorepo
+    scale); this tree is the readable answer to "what is in this project":
+
+        wikifier/
+        ├── parsers/
+        │   ├── bree.py — barrel & re-export chain engine
+        │   └── python.py
+        └── cli.py — entry point + full update pipeline
+    """
+    descriptions = _load_health_descriptions(root)
+    parsed = {k for k in cache.keys() if isinstance(k, str) and not k.startswith("_")}
+    # Health keys are free text (audit records may use whole sentences as the
+    # "file"; some entries point at directories): only real on-disk files —
+    # or parser-confirmed ones — belong in the tree.
+    tracked = set()
+    for k in descriptions:
+        k2 = k.rstrip("/")
+        if not k2 or k2 in parsed:
+            continue
+        try:
+            if (root / k2).is_file():
+                tracked.add(k2)
+        except OSError:
+            continue
+    files = sorted(parsed | tracked)
+    if not files:
+        return ["## File Tree", "", "```text",
+                "(no files parsed yet — run update-maps)", "```", ""]
+
+    # Nested {name: subtree}; directory keys end with '/', file leaves are None.
+    tree: Dict[str, Any] = {}
+    for path in files:
+        node = tree
+        parts = path.split("/")
+        for part in parts[:-1]:
+            node = node.setdefault(part + "/", {})
+        node[parts[-1]] = None
+
+    def count_leaves(node: Dict[str, Any]) -> int:
+        return sum(count_leaves(v) if isinstance(v, dict) else 1 for v in node.values())
+
+    out: List[str] = []
+    truncated = False
+
+    def render(node: Dict[str, Any], prefix: str, path_prefix: str) -> None:
+        nonlocal truncated
+        dirs = sorted(k for k in node if k.endswith("/"))
+        leaves = sorted(k for k in node if not k.endswith("/"))
+        shown = leaves[:TREE_DIR_FILE_CAP]
+        hidden = len(leaves) - len(shown)
+        items = dirs + shown + (["\x00more"] if hidden > 0 else [])
+        for i, name in enumerate(items):
+            if len(out) >= TREE_TOTAL_LINE_CAP:
+                truncated = True
+                return
+            last = i == len(items) - 1
+            connector = "└── " if last else "├── "
+            child_prefix = prefix + ("    " if last else "│   ")
+            if name == "\x00more":
+                out.append(prefix + connector + "… +{0} more files".format(hidden))
+            elif name.endswith("/"):
+                sub = node[name]
+                n = count_leaves(sub)
+                suffix = "  ({0} files)".format(n) if n > TREE_DIR_FILE_CAP else ""
+                out.append(prefix + connector + name + suffix)
+                render(sub, child_prefix, path_prefix + name)
+            else:
+                d = descriptions.get(path_prefix + name)
+                out.append(prefix + connector + name + ((" — " + d) if d else ""))
+
+    render(tree, "", "")
+
+    lines = [
+        "## File Tree", "",
+        "> Every parsed/tracked file, organised by folder. Descriptions come from",
+        "> the agent wiki (file_health). The dependency graph is further below.",
+        "", "```text",
+        "{0}/  ({1} files)".format(root.name, len(files)),
+    ]
+    lines.extend(out)
+    if truncated:
+        lines.append("… (tree capped at {0} lines — full file list lives in the import cache)".format(TREE_TOTAL_LINE_CAP))
+    lines.extend(["```", ""])
+    return lines
+
+
 def generate_library_md(root: Path, cache: Dict[str, Any]) -> str:
     """Render library.md content from an import cache (see module docstring)."""
     if not isinstance(cache, dict):
@@ -483,6 +632,7 @@ def generate_library_md(root: Path, cache: Dict[str, Any]) -> str:
         '> Run `wikifier record-change library.md "..."` if you need to annotate.',
         "",
     ]
+    lines.extend(_generate_tree_section(root, cache))
     lines.extend(_generate_mermaid_section(edges))
     lines.extend(_generate_table_section(edges))
     lines.extend(_generate_cycles_section(cache))

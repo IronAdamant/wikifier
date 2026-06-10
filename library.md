@@ -3,14 +3,73 @@
 > This file is regenerated. Manual edits will be overwritten.
 > Run `wikifier record-change library.md "..."` if you need to annotate.
 
+## File Tree
+
+> Every parsed/tracked file, organised by folder. Descriptions come from
+> the agent wiki (file_health). The dependency graph is further below.
+
+```text
+Wikifier/  (45 files)
+├── .github/
+│   └── workflows/
+│       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
+├── Findings/
+│   ├── 2026-06-10-Dogfood-Refactor-Validation.md — Self-describing findings doc
+│   └── 2026-06-10-Fix-Plan.md — Results appended, all phases verified
+├── Logged_issues/
+│   ├── 2026-06-10-brc-scoped-rerun-pathology.md — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   └── 2026-06-10-js-barrel-churn-selftest-failure.md — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
+├── tests/
+│   ├── __init__.py
+│   ├── _base.py
+│   ├── run_all.py
+│   ├── test_barrel_invalidation.py
+│   ├── test_health.py
+│   ├── test_import_cache.py
+│   └── test_parsers.py
+├── wikifier/
+│   ├── mcp/
+│   │   ├── __init__.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
+│   │   └── server.py
+│   ├── parsers/
+│   │   ├── __init__.py
+│   │   ├── bree.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   │   ├── cdia.py
+│   │   ├── javascript.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   │   └── python.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
+│   ├── scripts/
+│   │   ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+│   │   └── wikifier.sh — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+│   ├── __init__.py — v4.4.0 release prep; 30/30 tests
+│   ├── __main__.py
+│   ├── cli.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   ├── contracts.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
+│   ├── daemon.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
+│   ├── diagnostics.py
+│   ├── health.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
+│   ├── import_cache.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   ├── index.html — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+│   ├── library.py — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
+│   ├── locking.py — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
+│   ├── resolution.py
+│   └── serve.py — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── CHANGELOG.md — v4.4.0 release prep; 30/30 tests
+├── CLAUDE.md — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+├── README.md — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── diagnostics.html — Wiki summary verified accurate after change.
+├── file_health.md — Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survi…
+├── index.html — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── library.md — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── pyproject.toml — Build + twine check pass; clean-room wheel install verified
+├── wikifier.bat — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
+├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+└── wikifier.sh — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+```
+
 ## Dependency Graph (Mermaid)
 
 ```mermaid
 graph TD
-    subgraph importlib_import_module___
-        importlib_import_module_______import___now_fully_supported_______with_LDSI_CDIA_[" __import__ now fully supported
-    # with LDSI+CDIA+"]
-    end
     subgraph root
         wikifier["wikifier"]
         wikifier_health["wikifier.health"]
@@ -202,9 +261,9 @@ graph TD
     wikifier_import_cache_py -.-> dataclasses
     wikifier_import_cache_py --> wikifier_cli_py
     wikifier_import_cache_py --> wikifier_parsers___init___py
+    wikifier_library_py -.-> json
     wikifier_library_py -.-> os
     wikifier_library_py -.-> re
-    wikifier_library_py -.-> json
     wikifier_library_py -.-> tempfile
     wikifier_library_py -.-> pathlib
     wikifier_library_py -.-> typing
@@ -286,7 +345,6 @@ graph TD
     wikifier_parsers_python_py --> wikifier_parsers_cdia_py
     wikifier_parsers_python_py --> wikifier_parsers_javascript_py
     wikifier_parsers_python_py -.-> wikifier_contracts
-    wikifier_parsers_python_py -. ? .-> importlib_import_module_______import___now_fully_supported_______with_LDSI_CDIA_
     wikifier_resolution_py -.-> base64
     wikifier_resolution_py -.-> json
     wikifier_resolution_py -.-> os
@@ -484,10 +542,6 @@ graph TD
 | wikifier/parsers/python.py | ..cdia → wikifier/parsers/cdia.py | high |
 | wikifier/parsers/python.py | .cdia → wikifier/parsers/cdia.py | high |
 | wikifier/parsers/python.py | .javascript → wikifier/parsers/javascript.py | high |
-| wikifier/parsers/python.py | importlib.import_module() / __import__ now fully supported
-    # with LDSI+CDIA+registry parity (Layer 3.5 alias CFG, creative detectors, ACS wiring).
-    # See creative_dynamic lo → importlib.import_module() / __import__ now fully supported
-    # with LDSI+CDIA+ | low |
 | wikifier/parsers/python.py | json → json | medium |
 | wikifier/parsers/python.py | os → os | medium |
 | wikifier/parsers/python.py | pathlib → pathlib | medium |
@@ -540,7 +594,7 @@ Top cyclic clusters:
 
 ## Reverse Dependencies ("Who depends on me")
 
-**Targets with dependents**: 14 | **Total reverse edges**: 37
+**Targets with dependents**: 13 | **Total reverse edges**: 36
 
 **High-impact modules (most reverse dependents)**:
 - `wikifier` ← 8 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/health.py, wikifier/import_cache.py)
@@ -551,9 +605,8 @@ Top cyclic clusters:
 - `wikifier/parsers/__init__.py` ← 2 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py)
 - `wikifier/parsers/bree.py` ← 2 files depend on it (e.g. wikifier/import_cache.py, wikifier/parsers/javascript.py)
 - `wikifier/parsers/cdia.py` ← 2 files depend on it (e.g. wikifier/parsers/javascript.py, wikifier/parsers/python.py)
-- `importlib.import_module() / __import__ now fully supported
-    # with LDSI+CDIA+` ← 1 files depend on it (e.g. wikifier/parsers/python.py)
 - `wikifier.health` ← 1 files depend on it (e.g. tests/test_health.py)
+- `wikifier/import_cache.py` ← 1 files depend on it (e.g. wikifier/cli.py)
 
 ## Barrel Expansions
 
@@ -565,16 +618,10 @@ Top cyclic clusters:
 
 ## Conditional & Dynamic Intelligence
 
-**Conditional imports detected**: 2
-**Dynamic imports detected**: 2
+**Conditional imports detected**: 1
+**Dynamic imports detected**: 1
 
 Sample conditional imports (fragile / feature-flagged paths):
 - `tests/test_health.py` → `"wikifier.health"`  (ctx: )
-- `wikifier/parsers/python.py` → `importlib.import_module() / __import__ now fully supported
-    # with LDSI+CDIA+registry parity (Layer 3.5 alias CFG, creative detectors, ACS wiring).
-    # See creative_dynamic lo`  (ctx: )
 Sample dynamic imports (runtime / template-driven):
 - `tests/test_health.py` → `"wikifier.health"`  (type: static)
-- `wikifier/parsers/python.py` → `importlib.import_module() / __import__ now fully supported
-    # with LDSI+CDIA+registry parity (Layer 3.5 alias CFG, creative detectors, ACS wiring).
-    # See creative_dynamic lo`  (type: expression)

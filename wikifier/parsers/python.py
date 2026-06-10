@@ -261,6 +261,40 @@ def _strip_docstrings(content: str) -> str:
     return content
 
 
+def _strip_comments(content: str) -> str:
+    """Blank out # comments (outside string literals), preserving line structure.
+
+    The dynamic-import scanner matches anywhere in the text (unlike the
+    line-anchored static patterns), so a comment like
+    `# importlib.import_module() now supported` produced a garbage dynamic
+    edge whose raw_module was the comment text — which then leaked into
+    library.md as a phantom graph node. Docstrings were already stripped;
+    comments were not.
+    """
+    out_lines = []
+    for line in content.split("\n"):
+        in_str = None
+        cut = None
+        i = 0
+        n = len(line)
+        while i < n:
+            c = line[i]
+            if in_str:
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == in_str:
+                    in_str = None
+            elif c in ("'", '"'):
+                in_str = c
+            elif c == "#":
+                cut = i
+                break
+            i += 1
+        out_lines.append(line if cut is None else line[:cut])
+    return "\n".join(out_lines)
+
+
 def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
     """
     Parse a Python file and return structured import information.
@@ -295,8 +329,10 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
     except Exception:
         return []
 
-    # Remove docstrings to avoid matching imports inside documentation
+    # Remove docstrings + comments to avoid matching imports inside
+    # documentation (the dynamic scanner matches anywhere in the text).
     content = _strip_docstrings(content)
+    content = _strip_comments(content)
 
     imports: List[Dict[str, Any]] = []
 

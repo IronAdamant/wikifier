@@ -136,13 +136,34 @@
     .console.show { display: block; }
     .hint { font-size: 12px; color: var(--faint); margin-top: 8px; }
 
-    /* ---------- mermaid ---------- */
-    #map-wrap {
-        margin-top: 12px; padding: 10px; min-height: 160px;
+    /* ---------- file tree (primary structure view) ---------- */
+    #tree-pre {
+        margin: 12px 0 0; padding: 14px 16px; max-height: 520px; overflow: auto;
         background: var(--panel-2); border: 1px solid var(--border-soft);
-        border-radius: 12px; overflow: auto;
+        border-radius: 12px; font-family: var(--mono); font-size: 12.5px;
+        line-height: 1.5; color: #c4cedb; white-space: pre;
     }
+
+    /* ---------- dependency graph (collapsible, pan/zoom) ---------- */
+    details.graph { margin-top: 14px; }
+    details.graph > summary {
+        cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted);
+        padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+        list-style: none; user-select: none;
+    }
+    details.graph > summary::before { content: '▸ '; color: var(--accent); }
+    details.graph[open] > summary::before { content: '▾ '; }
+    details.graph > summary:hover { background: #15202f; }
+    #graph-viewport {
+        margin-top: 10px; height: 460px; overflow: hidden; cursor: grab;
+        background: var(--panel-2); border: 1px solid var(--border-soft);
+        border-radius: 12px; position: relative;
+    }
+    #graph-viewport.dragging { cursor: grabbing; }
+    #graph-canvas { transform-origin: 0 0; width: max-content; }
+    #map-wrap { padding: 10px; min-height: 120px; }
     #map-wrap svg { max-width: none; }
+    .graph-help { font-size: 11.5px; color: var(--faint); margin-top: 6px; }
     .errbox {
         font-size: 13px; padding: 14px; border: 1px solid #92600c;
         border-radius: 10px; background: #171207;
@@ -246,15 +267,23 @@
         <div class="hint" id="actions-hint"></div>
     </section>
 
-    <!-- ============ structure map ============ -->
+    <!-- ============ structure: file tree (primary) + dependency graph ============ -->
     <section class="card">
-        <h2>Code structure <span class="sub">imports &amp; dependencies, rebuilt from your code</span></h2>
-        <div id="map-wrap"><div class="hint">loading map…</div></div>
+        <h2>Code structure <span class="sub">file tree with wiki descriptions — rebuilt from your code</span></h2>
+        <pre id="tree-pre">loading…</pre>
         <div class="btnrow" style="margin-top:12px">
-            <button id="btn-copy-mermaid">⧉ Copy structure as text</button>
+            <button id="btn-copy-tree">⧉ Copy structure as text</button>
             <button id="btn-copy-snapshot">⧉ Copy full snapshot (tree + files + descriptions)</button>
-            <span class="hint" style="margin:0">Paste directly into docs or LLM chats.</span>
+            <span class="hint" style="margin:0">Clean, readable text — paste directly into docs or LLM chats.</span>
         </div>
+        <details class="graph" id="graph-details">
+            <summary>Dependency graph (drag to pan · scroll to zoom · double-click to reset)</summary>
+            <div id="graph-viewport"><div id="graph-canvas"><div id="map-wrap"><div class="hint" style="padding:10px">expand to render…</div></div></div></div>
+            <div class="btnrow" style="margin-top:8px">
+                <button id="btn-copy-mermaid">⧉ Copy diagram source (Mermaid)</button>
+                <span class="graph-help">Arrows: solid = high-confidence import · dashed = medium · “?” = low/unresolved.</span>
+            </div>
+        </details>
     </section>
 
     <!-- ============ files + folders ============ -->
@@ -281,8 +310,8 @@
 
 <div id="toast"></div>
 <div id="overlay"><div class="panel">
-    <h2>Server stopped</h2>
-    <p>The <code>wikifier serve</code> process has shut down and this page is now frozen.
+    <h2 id="overlay-title">Server stopped</h2>
+    <p id="overlay-msg">The <code>wikifier serve</code> process has shut down and this page is now frozen.
        To come back, run <code>wikifier serve</code> in the project folder again and reload.</p>
 </div></div>
 
@@ -303,7 +332,13 @@ const state = {
     jsonMissing: false,       // remember a file_health.json 404 — stop re-polling it
     running: false,
     liveWaitTimer: null,
+    pollTimer: null,
     lastDataSig: '',
+    failStreak: 0,            // consecutive artifact-fetch failures (server gone?)
+    halted: false,
+    graphRendered: false,     // dependency graph renders lazily on first expand
+    graphDirty: true,
+    panZoom: { scale: 1, x: 0, y: 0 },
 };
 
 const $ = id => document.getElementById(id);
@@ -316,10 +351,24 @@ async function safeFetch(path, fallbackText = '') {
         const res = await fetch(path, ctrl ? { signal: ctrl.signal, cache: 'no-store' } : { cache: 'no-store' });
         if (timer) clearTimeout(timer);
         if (!res.ok) throw new Error('HTTP ' + res.status);
+        state.failStreak = 0;
         return await res.text();
     } catch (e) {
+        // Network-level failures (server killed) count toward the halt
+        // threshold; HTTP errors (404 on optional files) do not.
+        if (!String(e.message || '').startsWith('HTTP ')) state.failStreak++;
         return fallbackText;
     }
+}
+
+function haltDashboard(title, msg) {
+    if (state.halted) return;
+    state.halted = true;
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    if (state.liveWaitTimer) clearInterval(state.liveWaitTimer);
+    $('overlay-title').textContent = title;
+    $('overlay-msg').innerHTML = msg;
+    $('overlay').classList.add('show');
 }
 
 function toast(msg, ms = 2200) {
@@ -383,12 +432,13 @@ async function detectServer() {
 async function stopServer() {
     if (!state.execMode) return;
     if (!confirm('Stop the wikifier serve process? The dashboard will go offline.')) return;
+    const done = () => haltDashboard('Server stopped',
+        'The <code>wikifier serve</code> process has shut down and this page is now frozen. ' +
+        'To come back, run <code>wikifier serve</code> in the project folder again and reload.');
     try {
         const res = await fetch('/__wikifier/shutdown', { method: 'POST' });
-        if (res.ok) { $('overlay').classList.add('show'); return; }
-    } catch (e) { /* connection may drop as it stops — that also means success */
-        $('overlay').classList.add('show'); return;
-    }
+        if (res.ok) { done(); return; }
+    } catch (e) { done(); return; }  // connection drop while stopping = success
     toast('Could not stop the server');
 }
 
@@ -581,20 +631,35 @@ function renderFolders() {
     }).join('') || '<div class="hint">No files tracked yet — run check-changes / update-maps.</div>';
 }
 
-// ---------- structure map ----------------------------------------------------
-async function loadMap() {
-    const wrap = $('map-wrap');
+// ---------- structure: file tree (primary) + lazy dependency graph -----------
+function treeText() {
+    const m = (state.libraryMd || '').match(/## File Tree[\s\S]*?```text\n([\s\S]*?)```/);
+    return m ? m[1].replace(/\s+$/, '') : '';
+}
+
+async function loadStructure() {
     const md = await safeFetch('library.md?cb=' + Date.now(), '');
     state.libraryMd = md;
+    const pre = $('tree-pre');
+    const tree = treeText();
     if (!md) {
-        wrap.innerHTML = `<div class="errbox"><b>No structure map yet.</b><br>
-            Click <i>Update map</i> above (or run <code>wikifier update-maps</code> in this folder), then refresh.</div>`;
-        return;
+        pre.textContent = 'No structure data yet — click “Update map” above (or run wikifier update-maps), then refresh.';
+    } else if (tree) {
+        pre.textContent = tree;
+    } else {
+        // Older library.md without the File Tree section: regenerating fixes it.
+        pre.textContent = 'This library.md predates the File Tree view — click “Update map” to regenerate it.';
     }
-    const match = md.match(/```mermaid\n([\s\S]*?)```/);
+    state.graphDirty = true;
+    if ($('graph-details').open) await renderGraph();
+}
+
+async function renderGraph() {
+    if (!state.graphDirty && state.graphRendered) return;
+    const wrap = $('map-wrap');
+    const match = (state.libraryMd || '').match(/```mermaid\n([\s\S]*?)```/);
     if (!match || !match[1].trim()) {
-        wrap.innerHTML = `<div class="errbox"><b>library.md has no diagram block.</b><br>
-            Run <code>wikifier update-maps</code> to regenerate it.</div>`;
+        wrap.innerHTML = '<div class="errbox" style="margin:10px"><b>No diagram block in library.md.</b> Run “Update map” to regenerate.</div>';
         return;
     }
     // textContent (never innerHTML) so the Mermaid source can't be parsed as HTML.
@@ -609,13 +674,56 @@ async function loadMap() {
         // re-read it per render; keep both maxEdges placements).
         mermaid.initialize({ startOnLoad: false, theme: 'dark', maxEdges: 1500, flowchart: { maxEdges: 1500 } });
         await mermaid.run({ nodes: [wrap.querySelector('.mermaid')] });
+        state.graphRendered = true;
+        state.graphDirty = false;
+        resetPanZoom();
     } catch (e) {
         // Never fail silently: show what broke + where the intact data lives.
         const msg = (e && (e.message || e.str)) || String(e);
-        wrap.innerHTML = `<div class="errbox"><b>Structure map could not be rendered</b><br>
+        wrap.innerHTML = `<div class="errbox"><b>Dependency graph could not be rendered</b><br>
             <code>${esc(String(msg)).slice(0, 300)}</code><br>
-            <span class="hint">The underlying map data in library.md is intact — use “Copy structure as text”.</span></div>`;
+            <span class="hint">The underlying data in library.md is intact — the File Tree above is unaffected.</span></div>`;
     }
+}
+
+// Zero-dep pan/zoom for the graph viewport: drag to pan, wheel to zoom
+// toward the cursor, double-click to reset.
+function applyPanZoom() {
+    const p = state.panZoom;
+    $('graph-canvas').style.transform = `translate(${p.x}px, ${p.y}px) scale(${p.scale})`;
+}
+function resetPanZoom() {
+    state.panZoom = { scale: 1, x: 0, y: 0 };
+    applyPanZoom();
+}
+function initPanZoom() {
+    const vp = $('graph-viewport');
+    let dragging = false, lastX = 0, lastY = 0;
+    vp.addEventListener('wheel', e => {
+        e.preventDefault();
+        const p = state.panZoom;
+        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        const ns = Math.min(8, Math.max(0.1, p.scale * factor));
+        const rect = vp.getBoundingClientRect();
+        const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+        p.x = cx - (cx - p.x) * (ns / p.scale);
+        p.y = cy - (cy - p.y) * (ns / p.scale);
+        p.scale = ns;
+        applyPanZoom();
+    }, { passive: false });
+    vp.addEventListener('mousedown', e => {
+        dragging = true; lastX = e.clientX; lastY = e.clientY;
+        vp.classList.add('dragging'); e.preventDefault();
+    });
+    window.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        state.panZoom.x += e.clientX - lastX;
+        state.panZoom.y += e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        applyPanZoom();
+    });
+    window.addEventListener('mouseup', () => { dragging = false; vp.classList.remove('dragging'); });
+    vp.addEventListener('dblclick', resetPanZoom);
 }
 
 // ---------- exports ----------------------------------------------------------
@@ -636,12 +744,12 @@ function buildSnapshot() {
         const mark = { g: '🟢', y: '🟡', r: '🔴' }[r.status];
         lines.push(`- ${mark} ${r.file} — ${r.reason}`);
     });
-    const src = mermaidSource();
-    if (src) {
+    const tree = treeText();
+    if (tree) {
         lines.push('');
-        lines.push('## Structure (Mermaid)');
-        lines.push('```mermaid');
-        lines.push(src);
+        lines.push('## Structure');
+        lines.push('```text');
+        lines.push(tree);
         lines.push('```');
     }
     return lines.join('\n');
@@ -675,7 +783,7 @@ async function loadAll() {
     renderSummary();
     renderFiles();
     renderFolders();
-    await loadMap();
+    await loadStructure();
     state.lastDataSig = await dataSignature();
 }
 
@@ -683,11 +791,19 @@ function wire() {
     $('btn-refresh').onclick = () => { loadAll(); toast('Refreshed'); };
     $('btn-stop').onclick = stopServer;
     $('btn-copy-serve').onclick = e => copyText('wikifier serve', e.target);
+    $('btn-copy-tree').onclick = e => {
+        const tree = treeText();
+        copyText(tree || 'No structure yet — run wikifier update-maps first.', e.target);
+    };
     $('btn-copy-mermaid').onclick = e => {
         const src = mermaidSource();
-        copyText(src || 'No map yet — run wikifier update-maps first.', e.target);
+        copyText(src || 'No diagram yet — run wikifier update-maps first.', e.target);
     };
     $('btn-copy-snapshot').onclick = e => copyText(buildSnapshot(), e.target);
+    $('graph-details').addEventListener('toggle', () => {
+        if ($('graph-details').open) renderGraph();
+    });
+    initPanZoom();
     ['btn-update', 'btn-update-full', 'btn-check'].forEach(id => {
         $(id).onclick = ev => runCommand(ev.target.dataset.cmd, ev.target);
     });
@@ -706,8 +822,26 @@ async function boot() {
     wire();
     await detectServer();
     await loadAll();
-    // Gentle background poll so monitor/agent updates appear automatically.
-    setInterval(() => { if (!state.running) loadAll(); }, 32000);
+    // Gentle background poll so monitor/agent updates appear automatically —
+    // and halts with an overlay once the server is gone, instead of spamming
+    // connection-refused errors forever.
+    state.pollTimer = setInterval(async () => {
+        if (state.running || state.halted) return;
+        if (state.execMode) {
+            try { await fetch('/__wikifier/status?cb=' + Date.now(), { cache: 'no-store' }); }
+            catch (e) {
+                haltDashboard('Server offline',
+                    'The <code>wikifier serve</code> process is no longer reachable. ' +
+                    'Run <code>wikifier serve</code> in the project folder and reload this page.');
+                return;
+            }
+        }
+        await loadAll();
+        if (state.failStreak >= 6) {
+            haltDashboard('Connection lost',
+                'The server stopped responding. Restart it (e.g. <code>wikifier serve</code>) and reload this page.');
+        }
+    }, 32000);
 }
 
 window.onload = boot;
