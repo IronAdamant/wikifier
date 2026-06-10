@@ -88,7 +88,7 @@ JS/TS parsing runs at ~22ms per file; Python at ~1ms. Incremental runs after the
 | `wikifier check-changes` | Incremental change scan + health/pending update |
 | `wikifier record-change <file> "reason"` | Log the *why* (required after edits) |
 | `wikifier mark-green <file>` | Mark the wiki entry current |
-| `wikifier update-maps [--full] [--directory=src/]` | Rebuild dependency graph + library.md (pure-Python pipeline; `--sh` for the legacy shell path) |
+| `wikifier update-maps [--full] [--directory=src/]` | Rebuild dependency graph + library.md (single pure-Python pipeline; the shell launcher delegates here) |
 | `wikifier health [--summary\|--json]` | Health matrix — compact formats for agents |
 | `wikifier cycles` | Circular dependency report with break recommendations |
 | `wikifier monitor &` / `wikifier daemon start` | Background heartbeat / managed maintenance |

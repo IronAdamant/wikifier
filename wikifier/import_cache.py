@@ -68,7 +68,15 @@ def save_cache(root: Path, cache: Dict[str, Any]) -> None:
 
     Uses file locking (M2-Rem-07) to prevent corruption when multiple
     agents are running update-maps or health operations concurrently.
+
+    Set WIKIFIER_DEBUG_SAVES=1 to print each save's call site to stderr —
+    the diagnostic for "who keeps rewriting the cache mid-run".
     """
+    if os.environ.get("WIKIFIER_DEBUG_SAVES"):
+        import sys as _sys
+        import traceback
+        frames = "".join(traceback.format_stack()[-4:-1])
+        print(f"[save_cache] root={root}\n{frames}", file=_sys.stderr)
     if locking:
         with locking.file_lock(root):
             _do_save_cache(root, cache)
@@ -100,8 +108,11 @@ def _do_save_cache(root: Path, cache: Dict[str, Any]) -> None:
                         cache[k] = prev[k]
     except Exception:
         pass  # never let preservation break the save itself
+    # Compact separators: the cache is machine-consumed only, and indent=2
+    # made barrel-heavy caches ~2-3x larger and proportionally slower to
+    # write (observed: 274MB on Babylon.js).
     with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump(cache, f, indent=2, ensure_ascii=False)
+        json.dump(cache, f, ensure_ascii=False, separators=(",", ":"))
 
 
 def get_file_data(cache: Dict[str, Any], rel_path: str) -> Optional[Dict[str, Any]]:

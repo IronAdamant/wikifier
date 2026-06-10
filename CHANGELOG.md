@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Thin shell**: `wikifier.sh`'s `update-maps` now delegates to the Python pipeline in a
+  single invocation; the ~1,750-line in-shell first-pass (one Python interpreter spawned
+  per file at ~12s/file, plus an incremental merge block that could deadlock on stdin)
+  is retired. The launcher shrank from 2,910 to 785 lines; `./wikifier.sh update-maps
+  --full` on the 18-file scratch project: 3m39s → 2.0s, and the previously-hanging
+  incremental second run completes in 1.5s. `--sh`/`--legacy-sh` are deprecated no-ops.
+- **BRC persistence bounded**: `_barrel_resolutions` chain entries now store lean,
+  deduped leaf references (the heavy per-leaf payloads are rebuilt at emission), index
+  merges are set-backed instead of linear list scans (quadratic on popular barrels), and
+  the cache is written compact (no indent). Synthetic barrel-hell (1,500-leaf barrel,
+  80 consumers): full run 10s with a 6.1MB cache; a scoped re-run that previously churned
+  for 93+ minutes completes in 1.0s with exactly one save. New diagnostic:
+  `WIKIFIER_DEBUG_SAVES=1` prints every cache save's call site.
+
 ### Fixed
 
 - **Barrel-leaf edge explosion**: a named import through an `export *` barrel emitted one

@@ -40,7 +40,7 @@ pip install -e .                       # dev install (entry points: wikifier, wi
 python -m wikifier <command>           # equivalent to the wikifier entry point
 ./wikifier.sh <command>                # shell launcher (root copy; packaged copy in wikifier/scripts/)
 wikifier init [--target DIR]           # bootstrap a target project (copies only index.html)
-wikifier update-maps [--full] [--directory=src/] [--max-files=N]   # rebuild dependency graph + library.md (pure-Python pipeline by default; --sh for the legacy shell path)
+wikifier update-maps [--full] [--directory=src/] [--max-files=N]   # rebuild dependency graph + library.md (pure-Python pipeline; wikifier.sh delegates here — the in-shell first-pass was retired, --sh is a deprecated no-op)
 wikifier health [--summary|--json]     # health matrix (use --summary/--json for machine consumption)
 wikifier monitor &                     # background incremental heartbeat
 wikifier daemon {start|stop|status}    # managed background maintenance

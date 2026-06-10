@@ -189,11 +189,20 @@ except ImportError:
 # Wave 3 External / Packaged Full-Update: improved root fallbacks for all parser paths
 # (supports direct python -m invocation + cwd in subdir / via-symlink / pnpm-store of
 # pip-installed external monorepo). Central discover now handles logical PWD walk-up.
+# Memo for _get_project_root_fallback: it is called per resolution site —
+# during barrel-leaf name routing that means per LEAF per statement — and each
+# call used to re-run marker-walk discovery plus Path.resolve(). On a deep
+# real tree (Babylon.js) that alone burned 75 minutes on a scoped re-run.
+# Keyed by (anchor, env root, cwd) so env/cwd changes can never serve a stale
+# root; cleared alongside the other parser caches.
+_root_fallback_cache: dict = {}
+
+
 def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Path:
     """Robust project root fallback used throughout JS parser + resolution sites.
 
     Primary: discover_project_root() (hardened for symlinks/pnpm stores).
-    Secondary: WIKIFIER_* env. Tertiary: default/cwd.
+    Secondary: WIKIFIER_* env. Tertiary: default/cwd. Memoized (see above).
 
     Containment rule: when `default` names the concrete file/dir being
     resolved, the returned root must CONTAIN it — a root that does not contain
@@ -206,6 +215,15 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
     A literal "." default carries no anchor meaning (callers use it for
     cache-root lookup) and keeps the historical discovery-first behavior.
     """
+    memo_key = (
+        str(default) if default is not None else None,
+        os.environ.get("WIKIFIER_PROJECT_ROOT") or os.environ.get("WIKIFIER_ROOT"),
+        os.getcwd(),
+    )
+    cached = _root_fallback_cache.get(memo_key)
+    if cached is not None:
+        return cached
+
     anchor: Optional[Path] = None
     if default is not None and str(default) != ".":
         try:
@@ -223,6 +241,10 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
         except ValueError:
             return False
 
+    def _finish(result: Path) -> Path:
+        _root_fallback_cache[memo_key] = result
+        return result
+
     try:
         # inside parsers/ -> ..cli sibling
         from ..cli import discover_project_root
@@ -230,7 +252,7 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
         if root:
             r = Path(root).resolve()
             if _contains(r):
-                return r
+                return _finish(r)
     except Exception:
         pass
     env = os.environ.get("WIKIFIER_PROJECT_ROOT") or os.environ.get("WIKIFIER_ROOT")
@@ -238,7 +260,7 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
         try:
             r = Path(env).expanduser().resolve()
             if _contains(r):
-                return r
+                return _finish(r)
         except Exception:
             pass
     if anchor is not None:
@@ -246,16 +268,16 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
         for cand in (anchor, *anchor.parents):
             try:
                 if any((cand / m).exists() for m in markers):
-                    return cand
+                    return _finish(cand)
             except OSError:
                 break
-        return anchor
+        return _finish(anchor)
     if default is not None:
         try:
-            return Path(default).resolve()
+            return _finish(Path(default).resolve())
         except Exception:
             pass
-    return Path.cwd().resolve()
+    return _finish(Path.cwd().resolve())
 
 
 def _make_diag_for_js(
@@ -1090,31 +1112,46 @@ def _follow_reexports(
         return []
 
 
+# Memo for _abs_resolved_target: name routing calls it once per barrel leaf
+# per statement (hundreds of thousands of times on barrel-heavy repos); the
+# (importer dir, resolved path) -> absolute mapping is stable within a run.
+# Cleared alongside the other parser caches.
+_abs_target_cache: dict = {}
+
+
 def _abs_resolved_target(importer_path: Path, resolved_path) -> Optional[Path]:
     """Best-effort absolutization of a resolver-produced path (W10 helper).
 
     central_resolve returns project-relative paths ("barrel/index.js"); legacy
     fallbacks may return absolute ones. Try project-root-, cwd- and
     importer-relative anchoring; return None when the file cannot be located.
+    Memoized per (importer dir, resolved path).
     """
     if not resolved_path:
         return None
+    memo_key = (str(importer_path.parent), str(resolved_path))
+    if memo_key in _abs_target_cache:
+        return _abs_target_cache[memo_key]
+    result: Optional[Path] = None
     try:
         p = Path(resolved_path)
         if p.is_absolute():
-            return p.resolve() if p.exists() else p
-        proj_root = _get_project_root_fallback(importer_path.parent)
-        cand = proj_root / p
-        if cand.exists():
-            return cand.resolve()
-        if p.exists():
-            return p.resolve()
-        cand2 = importer_path.parent / p
-        if cand2.exists():
-            return cand2.resolve()
+            result = p.resolve() if p.exists() else p
+        else:
+            proj_root = _get_project_root_fallback(importer_path.parent)
+            cand = proj_root / p
+            if cand.exists():
+                result = cand.resolve()
+            elif p.exists():
+                result = p.resolve()
+            else:
+                cand2 = importer_path.parent / p
+                if cand2.exists():
+                    result = cand2.resolve()
     except Exception:
-        return None
-    return None
+        result = None
+    _abs_target_cache[memo_key] = result
+    return result
 
 
 # Detector labels that do NOT constitute positive barrel evidence:
@@ -1875,6 +1912,8 @@ def _clear_reexport_cache() -> None:
     _reexport_cache.clear()
     _reexport_probe_cache.clear()
     _export_names_cache.clear()
+    _root_fallback_cache.clear()
+    _abs_target_cache.clear()
 
 
 # =============================================================================

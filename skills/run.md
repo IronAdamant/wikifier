@@ -8,7 +8,7 @@
 **See also**: `README.md` (Intended Use section: strictly agent-to-agent wiki for token saving), M5-Dogfood-Assessment-Report.md, Findings/2026-06-10-Dogfood-Refactor-Validation.md, and the library in wikifier/.
 
 **v0.6 migration notes (package v4.2.0)** — changes are additive or strictly-better defaults; v0.5 agent behavior keeps working:
-- `update-maps` (CLI) now runs the **pure-Python full pipeline by default**: every dirty file is parsed in-process, the canonical per-file cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `--python-primary` is accepted but redundant; `--sh`/`--legacy-sh` selects the legacy shell path (slow fallback). Scoping is explicit via `--directory=`/`--max-files=` and reported in the result (`files_skipped`) — there are no silent caps.
+- `update-maps` (CLI) now runs the **pure-Python full pipeline**: every dirty file is parsed in-process, the canonical per-file cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `--python-primary` is accepted but redundant; the in-shell first-pass was retired entirely (wikifier.sh's update-maps delegates to this pipeline; `--sh`/`--legacy-sh` are deprecated no-ops). Scoping is explicit via `--directory=`/`--max-files=` and reported in the result (`files_skipped`) — there are no silent caps.
 - `run_full_update`/`update_maps` returns gained additive fields: `files_parsed` (actual), `parseable_files`, `edges_persisted`, `files_skipped`, `cycles`, `library`. Tolerate additive fields as always.
 - `wikifier health --summary|--json|--format=...` now work from the CLI (previously library-only).
 - A POSIX lock self-deadlock in library `record_change`/`mark_green`/`check_changes` was fixed (locking is now re-entrant per process). MCP timeouts on those tools should no longer occur; the CLI fallback guidance below remains valid as defense in depth.
@@ -158,7 +158,7 @@ See the full design, mandatory workflow example, and M2 exit criteria in the pla
 | `wikifier prepare-edit` | `<file>` | Stage current mtime before you start editing (for future diffing). |
 | `wikifier mark-green` | `<file> [reason]` | Flip file status to Green after you have written/updated its wiki summary. |
 | `wikifier monitor` | — | Start background 30s heartbeat (run with `&` or in separate terminal). |
-| `wikifier update-maps` | `[--full] [--directory=...] [--max-files=N] [--sh]` | Rebuild `library.md` + import cache (pure-Python full pipeline by default; `--sh` = legacy shell fallback). |
+| `wikifier update-maps` | `[--full] [--directory=...] [--max-files=N]` | Rebuild `library.md` + import cache (single pure-Python pipeline; the shell launcher delegates here). |
 | `wikifier validate` | — | Ensure every file in monitored_paths has at least a health row. |
 | `wikifier journal` | `[YYYY-MM-DD]` | Read the journal for a day (default = today). |
 | `wikifier issues` | `[simple|moderate|high|critical]` | List logged issues by severity. |

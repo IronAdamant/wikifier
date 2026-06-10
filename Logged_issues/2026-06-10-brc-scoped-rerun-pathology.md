@@ -2,7 +2,21 @@
 
 **Date logged:** 2026-06-10
 **Severity:** Medium (does not affect the primary full/incremental pipeline; hits scoped re-runs and the sh fallback on barrel-heavy repos)
-**Status:** Open
+**Status:** RESOLVED 2026-06-10 (thin-shell + BRC rework)
+
+**Actual root causes (found via faulthandler stack dumps + WIKIFIER_DEBUG_SAVES):**
+1. The 75-minute scoped burner was NOT cache churn (0 mid-run saves): it was
+   `_get_project_root_fallback` re-running marker-walk discovery + Path.resolve()
+   **once per barrel leaf per statement** during name routing — ~hundreds of
+   thousands of discovery walks on a deep real tree. Fixed by memoizing it and
+   `_abs_resolved_target` (keyed by anchor/env/cwd; cleared with parser caches).
+   Babylon scoped re-run: 75min → 80.6s (and it parsed 2,070 barrel-affected files).
+2. BRC bloat was real and separate: lean deduped leaf references + set-backed index
+   merges + compact JSON dump took Babylon's cache 274MB → 101MB and the synthetic
+   scoped re-run to 1.0s with exactly one save.
+3. The sh incremental hang was retired wholesale: wikifier.sh's update-maps now
+   delegates to the Python pipeline (launcher 2,910 → 785 lines); the per-file spawn
+   loop and the deadlocking stdin merge block no longer exist.
 **Found during:** barrel-leaf explosion fix validation (user noticed stalled background commands)
 
 ## Symptom 1 — scoped re-run churn (Python path)

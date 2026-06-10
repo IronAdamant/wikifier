@@ -733,8 +733,12 @@ def main():
             python_primary_requested = True
             continue  # consume, do not forward to sh
         if a in ("--sh", "--legacy-sh", "--no-python-primary"):
-            python_primary_requested = False
-            continue  # consume, do not forward to sh
+            # The in-shell update-maps implementation was retired (2026-06-10
+            # thin-shell rework); wikifier.sh itself now delegates here.
+            print("[wikifier] note: --sh is a deprecated no-op — the legacy shell "
+                  "update-maps path was retired; the Python pipeline always runs.",
+                  file=sys.stderr)
+            continue  # consume; stay on the Python pipeline
         if a in ("update-maps", "update_maps"):
             is_update_maps_cmd = True
         stripped_filtered.append(a)

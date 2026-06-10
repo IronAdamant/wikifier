@@ -342,6 +342,10 @@ class BarrelResolutionCache:
     def __post_init__(self) -> None:
         self.resolutions = dict(self.resolutions or {})
         self.file_index = dict(self.file_index or {})
+        # Transient set views over persisted membership lists (never serialized;
+        # see _membership). Without these, store() membership tests were linear
+        # scans that went quadratic across a run on barrels with many importers.
+        self._fast_sets: Dict[str, set] = {}
 
     @classmethod
     def from_cache(cls, cache: Dict[str, Any]) -> "BarrelResolutionCache":
@@ -358,6 +362,16 @@ class BarrelResolutionCache:
         state); an explicit empty dict therefore remains the way to express
         intentional clearing (prune-to-zero, clear()).
         """
+        # Stable output: importer/chain lists are append-ordered in memory for
+        # speed; sort once here so the persisted form is deterministic.
+        for entry in self.resolutions.values():
+            if isinstance(entry.get("importers"), list):
+                entry["importers"] = sorted(set(entry["importers"]))
+        for idxe in self.file_index.values():
+            if isinstance(idxe.get("importers"), list):
+                idxe["importers"] = sorted(set(idxe["importers"]))
+            if isinstance(idxe.get("chain_ids"), list):
+                idxe["chain_ids"] = sorted(set(idxe["chain_ids"]))
         cache["_barrel_resolutions"] = self.resolutions or {}
         cache["_barrel_file_index"] = self.file_index or {}
 
@@ -371,6 +385,58 @@ class BarrelResolutionCache:
 
     def get(self, chain_id: str) -> Optional[Dict[str, Any]]:
         return self.resolutions.get(chain_id)
+
+    @staticmethod
+    def _lean_results(results: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """Compress chain results for persistence.
+
+        Stored results exist so a cache hit can replay the expansion (and so
+        name routing on hits still sees the full leaf set) — they do NOT need
+        the heavy per-leaf payloads (resolution_metadata, barrel_v2 hop blobs,
+        analysis fields), which the emission layer rebuilds or defaults.
+        Those payloads were the dominant weight of barrel-heavy caches
+        (274MB import_cache.json on Babylon.js). Leaves are also deduped by
+        resolved_path (BREE can reach the same leaf via multiple hop paths).
+        """
+        lean: List[Dict[str, Any]] = []
+        seen: set = set()
+        for r in results or []:
+            if not isinstance(r, dict):
+                continue
+            rp = r.get("resolved_path")
+            if rp:
+                if rp in seen:
+                    continue
+                seen.add(rp)
+            slim = {}
+            for k in (
+                "module", "resolved_path", "via_barrel", "barrel_chain",
+                "barrel_depth", "is_conditional", "conditional_context",
+                "barrel_detector",
+            ):
+                v = r.get(k)
+                if v is not None:
+                    slim[k] = v
+            lean.append(slim)
+        return lean
+
+    @staticmethod
+    def _lean_hops(hops: Optional[List[Any]]) -> List[Dict[str, Any]]:
+        """Keep only primitive hop fields (drop per-hop metadata dicts)."""
+        out: List[Dict[str, Any]] = []
+        for h in hops or []:
+            if isinstance(h, dict):
+                out.append({k: v for k, v in h.items() if not isinstance(v, (dict, list))})
+        return out
+
+    def _membership(self, key: str, current: List[str]) -> set:
+        """Transient set view over a persisted list (membership tests during
+        store() were linear scans — quadratic across a run on popular barrels)."""
+        s = self._fast_sets.get(key)
+        if s is None:
+            s = set(current)
+            self._fast_sets[key] = s
+        return s
 
     def store(
         self,
@@ -433,15 +499,19 @@ class BarrelResolutionCache:
                     snap[ck or str(k)] = 0.0
         cid = chain_id or self._make_chain_id(bc, start_specifier)
         entry = self.resolutions.get(cid, {})
-        # merge importers
-        existing_imps = set(entry.get("importers", []))
-        existing_imps.update(imps)
+        # merge importers (set-backed membership; lists stay the persisted form)
+        imp_list = entry.get("importers", [])
+        imp_set = self._membership(f"res:{cid}", imp_list)
+        for imp in imps:
+            if imp and imp not in imp_set:
+                imp_set.add(imp)
+                imp_list.append(imp)
         entry.update({
             "chain_id": cid,
-            "importers": sorted(existing_imps),
+            "importers": imp_list,
             "barrel_chain": bc or entry.get("barrel_chain", []),
-            "hops": hops or entry.get("hops", []),
-            "results": results or entry.get("results", []),
+            "hops": self._lean_hops(hops) if hops else entry.get("hops", []),
+            "results": self._lean_results(results) if results else entry.get("results", []),
             "start_specifier": start_specifier or entry.get("start_specifier", ""),
             "detector_used": detector_used or entry.get("detector_used", "unknown"),
             "is_partial": is_partial or entry.get("is_partial", False),
@@ -461,10 +531,14 @@ class BarrelResolutionCache:
             if fkey not in self.file_index:
                 self.file_index[fkey] = {"chain_ids": [], "importers": []}
             idxe = self.file_index[fkey]
-            if cid not in idxe["chain_ids"]:
+            cid_set = self._membership(f"idx_c:{fkey}", idxe["chain_ids"])
+            if cid not in cid_set:
+                cid_set.add(cid)
                 idxe["chain_ids"].append(cid)
+            imp_idx_set = self._membership(f"idx_i:{fkey}", idxe["importers"])
             for imp in imps:
-                if imp and imp not in idxe["importers"]:
+                if imp and imp not in imp_idx_set:
+                    imp_idx_set.add(imp)
                     idxe["importers"].append(imp)
 
         return cid
