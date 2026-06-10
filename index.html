@@ -770,8 +770,43 @@ Open index.html in the project for the live visual version.
         }
 
         // Boot: only what the human view needs (chart + files+descs + tree + monitor). Poll for live feel.
+        // Browsers refuse fetch() from file:// pages (unique-origin sandbox),
+        // so a double-clicked index.html can never read the wiki artifacts —
+        // the map stays empty while the console fills with CORS errors. Show
+        // the one-command fix prominently instead of failing silently.
+        function showFileProtocolNotice() {
+            const div = document.createElement('div');
+            div.id = 'file-protocol-notice';
+            div.style.cssText = 'position:sticky;top:0;z-index:60;background:#7c2d12;color:#ffedd5;padding:14px 18px;font-size:14px;line-height:1.6;box-shadow:0 2px 8px rgba(0,0,0,.4)';
+            div.innerHTML = '<strong>The dashboard cannot read the wiki files when opened directly from disk.</strong><br>' +
+                'Browsers block <code>fetch()</code> on <code>file://</code> pages (security sandbox), so the map and file list would stay empty. ' +
+                'Serve this folder over localhost instead — run one of these in the project folder, then open the link:' +
+                '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+                '<button id="fpCopyServe" style="background:#10b981;color:#06281e;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer">Copy: wikifier serve</button>' +
+                '<button id="fpCopyPy" style="background:#374151;color:#e5e7eb;border:none;border-radius:6px;padding:6px 12px;cursor:pointer">Copy: python3 -m http.server 8787</button>' +
+                '<a href="http://localhost:8787/index.html" style="color:#5eead4;text-decoration:underline">open http://localhost:8787/index.html</a>' +
+                '</div>';
+            document.body.prepend(div);
+            const wire = (id, text) => {
+                const b = document.getElementById(id);
+                if (!b) return;
+                b.onclick = () => navigator.clipboard.writeText(text).then(() => {
+                    const old = b.textContent;
+                    b.textContent = 'Copied ✓';
+                    setTimeout(() => { b.textContent = old; }, 1600);
+                });
+            };
+            wire('fpCopyServe', 'wikifier serve');
+            wire('fpCopyPy', 'python3 -m http.server 8787');
+        }
+
         function boot() {
             initTailwind();
+
+            if (location.protocol === 'file:') {
+                showFileProtocolNotice();
+                return; // skip data loads + polling: every fetch would fail
+            }
 
             loadHealthMatrix();
             loadMermaid();

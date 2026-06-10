@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Human dashboard opened via `file://` failed silently**: browsers block `fetch()` from
+  `file://` pages, so a double-clicked `index.html` showed an empty map while the console
+  filled with CORS errors (reported on llvm-project after a successful `update-maps`).
+  The page now detects `file:` protocol at boot, skips the doomed fetch polling, and shows
+  a prominent banner with one-click copyable fixes. New command: **`wikifier serve [port]`**
+  (stdlib `http.server` on 127.0.0.1, default 8787) so the fix is one word; `init` guidance
+  and docs updated to lead with it.
+
 ## [4.3.0] - 2026-06-10
 
 ### Changed

@@ -84,6 +84,7 @@ Core:
   mark-green <file>
   health
   monitor
+  serve [port]
   update-maps
   init
 
@@ -159,6 +160,13 @@ dist
             & $PSCommandPath check-changes
             Start-Sleep -Seconds 30
         }
+    }
+    "serve" {
+        # Browsers block fetch() on file:// pages, so index.html must be served.
+        $port = if ($Arguments -and $Arguments[0]) { $Arguments[0] } else { "8787" }
+        Write-Log "Serving $WikifierRoot at http://localhost:$port/index.html (Ctrl+C to stop)"
+        Set-Location $WikifierRoot
+        python -m http.server $port --bind 127.0.0.1
     }
     default {
         Write-Err "Unknown command '$Command'. Try 'wikifier help'."

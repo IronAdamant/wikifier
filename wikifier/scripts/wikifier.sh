@@ -258,6 +258,9 @@ Core Commands:
   update-maps                Rebuild library.md with import/dependency Mermaid graph.
   validate                   Check that every monitored file has at least a stub wiki entry.
   monitor                    Background heartbeat: runs check-changes every 30s forever.
+  serve [port]               Serve the project folder on localhost (default 8787) so the
+                             index.html dashboard can read the wiki files (browsers block
+                             file:// fetches — do not double-click index.html).
   daemon <start|stop|status|logs|restart|run|install-service|uninstall-service>
                              Long-running daemon for continuous health matrix + dependency freshness.
                              Survives laptop sleep/lid close via wake detection. Supports systemd user service.
@@ -493,6 +496,20 @@ cmd_monitor() {
     done
 }
 
+cmd_serve() {
+    # Serve the project folder over localhost so the human dashboard
+    # (index.html) can fetch the wiki artifacts. Browsers block fetch() on
+    # file:// pages, so a double-clicked index.html always shows an empty map
+    # — the dashboard itself now explains this and points here.
+    local port="${1:-8787}"
+    if ! command -v python3 >/dev/null 2>&1; then
+        error "serve requires python3 (uses the stdlib http.server)."
+        return 1
+    fi
+    log "Serving $PROJECT_ROOT at http://localhost:$port/index.html  (Ctrl+C to stop)"
+    ( cd "$PROJECT_ROOT" && exec python3 -m http.server "$port" --bind 127.0.0.1 )
+}
+
 cmd_update_maps() {
     # Thin delegation (the long-stated "shell becomes thin" goal): the full
     # pipeline — dirty detection, in-process parsing, canonical cache persist,
@@ -694,7 +711,7 @@ EOT
 
     log "✅ Wikifier initialised in $target_dir . Edit monitored_paths.txt to point at your real codebase (or subdirs for monorepos)."
     log "   Recommended: export WIKIFIER_PROJECT_ROOT=$target_dir  (or cd there and use ./wikifier.sh)"
-    log "   Human layer: open index.html in browser for this project's code structure chart + files + descriptions (auto-refreshes with monitor). Use the copy buttons for clean text exports (tree + snapshot) to LLMs or teammates."
+    log "   Human layer: run 'wikifier serve' and open http://localhost:8787/index.html for this project's code structure chart + files + descriptions (browsers block file:// fetches, so don't double-click index.html — the page will tell you the same). Use the copy buttons for clean text exports (tree + snapshot) to LLMs or teammates."
 }
 
 cmd_cycles() {
@@ -804,6 +821,7 @@ main() {
         prepare-edit)            cmd_prepare_edit "$@" ;;
         mark-green)              cmd_mark_green "$@" ;;
         monitor)                 cmd_monitor ;;
+        serve)                   cmd_serve "$@" ;;
         daemon)                  python3 -m wikifier.daemon "$@" ;;
         update-maps)             cmd_update_maps "$@" ;;
         validate)                cmd_validate ;;
