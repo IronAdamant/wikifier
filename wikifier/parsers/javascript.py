@@ -983,11 +983,13 @@ def _follow_reexports(
         barrel_ctx = {}
         try:
             from pathlib import Path as _P
-            from .bree import BarrelResolutionCache as _BRC
-            from .. import import_cache as _ic
+            from . import bree as _bree_mod
             proj_root = _get_project_root_fallback(".")
-            icache = _ic.load_cache(proj_root)
-            brc = _BRC.from_cache(icache)
+            # Process-level session cache: loaded once per root, flushed at the
+            # parse-run boundary. Building a fresh BarrelResolutionCache from a
+            # full import_cache.json load per follow call was the dominant cost
+            # of JS parsing on barrel-heavy projects.
+            brc = _bree_mod.get_session_barrel_cache(proj_root)
             barrel_ctx = {
                 "barrel_cache": brc,
                 "cache_root": proj_root,
@@ -1046,6 +1048,126 @@ def _follow_reexports(
 
     except Exception:
         return []
+
+
+def _abs_resolved_target(importer_path: Path, resolved_path) -> Optional[Path]:
+    """Best-effort absolutization of a resolver-produced path (W10 helper).
+
+    central_resolve returns project-relative paths ("barrel/index.js"); legacy
+    fallbacks may return absolute ones. Try project-root-, cwd- and
+    importer-relative anchoring; return None when the file cannot be located.
+    """
+    if not resolved_path:
+        return None
+    try:
+        p = Path(resolved_path)
+        if p.is_absolute():
+            return p.resolve() if p.exists() else p
+        proj_root = _get_project_root_fallback(importer_path.parent)
+        cand = proj_root / p
+        if cand.exists():
+            return cand.resolve()
+        if p.exists():
+            return p.resolve()
+        cand2 = importer_path.parent / p
+        if cand2.exists():
+            return cand2.resolve()
+    except Exception:
+        return None
+    return None
+
+
+# Detector labels that do NOT constitute positive barrel evidence:
+# "none" = BREE looked and found no barrel; "unresolved"/"resolution_failed" =
+# nothing was followed; "cycle" = expansion aborted; "cached" = replay default
+# that carries no signal of its own (real cached barrels keep their original
+# detector name). Empty/None = field absent.
+_NON_BARREL_DETECTORS = {None, "", "none", "unresolved", "resolution_failed", "cycle", "cached"}
+
+
+def _probe_shows_real_barrel(probe: List[Dict[str, Any]], direct_resolved_path, importer_path: Path) -> bool:
+    """N2/W10 fix (via_barrel pollution): decide whether a _follow_reexports
+    probe constitutes GENUINE barrel evidence for a normal (non export_*) import.
+
+    _follow_reexports/BREE unconditionally tag every result with
+    via_barrel=True / barrel_depth>=1 — even a plain `import {x} from './a.js'`
+    whose "chain" is just the directly-resolved file itself (depth 1, detector
+    "none", no hops). Emitting those as barrel edges polluted every clean
+    static import. Follow the probe only when the chain actually traversed
+    >=1 re-export hop, a detector positively identified the target as a
+    barrel, or the expansion produced leaves different from the direct
+    resolution. Depth-1 aggregator barrels (P6) stay covered by the direct
+    structural re-export check on the resolved target itself.
+
+    Unresolved imports (no direct resolution) keep the legacy partial-tagged
+    synthetic emission — barrelness cannot be disproved without a resolution,
+    and the synth is explicitly marked is_partial/no_resolved_path.
+    """
+    if not probe:
+        return False
+    if not direct_resolved_path:
+        return True  # legacy behavior for unresolved imports (partial synth)
+
+    direct_abs = _abs_resolved_target(importer_path, direct_resolved_path)
+    for r in probe:
+        if not isinstance(r, dict):
+            continue
+        # 1) Chain actually traversed a re-export hop (depth 1 = the file itself).
+        if (r.get("barrel_depth") or 0) >= 2:
+            return True
+        if len(r.get("barrel_chain") or []) >= 2:
+            return True
+        # 2) A BREE detector positively identified the resolved target as a barrel.
+        det = r.get("barrel_detector") or (r.get("barrel_v2") or {}).get("barrel_detector")
+        if det not in _NON_BARREL_DETECTORS:
+            return True
+        # 3) Expansion landed on a different file than the direct resolution.
+        rp = r.get("resolved_path")
+        if rp and direct_abs is not None:
+            r_abs = _abs_resolved_target(importer_path, rp)
+            if r_abs is not None and r_abs != direct_abs:
+                return True
+
+    # 4) Structural check on the directly-resolved target itself: covers
+    # depth-1 aggregator barrels and environments where BREE produced no hops
+    # (e.g. a cleared/unwired registry after reset_bree_engine, or unreadable
+    # project-relative paths — its extractor then silently returns []).
+    try:
+        direct_abs = direct_abs or _abs_resolved_target(importer_path, direct_resolved_path)
+        if direct_abs is not None and _file_has_reexports(direct_abs):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _file_has_reexports(abs_path: Path) -> bool:
+    """True if the file contains at least one re-export statement (W10 helper).
+
+    First asks the BREE-backed memoized extractor; on an empty answer falls
+    back to a direct scan with the authoritative hoisted EXPORT_PATTERNS,
+    because the engine path returns [] (without raising) whenever the BREE
+    registry is empty/unwired. Memoized per absolute path via _reexport_cache's
+    sibling dict and cleared together with it.
+    """
+    key = str(abs_path)
+    if key in _reexport_probe_cache:
+        return _reexport_probe_cache[key]
+    result = False
+    try:
+        if _extract_barrel_reexports(key):
+            result = True
+        else:
+            content = abs_path.read_text(encoding="utf-8", errors="ignore")
+            # Same cheap early-out as _extract_barrel_reexports
+            if "export" in content and "from" in content:
+                result = any(
+                    pattern.search(content) for pattern, _ptype in EXPORT_PATTERNS
+                )
+    except Exception:
+        result = False
+    _reexport_probe_cache[key] = result
+    return result
 
 
 # ---------------------------------------------------------------------
@@ -1543,8 +1665,13 @@ require_pattern = re.compile(
 )
 
 # import ... = require("...")
+# N2 dedupe fix: [^=\n;]+ (was [^=]+) — the unbounded class crossed statement
+# boundaries (newlines/semicolons), so `import {x} from './a';\nconst y = require('./b');`
+# matched as a single bogus import-equals and emitted a DUPLICATE edge for './b'
+# (already captured by require_pattern). TS `import x = require("y")` is a
+# single-line statement, so excluding \n and ; is safe.
 import_equals_pattern = re.compile(
-    r'import\s+[^=]+=\s*require\s*\(\s*[\'"]([^\'"]+)[\'"]',
+    r'import\s+[^=\n;]+=\s*require\s*\(\s*[\'"]([^\'"]+)[\'"]',
     re.MULTILINE
 )
 
@@ -1692,6 +1819,9 @@ if _bree_light and isinstance(_bree_light, LightweightRegexReexportExtractor):
 # Safe within-process cache for the duration of one parser invocation in update-maps.
 _parse_cache: dict[str, List[Dict[str, Any]]] = {}
 _reexport_cache: dict[str, list[dict]] = {}
+# W10: boolean "does this file contain any re-export?" probe results
+# (see _file_has_reexports); cleared together with _reexport_cache.
+_reexport_probe_cache: dict[str, bool] = {}
 
 
 def _clear_parse_cache() -> None:
@@ -1700,6 +1830,7 @@ def _clear_parse_cache() -> None:
 
 def _clear_reexport_cache() -> None:
     _reexport_cache.clear()
+    _reexport_probe_cache.clear()
 
 
 def _extract_barrel_reexports(filepath: str) -> list[dict]:
@@ -1885,21 +2016,27 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                 else:
                     continue
             else:
-                # Fallback for older patterns without named groups (rare after A1)
+                # Fallback for patterns without named groups (es_import, import_equals,
+                # export_*, import_type*, side_effect_import, ...). Every one of these
+                # patterns captures its specifier from INSIDE a quoted string literal,
+                # so the edge is static by construction.
+                #
+                # N2/W10 fix (is_dynamic bleed): this branch used to run the captured
+                # literal through _analyze_dynamic_specifier, which classified plain
+                # relative specifiers like './a.js' as dynamic_type="expression"
+                # (no surrounding quotes survive the regex capture), polluting every
+                # static ES import with is_dynamic=True + "low" confidence. The
+                # genuinely dynamic-capable patterns (require, dynamic_import,
+                # import.meta.resolve) all use named groups and are fully handled in
+                # the `if groups:` branch above — they never reach here.
                 raw_module = ""
                 for g in match.groups():
                     if g:
                         raw_module = g.strip()
                         break
-                if raw_module:
-                    analysis = _analyze_dynamic_specifier(raw_module)
-                    dynamic_type = analysis["dynamic_type"]
-                    dynamic_complexity = analysis["dynamic_complexity"]
-                    analysis_notes = analysis.get("analysis_notes", [])
-                else:
-                    dynamic_type = "unknown"
-                    dynamic_complexity = "opaque"
-                    analysis_notes = ["no_capture"]
+                dynamic_type = "static"
+                dynamic_complexity = "simple"
+                analysis_notes = []
                 expr_raw = None
                 dynamic_candidates = []
 
@@ -2024,16 +2161,46 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                 followed = _follow_reexports(path, raw_module, max_depth=_BARREL_MAX_DEPTH)
             else:
                 probe = _follow_reexports(path, raw_module, max_depth=_BARREL_MAX_DEPTH)
-                if probe:
-                    for f in probe:
-                        d = f.get("barrel_depth") or 0
-                        ch = f.get("barrel_chain") or []
-                        # Dogfood fix (P6): flag depth-1 barrels for normal imports too (CJS aggregator barrels like services/*/index.js in RecipeLab_alt etc.)
-                        # Previously only deeper expansions were tagged; now consistent with export_* path and BREE leaf emission.
-                        if d >= 1 or len(ch) >= 1:
-                            followed = probe
-                            break
+                # N2/W10 fix: only adopt the probe when it shows GENUINE barrel
+                # evidence (traversed >=1 re-export hop, positive detector,
+                # leaves differing from the direct resolution, or the resolved
+                # target structurally contains re-exports — the latter keeps the
+                # P6 depth-1 CJS aggregator barrels flagged). The previous
+                # `d >= 1 or len(ch) >= 1` accepted every probe result (BREE
+                # tags depth>=1 unconditionally), so EVERY resolvable relative
+                # import was spuriously emitted as via_barrel=True/barrel_depth=1.
+                if probe and _probe_shows_real_barrel(probe, resolved_path, path):
+                    followed = probe
             if followed:
+                # W10 canonical edge representation: for normal imports that hit a
+                # real barrel, emit the DIRECT entry-barrel edge first (the file the
+                # import statement actually lands on — the true filesystem
+                # dependency), then the BREE-expanded ultimate leaves. Previously
+                # only leaves were emitted, hiding the consumer -> entry-barrel
+                # dependency whenever expansion succeeded. Skipped when expansion
+                # already terminated on the entry file itself (no duplicate).
+                if not ptype.startswith("export_") and resolved_path:
+                    _root_abs = _abs_resolved_target(path, resolved_path)
+                    _root_already_present = False
+                    for f in followed:
+                        f_rp = f.get("resolved_path") if isinstance(f, dict) else None
+                        if f_rp and (
+                            f_rp == resolved_path
+                            or (_root_abs is not None and _abs_resolved_target(path, f_rp) == _root_abs)
+                        ):
+                            _root_already_present = True
+                            break
+                    if not _root_already_present:
+                        followed = [{
+                            "module": resolved_module,
+                            "resolved_path": resolved_path,
+                            "via_barrel": True,
+                            "barrel_chain": [raw_module],
+                            "barrel_depth": 1,
+                            "is_conditional": False,
+                            "conditional_context": None,
+                            "barrel_detector": (followed[0].get("barrel_detector") if isinstance(followed[0], dict) else None) or "bree",
+                        }] + list(followed)
                 for f in followed:
                     depth = f.get("barrel_depth", 1)
 
@@ -2165,6 +2332,11 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
                 "dynamic_type": dynamic_type if is_dynamic else "static",
                 "is_conditional": is_conditional,
                 "conditional_context": conditional_context,
+                # W10 canonical edge representation: a direct (non-barrel) edge
+                # explicitly states via_barrel=False / barrel_depth=0 instead of
+                # omitting the keys (additive; consumers tolerate extra fields).
+                "via_barrel": False,
+                "barrel_depth": 0,
                 # Phase 4: rich Resolution metadata for res_meta_v1 emission
                 "strategy": strategy_name,
                 "resolution_metadata": res_meta,
@@ -2195,7 +2367,41 @@ def parse_javascript_imports(filepath: str) -> List[Dict[str, Any]]:
     # Layer 3 (dataflow/aliases) and Layer 4 (registry) next per plan in m2-gap-closure doc.
     # Primary dynamic entries stay low/unresolved conf; candidates provide speculative signals.
 
+    # N2 dedupe: collapse fully-identical edges (same raw specifier, resolution,
+    # statement type, original statement and barrel/dynamic shape). Sources of
+    # duplicates: overlapping regex patterns matching the same statement, and
+    # BREE chains reaching the same leaf via equivalent re-export statements
+    # (e.g. export_from + export_star both matching `export * from './leaf'`).
+    # First occurrence wins (preserves emission order: entry barrel before leaves).
+    _seen_edge_sigs = set()
+    _deduped: List[Dict[str, Any]] = []
+    for _e in imports:
+        _sig = (
+            _e.get("raw_module"),
+            _e.get("resolved_path"),
+            _e.get("statement_type"),
+            _e.get("original_statement"),
+            bool(_e.get("via_barrel")),
+            _e.get("barrel_depth"),
+            bool(_e.get("is_dynamic")),
+        )
+        if _sig in _seen_edge_sigs:
+            continue
+        _seen_edge_sigs.add(_sig)
+        _deduped.append(_e)
+    imports = _deduped
+
     _parse_cache[key] = imports
+
+    # Persist any barrel-chain resolutions accumulated during this parse.
+    # One flush per file (pipe/standalone mode); batched runs (run_full_update)
+    # bracket the whole loop with bree.begin_batch()/end_batch() and flush once.
+    try:
+        from . import bree as _bree_mod
+        _bree_mod.flush_barrel_cache_if_not_batched()
+    except Exception:
+        pass
+
     return imports
 
 

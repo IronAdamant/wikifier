@@ -70,3 +70,6 @@ trammel.db
 .wikifier/
 .wikifier/**
 
+
+# Local agent-coordination state (session-scoped, never committed)
+.coordinationhub/

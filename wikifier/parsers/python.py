@@ -528,7 +528,8 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         original = match.group(0).strip()
 
         is_relative = raw_module.startswith('.')
-        level = len(re.match(r'\.+', raw_module).group()) if is_relative else 0
+        _dots = re.match(r'\.+', raw_module) if is_relative else None
+        level = len(_dots.group()) if _dots else 0
 
         resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
 
@@ -605,7 +606,8 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         original = match.group(0).strip()
 
         is_relative = raw_module.startswith('.')
-        level = len(re.match(r'\.+', raw_module).group()) if is_relative else 0
+        _dots = re.match(r'\.+', raw_module) if is_relative else None
+        level = len(_dots.group()) if _dots else 0
 
         resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
 

@@ -4,135 +4,130 @@
 [![PyPI version](https://img.shields.io/pypi/v/wikifier.svg)](https://pypi.org/project/wikifier/)
 [![GitHub Stars](https://img.shields.io/github/stars/IronAdamant/wikifier?style=social)](https://github.com/IronAdamant/wikifier/stargazers)
 
-**Agent-to-Agent Codebase Wiki — Token-Efficient • Autonomous • Zero-Dependency**
+**The agent-to-agent codebase wiki — a token-efficient codebase map for AI agents. Zero dependencies, autonomous, built for LLM context windows.**
 
-Wikifier gives AI agents and LLMs a living, queryable map of any codebase — from tiny scripts to 50k+ file monorepos — so they can look up files, imports, health status, and summaries without dumping full source into context.
+Wikifier gives AI coding agents and LLMs a living, queryable map of any codebase — file health matrix, dependency graphs, per-file summaries — so they can look things up instead of re-reading full source files into their context window. From small scripts to 50,000-file monorepos, agents get fast code navigation, import analysis, and circular dependency detection without burning tokens on code they don't need right now.
 
-The goal is token efficiency. It works as a token-saving agent-operated wiki layer that agents maintain themselves through a strict but lightweight workflow. Primary purpose: help LLMs and agents work on real codebases without wasting context on raw files they don't need right now.
+It is an automated library for AI agents: an agent asks for the map, gets a compact answer, and keeps the wiki current itself as it works.
 
-Key capabilities flow naturally from this:
-- Fast, targeted lookup through small `file_health.md`, `library.md` (with Mermaid dependency graphs and summaries), per-file `*.wiki.md` notes, health matrix, barrel reports, and incremental status.
-- Autonomous maintenance: after editing source, agents use `record-change "the why"` (this is mandatory) to log intent, then `mark-green` once the wiki entry is updated.
-- Support for creating new wiki entries or docs on the fly during agent work.
-- Works great with or without MCP. There's an optional `wikifier-mcp` server that provides rich tools such as `get_project_status`, `get_dependencies`, `get_file_wiki`, `suggest_next_actions`, and `check_changes`.
-- Handles large projects well thanks to incremental updates, directory scoping, and streaming modes. Everything is zero-dependency (pure Python + Bash).
+## Why Wikifier?
 
-**Mandatory agent protocol** (the exact loop agents should follow): `check-changes` → read the compact `file_health.md` + `pending_updates.md` → prioritize → edit → `record-change` → `mark-green` → `update-maps` when imports or structure change. The full LLM-ready details and examples live in `skills/run.md` (v0.5).
+Every AI coding assistant faces the same problem: context windows are finite and raw source code is expensive. Re-reading a 2,000-line file to answer "what does this module do and who imports it?" wastes tokens that could go toward actual reasoning.
 
-This entire project (including all the M5 dogfood evidence) was built and operated by agents using exactly this mode. It is deliberately **not** a general-purpose human documentation tool or IDE replacement — agent-to-agent first, always.
+Wikifier solves this with a small set of generated, queryable artifacts:
 
-See `--help`, `skills/run.md`, and the MCP README for concrete usage.
+- **`file_health.md`** — a documentation health matrix (🟢 current / 🟡 stale / 🔴 broken) so agents know what to trust and what to fix first
+- **`library.md`** — the codebase map: a Mermaid dependency diagram, resolved import tables, circular dependency report with break recommendations, and a confidence-scored risk snapshot
+- **Per-file `*.wiki.md` notes** — short "what this file is for" summaries, maintained by the agents themselves
+- **`journal/`** — a semantic audit trail of *why* every change was made, written by `record-change`
 
-### Intended Use: Strictly Agent-to-Agent (Token-Saving)
+The result: an LLM looks up a 50-token summary instead of ingesting a 5,000-token file. That's the entire point — token-efficient code understanding for AI agents.
 
-This is meant **strictly** as an agent-to-agent wiki layer for token saving:
+## How It Works — the Agent Loop
 
-- Primary purpose: save tokens for agents/LLMs by letting them consult the health matrix, file wikis, barrels, and incremental status instead of re-reading full sources.
-- Agents autonomously keep everything current: edit source → `record-change "the why"` → update the corresponding wiki entry → `mark-green`.
-- You can create new wiki-maintained files or docs as part of your agent sessions.
-- Typical workflow: run `wikifier check-changes`, read the small `file_health.md` + `pending_updates.md`, prioritize (🔴 then 🟡), do the work, record the change with intent, mark it green, and run `update-maps` when the dependency picture shifts.
-- **It shouldn't be used for anything more than that.** Not general human docs, not an IDE, not for broad non-agent use.
-
-The exact loop and LLM workflow are documented in `--help` and `skills/run.md`. All the real-world M5+ evidence in `Findings/` was produced by agents following this protocol precisely.
-
-### Status & Recent Changes
-
-M5 broad real-world dogfood (85-90%+) on multiple external 5k–50k+ creative projects is complete. See `Findings/M5-Dogfood-Progress.md`, `M5-Dogfood-Assessment-Report.md`, and `p6_real_world_validation_report.md` for full agent diaries, metrics, 9 Guiding Principles traces, and the M5.3 plan.
-
-Recent focus (v4.1.x):
-- Human investigation layer separation (only the clean `index.html` viewer is deployed to targets; `diagnostics.html` is maintainer-only).
-- Mapping & update speed hygiene (faster candidate collection with scandir + git fast-path, consistent excludes, parser micro-opts).
-- Human dashboard UX: prominent Quick actions toolbar with copy buttons for main commands (check-changes, update-maps, monitor &); big primary buttons in empty states for first-time setup; session-guarded auto-copy of `wikifier update-maps` on first "no structure map yet" render; live-wait model (buttons copy + immediately show fixed waiting banner + aggressive 3s auto-poll so chart/files auto-appear after terminal execution, with "I ran it — refresh now" link and success toast). Explanatory "why copy" note in UI (static viewer sandbox security; design choice for zero-dep; copy+live is the provided auto). Accepted as "Good enough".
-- mcp and skills docs sync: updated the human layer descriptions in `skills/run.md` and `wikifier/mcp/README.md` to accurately reflect the delivered copy + live-wait UX (banner, 3s poll, I-ran-it, first-run auto-wait, security rationale). See latest notes below. (This sync followed the "Good enough" acceptance of the model.)
-
-Full history moved to `docs/` and `Findings/`. The project stays deliberately lean and agent-first.
-
-**v4.1.4 (2026-06)**: mcp and skills docs sync for live-wait human dashboard UX (final polish to secondary viewer; no behaviour change or version bump this pass).
-- Extended human layer sections in `skills/run.md` (v0.5) and `wikifier/mcp/README.md` ("Human layer in MCP projects") + root README recent focus to fully document the delivered model after "Good enough" acceptance: Quick actions toolbar buttons (now copyAndWaitForUpdate), prominent primary buttons in empty states, session-guarded first-run auto-copy of update-maps + immediate live-wait activation, injected waiting banner ("Waiting for `...` ... (auto-polling every 3s)"), "I ran it — refresh now" link, 3s aggressive poll that auto-detects artifact writes (library.md / health) and refreshes views + success toast without further clicks, and the inline explanatory note on why copy+wait (pure static zero-dep viewer; browser security sandbox prevents direct host exec from JS; copy + live-wait + fast poll is the auto provided so results appear automatically post terminal run).
-- FRESH 3 hygiene (grep 0 def code matches on targets) + record-change (with subid=human-layer-live-wait-sync) + mark-green preceded/ followed the edits per protocol.
-- Complements v4.1.3 (buttons + first auto-copy landing in index.html) and keeps agent SSOT / MCP / CLI primary and unchanged. No core features added.
-
-**v4.1.3 (2026-06)**: Human dashboard command buttons + first-run update-maps UX (very minor polish to the secondary human investigation layer).
-- Added visible "Quick actions" bar with easy one-click copy buttons for the primary commands available to humans using the dashboard (check-changes, update-maps, start monitor). Feedback includes exact pasteable command + "run in this project folder then Refresh" guidance + manual refresh link.
-- Enhanced empty states ("No structure map yet", "No files yet") with prominent primary buttons for the relevant commands (update-maps prioritized, combined first-time setup for files).
-- "Automatically on first run": when the no-map empty state first appears in a browser session, the `wikifier update-maps` command is auto-copied (guarded by sessionStorage) with a note, making the recommended first action feel automatic. Buttons + instructions guide the user to run in terminal and refresh/poll.
-- Existing "Rebuild tree" / "Update data" buttons now use the improved copy+feedback UX. Keeps the clean human view (no dense agent internals).
-- All under protocol (FRESH, record+mark-green with subid=human-dashboard-commands). No new features or scope change. Complements the existing copy snapshot buttons and guidance.
-
-**v4.1.2 (2026-06)**: Speed improvements for updates on large projects (scandir/git fast-path in collectors, richer early pruning via `exclude_patterns.txt`, regex hoisting in parsers). Complements scoping, streaming budgets, and incremental dirty + barrel reverse index. No behaviour change.
-
-**v4.1.1**: Human layer separation enforcement (only `index.html` copied on init).
-
-**v4.1.0**: Structure cleanup (historical docs to `docs/`).
-
-**v4.0 + 4.0.1 + M5**: Broad dogfood, MCP hardening, zero-dep enforcement, sustained monitor/subagent foundations. See `Findings/` for details.
-
----
-
-## 🚀 Installation
-
-## Installation & Quick Start (for Agents & Humans)
+Agents keep the wiki alive through a strict but lightweight workflow (the full LLM-ready protocol lives in [`skills/run.md`](skills/run.md)):
 
 ```bash
-pip install wikifier
+wikifier check-changes          # what changed? (incremental, sub-second)
+# read file_health.md + pending_updates.md, prioritize 🔴 then 🟡
+# ... edit source ...
+wikifier record-change "path/file.py" "why this changed"   # mandatory — the semantic audit trail
+# ... update the file's wiki summary ...
+wikifier mark-green "path/file.py"
+wikifier update-maps            # when imports/structure changed
 ```
 
-For a project (recommended for agents):
+`record-change` is the heart of the system: it captures intent (the *why*), which is exactly the context the next agent session — or the next human — can't recover from a git diff alone.
+
+## Installation & Quick Start
 
 ```bash
-# 1. In the target project (or use WIKIFIER_PROJECT_ROOT)
-wikifier init
-
-# 2. Focus monitored_paths.txt for large repos (highly recommended)
-# 3. Run the agent loop
-wikifier check-changes
-wikifier health --summary
-# ... edit ... 
-wikifier record-change "path/to/file.py" "added feature X because Y (agent task Z)"
-wikifier mark-green "path/to/file.py"
-wikifier update-maps   # when imports/structure changed
+pip install wikifier            # zero-dependency core (pure Python stdlib)
+pip install wikifier[mcp]       # optional: adds the MCP server for AI agents
 ```
 
-**For MCP / AI agents** (Claude Desktop, Cursor, Cline, etc.):
+Bootstrap any project:
 
 ```bash
-WIKIFIER_PROJECT_ROOT=/abs/path/to/your/project wikifier-mcp
+cd /path/to/your/project
+wikifier init                   # creates monitored_paths.txt, excludes, and the human dashboard
+wikifier update-maps            # build the dependency graph + library.md
+wikifier check-changes          # start the loop
+wikifier health --summary       # compact machine-readable status
 ```
 
-Or pass `project_root=` on every tool call. Root detection priority: env var > explicit param > upward walk for markers > .mcp.json.
-
-Full protocol, examples, and LLM workflow: `skills/run.md` (read this first as an agent).
+For external projects or monorepos, always pass an explicit root: `WIKIFIER_PROJECT_ROOT=/abs/path wikifier ...`
 
 ## What You Get
 
-- Token-efficient lookup for agents (health matrix, library.md with Mermaid, file wikis, BRC, incremental status).
-- Autonomous maintenance: `record-change` (the "why") + `mark-green`.
-- Incremental + scoped + resumable for large codebases.
-- Optional MCP server with 23+ tools for agents.
-- Secondary clean `index.html` dashboard (after init) for humans browsing the agent's wiki (prominent Mermaid chart + files with short descriptions + folder browser + Quick actions copy+live-wait buttons that make updates appear automatically after terminal run).
-- True zero dependencies.
+- **Fast, real dependency analysis** — Python and JavaScript/TypeScript import parsing (ES modules, CommonJS, dynamic imports, TypeScript path aliases, package.json exports, workspaces), barrel/re-export chain expansion, and per-edge confidence scoring with actionable explanations
+- **A pure-Python update pipeline** — `update-maps` parses every changed file in-process, persists a canonical import cache, computes reverse dependencies, Tarjan-based circular dependency detection, and regenerates `library.md` atomically
+- **Incremental everything** — mtime-based dirty detection plus a barrel-aware reverse index means editing one file re-analyzes only its true consumers, even in barrel-heavy monorepos
+- **Autonomous maintenance** — agents log intent with `record-change`, refresh summaries, and `mark-green`; a background `monitor`/daemon keeps the matrix fresh
+- **An optional MCP server** — 23+ Model Context Protocol tools (`get_project_status`, `get_dependencies`, `get_file_wiki`, `get_cycles`, `suggest_next_actions`, …) for Claude Code, Claude Desktop, Cursor, Cline, and any MCP-capable AI agent
+- **A clean human dashboard** — `index.html`, a static read-only viewer of the same artifacts: the dependency chart, files with plain-language descriptions, and one-click copy buttons (see below)
+- **True zero dependencies** — the core runs on the Python standard library and POSIX shell alone, so forks can layer their own libraries on a dependency-free base
 
-See `skills/run.md` for the exact agent contract and `wikifier/mcp/README.md` for MCP setup.
+## Real-World Performance (v4.2.0, measured)
+
+Validated by dogfooding on Wikifier itself plus large open-source codebases — Apache Airflow, Babylon.js, LLVM, the Linux kernel, Rust, and llama_index:
+
+| Codebase | Scale | Full `update-maps` |
+|----------|-------|--------------------|
+| llama_index | 3,837 Python files | **~8.5s** (17k import edges, full map) |
+| Babylon.js | 3,905 TypeScript files, barrel-heavy | completes with full 5,389-node map |
+| Linux kernel / LLVM / Rust | 37k–54k file trees | candidate scan in 3–8s |
+
+JS/TS parsing runs at ~22ms per file; Python at ~1ms. Incremental runs after the first build take seconds. Verified by a stdlib-only test suite (`python -m unittest discover tests`).
 
 ## Core Commands
 
 | Command | Purpose |
 |---------|---------|
-| `wikifier check-changes` | Incremental scan + health/pending update |
-| `wikifier record-change <file> "reason"` | Log why (required after edits) |
+| `wikifier init [--target DIR]` | Bootstrap a project (templates + human dashboard) |
+| `wikifier check-changes` | Incremental change scan + health/pending update |
+| `wikifier record-change <file> "reason"` | Log the *why* (required after edits) |
 | `wikifier mark-green <file>` | Mark the wiki entry current |
-| `wikifier update-maps` | Rebuild dependency graph + library.md |
-| `wikifier health --summary` | Quick view (use for agents) |
-| `wikifier monitor &` | Background incremental heartbeat |
+| `wikifier update-maps [--full] [--directory=src/]` | Rebuild dependency graph + library.md (pure-Python pipeline; `--sh` for the legacy shell path) |
+| `wikifier health [--summary\|--json]` | Health matrix — compact formats for agents |
+| `wikifier cycles` | Circular dependency report with break recommendations |
+| `wikifier monitor &` / `wikifier daemon start` | Background heartbeat / managed maintenance |
 
-For full power use the Python library (`from wikifier import ...`) or MCP tools directly.
+Python library access for full power: `from wikifier import check_changes, record_change, mark_green, health, update_maps`.
+
+## MCP Server for AI Coding Agents
+
+```bash
+WIKIFIER_PROJECT_ROOT=/abs/path/to/project wikifier-mcp
+```
+
+Works with Claude Desktop, Claude Code, Cursor, Cline, and any Model Context Protocol client. Root detection priority: env var → explicit `project_root=` per call → marker walk → cwd. Setup, tool list, and client config examples: [`wikifier/mcp/README.md`](wikifier/mcp/README.md).
+
+## The Human Layer (Secondary, by Design)
+
+`wikifier init` copies a single static `index.html` into your project: a read-only dashboard showing the Mermaid code-structure chart, files with short descriptions, and a folder browser — useful for humans investigating what the agents know. Command buttons copy the exact CLI command and live-poll for results (a static page can't execute shell commands — that's the browser sandbox working as intended). The agent-facing markdown files and tools remain the single source of truth.
+
+## Intended Use: Strictly Agent-to-Agent
+
+Wikifier is a token-saving wiki layer *for agents*, and deliberately nothing more: not a general documentation generator, not an IDE plugin, not a code search engine for humans. Agents consult the map instead of re-reading sources, keep it current as they work, and create new wiki entries on the fly. The human dashboard is a window into that, not the product.
+
+## What's New in v4.2.0
+
+A full real-world dogfood sweep (this repo + RecipeLab + 8 large OSS projects) followed by a fix pass for everything it surfaced:
+
+- `update-maps` now defaults to the **pure-Python pipeline**: every changed file actually parsed, canonical cache schema, cycles/ACS/reverse-deps computed, `library.md` regenerated atomically
+- **43× faster JS/TS parsing** (barrel-cache persistence batched per run instead of per chain)
+- Fixed a POSIX lock self-deadlock in the library workflow calls (the likely cause of historical MCP timeouts), barrel-churn invalidation, static-import flag pollution, exclude-pattern globs, `health --summary/--json`, and several shell-path crashes — one of which could destroy an existing `library.md`
+- **New stdlib-only test suite** (28 tests) — the project's first formal regression net
+
+Full details: [`CHANGELOG.md`](CHANGELOG.md) and `Findings/2026-06-10-Dogfood-Refactor-Validation.md`.
 
 ## Links
 
-- GitHub: https://github.com/IronAdamant/wikifier
-- PyPI: https://pypi.org/project/wikifier/
-- Agent Protocol: `skills/run.md`
-- MCP: `wikifier/mcp/README.md`
-- Evidence: `Findings/` (M5 dogfood etc.)
+- **GitHub**: https://github.com/IronAdamant/wikifier
+- **PyPI**: https://pypi.org/project/wikifier/
+- **Agent Protocol**: [`skills/run.md`](skills/run.md) — read this first as an agent
+- **MCP Setup**: [`wikifier/mcp/README.md`](wikifier/mcp/README.md)
+- **Evidence**: `Findings/` — real-world dogfood reports and metrics
 
-**For AI search / agents**: Wikifier is a zero-dependency, agent-maintained, token-saving codebase wiki with autonomous `record-change` / `mark-green` updates, MCP tools, and strong support for large monorepos via scoping and streaming.
+**For AI search / agents**: Wikifier is a zero-dependency, agent-maintained codebase wiki and dependency graph generator that gives LLMs and AI coding agents token-efficient codebase maps — health matrix, Mermaid dependency diagrams, import analysis, circular dependency detection, and an optional MCP server — with autonomous `record-change` / `mark-green` updates, validated on monorepos up to 50k+ files.

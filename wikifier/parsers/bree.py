@@ -212,6 +212,11 @@ class ExpandedChainResult:
     # Phase 2 additions for persistent cache + graceful degradation
     is_partial: bool = False
     partial_reason: Optional[str] = None
+    # E1 fix (additive): canonical rel paths of EVERY file traversed in this expansion
+    # (entry barrel + intermediate barrel hops + leaves). Lets the top-level store build
+    # a complete mtimes_snapshot / file_index covering mid-chain barrels, which the
+    # results list alone cannot provide (it only carries final leaves).
+    chain_files: List[str] = field(default_factory=list)
 
 
 # =============================================================================
@@ -345,15 +350,16 @@ class BarrelResolutionCache:
         return cls(resolutions=dict(res), file_index=dict(idx))
 
     def to_cache_updates(self, cache: Dict[str, Any]) -> None:
-        """Push mutations back into the main cache dict (caller decides save)."""
-        if self.resolutions:
-            cache["_barrel_resolutions"] = self.resolutions
-        else:
-            cache.pop("_barrel_resolutions", None)
-        if self.file_index:
-            cache["_barrel_file_index"] = self.file_index
-        else:
-            cache.pop("_barrel_file_index", None)
+        """Push mutations back into the main cache dict (caller decides save).
+
+        E1 fix: always materialize both reserved keys (even when empty) instead of
+        popping them. save_cache() preserves on-disk barrel state only when the
+        keys are *absent* from the dict being saved (caller never touched barrel
+        state); an explicit empty dict therefore remains the way to express
+        intentional clearing (prune-to-zero, clear()).
+        """
+        cache["_barrel_resolutions"] = self.resolutions or {}
+        cache["_barrel_file_index"] = self.file_index or {}
 
     def _make_chain_id(self, barrel_chain: List[str], start_spec: str = "") -> str:
         key_mat = "|".join(barrel_chain or []) + "::" + (start_spec or "")
@@ -388,9 +394,19 @@ class BarrelResolutionCache:
         symlink/workspace safety and single identity for overlapping chains.
         """
         # Canonical normalization pass (importer_rel, barrel_chain, mtimes_snapshot keys, file_index)
-        # We defensively normalize here (root may be inferred from env if not passed; callers
-        # in expand_chain already pre-canonicalized via ctx).
-        root_for_norm = _get_project_root_fallback(".")
+        # We defensively normalize here. E1 fix: prefer the caller's project root (ctx["cache_root"],
+        # set by expand_chain) over CWD/env inference — when CWD != project root the fallback
+        # produced wrong canonical keys for relative paths, silently corrupting the snapshot/index.
+        root_for_norm = None
+        if ctx:
+            try:
+                cr = ctx.get("cache_root")
+                if cr:
+                    root_for_norm = Path(cr)
+            except Exception:
+                root_for_norm = None
+        if root_for_norm is None:
+            root_for_norm = _get_project_root_fallback(".")
         bc = [_brc_canonical(p, root_for_norm) for p in (barrel_chain or []) if p]
         imps = [_brc_canonical(p, root_for_norm) for p in (importers or []) if p]
         # Final squeeze (Agent B, BRC side): small defensive recording of importer when ctx has "importer_rel".
@@ -409,7 +425,12 @@ class BarrelResolutionCache:
         for k, v in (mtimes_snapshot or {}).items():
             if k:
                 ck = _brc_canonical(k, root_for_norm)
-                snap[ck or str(k)] = int(v)
+                # E1: keep sub-second precision (float). Whole-second ints made a
+                # snapshot-then-edit within the same second invisible to is_stale.
+                try:
+                    snap[ck or str(k)] = float(v)
+                except Exception:
+                    snap[ck or str(k)] = 0.0
         cid = chain_id or self._make_chain_id(bc, start_specifier)
         entry = self.resolutions.get(cid, {})
         # merge importers
@@ -465,8 +486,13 @@ class BarrelResolutionCache:
                     # Deleted barrel in chain → treat as stale so consumers get refreshed
                     # (they will naturally observe the missing import on re-expand).
                     return True
-                cur = ic_get_mtime(fp)  # see wrapper below
-                if cur > int(old or 0):
+                # E1: compare with sub-second precision (snapshots now store float
+                # mtimes); whole-second int comparison missed same-second edits.
+                try:
+                    cur = float(fp.stat().st_mtime)
+                except Exception:
+                    cur = float(ic_get_mtime(fp)) if callable(ic_get_mtime) else 0.0
+                if cur > float(old or 0):
                     return True
             except Exception:
                 return True
@@ -716,6 +742,90 @@ get_barrel_resolutions = None
 get_barrel_file_index = None
 ic_get_mtime = None
 _ensure_import_cache_helpers()
+
+
+# =============================================================================
+# Process-level barrel-cache session (performance-critical)
+#
+# expand_chain used to load AND save the entire import_cache.json once per
+# barrel chain expansion (multiple times per parsed file). On real projects
+# that serialization dominated parse time (~93% of wall time on Babylon.js).
+# Instead we keep one BarrelResolutionCache per process/root, mark it dirty on
+# store, and flush once: per parsed file in standalone/pipe mode, or once per
+# run when the caller brackets the run with begin_batch()/end_batch().
+# =============================================================================
+
+_BRC_SESSION: Dict[str, Any] = {"root": None, "brc": None, "dirty": False, "batch": False}
+
+
+def get_session_barrel_cache(cache_root: Path) -> Optional["BarrelResolutionCache"]:
+    """Return the per-process BarrelResolutionCache for cache_root (loaded once).
+
+    Switching roots flushes any pending state for the previous root first.
+    Returns None when the import cache cannot be loaded (standalone usage).
+    """
+    try:
+        root_key = str(Path(cache_root).resolve())
+    except Exception:
+        root_key = str(cache_root)
+    if _BRC_SESSION["brc"] is not None and _BRC_SESSION["root"] == root_key:
+        return _BRC_SESSION["brc"]
+    if _BRC_SESSION["dirty"]:
+        flush_barrel_cache()
+    try:
+        _ensure_import_cache_helpers()
+        from .. import import_cache as _ic
+        cdict = _ic.load_cache(Path(cache_root))
+        brc = BarrelResolutionCache.from_cache(cdict)
+    except Exception:
+        return None
+    _BRC_SESSION.update({"root": root_key, "brc": brc, "dirty": False})
+    return brc
+
+
+def mark_session_dirty(brc: Optional["BarrelResolutionCache"]) -> None:
+    """Mark the session cache as needing a flush (no-op for foreign caches)."""
+    if brc is not None and brc is _BRC_SESSION["brc"]:
+        _BRC_SESSION["dirty"] = True
+
+
+def begin_batch() -> None:
+    """Suppress per-file flushes; caller promises to call end_batch()."""
+    _BRC_SESSION["batch"] = True
+
+
+def end_batch() -> None:
+    """End a batched run and persist any pending barrel resolutions."""
+    _BRC_SESSION["batch"] = False
+    flush_barrel_cache()
+
+
+def flush_barrel_cache(force: bool = False) -> bool:
+    """Persist the session barrel cache into import_cache.json if dirty.
+
+    Returns True when a save happened. Lock-protected via import_cache.save_cache.
+    """
+    if _BRC_SESSION["brc"] is None or _BRC_SESSION["root"] is None:
+        return False
+    if not (_BRC_SESSION["dirty"] or force):
+        return False
+    try:
+        from .. import import_cache as _ic
+        root = Path(_BRC_SESSION["root"])
+        cdict = _ic.load_cache(root)
+        _BRC_SESSION["brc"].to_cache_updates(cdict)
+        _ic.save_cache(root, cdict)
+        _BRC_SESSION["dirty"] = False
+        return True
+    except Exception:
+        return False
+
+
+def flush_barrel_cache_if_not_batched() -> bool:
+    """Flush unless inside a begin_batch()/end_batch() bracket."""
+    if _BRC_SESSION["batch"]:
+        return False
+    return flush_barrel_cache()
 
 
 # =============================================================================
@@ -1311,18 +1421,15 @@ class BarrelReexportAnalysisEngine:
         is_top_level = context.get("_bree_top_level", True)  # caller marks first call
 
         if barrel_cache is None:
-            try:
-                _ensure_import_cache_helpers()
-                from .. import import_cache as _ic
-                cdict = _ic.load_cache(cache_root)
-                barrel_cache = BarrelResolutionCache.from_cache(cdict)
+            # Use the process-level session cache (loaded once per root) instead
+            # of re-reading import_cache.json on every top-level expansion.
+            barrel_cache = get_session_barrel_cache(cache_root)
+            if barrel_cache is not None:
                 # make available to recursive calls via **context
                 context["barrel_cache"] = barrel_cache
                 context["cache_root"] = cache_root
                 if importer_rel:
                     context["importer_rel"] = importer_rel
-            except Exception:
-                barrel_cache = None
 
         # Attempt early hit for this expansion level (keyed on resolved start + spec)
         # We perform the hit logic after first resolve below to have the real resolved_path.
@@ -1351,6 +1458,35 @@ class BarrelReexportAnalysisEngine:
 
         # Wave 1 canonical: use physical canonical form for all BRC keys/ids/snapshots
         resolved_for_brc = _brc_canonical(resolved_path, cache_root) if resolved_path else None
+
+        # E1 fix: anchor the (often project-relative, e.g. central_resolve canonical rel)
+        # resolved path to the project root for ALL file IO below (detector content reads,
+        # re-export extraction, recursion start file, mtime snapshots). Without this, every
+        # run with CWD != project root silently saw "file does not exist": no re-exports
+        # extracted (chain stopped at the entry barrel) and an empty mtimes_snapshot.
+        resolved_abs: Optional[Path] = None
+        if resolved_path:
+            try:
+                _rp = Path(str(resolved_path))
+                resolved_abs = _rp if _rp.is_absolute() else (Path(cache_root) / _rp)
+            except Exception:
+                resolved_abs = Path(str(resolved_path))
+        # E1: tolerate resolvers that return a DIRECTORY for a package/dir import
+        # (node-style). Without this, the directory was treated as an unreadable
+        # terminal leaf — no re-export extraction, chain never reached the real
+        # entry barrel, and leaf churn could not invalidate the consumer.
+        if resolved_abs is not None:
+            try:
+                if resolved_abs.is_dir():
+                    for _idx in ("index.js", "index.ts", "index.jsx", "index.tsx", "index.mjs", "index.cjs"):
+                        _cand = resolved_abs / _idx
+                        if _cand.is_file():
+                            resolved_abs = _cand
+                            resolved_path = str(_cand)
+                            resolved_for_brc = _brc_canonical(resolved_path, cache_root)
+                            break
+            except Exception:
+                pass
 
         # --- Phase 2: mtime-validated persistent cache hit (after first resolve gives us identity) ---
         cache_hit = False
@@ -1390,6 +1526,8 @@ class BarrelReexportAnalysisEngine:
                     hops=[],  # hops can be reconstructed from stored if needed; for perf we skip
                     is_partial=ch_partial,
                     partial_reason=ch_reason,
+                    # E1: replayed chains expose their full file set too (barrel_chain is canonical)
+                    chain_files=[str(c) for c in (cached_entry.get("barrel_chain") or []) if c],
                 )
 
         if not resolved_path:
@@ -1441,32 +1579,68 @@ class BarrelReexportAnalysisEngine:
         if resolved_path in visited:
             return ExpandedChainResult([], [], 0, "cycle", policy, is_partial=True, partial_reason="cycle_detected")
 
+        # E1: an empty visited set marks the chain-root call (the consumer's own import
+        # statement). Used below so the entry barrel itself is also emitted as an edge
+        # (legacy edge contract: consumer -> barrel/index.js) in addition to the leaves.
+        entry_is_chain_root = not visited
+
         visited.add(resolved_path)
 
         # Detect + extract using BREE strategies
+        # E1 fix: hand strategies the ROOT-ANCHORED path so file reads work from any CWD.
+        detect_path = str(resolved_abs) if resolved_abs is not None else str(resolved_path)
         barrel_info = self.is_barrel(
-            resolved_path,
+            detect_path,
             content=context.get("content"),
             lightweight_reexports=None,  # filled below
             **context,
         )
 
-        reexports = self.extract_reexports(resolved_path, **context)
+        reexports = self.extract_reexports(detect_path, **context)
 
         # If the detector didn't see reexports yet, give lightweight results to detectors
         if not barrel_info.is_barrel and reexports:
             barrel_info = self.is_barrel(
-                resolved_path,
+                detect_path,
                 lightweight_reexports=reexports,
                 **context,
             )
 
         results: List[Dict[str, Any]] = []
         hops: List[ReexportHop] = []
+        sub_chain_files: List[str] = []  # E1: intermediate barrel hops + sub-leaves from recursion
         current_depth = 1
         detector_name = barrel_info.detector_name if barrel_info.is_barrel else "none"
 
         if reexports and depth_limit > 1 and barrel_info.is_barrel:
+            # E1: at the chain root, FIRST emit the entry barrel itself as a regular
+            # via_barrel edge (consumer -> barrel/index.js). Expansion then appends
+            # the transitive leaves after it. This preserves the legacy edge contract
+            # (the entry barrel is the consumer's direct dependency) while the leaves
+            # carry the deep-chain information.
+            if entry_is_chain_root:
+                results.append({
+                    "module": display,
+                    "resolved_path": resolved_path,
+                    "via_barrel": True,
+                    "barrel_chain": [start_specifier],
+                    "barrel_depth": current_depth,
+                    "is_conditional": False,
+                    "conditional_context": None,
+                    "barrel_detector": detector_name,
+                    "barrel_v2": {
+                        "via_barrel": True,
+                        "barrel_depth": current_depth,
+                        "barrel_chain": [start_specifier],
+                        "barrel_detector": detector_name,
+                        "is_partial": False,
+                        "partial_reason": None,
+                        "hops": [],
+                        "mtimes_signature": "",
+                    },
+                    "resolution_metadata": hop_meta or {},
+                    "strategy": (hop_meta or {}).get("strategy", "bree-entry"),
+                })
             fanout = 0
             for reexp in reexports:
                 if fanout >= policy.max_fanout_per_hop:
@@ -1489,13 +1663,24 @@ class BarrelReexportAnalysisEngine:
                 if importer_rel:
                     sub_context["importer_rel"] = importer_rel
                 sub_res = self.expand_chain(
-                    Path(resolved_path),
+                    # E1 fix: recurse with the root-anchored file so the resolver
+                    # (e.g. central_resolve via javascript closure) gets a real
+                    # importer path regardless of CWD.
+                    resolved_abs if resolved_abs is not None else Path(resolved_path),
                     reexp.get("raw_module", ""),
                     resolver_func,
                     max_depth=depth_limit - 1,
                     visited=visited,
                     **sub_context,
                 )
+                # E1: accumulate every file the sub-expansion traversed (intermediate
+                # barrels + leaves) so the top-level snapshot/index covers the FULL chain.
+                try:
+                    for scf in (getattr(sub_res, "chain_files", None) or []):
+                        if scf and scf not in sub_chain_files:
+                            sub_chain_files.append(str(scf))
+                except Exception:
+                    pass
                 for sub in sub_res.results:
                     # Prepend current hop to chain (exactly as legacy did)
                     chain = sub.get("barrel_chain", [])
@@ -1552,27 +1737,46 @@ class BarrelReexportAnalysisEngine:
             results.append(leaf)
 
         # --- Phase 2: build mtimes snapshot for the chain we just expanded (or partial) ---
-        # Snapshot covers the entry barrel + every resolved_path we landed on in results
+        # Snapshot covers the entry barrel + every intermediate barrel hop traversed during
+        # recursion (sub_chain_files) + every leaf resolved_path in results.
         # Wave 1: canonicalize all barrel paths (barrel_chain + mtimes_snapshot keys) via to_canonical_rel v1
+        # E1 fix: (a) include intermediate hops, (b) anchor relative paths to cache_root before
+        # the exists()/mtime probe (they are project-relative canonical forms, NOT CWD-relative),
+        # (c) per-item tolerance — one bad path must not empty the whole snapshot.
         mtimes_snap: Dict[str, int] = {}
-        all_chain_files = set([str(resolved_path)] if resolved_path else [])
+        all_chain_files: List[str] = []  # ordered: entry barrel first, then deterministic rest
+        _seen_cf: set = set()
+
+        def _add_chain_file(x: Any) -> None:
+            s = str(x) if x else ""
+            if s and s not in _seen_cf:
+                _seen_cf.add(s)
+                all_chain_files.append(s)
+
+        if resolved_path:
+            _add_chain_file(resolved_path)
+        for f in sorted(str(s) for s in sub_chain_files if s):
+            _add_chain_file(f)
         for r in results:
-            rp = r.get("resolved_path")
+            rp = r.get("resolved_path") if isinstance(r, dict) else None
             if rp:
-                all_chain_files.add(str(rp))
-        # also the barrels we recursed through are represented by resolved_path at each level
+                _add_chain_file(rp)
         canon_chain_files: List[str] = []
-        try:
-            for f in all_chain_files:
-                if f:
-                    c = _brc_canonical(f, cache_root)
-                    if c:
-                        canon_chain_files.append(c)
-                    fp = Path(f)
-                    if fp.exists():
-                        mtimes_snap[c or str(f)] = ic_get_mtime(fp)
-        except Exception:
-            pass
+        for f in all_chain_files:
+            try:
+                c = _brc_canonical(f, cache_root)
+                if c and c not in canon_chain_files:
+                    canon_chain_files.append(c)
+                fp = Path(f)
+                if not fp.is_absolute():
+                    fp = Path(cache_root) / fp
+                if fp.exists():
+                    key = c or str(f)
+                    if key not in mtimes_snap:
+                        # float for sub-second churn detection (see is_stale)
+                        mtimes_snap[key] = float(fp.stat().st_mtime)
+            except Exception:
+                continue  # tolerate this path; keep snapshotting the rest of the chain
 
         chain_for_id = [str(resolved_path)] if resolved_path else []
         # For full chain we can enrich from results' barrel_chain but start with entry
@@ -1584,7 +1788,18 @@ class BarrelReexportAnalysisEngine:
 
         if barrel_cache is not None:
             imps_list = [importer_rel] if importer_rel else []
+            # E1 fix: store under the SAME chain_id the lookup above computes
+            # ([entry barrel] + specifier). The full multi-file barrel_chain would
+            # otherwise hash to a different id, so hits/promotions would target a
+            # different entry than the one stored here.
+            explicit_cid: Optional[str] = None
+            if resolved_for_brc:
+                try:
+                    explicit_cid = barrel_cache._make_chain_id([resolved_for_brc], start_specifier)
+                except Exception:
+                    explicit_cid = None
             barrel_cache.store(
+                chain_id=explicit_cid,
                 importers=imps_list,
                 barrel_chain=full_barrel_chain or [str(resolved_path)] if resolved_path else [],
                 hops=[h.__dict__ if hasattr(h, "__dict__") else (h if isinstance(h, dict) else {"raw": str(h)}) for h in (hops or [])],
@@ -1596,15 +1811,20 @@ class BarrelReexportAnalysisEngine:
                 mtimes_snapshot=mtimes_snap,
                 ctx=context,
             )
-            # Persist the updates to disk so subproc parsers and first-pass see them (lock-protected)
-            try:
-                _ensure_import_cache_helpers()
-                from .. import import_cache as _ic
-                cdict = _ic.load_cache(cache_root)
-                barrel_cache.to_cache_updates(cdict)
-                _ic.save_cache(cache_root, cdict)
-            except Exception:
-                pass  # best effort; cache still consistent in mem for this run
+            # Defer persistence: mark the session dirty and let the parse-run
+            # boundary flush once (per file in pipe mode, per run in batch mode).
+            # Foreign caches passed in via context manage their own persistence.
+            if barrel_cache is _BRC_SESSION["brc"]:
+                mark_session_dirty(barrel_cache)
+            else:
+                try:
+                    _ensure_import_cache_helpers()
+                    from .. import import_cache as _ic
+                    cdict = _ic.load_cache(cache_root)
+                    barrel_cache.to_cache_updates(cdict)
+                    _ic.save_cache(cache_root, cdict)
+                except Exception:
+                    pass  # best effort; cache still consistent in mem for this run
 
         return ExpandedChainResult(
             results=results,
@@ -1615,6 +1835,9 @@ class BarrelReexportAnalysisEngine:
             hops=hops,
             is_partial=final_is_partial,
             partial_reason="partial_chain" if final_is_partial else None,
+            # E1: expose the canonical file set so PARENT expansions can fold our
+            # entry barrel (their intermediate hop) + leaves into their snapshot.
+            chain_files=list(canon_chain_files),
         )
 
     def clear_memo(self) -> None:
@@ -1665,10 +1888,33 @@ def get_bree_engine(policy: Optional[ExpansionPolicy] = None) -> BarrelReexportA
 
 
 def reset_bree_engine() -> None:
-    """Test / diagnostic helper."""
+    """Test / diagnostic helper.
+
+    E1 fix: clearing the registry used to leave it EMPTY for the rest of the
+    process (defaults were registered exactly once at import), which silently
+    disabled barrel detection/extraction — chains stopped at the entry barrel
+    and importers were never invalidated on leaf edits. We now re-register the
+    module-level default instances (the same objects javascript.py wires its
+    authoritative EXPORT_PATTERNS into, so that injection survives resets).
+    Also flushes + detaches the process-level BRC session so per-root state
+    cannot leak across resets (flush-then-discard preserves store semantics).
+    """
     global _ENGINE
     _ENGINE = None
+    # Persist any pending session barrel state before discarding it.
+    try:
+        flush_barrel_cache()
+    except Exception:
+        pass
+    _BRC_SESSION.update({"root": None, "brc": None, "dirty": False, "batch": False})
     BREERegistry.clear()
+    # Restore the default strategy wiring (same singleton instances as import time).
+    BREERegistry.register_detector(_default_detector1, priority=100)
+    BREERegistry.register_detector(_default_detector2, priority=50)
+    BREERegistry.register_detector(_default_detector3, priority=30)
+    BREERegistry.register_extractor("lightweight-regex", _default_light_extractor)
+    BREERegistry.register_extractor("ast-full", ASTReexportExtractor())
+    BREERegistry.register_exports_handler("default-exports-map", _default_exports)
 
 
 # Convenience: show registered strategies (useful for debugging / library.md)

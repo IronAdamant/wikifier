@@ -2,7 +2,7 @@
 
 Wikifier provides a powerful, first-class **MCP server** using the Model Context Protocol.
 
-**This is explicitly part of the agent-to-agent wiki system** (see root README "Intended Use" and skills/run.md v0.5): for token-efficient file lookup (via health matrix, get_file_wiki, BRC reports, etc.), autonomous updates to wiki summaries, and creation of new wiki entries as agents work. Core Wikifier is **zero-dependency** (see pyproject.toml: dependencies = [] ; only optional `mcp` extra for the server). MCP support is opt-in and does not affect the zero-dep guarantee for agents using the library or CLI.
+**This is explicitly part of the agent-to-agent wiki system** (see root README "Intended Use" and skills/run.md v0.6): for token-efficient file lookup (via health matrix, get_file_wiki, BRC reports, etc.), autonomous updates to wiki summaries, and creation of new wiki entries as agents work. Core Wikifier is **zero-dependency** (see pyproject.toml: dependencies = [] ; only optional `mcp` extra for the server). MCP support is opt-in and does not affect the zero-dep guarantee for agents using the library or CLI.
 
 This allows AI coding agents to treat Wikifier as a native, transparent, and conservative codebase memory system for the strict agent-to-agent wiki use case.
 
@@ -89,6 +89,13 @@ M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon 
 **Human layer in MCP projects**: `wikifier init --target` (or equivalent) copies only `index.html` (the human viewer) into the project root — the same folder the MCP server/CLI operate on. `diagnostics.html` (Wikifier's maintainer/refactor hub with its own architecture and source tree) is no longer copied; it would point at the wrong folder and be stale/irrelevant for the host project (delete any old copy if present). Humans open the local `index.html` (best via `python -m http.server 8000`) for a clean visual of *this project's* wiki: the code structure/dependency chart (Mermaid) is the prominent hero at the top, followed by "Files & descriptions" (paths + short wiki summaries of what each file does) and a simple folder browser. A "Quick actions" toolbar provides one-click copy buttons for the main commands (check-changes, update-maps, monitor &); empty states have prominent buttons for first-time commands (update-maps prioritized). On first open (no map yet), the update-maps command is auto-copied (sessionStorage-guarded) with guidance so initial setup feels automatic — and live-wait mode starts immediately. Buttons use an enhanced copy+live-wait model: copy the exact command, inject a fixed "Waiting for `wikifier update-maps` (or combined) to produce data... (auto-polling every 3s)" banner at top, with an "I ran it — refresh now" link; an aggressive 3s setInterval then reloads the relevant sections (mermaid for update-maps, health for check) and auto-detects when data appears (hasMap / hasFiles from the artifacts written by the terminal execution), stops polling, removes banner, shows success toast "✓ Data updated! View refreshed.", and forces view refresh — so the trees/files appear automatically after the user runs the pasted command. A UI note explains the design: pure static client-side viewer (zero runtime deps, no privileged code); browser sandbox prevents static JS from executing host shell commands; the provided auto is copy + live-wait + fast poll so results show without further UI action post-terminal-run. This was accepted as "Good enough" after full rationale. Two big copy buttons give "Copy structure as text" (just the Mermaid) and "Copy full snapshot (tree + files + descriptions)" — clean Markdown ready to paste into docs, emails, or LLM chats. The main human page deliberately shows *only* what's useful for human investigation (chart + files + what they look like); dense agent details live in `diagnostics.html` in the Wikifier source (for maintainers/porters of the tool). Agent-to-agent work via MCP tools + the text files stays primary and unchanged. This is the secondary human investigation / export layer on top of the zero-dep agent wiki.
 
 
+## Reliability Notes (v4.2.0)
+
+- `update_maps` now drives the **real pure-Python pipeline** by default: every dirty file is parsed in-process, the canonical cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `directory=` and `max_files=` are explicit scoping, reported back as `files_skipped` (no silent caps). Measured: 3,837 Python files in ~8.5s.
+- A POSIX lock self-deadlock in `record_change`/`mark_green`/`check_changes` (the likely cause of historical MCP timeout reports on these tools) is fixed — locking is now re-entrant per process.
+- Barrel-cache persistence is batched per run instead of per chain expansion (~43× faster JS/TS parsing on barrel-heavy projects).
+- The optional `mcp` dependency is now import-guarded: the core `wikifier` package imports cleanly without it, and `wikifier-mcp` fails with a clear "pip install wikifier[mcp]" message instead of a traceback.
+
 ## High-Value Tools
 
 ### Core
@@ -120,11 +127,11 @@ M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon 
 
 ## Philosophy (Agent-to-Agent Wiki, Zero-Dep Core)
 
-- **Strictly agent-to-agent wiki for token saving** (per root README "Intended Use" and skills/run.md v0.5): quick file lookup via the health matrix / get_file_wiki / BRC / stele chunks (instead of dumping full sources into context), autonomous updates to wiki summaries, and creation of new wiki-maintained files/entries as agents work. It should not be used for anything more.
+- **Strictly agent-to-agent wiki for token saving** (per root README "Intended Use" and skills/run.md v0.6): quick file lookup via the health matrix / get_file_wiki / BRC / stele chunks (instead of dumping full sources into context), autonomous updates to wiki summaries, and creation of new wiki-maintained files/entries as agents work. It should not be used for anything more.
 
 - **Zero-dependency by design** — core (health matrix, record-change, check-changes, library, CLI) has no runtime dependencies (see pyproject.toml). MCP server/tools are optional via the `[mcp]` extra only. This keeps the agent wiki layer lightweight and portable for any environment.
 
-- **Conservative by default** — prioritizes accuracy and trustworthiness over completeness. Agents should prefer `format="summary"` or `"json"` + `directory=` scoping on large projects, and fall back to CLI when MCP times out (M5 reality on BRC-heavy or 50k+ targets).
+- **Conservative by default** — prioritizes accuracy and trustworthiness over completeness. Agents should prefer `format="summary"` or `"json"` + `directory=` scoping on large projects. Timeouts are rare since v4.2.0 (deadlock fix + batched barrel persistence), but the CLI fallback remains valid defense in depth on extreme targets.
 - **Highly transparent** — agents can see resolution stats, health, and limitations.
 - **Agent-native** — high-level tools (`get_project_status`, `suggest_next_actions`, `get_dependents`) are first-class citizens.
 - **Concurrency safe** (M2-Rem-07) — critical state files are protected by file locking so multiple agents + background monitors can safely operate in parallel.

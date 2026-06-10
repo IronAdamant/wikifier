@@ -249,6 +249,10 @@ def daemon_loop() -> None:
 
 def cmd_start() -> None:
     """Start the daemon in the background (double-fork, daemonize)."""
+    if not hasattr(os, "fork"):
+        print("The background daemon requires a Unix-like OS (os.fork is unavailable here).")
+        print("On Windows, run 'wikifier daemon run' in a terminal (foreground) or use an external process manager.")
+        sys.exit(1)
     ensure_state_dir()
 
     pid = read_pid()

@@ -77,9 +77,29 @@ def save_cache(root: Path, cache: Dict[str, Any]) -> None:
 
 
 def _do_save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Internal save without locking."""
+    """Internal save without locking.
+
+    E1 fix (barrel churn invalidation): the BREE BarrelResolutionCache persists its
+    reserved keys (_barrel_resolutions / _barrel_file_index) out-of-band during parsing
+    (session flush or legacy immediate-persist). A caller then saving an older/stale
+    cache dict that never touched barrel state would silently erase them. Preserve the
+    on-disk values when the keys are ABSENT from the dict being saved; intentional
+    clearing always goes through to_cache_updates()/set_barrel_*() which now write
+    explicit (possibly empty) dicts.
+    """
     cache_path = _get_cache_path(root)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
+    _BARREL_KEYS = ("_barrel_resolutions", "_barrel_file_index")
+    try:
+        if cache_path.exists() and any(k not in cache for k in _BARREL_KEYS):
+            with open(cache_path, "r", encoding="utf-8") as f:
+                prev = json.load(f)
+            if isinstance(prev, dict):
+                for k in _BARREL_KEYS:
+                    if k not in cache and prev.get(k):
+                        cache[k] = prev[k]
+    except Exception:
+        pass  # never let preservation break the save itself
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2, ensure_ascii=False)
 
@@ -1273,14 +1293,6 @@ def compute_files_needing_reparse(
 # The real state lives under reserved top-level keys in the import cache JSON.
 # =============================================================================
 
-def get_mtime(path: Path) -> int:
-    """Return mtime of a file as int seconds (0 on error)."""
-    try:
-        return int(path.stat().st_mtime)
-    except Exception:
-        return 0
-
-
 def get_barrel_resolutions(cache: Dict[str, Any]) -> Dict[str, Any]:
     """Return the persisted _barrel_resolutions dict (or empty)."""
     return (cache or {}).get("_barrel_resolutions", {}) or {}
@@ -1292,17 +1304,14 @@ def get_barrel_file_index(cache: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def set_barrel_resolutions(cache: Dict[str, Any], resolutions: Dict[str, Any]) -> None:
-    if resolutions:
-        cache["_barrel_resolutions"] = resolutions
-    else:
-        cache.pop("_barrel_resolutions", None)
+    # E1: always materialize the key (empty dict = intentional clear). save_cache()
+    # only preserves on-disk barrel state when the key is absent from the saved dict.
+    cache["_barrel_resolutions"] = resolutions or {}
 
 
 def set_barrel_file_index(cache: Dict[str, Any], file_index: Dict[str, Any]) -> None:
-    if file_index:
-        cache["_barrel_file_index"] = file_index
-    else:
-        cache.pop("_barrel_file_index", None)
+    # E1: always materialize the key (empty dict = intentional clear); see save_cache().
+    cache["_barrel_file_index"] = file_index or {}
 
 
 def invalidate_stale_barrel_entries(

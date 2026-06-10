@@ -1,22 +1,15 @@
 """
-Wikifier MCP Server - Rich Edition (M5 Hardened)
+Wikifier MCP Server
 
-This is a first-class Model Context Protocol (MCP) server for Wikifier.
+A Model Context Protocol (MCP) server exposing Wikifier as an
+**agent-to-agent codebase wiki** for token-efficient file lookup (health
+matrix, get_file_wiki, barrel reports), autonomous wiki summary updates,
+and creation of new wiki entries as agents work. Strictly for that purpose
+(see README "Intended Use" and skills/run.md).
 
-It is designed to be used by agents (Claude, Cline, Cursor, etc.) as a
-powerful, transparent, and conservative **agent-to-agent codebase wiki**
-for token-efficient file lookup (health matrix, get_file_wiki, BRC reports,
-stele chunks), autonomous wiki summary updates, and creation of new wiki
-entries as agents work. Strictly for that purpose (see README "Intended Use"
-and skills/run.md v0.5).
-
-M5 dogfood (external 5k-79k+ projects incl. alt BRC stress ~19-20 named,
-Consistency ~1k, llvm 79k+ C++) + M5.1 hardening (external root discovery,
-60s timeouts + actionable errors, health pruning, CLI parity) + M5.3
-sustained (monitors/daemons for 30s heartbeat "Pruned 0") + post-4.0.1
-health hygiene (_coerce_root for str|Path roots in direct calls, 
-SUPERSEDED_PATTERNS prune for lean matrix while keeping audit Reds) inform the
-reliability.
+Validated on external projects from ~1k to 79k+ files. Commands run with a
+60s timeout and actionable errors; on very large or barrel-heavy targets,
+tools fall back gracefully to the CLI/library path.
 
 Run with:
     python -m wikifier.mcp.server
@@ -24,11 +17,21 @@ Run with:
     wikifier-mcp
 
 Always pass project_root= (or WIKIFIER_PROJECT_ROOT) for external/user
-projects. Falls back gracefully to CLI/library on large/BRC targets.
+projects.
+
+This module requires the optional 'mcp' extra. The core wikifier package
+must remain importable without it (zero-dependency contract).
 """
 
-from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, Field
+try:
+    from mcp.server.fastmcp import FastMCP
+    from pydantic import BaseModel, Field
+except ImportError as _e:
+    raise ImportError(
+        "The Wikifier MCP server requires the optional 'mcp' dependency. "
+        "Install it with: pip install wikifier[mcp]. "
+        "The core wikifier CLI and library work without it."
+    ) from _e
 import subprocess
 import re
 import os
@@ -238,8 +241,12 @@ def _run_wikifier_command(cmd: str, args: list[str] | None = None, check: bool =
             raise RuntimeError(f"Wikifier command '{cmd}' failed on {root}: {error_msg}")
         return f"Error: {error_msg}"
     except subprocess.TimeoutExpired as e:
-        # M5.1: better error messages for timeouts (per report MCP get_barrel/get_status/get_files/suggest often timeout 6000s on alt BRC or Consistency; shell+lib reliable equiv used). Surfaces actionable (use python-primary/dir scope).
-        error_msg = f"timed out after 60s (M5.1 hardening; alt BRC ~20+ y/chains, Consistency ~1k, llvm 4min/1363 chains/168k units per M5-Dogfood-Assessment-Report+Progress; recommend python lib equivs or scoped for <30s DoD#2)"
+        error_msg = (
+            f"command '{cmd}' exceeded the 60s timeout on {root}. "
+            "Large or barrel-heavy projects can exceed this via the shell path; "
+            "use the Python library equivalents (e.g. update_maps with "
+            "use_python_primary=True) or scope the run with directory=/max_files="
+        )
         if check:
             raise RuntimeError(f"Wikifier command '{cmd}' timed out on {root}: {error_msg}")
         return f"Error: timeout: {error_msg}"
@@ -582,7 +589,7 @@ def update_maps(
         if "edges drawn" in line:
             try:
                 edges = int(line.split()[-2])
-            except:
+            except (ValueError, IndexError):
                 pass
         if "Files analyzed" in line or "Python:" in line:
             # Rough extraction
@@ -1538,8 +1545,6 @@ def get_file_wiki(file: str, format: Literal["text", "json"] = "text", project_r
                 "After writing the summary, run mark_green on the file"
             ]
         }
-    return f"Could not find a dedicated wiki summary for {file}. Tried many locations. Consider creating {base_no_ext}.wiki.md next to the source."
-
     return (
         f"No dedicated wiki summary found for {file}.\n\n"
         "Recommended locations (best to good):\n"
@@ -1791,9 +1796,13 @@ Use get_files_needing_attention() for the actual list."""
 
 
 @mcp.tool()
-def get_current_project_root() -> str:
-    """Return the project root currently being used by this Wikifier MCP instance."""
-    return str(WIKIFIER_ROOT)
+def get_current_project_root(project_root: Optional[str] = None) -> str:
+    """Return the effective project root for this Wikifier MCP instance.
+
+    Like every other tool, an explicit project_root= overrides the
+    startup-time discovered root (multi-project agent support).
+    """
+    return str(_get_effective_root(project_root))
 
 
 @mcp.tool()
@@ -1959,7 +1968,7 @@ def get_incremental_status(project_root: Optional[str] = None) -> dict:
     if last_update_path.exists():
         try:
             last_update = last_update_path.read_text().strip()
-        except:
+        except (OSError, UnicodeDecodeError):
             last_update = "unreadable"
 
     return {

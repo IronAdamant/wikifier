@@ -7,7 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.2.0] - 2026-06-10
+
+**Real-world dogfood sweep (Wikifier itself, RecipeLab_alt, 8 large open-source projects
+incl. llvm/linux/rust/airflow/Babylon.js) + fixes for everything it surfaced.** Findings:
+`Findings/2026-06-10-Dogfood-Refactor-Validation.md`; plan: `Findings/2026-06-10-Fix-Plan.md`.
+
+### Added
+
+- **Test suite** (`tests/`, pure stdlib unittest, 28 tests): parser edge contract, cache
+  schema round-trip, cycles, barrel-churn invalidation, health workflow, exclude patterns.
+  Run with `python -m unittest discover tests`.
+- **`wikifier/library.py`** — pure-Python library.md generator (Mermaid graph with
+  directory subgraphs + confidence-styled edges, dependency table, cycles/CIABRE, ACS
+  snapshot, reverse deps, barrel + conditional/dynamic intelligence). Atomic writes.
+
+### Changed
+
+- **`update-maps` now defaults to the pure-Python pipeline** (`run_full_update`): parses
+  ALL dirty files in-process, persists the canonical per-file schema, computes reverse
+  deps + cycles + ACS, regenerates library.md atomically. `--sh`/`--legacy-sh` selects the
+  old shell path. Scoping via `--directory=`/`--max-files=` is explicit and reported
+  (`files_skipped`) — no silent caps. Measured: llama_index (3,837 py files) full run in
+  ~8.5s with 17k edges; Babylon.js (3,905 ts files, barrel-heavy) completes with full map.
+- **BREE barrel-cache persistence batched**: one flush per parse run/file instead of a
+  full import_cache.json load+save per chain expansion. JS/TS parsing on Babylon.js:
+  963ms/file → ~22ms/file (43×) with identical edges.
+
+### Fixed
+
+- **`run_full_update` was a façade**: parsed only `min(20, dirty)` files while reporting
+  success with the full dirty count, wrote a schema-divergent cache (top-level list,
+  absolute paths, stringified booleans), never produced library.md. Now a real pipeline.
+- **wikifier.sh map build crash + artifact destruction**: undeclared `node_dependents`
+  array crashed the Mermaid build under `set -u` on bare-module nodes (e.g. `os`), and
+  library.md was truncated before building — a crash destroyed the previous artifact
+  (observed in the wild on RecipeLab_alt). Builds are now atomic (temp + mv) and the
+  dead code is removed. Also: `((var++))` counters killed the script under `set -e` at
+  zero; missing `except` in the embedded dirty-detection Python was a silent SyntaxError
+  that disabled incremental detection (every run reparsed everything); missing
+  `import os` + subshell-lost assignments broke reverse-dependency preload silently.
+- **POSIX self-deadlock in library workflow calls**: `cli.record_change`/`mark_green`/
+  `check_changes` held the project lock and then re-acquired it via `health.upsert_entry`
+  (flock is not re-entrant across fds) — blocking forever. Likely the root cause of
+  long-standing MCP timeout reports. `locking.file_lock` is now re-entrant per process.
+- **JS parser data quality**: plain static imports were flagged
+  `is_dynamic=True`/`via_barrel=True`/`confidence=low` (unnamed-group fallback ran static
+  specifiers through dynamic analysis; BREE tagged every relative import as a depth-1
+  barrel). Barrel edges now require actual re-export evidence; `import x = require()`
+  no longer crosses statement boundaries (duplicate edges); final dedupe pass added.
+- **Barrel churn invalidation (E1)**: editing a chain leaf/mid file now correctly marks
+  importers stale (mtimes_snapshot covered the whole chain only after fix; the
+  `_barrel_file_index` now indexes every chain member; parser self-test churn 4/4).
+- `exclude_patterns.txt` file globs (e.g. `*.pyc`, `generated_*.py`) are now honored by
+  the Python collector (previously directory names only).
+- `wikifier health --summary|--json|--format=...` now work from the CLI (previously
+  silently ignored; full matrix printed).
+- MCP `update_maps(use_python_primary=True)` previously TypeError'd on its own
+  `directory`/`max_files` arguments and silently fell back to the shell path.
+- `init` no longer seeds target projects with a template "wikifier.sh — Core CLI
+  implemented" health entry; `init` documented in `wikifier help`; stale
+  `Logged_issues/map.md` reference removed; leaked `wikifier_fresh_pairs.*` temp files
+  cleaned up.
+
 ## [Unreleased]
+
+### Fixed (2026-06-10 refactoring pass — zero-dependency enforcement + bug fixes)
+
+- **Critical: `import wikifier` no longer crashes when the optional `mcp` extra is not installed.** `wikifier/__init__.py` unconditionally imported the MCP subpackage, which unconditionally imported `FastMCP`/`pydantic`. The MCP import is now guarded (`wikifier.mcp.mcp` is `None` without the extra) and `wikifier-mcp` fails with a clear "pip install wikifier[mcp]" message. The zero-dependency rule is now recorded as NON-NEGOTIABLE in CLAUDE.md (forks may layer their own third-party libs on a dependency-free base).
+- Windows portability: `wikifier/locking.py` no longer hard-imports `fcntl` (msvcrt byte-range fallback added; advisory best-effort otherwise); `wikifier daemon start` now prints a clear message instead of `AttributeError` where `os.fork` is unavailable.
+- `health.get_healable_stubs()` no longer raises `KeyError` (`quality["has_purpose"]` → `quality["has_purpose_section"]`).
+- `contracts.is_valid_semantic_tag(..., category="any")` no longer returns `True` unconditionally (`... or True` bug; the function had no callers, so no behavior change elsewhere).
+- MCP `get_current_project_root()` now honors `project_root=` like every other tool instead of returning the startup-time root.
+- Packaged copies resynced with root (maintenance-hazard drift): `wikifier/scripts/wikifier.sh` was stale and missing v4.1.2 improvements (absolute monitored-path normalization, exclude-pattern early pruning, root `.resolve()`); `wikifier/index.html` had whitespace drift.
+
+### Changed
+
+- Removed duplicate `get_mtime()` definition in `import_cache.py` (second identical def shadowed the first).
+- Cleanup in `cli.py` (unused import, duplicated `force_full` computation, redundant env-var double-set, simplified exclude filter) and `parsers/python.py` (defensive relative-import level parsing).
+- MCP server: bare `except:` handlers narrowed to specific exceptions, unreachable code in `get_file_wiki` removed, timeout error message rewritten to be actionable for any project (dogfood-specific jargon removed).
+- Module docstrings of `wikifier/__init__.py`, `wikifier/mcp/__init__.py`, and `wikifier/mcp/server.py` rewritten to describe current behavior (milestone codenames removed).
+
+### Known issues (pre-existing, logged during this pass)
+
+- `python -m wikifier.parsers.javascript` self-test: 1 of 4 Phase-2 barrel churn tests fails at HEAD (stale importer not marked dirty via barrel mtime snapshot). Present before this pass; needs investigation.
 
 - Wave 3 micro-steps (real generator body + CLI streaming flag delegation + MCP streaming param support) delivered by dedicated subagents in original worktrees and successfully integrated to main (2026-05-27). Plans updated with accurate closure notes.
 

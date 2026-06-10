@@ -405,7 +405,7 @@ process_file_imports() {
                         ;;
                 esac
             fi
-            ((i++))
+            i=$((i + 1))   # set -e safe form (consistent with other counters)
         done
 
         if [[ -n "$suffixes_str" ]]; then
@@ -714,20 +714,6 @@ print(data.get("dependents", {}).get(sys.argv[2], 0))
         local style
         style=$(get_edge_style "$conf")
 
-        # Determine edge style based on confidence + impact + reverse dependency data
-        local dep_count="${node_dependents[$tgt_node]:-0}"
-
-        if [[ "$dep_count" -gt 8 ]]; then
-            # Very high impact target → thick arrow
-            style="==>"
-        elif [[ "$dep_count" -gt 4 ]]; then
-            # Moderately high impact
-            style="=>"
-        fi
-
-        # If this node has many dependents, consider drawing a reverse edge later
-        # (we'll add a small set of reverse edges for the most important modules below)
-
         mermaid_edges+=("$src_node $style $tgt_node")
     done
     fi   # end R1 LARGE_SCALE_MODE guard for pairs processing
@@ -783,7 +769,10 @@ print(data.get("dependents", {}).get(sys.argv[2], 0))
     for edge in "${mermaid_edges[@]}"; do
         if (( edge_count < max_edges )); then
             echo "    $edge"
-            ((edge_count++))
+            # NOTE: ((var++)) returns status 1 when var is 0 (post-increment yields 0),
+            # which kills the whole script under `set -e` before library.md is moved
+            # into place. Always use the assignment form for counters here.
+            edge_count=$((edge_count + 1))
         fi
     done
 
@@ -868,7 +857,7 @@ for tgt, srcs in rev.items():
             for s in $rev_sources; do
                 if [[ -n "$s" && "$styled" -lt 25 ]]; then
                     echo "    $s -.->|depends on| $node"
-                    ((styled++))
+                    styled=$((styled + 1))   # set -e safe (((styled++)) returns 1 at 0)
                 fi
             done
         fi
@@ -1009,6 +998,11 @@ perform_first_pass_graph_and_cache_update() {
     declare -g MAX_SHELL_RESOLVED_PAIRS=${WIKIFIER_MAX_SHELL_PAIRS:-8000}
     declare -g LARGE_SCALE_MODE=false
     declare -g FRESH_PAIRS_TMP=""
+    # R3 hygiene: sweep stale fresh-pairs temps (>1 day old) left by previously
+    # interrupted runs, then guarantee cleanup of this run's temp on any exit path
+    # (the explicit rm at the end of this function only covers the happy path).
+    find "$STAGING_DIR" -maxdepth 1 -name 'wikifier_fresh_pairs.*' -mmin +1440 -delete 2>/dev/null || true
+    trap 'rm -f "${FRESH_PAIRS_TMP:-}" 2>/dev/null' EXIT
     if command -v mktemp >/dev/null 2>&1; then
         FRESH_PAIRS_TMP=$(mktemp "${STAGING_DIR}/wikifier_fresh_pairs.XXXXXX.txt" 2>/dev/null || echo "${STAGING_DIR}/wikifier_fresh_pairs.txt")
     else
@@ -1162,7 +1156,8 @@ try:
                 cids = ",".join(r.get("chain_ids", [])[:2])
                 rsn = r.get("reason", "")
                 det = r.get("detector_used", "")
-                print(f"DEBUG BarrelReport: importer={imp} via_barrels=[{trig}] chains=[{cids}] reason={rsn} detector={det} v1={r.get('node_identity_version')}", file=sys.stderr)
+                niv = r.get("node_identity_version")
+                print(f"DEBUG BarrelReport: importer={imp} via_barrels=[{trig}] chains=[{cids}] reason={rsn} detector={det} v1={niv}", file=sys.stderr)
         except Exception:
             pass
     seen = {str(p.resolve()) for p in dirty}
@@ -1178,6 +1173,11 @@ try:
         prune_barrel_resolutions(root, max_age_days=90.0, dry_run=False)
     except Exception:
         pass
+except Exception:
+    # Barrel augmentation is best-effort; the mtime-based dirty list above stands alone.
+    # (This except was missing, which made the whole snippet a SyntaxError and silently
+    # disabled incremental dirty detection — every run reparsed all files.)
+    pass
 
 for d in dirty:
     print(str(d))
@@ -1187,27 +1187,22 @@ for d in dirty:
             [[ -n "$f" && -f "$f" ]] && files_to_reparse+=("$f")
         done <<< "$dirty_out"
 
-        # Pre-load reverse dependencies from cache (one-time, kept as-is; cheap single spawn)
+        # Pre-load reverse dependencies from cache (one-time, cheap single spawn).
+        # Note: read via process substitution (not a pipe) so the assignments
+        # land in this shell, and emit tgt|sources lines directly from Python.
         if [[ -z "${reverse_deps_loaded:-}" ]]; then
-            python3 -c '
+            while IFS='|' read -r tgt sources; do
+                [[ -n "$tgt" ]] && reverse_deps["$tgt"]="$sources"
+            done < <(python3 -c '
+import os
 from pathlib import Path
 import wikifier.import_cache as ic
-import json, sys
 root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT", os.environ.get("WIKIFIER_ROOT", ".")))
 cache = ic.load_cache(root)
-rev = ic.get_reverse_dependencies(cache)
-print(json.dumps(rev))
-' 2>/dev/null | while IFS= read -r jsonline; do
-                if [[ -n "$jsonline" && "$jsonline" != "{}" ]]; then
-                    echo "$jsonline" | python3 -c '
-import json,sys
-for k, v in json.load(sys.stdin).items():
-    print(f"{k}|{",".join(v)}")
-' | while IFS='|' read -r tgt sources; do
-                        [[ -n "$tgt" ]] && reverse_deps["$tgt"]="$sources"
-                    done
-                fi
-            done
+rev = ic.get_reverse_dependencies(cache) or {}
+for k, v in rev.items():
+    print(k + "|" + ",".join(v))
+' 2>>"$STAGING_DIR/debug.log")
             reverse_deps_loaded=1
         fi
     }
@@ -1258,13 +1253,13 @@ except Exception as ex:
             # Rebuild assoc from cleaned snapshot (old contribs of reparses removed; untouched preserved)
             unset reverse_deps 2>/dev/null || true
             declare -gA reverse_deps=()
-            echo "$cleaned_rev_json" | python3 -c '
+            while IFS='|' read -r tgt sources; do
+                [[ -n "$tgt" ]] && reverse_deps["$tgt"]="$sources"
+            done < <(echo "$cleaned_rev_json" | python3 -c '
 import json, sys
 for k, v in json.load(sys.stdin).items():
-    print(f"{k}|{",".join(v)}")
-' 2>/dev/null | while IFS='|' read -r tgt sources; do
-                [[ -n "$tgt" ]] && reverse_deps["$tgt"]="$sources"
-            done
+    print(k + "|" + ",".join(v))
+' 2>>"$STAGING_DIR/debug.log")
             reverse_deps_loaded=1
         fi
     fi
@@ -1311,7 +1306,7 @@ for k, v in json.load(sys.stdin).items():
         count=0
         for pair in "${resolved_pairs[@]}"; do
             debug_log "  $pair"
-            ((count++))
+            count=$((count + 1))   # set -e safe (((count++)) returns 1 at 0)
             [[ $count -ge 10 ]] && break
         done
         debug_log "=== End of sample ==="
@@ -1618,7 +1613,18 @@ stats = cdata.get("stats", {})
 a_summary = (analyses or {}).get("summary", {})
 acs_sum = acs or {}
 re_flag = " (REUSED via graph_signature delta short-circuit)" if reused_cycles else ""
-print(f"Cycle detection (Phase 1): {stats.get(\"cyclic_scc_count\",0)} cyclic SCC(s), {stats.get(\"total_files_in_cycles\",0)} files. CIABRE v1.3: {a_summary.get(\"high_severity_count\",0)} high-sev, max_blast={a_summary.get(\"max_blast_radius\",0)}, avg_score={a_summary.get(\"avg_score\",0)}. ACS: avg={acs_sum.get('avg_confidence',0)}, low<0.65={acs_sum.get('low_conf_edges',0)} (samples={len(acs_sum.get('sample_low_conf_explanations',[]))}). graph_sig={gsig}{re_flag}", file=sys.stderr)
+# NOTE: keep quoted dict keys OUT of f-string expressions here. This code lives in a
+# shell single-quoted string: \" inside {...} is a Python SyntaxError and bare single
+# quotes are eaten by the shell. Hoist lookups to plain variables first.
+csc = stats.get("cyclic_scc_count", 0)
+tfc = stats.get("total_files_in_cycles", 0)
+hsc = a_summary.get("high_severity_count", 0)
+mbl = a_summary.get("max_blast_radius", 0)
+avs = a_summary.get("avg_score", 0)
+acs_avg = acs_sum.get("avg_confidence", 0)
+acs_low = acs_sum.get("low_conf_edges", 0)
+acs_samp = len(acs_sum.get("sample_low_conf_explanations", []) or [])
+print(f"Cycle detection (Phase 1): {csc} cyclic SCC(s), {tfc} files. CIABRE v1.3: {hsc} high-sev, max_blast={mbl}, avg_score={avs}. ACS: avg={acs_avg}, low<0.65={acs_low} (samples={acs_samp}). graph_sig={gsig}{re_flag}", file=sys.stderr)
 ' 2>/dev/null || true
 
     }
@@ -1851,7 +1857,7 @@ _resolve_relative_import() {
     local up=0
     local temp="$raw"
     while [[ "$temp" == ../* ]]; do
-        ((up++))
+        up=$((up + 1))   # set -e safe (((up++)) returns 1 at 0)
         temp="${temp#../}"
     done
     while [[ "$temp" == .*/* ]]; do   # handle .foo/bar style
@@ -1955,7 +1961,7 @@ _try_resolve_bare_internal_import() {
         fi
 
         dir=$(dirname "$dir")
-        ((depth++))
+        depth=$((depth + 1))   # set -e safe (((depth++)) returns 1 at 0)
     done
 
     local result="${resolved}|${conf}"
@@ -1973,6 +1979,7 @@ Wikifier v4.0 — Agent-First Codebase Wiki (Zero Dependencies)
 Usage: wikifier <command> [arguments]
 
 Core Commands:
+  init [--target DIR]        Bootstrap wikifier in a target project (copies index.html + templates).
   check-changes              Scan monitored paths for mtime changes since last run.
                              Marks changed files Yellow + adds to pending_updates.
   health                     Pretty-print the current Documentation Health Matrix.
@@ -2052,7 +2059,7 @@ cmd_check_changes() {
             add_pending "$rel_file" "Auto-detected modification — review and run mark-green after wiki update"
             write_journal "auto-detected" "$rel_file" "File mtime changed (check-changes)"
 
-            ((changed++))
+            changed=$((changed + 1))   # set -e safe (((changed++)) returns 1 at 0)
         done < <(find "$root" -type f -newermt "$last_ts" -print0 2>/dev/null || true)
     done < <(get_monitored_paths)
 
@@ -2176,7 +2183,10 @@ try:
     stats_before = __import__("wikifier.import_cache", fromlist=["get_reverse_dependency_stats"]).get_reverse_dependency_stats(cache)
     new_stats = apply_record_deletion_to_reverse_index(cache, rel)
     __import__("wikifier.import_cache", fromlist=["save_cache"]).save_cache(root, cache)
-    print(f"[A1] reverse cleaned for deleted {rel}: targets={new_stats.get(\"target_count\",0)} edges={new_stats.get(\"total_reverse_edges\",0)} (was targets={stats_before.get(\"target_count\",0)})", file=sys.stderr)
+    nt = new_stats.get("target_count", 0)
+    ne = new_stats.get("total_reverse_edges", 0)
+    ot = stats_before.get("target_count", 0)
+    print(f"[A1] reverse cleaned for deleted {rel}: targets={nt} edges={ne} (was targets={ot})", file=sys.stderr)
 except Exception as ex:
     print(f"[A1] reverse clean on delete best-effort skipped: {ex}", file=sys.stderr)
 ' 2>/dev/null || true
@@ -2221,6 +2231,14 @@ cmd_monitor() {
 
 cmd_update_maps() {
     log "Rebuilding library.md (import map + Mermaid)..."
+
+    # Build into a temp file and move into place only at the end, so a failed
+    # build never destroys the previous library.md. LIBRARY_MD is shadowed
+    # locally; bash dynamic scoping makes all helpers called from here append
+    # to the temp file.
+    local LIBRARY_MD_FINAL="$LIBRARY_MD"
+    local LIBRARY_MD="${LIBRARY_MD_FINAL}.tmp.$$"
+    rm -f "${LIBRARY_MD_FINAL}".tmp.* 2>/dev/null || true
 
     cat > "$LIBRARY_MD" << 'EOT'
 # Library & Imports Map (auto-generated by wikifier update-maps)
@@ -2389,12 +2407,20 @@ cc = stats.get("cyclic_scc_count", 0)
 fc = stats.get("total_files_in_cycles", 0)
 ls = stats.get("largest_scc_size", 0)
 print(f"**Status**: {cc} cyclic cluster(s) involving {fc} file(s). Largest cluster size: {ls}")
-print(f"**Signals across cycles**: dynamic={stats.get(\"dynamic_edges_in_cycles\",0)} | conditional={stats.get(\"conditional_edges_in_cycles\",0)} | via_barrel={stats.get(\"barrel_edges_in_cycles\",0)}")
-print(f"**Graph Integrity**: {integrity.get(\"summary\", \"N/A\")}")
+# NOTE: this program is embedded in a shell single-quoted string. Never put \" or
+# bare single quotes inside f-string {...} expressions (SyntaxError / shell-eaten);
+# hoist quoted lookups to plain variables first (works on Python 3.8+).
+dyn_e = stats.get("dynamic_edges_in_cycles", 0)
+cond_e = stats.get("conditional_edges_in_cycles", 0)
+barr_e = stats.get("barrel_edges_in_cycles", 0)
+print(f"**Signals across cycles**: dynamic={dyn_e} | conditional={cond_e} | via_barrel={barr_e}")
+gi_sum = integrity.get("summary", "N/A")
+print(f"**Graph Integrity**: {gi_sum}")
 gs = cdata.get("graph_signature", "N/A")
 re = cdata.get("reused", False)
 rr = cdata.get("reuse_reason", "")
-print(f"**Graph signature**: {gs} (reused={re}{', ' + rr if rr else ''}) — Wave 3 complete (main-path delta short-circuit + iterative Tarjan harness) + canonical v1 node_identity_version prep + get_cycles_reuse_stats broad surfacing (health/diag/MCP/library) (gap1_cycles_longterm_strategy)")
+rr_suffix = ", " + rr if rr else ""
+print(f"**Graph signature**: {gs} (reused={re}{rr_suffix}) — Wave 3 complete (main-path delta short-circuit + iterative Tarjan harness) + canonical v1 node_identity_version prep + get_cycles_reuse_stats broad surfacing (health/diag/MCP/library) (gap1_cycles_longterm_strategy)")
 # P3 CIABRE: load or compute analyses for severity + actionable recs (fresh after 3d in update-maps)
 analyses = cache.get("_cycle_analyses") or ic.compute_cycle_analyses(cache)
 a_map = {}
@@ -2403,7 +2429,10 @@ for a in (analyses.get("analyses", []) or []):
     a_map[key] = a
 a_sum = analyses.get("summary", {})
 if a_sum.get("total_sccs_analyzed", 0):
-    print(f"**CIABRE Severity Summary**: {a_sum.get('high_severity_count',0)} high/critical | max_blast={a_sum.get('max_blast_radius',0)} | avg_score={a_sum.get('avg_score',0)} (see per-cluster below)")
+    hs_n = a_sum.get("high_severity_count", 0)
+    mb_n = a_sum.get("max_blast_radius", 0)
+    avg_n = a_sum.get("avg_score", 0)
+    print(f"**CIABRE Severity Summary**: {hs_n} high/critical | max_blast={mb_n} | avg_score={avg_n} (see per-cluster below)")
 print()
 if sccs:
     print("Top cyclic clusters (with signals + P3 CIABRE severity/weakest/rec):")
@@ -2419,23 +2448,28 @@ if sccs:
         key = tuple(sorted(s.get("nodes", [])))
         a = a_map.get(key, {})
         sev = a.get("severity")
+        sz = s.get("size")
         if sev:
             bl = a.get("external_blast_radius", 0)
             sc = a.get("score", 0)
             w = (a.get("weakest_links") or [{}])[0]
-            w_str = f"weakest={w.get('from','?')}→{w.get('to','?')} (risk={w.get('risk_score','?')})" if w.get("from") else ""
+            w_from = w.get("from", "?")
+            w_to = w.get("to", "?")
+            w_risk = w.get("risk_score", "?")
+            w_str = f"weakest={w_from}→{w_to} (risk={w_risk})" if w.get("from") else ""
             top_rec = (a.get("recommendations") or [{}])[0]
             rec_str = ""
-            if top_rec.get("strategy"):
+            strat = top_rec.get("strategy")
+            if strat:
                 # Surfacing uniformity (ACS+CIABRE): full rationale/hint/safety (no truncation) for agent trust + verbatim quoting
                 rat = top_rec.get("rationale") or ""
                 hnt = top_rec.get("hint") or ""
                 saf = top_rec.get("safety") or ""
-                rec_str = f" | top rec: {top_rec.get('strategy')} — {rat} (hint: {hnt}; safety: {saf})"
-            print(f"- {idx}. size={s.get('size')} : {ex}{extra}")
+                rec_str = f" | top rec: {strat} — {rat} (hint: {hnt}; safety: {saf})"
+            print(f"- {idx}. size={sz} : {ex}{extra}")
             print(f"    **SEVERITY**: {sev} (score={sc}, blast={bl}) {w_str}{rec_str}")
         else:
-            print(f"- {idx}. size={s.get('size')} : {ex}{extra}")
+            print(f"- {idx}. size={sz} : {ex}{extra}")
     if len(sccs) > 8:
         print(f"- ... ({len(sccs)-8} more clusters — use MCP `get_cycles(analysis=True)` for complete CIABRE details)")
 else:
@@ -2446,10 +2480,15 @@ else:
 acs = ic.ensure_acs_summary_persisted(cache, root)
 if acs.get("total_scored_edges"):
     print("\n## ACS Risk Snapshot (Actionable Confidence System)")
-    print(f"**Scored edges**: {acs.get('total_scored_edges')} | **avg_confidence**: {acs.get('avg_confidence')} | **low<0.65**: {acs.get('low_conf_edges')} (threshold {acs.get('low_conf_threshold')})")
+    tse = acs.get("total_scored_edges")
+    avgc = acs.get("avg_confidence")
+    lowc = acs.get("low_conf_edges")
+    thr = acs.get("low_conf_threshold")
+    print(f"**Scored edges**: {tse} | **avg_confidence**: {avgc} | **low<0.65**: {lowc} (threshold {thr})")
     tr = acs.get("top_risk_reasons") or {}
     if tr:
-        print(f"**Top risk reasons**: {', '.join(f'{k}:{v}' for k,v in list(tr.items())[:4])}")
+        tr_str = ", ".join(f"{k}:{v}" for k, v in list(tr.items())[:4])
+        print(f"**Top risk reasons**: {tr_str}")
     samples = acs.get("sample_low_conf_explanations") or []
     if samples:
         print("**Sample low-confidence edges (quote Recommendation: verbatim for decisions)**:")
@@ -2458,7 +2497,7 @@ if acs.get("total_scored_edges"):
     print("> Full per-edge via get_dependencies(..., format=\"json\") confidence_explanation. Use filter score<0.65 or high-sev reasons. ACS v1.0 + CIABRE v1.3.\n")
 
 print("\n> Machine-readable: `wikifier cycles`, MCP `get_cycles(format=\"json\", analysis=True)`. CIABRE v1.3 (R5 + registry ext): severity+blast+weakest + ranked practical recs (full rationale/hint/safety, ACS refs) from dogfood-tuned rules. ACS summary + samples in _acs_summary. Full in cache.\n")
-' 2>/dev/null || echo "\n## Circular Dependencies\n(Requires update-maps run to populate cache.)\n" ) >> "$LIBRARY_MD"
+' 2>/dev/null || printf '\n## Circular Dependencies\n\n(Requires update-maps run to populate cache.)\n' ) >> "$LIBRARY_MD"
 
     # A1: "Who depends on me" / Reverse Dependencies section in library.md (first-class index)
     ( python3 -c '
@@ -2470,7 +2509,11 @@ rev = ic.get_reverse_dependencies(cache) or {}
 stats = ic.get_reverse_dependency_stats(cache)
 sig = ic.get_reverse_signature(cache)
 print("\n## Reverse Dependencies (A1 First-Class Index — \"Who depends on me\")")
-print(f"**Targets with dependents**: {stats.get(\"target_count\", 0)} | **Total reverse edges**: {stats.get(\"total_reverse_edges\", 0)} | **Signature**: {sig or \"n/a\"} (delta-detectable, O(changed) maintained)")
+# Hoisted out of the f-string: \"/bare quotes inside {...} break this shell-embedded python
+tc = stats.get("target_count", 0)
+tre = stats.get("total_reverse_edges", 0)
+sig_str = sig or "n/a"
+print(f"**Targets with dependents**: {tc} | **Total reverse edges**: {tre} | **Signature**: {sig_str} (delta-detectable, O(changed) maintained)")
 print()
 if rev:
     # High-impact: sort by #dependents desc, bounded for scale (50k+ safe)
@@ -2485,7 +2528,7 @@ if rev:
 else:
     print("(No reverse dependencies recorded — run `update-maps` to populate first-class index.)")
 print("> Scalable: direct from persisted _reverse_dependencies (no rebuild). See contracts + import_cache for maintain_ API on renames/deletes.\n")
-' 2>/dev/null || echo "\n## Reverse Dependencies (A1)\n(Requires update-maps + cache.)\n" ) >> "$LIBRARY_MD"
+' 2>/dev/null || printf '\n## Reverse Dependencies (A1)\n\n(Requires update-maps + cache.)\n' ) >> "$LIBRARY_MD"
 
     ( python3 -c '
 from pathlib import Path
@@ -2511,8 +2554,9 @@ if tops:
         print(f"- `{f}`: {c} imports (max_depth={d})")
 else:
     print("(No barrel usage detected in this run)")
-print(f"\n> {summary.get(\"note\", \"\")}\n")
-' 2>/dev/null || echo "\n## Barrel Expansions\n(Barrel data pending full Phase 2 cache.)\n" ) >> "$LIBRARY_MD"
+note = summary.get("note", "")
+print(f"\n> {note}\n")
+' 2>/dev/null || printf '\n## Barrel Expansions\n\n(Barrel data pending full Phase 2 cache.)\n' ) >> "$LIBRARY_MD"
 
     ( python3 -c '
 from pathlib import Path
@@ -2540,8 +2584,9 @@ if summary.get("dynamic_examples"):
         imp = ex.get("import", "?")
         typ = ex.get("type", "?")
         print(f"- `{src}` → `{imp}`  (type: {typ})")
-print(f"\n> {summary.get(\"note\", \"\")}\n")
-' 2>/dev/null || echo "\n## Conditional & Dynamic Intelligence\n(Enrichment pending parser + CDIA Phase 3.)\n" ) >> "$LIBRARY_MD"
+note = summary.get("note", "")
+print(f"\n> {note}\n")
+' 2>/dev/null || printf '\n## Conditional & Dynamic Intelligence\n\n(Enrichment pending parser + CDIA Phase 3.)\n' ) >> "$LIBRARY_MD"
 
     # Legacy lightweight summary section (will be replaced in a future step)
     cat >> "$LIBRARY_MD" << 'EOT'
@@ -2558,6 +2603,7 @@ EOT
     done
 
     echo "" >> "$LIBRARY_MD"
+    mv "$LIBRARY_MD" "$LIBRARY_MD_FINAL"
     log "✅ library.md updated. You can now embed the Mermaid diagram in index.html or any Markdown viewer."
 }
 
@@ -2610,8 +2656,10 @@ cmd_issues() {
     else
         find "$LOGGED_ISSUES_ROOT/$sev" -type f -name "*.md" 2>/dev/null | sort
     fi
-    echo ""
-    echo "See Logged_issues/map.md for the categorised overview."
+    if [[ -f "$LOGGED_ISSUES_ROOT/map.md" ]]; then
+        echo ""
+        echo "See Logged_issues/map.md for the categorised overview."
+    fi
 }
 
 cmd_init() {
@@ -2687,8 +2735,9 @@ EOT
     mkdir -p "$PROJECT_ROOT/.wikifier"
     echo "project_root=$PROJECT_ROOT" > "$PROJECT_ROOT/.wikifier/config" 2>/dev/null || true
 
-    # Seed a first health entry for the tool itself
-    upsert_health "wikifier.sh" "🟢 Green" "Core CLI implemented and documented."
+    # W9: do NOT seed a health entry for the tool itself — a fresh target project
+    # starts with an empty health matrix (the old template entry described Wikifier,
+    # not the target project, and polluted every init'd repo).
 
     # R6 UX: auto-copy launcher wikifier.sh + human dashboards into target
     # (the HTMLs provide the human investigation layer: live health matrix + Mermaid tree diagram,
@@ -2753,17 +2802,26 @@ cc = stats.get("cyclic_scc_count", len(sccs))
 fc = stats.get("total_files_in_cycles", len(cycles.get("all_cycle_files", [])))
 ls = stats.get("largest_scc_size", 0)
 print(f"Clusters: {cc}   |   Files involved: {fc}   |   Largest: {ls}")
-print(f"Signals: dyn={stats.get(\"dynamic_edges_in_cycles\",0)} cond={stats.get(\"conditional_edges_in_cycles\",0)} barrel={stats.get(\"barrel_edges_in_cycles\",0)}")
-print(f"Graph Integrity: {integrity.get(\"summary\", \"N/A\")}")
+# Hoisted out of f-strings: \"/bare quotes inside {...} break this shell-embedded python
+dyn_e = stats.get("dynamic_edges_in_cycles", 0)
+cond_e = stats.get("conditional_edges_in_cycles", 0)
+barr_e = stats.get("barrel_edges_in_cycles", 0)
+print(f"Signals: dyn={dyn_e} cond={cond_e} barrel={barr_e}")
+gi_sum = integrity.get("summary", "N/A")
+print(f"Graph Integrity: {gi_sum}")
 gs = cycles.get("graph_signature", "N/A")
 re = cycles.get("reused", False)
 rr = cycles.get("reuse_reason", "")
-print(f"Graph signature: {gs} (reused={re}{', ' + rr if rr else ''}) — Wave 3 complete + canonical v1 prep (node_identity_version + harness) + broad reuse stats via get_cycles_reuse_stats (health/diag/MCP/library) (gap1_cycles_longterm_strategy)")
+rr_suffix = ", " + rr if rr else ""
+print(f"Graph signature: {gs} (reused={re}{rr_suffix}) — Wave 3 complete + canonical v1 prep (node_identity_version + harness) + broad reuse stats via get_cycles_reuse_stats (health/diag/MCP/library) (gap1_cycles_longterm_strategy)")
 # P3: CIABRE severity + recs (on-demand compute for CLI safety)
 analyses = ic.get_cycle_analyses(cache) or ic.compute_cycle_analyses(cache, root=root, use_canonical=uc)
 a_sum = analyses.get("summary", {})
 if a_sum.get("total_sccs_analyzed"):
-    print(f"CIABRE v1.3: high-severity={a_sum.get('high_severity_count',0)} | max_blast={a_sum.get('max_blast_radius',0)} | avg_score={a_sum.get('avg_score',0)}")
+    hs_n = a_sum.get("high_severity_count", 0)
+    mb_n = a_sum.get("max_blast_radius", 0)
+    avg_n = a_sum.get("avg_score", 0)
+    print(f"CIABRE v1.3: high-severity={hs_n} | max_blast={mb_n} | avg_score={avg_n}")
 print()
 
 if not sccs:
@@ -2788,14 +2846,24 @@ else:
             rec0 = (a.get("recommendations") or [{}])[0]
             rec_detail = rec0.get("strategy", "?")
             # Surfacing uniformity: full (no hard truncate) for CLI agents
-            if rec0.get("rationale"):
-                rec_detail += f" — {rec0.get('rationale') or ''}"
-            if rec0.get("hint"):
-                rec_detail += f" | hint: {rec0.get('hint') or ''}"
-            if rec0.get("safety"):
-                rec_detail += f" | safety: {rec0.get('safety') or ''}"
-            sev_line = f"\n      SEVERITY: {a.get('severity')} score={a.get('score')} blast={a.get('external_blast_radius')} | weakest: {w.get('from','?')}→{w.get('to','?')} | rec: {rec_detail}"
-        print(f"  {i}. size={s.get('size')} : {path}{extra}{sev_line}")
+            # (values hoisted out of f-strings: quotes inside {...} break shell-embedded python)
+            rat = rec0.get("rationale") or ""
+            hnt = rec0.get("hint") or ""
+            saf = rec0.get("safety") or ""
+            if rat:
+                rec_detail += f" — {rat}"
+            if hnt:
+                rec_detail += f" | hint: {hnt}"
+            if saf:
+                rec_detail += f" | safety: {saf}"
+            sev = a.get("severity")
+            sc = a.get("score")
+            bl = a.get("external_blast_radius")
+            w_from = w.get("from", "?")
+            w_to = w.get("to", "?")
+            sev_line = f"\n      SEVERITY: {sev} score={sc} blast={bl} | weakest: {w_from}→{w_to} | rec: {rec_detail}"
+        sz = s.get("size")
+        print(f"  {i}. size={sz} : {path}{extra}{sev_line}")
     if len(sccs) > 12:
         print(f"  ... and {len(sccs)-12} more (use MCP get_cycles(analysis=True) for full CIABRE)")
 print()
@@ -2825,7 +2893,7 @@ main() {
         validate)                cmd_validate ;;
         journal)                 cmd_journal "$@" ;;
         issues)                  cmd_issues "$@" ;;
-        init)                    cmd_init ;;
+        init)                    cmd_init "$@" ;;
         cycles)                  cmd_cycles ;;
         *)
             error "Unknown command: $cmd"

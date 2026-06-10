@@ -1207,7 +1207,7 @@ def get_healable_stubs(root: Path, min_wiki_length: int = 350, directory: Option
                 "quality": quality["quality"],
                 "quality_score": quality["score"],
                 "has_headings": quality["has_headings"],
-                "has_purpose": quality["has_purpose"],
+                "has_purpose": quality["has_purpose_section"],
                 "reason": entry.get("reason", "")
             })
 

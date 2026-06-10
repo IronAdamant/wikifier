@@ -12,7 +12,7 @@ import platform
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from contextlib import contextmanager, nullcontext as _nullcontext
+from contextlib import nullcontext as _nullcontext
 
 
 def discover_project_root() -> Path:
@@ -180,6 +180,7 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
     # passed root; excludes live at the logical project root, not arbitrary monitored subdirs.
     ep_root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT", root))
     ep = ep_root / "exclude_patterns.txt"
+    EXCLUDE_GLOBS: set = set()
     if ep.exists():
         try:
             for line in ep.read_text(errors="ignore").splitlines():
@@ -187,12 +188,31 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
                 if p and not p.startswith("#"):
                     p = p.split()[0]  # first token
                     if p:
+                        if any(ch in p for ch in "*?["):
+                            # file glob (e.g. *.pyc, generated_*.py) — matched per
+                            # candidate below, not just used as a dirname prune
+                            EXCLUDE_GLOBS.add(p)
                         EXCLUDES.add(p)
                         # also common glob forms as exact for dirname match
                         if p.endswith("/*") or p.endswith("*"):
                             EXCLUDES.add(p.rstrip("/*"))
         except Exception:
             pass
+
+    import fnmatch as _fnmatch
+
+    def _glob_excluded(path: Path) -> bool:
+        if not EXCLUDE_GLOBS:
+            return False
+        name = path.name
+        try:
+            relp = str(Path(path).resolve().relative_to(root))
+        except Exception:
+            relp = name
+        return any(
+            _fnmatch.fnmatch(name, g) or _fnmatch.fnmatch(relp, g)
+            for g in EXCLUDE_GLOBS
+        )
 
     # Fast path: if inside a git repo, use `git ls-files` + untracked (respects .gitignore, dramatically faster
     # on large checkouts than any walk; falls back to scandir scan). This is a pure speed opt for "updates"
@@ -213,7 +233,7 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
                 if p.suffix.lower() in exts:  # reuse the set from above (adjusted)
                     # quick filter for excludes we still want even if git surfaces them
                     parts = p.parts
-                    if not any(part in EXCLUDES or any(part.startswith(e) for e in (".",)) for part in parts):
+                    if not any(part in EXCLUDES or part.startswith(".") for part in parts) and not _glob_excluded(p):
                         candidates.append(p)
             if candidates:
                 return candidates  # success, use git list
@@ -235,7 +255,9 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
                         elif entry.is_file(follow_symlinks=False):
                             lname = name.lower()
                             if lname.endswith(exts_lower):
-                                candidates.append(Path(entry.path))
+                                fp = Path(entry.path)
+                                if not _glob_excluded(fp):
+                                    candidates.append(fp)
                     except Exception:
                         continue
         except Exception:
@@ -321,223 +343,278 @@ def _exercise_persist_pipeline(
     return persist_exercised, persisted_pairs
 
 
+def _pair_from_parser_edge(edge: Dict[str, Any], root: Path) -> Optional[Dict[str, Any]]:
+    """Normalize one parser edge into the canonical resolved_pairs shape.
+
+    Canonical pair: project-relative `resolved` path (display module for
+    non-path resolutions, "" when unresolved), string `confidence`, real
+    booleans, plus passthrough of the rich payloads (barrel_v2,
+    resolution_metadata, ACS fields, CDIA analyses) when the parser provided
+    them. The per-file cache entry implies the source, so no `src` key.
+    """
+    if not isinstance(edge, dict):
+        return None
+    raw = edge.get("raw_module") or edge.get("module") or edge.get("raw") or ""
+    resolved = ""
+    rp = edge.get("resolved_path")
+    if rp:
+        try:
+            resolved = Path(rp).resolve().relative_to(root).as_posix()
+        except Exception:
+            resolved = str(rp)
+    else:
+        mod = edge.get("module")
+        if mod and mod != raw:
+            resolved = str(mod)
+    pair: Dict[str, Any] = {
+        "raw": str(raw),
+        "resolved": resolved,
+        "confidence": str(edge.get("resolution_confidence") or edge.get("confidence") or "low"),
+        "is_dynamic": bool(edge.get("is_dynamic")),
+        "is_conditional": bool(edge.get("is_conditional")),
+        "via_barrel": bool(edge.get("via_barrel")),
+        "barrel_depth": int(edge.get("barrel_depth") or 0),
+    }
+    if edge.get("dynamic_type"):
+        pair["dynamic_type"] = edge["dynamic_type"]
+    for k in (
+        "confidence_score", "confidence_reasons", "confidence_explanation",
+        "barrel_v2", "resolution_metadata", "strategy", "cdia_v1",
+        "conditional_analysis", "dynamic_analysis", "diagnostic",
+    ):
+        v = edge.get(k)
+        if v not in (None, "", [], {}):
+            pair[k] = v
+    return pair
+
+
 def run_full_update(
     root: Optional[Path] = None,
     force_full: bool = True,
     verbose: bool = False,
     use_canonical: bool = True,
-    use_python_primary: bool = True,  # Wave 5: explicit opt-in for CLI/MCP/daemon direct pure-Py path (no sh)
+    use_python_primary: bool = True,
+    directory: Optional[str] = None,
+    max_files: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Core entry point for the Python-primary `update-maps [--full]` implementation.
+    Python-primary implementation of `update-maps [--full]` — the full pipeline,
+    no shell:
 
-    Wave 3: dirty detection + parser skeleton (see prior).
-    Wave 4: deepened to include *more of the persist pipeline* in pure Python.
-    Wave 5 (this wave for External/Packaged Full-Update Robustness): more extraction
-    into deeper pipeline for direct daemon/MCP calls without sh:
-    - Parser invocation deepened (min(20, dirty) files exercised directly via parse_*_imports,
-      richer capture of cdia_v1/barrel_v2/res_meta_v1 + creative signals).
-    - Creative + barrel Gap #1 tie-in under pure path: detects "creative" / dynamic_analysis
-      / has_creative from parser outputs; emits creative_v1=... demo suffixes in persisted
-      pairs (exercises creative detectors, ACS penalties/recommendations + barrel_v2 exactly
-      as in full creative/DeepBarrel waves, from the pure-Py entrypoint too).
-    - Extracted internal _exercise_persist_pipeline(...) helper (more of the sh
-      parse_parser_json_output / process_file_imports / persist_rich_cache_data logic
-      now directly reusable / testable from daemon + MCP without shell).
-    - use_python_primary flag for explicit selection; still bounded/best-effort for
-      5k+ scale (defensive, references R1 scale hardening). Full ACS/CIABRE/cycles/
-      library.md stay sh-orchestrated for fidelity during transition (Phase 4 goal:
-      sh thin, delegates to this).
-    - Discovery (outermost + yarn/pnpm/symlink) inherited automatically.
+      1. collect candidate sources (git fast-path / pruned walk; honors
+         exclude_patterns.txt including file globs)
+      2. dirty detection via import_cache.compute_files_needing_reparse,
+         merged with barrel-stale importers (BRC reverse index)
+      3. parse EVERY dirty file in-process (BREE persistence batched: one
+         barrel-cache flush per run, not per chain)
+      4. persist canonical per-file entries {mtime, imports, resolved,
+         resolved_pairs} into import_cache.json (single save)
+      5. rebuild reverse dependencies, cycles + analyses, ACS summary
+      6. regenerate library.md atomically (wikifier.library)
 
-    sh remains untouched thin wrapper. Enables direct calls from daemon (periodic/post-sleep),
-    MCP update_maps(use_python_primary=True), and CLI `update-maps --python-primary`.
+    `directory`/`max_files` are explicit scoping. When max_files truncates the
+    dirty set, the result reports `files_skipped` — there are no silent caps.
 
-    Args:
-        root: target monorepo root (if None, uses discover_project_root())
-        force_full: if True, equivalent to --full (ignore dirty, reparse all)
-        verbose: emit progress to stdout
-        use_canonical: (Wave 4) advisory for v1 cycle canonical in future pure phases
-        use_python_primary: Wave 5 flag for consumers preferring direct path (default True)
-
-    Returns:
-        dict with keys: success, root, mode, files_to_reparse, dirty_sample,
-        parsers_invoked_sample, persist_pipeline_exercised, sample_persisted_pairs,
-        barrel_creative_tied_in_pure_path, note, timestamp, use_canonical, ...
-        (future: full stats, acs_summary, timing, cycle guarantees)
+    Returns a dict with: success, root, mode, parseable_files, files_to_reparse,
+    files_parsed, files_skipped, edges_persisted, parse_errors (bounded sample),
+    cycles, library, dirty_sample, timestamp. `persist_pipeline_exercised` is
+    kept for backward compatibility (True whenever the persist step ran).
     """
     if root is None:
         root = discover_project_root()
     root = Path(root).resolve()
 
-    # Ensure env for any child python -m parsers / import_cache calls (packaged safety)
+    # Ensure env for any child parser/resolution helpers (packaged safety)
     os.environ["WIKIFIER_PROJECT_ROOT"] = str(root)
-    os.environ.setdefault("WIKIFIER_PROJECT_ROOT", str(root))
 
     if verbose:
         print(f"[run_full_update] target root: {root}")
-        print("[run_full_update] Python-primary path (Wave 5) — deeper parser/persist + barrel/creative tie-in + direct-call ready")
 
+    from datetime import datetime as _dt
     result: Dict[str, Any] = {
         "success": False,
         "root": str(root),
         "mode": "full" if force_full else "incremental",
+        "parseable_files": 0,
         "files_to_reparse": 0,
-        "timestamp": __import__("datetime").datetime.now().isoformat(),
+        "files_parsed": 0,
+        "files_skipped": 0,
+        "edges_persisted": 0,
+        "timestamp": _dt.now().isoformat(),
+        "use_canonical": use_canonical,
+        "use_python_primary": use_python_primary,
     }
 
     try:
-        # === Actual dirty detection (Phase 1, unified with barrel) ===
         from . import import_cache as ic
+
+        # === 1. Candidates ===
         cands = _collect_candidate_source_files(root)
+        if directory:
+            try:
+                want = str((root / directory).resolve())
+                cands = [p for p in cands if str(Path(p).resolve()).startswith(want)]
+            except Exception:
+                pass
+        result["parseable_files"] = len(cands)
         if verbose:
-            print(f"[run_full_update] collected {len(cands)} candidate sources (pruned walk)")
+            print(f"[run_full_update] {len(cands)} candidate sources")
 
-        dirty = ic.compute_files_needing_reparse(root, cands, full_rebuild=force_full)
-
-        # Merge barrel-driven stale importers (exact parity with sh's unified python -c block;
-        # uses O(changed) fast path via BRC file_index when possible)
+        # === 2. Dirty detection + barrel-stale merge ===
+        dirty = ic.compute_files_needing_reparse(root, cands, full_rebuild=force_full) or []
         try:
             cache_for_barrel = ic.load_cache(root)
             barrel_stale = ic.invalidate_stale_barrel_entries(
-                cache_for_barrel, root, changed_files=[str(p) for p in (dirty or [])]
-            )
-            seen = {str(Path(p).resolve()) for p in (dirty or [])}
-            for rel in (barrel_stale or []):
+                cache_for_barrel, root, changed_files=[str(p) for p in dirty]
+            ) or []
+            seen = {str(Path(p).resolve()) for p in dirty}
+            for rel in barrel_stale:
                 if rel:
                     p = (root / rel).resolve()
                     if p.exists() and str(p) not in seen:
                         dirty.append(p)
                         seen.add(str(p))
         except Exception:
-            # barrel logic optional / best-effort in skeleton; regular mtime dirty always present
-            pass
+            pass  # barrel merge is best-effort; mtime dirty set is authoritative
+        result["files_to_reparse"] = len(dirty)
+        result["dirty_sample"] = [str(p) for p in dirty[:3]]
 
-        if verbose:
-            print(f"[run_full_update] dirty set computed: {len(dirty)} files (mtime + barrel consumers)")
+        if max_files is not None:
+            try:
+                cap = int(max_files)
+                if len(dirty) > cap:
+                    result["files_skipped"] = len(dirty) - cap
+                    dirty = dirty[:cap]
+            except (TypeError, ValueError):
+                pass
 
-        # === Parser invocation (Phase 2) — direct Python calls (not sh/subprocess) ===
-        # Wave 5: deepened extraction (up to 20 files) exercising full parser rich paths
-        # including barrel_v2, res_meta, cdia, creative detectors from javascript/python parsers.
-        # Ties broader Gap #1 (barrel + creative) into the pure primary path.
-        parsers_invoked = 0
-        sample_parsed: List[str] = []
-        sample_parser_outputs: List[Dict[str, Any]] = []
+        # === 3. Parse every dirty file (in-process, BREE batched) ===
+        from .parsers import javascript as js_parser
+        from .parsers import python as py_parser
         try:
-            from .parsers import javascript as js_parser
-            from .parsers import python as py_parser
-            # Wave 5: deeper (20) for more extraction / real dogfood exercise of creative/barrel under pure
-            sample_limit = min(20, len(dirty or []))
-            for f in (dirty or [])[:sample_limit]:
+            from .parsers import bree as bree_mod
+        except Exception:
+            bree_mod = None
+        try:
+            from .resolution import to_canonical_rel as _canon
+        except Exception:
+            _canon = None
+
+        def _rel(p: Path) -> Optional[str]:
+            try:
+                if _canon is not None:
+                    c = _canon(p, root, follow_symlinks=True)
+                    if c:
+                        return c
+            except Exception:
+                pass
+            try:
+                return Path(p).resolve().relative_to(root).as_posix()
+            except Exception:
+                return None
+
+        new_entries: Dict[str, Dict[str, Any]] = {}
+        edges_total = 0
+        parsed_count = 0
+        parse_errors: List[Dict[str, str]] = []
+
+        if bree_mod is not None:
+            try:
+                bree_mod.begin_batch()
+            except Exception:
+                bree_mod = None
+        try:
+            for f in dirty:
+                fstr = str(f)
+                low = fstr.lower()
                 try:
-                    fstr = str(f)
-                    parsed_list: List[Dict[str, Any]] = []
-                    if fstr.lower().endswith((".js", ".ts", ".jsx", ".tsx")):
-                        parsed_list = js_parser.parse_javascript_imports(fstr) or []
-                        parsers_invoked += 1
-                        sample_parsed.append(fstr)
-                    elif fstr.lower().endswith(".py"):
-                        parsed_list = py_parser.parse_python_imports(fstr) or []
-                        parsers_invoked += 1
-                        sample_parsed.append(fstr)
-                    if parsed_list:
-                        sample_parser_outputs.append({"file": fstr, "imports": parsed_list[:3]})
+                    if low.endswith((".js", ".ts", ".jsx", ".tsx")):
+                        edges = js_parser.parse_javascript_imports(fstr) or []
+                    elif low.endswith(".py"):
+                        edges = py_parser.parse_python_imports(fstr) or []
+                    else:
+                        continue
+                except Exception as pe:
+                    parse_errors.append({"file": fstr, "error": f"{type(pe).__name__}: {pe}"})
+                    continue
+                rel = _rel(Path(fstr))
+                if not rel:
+                    continue
+                pairs = [p for p in (_pair_from_parser_edge(e, root) for e in edges) if p]
+                new_entries[rel] = {
+                    "mtime": ic.get_mtime(Path(fstr)),
+                    "imports": [p.get("raw", "") for p in pairs],
+                    "resolved": [p["resolved"] for p in pairs if p.get("resolved")],
+                    "resolved_pairs": pairs,
+                }
+                parsed_count += 1
+                edges_total += len(pairs)
+                if verbose and parsed_count % 200 == 0:
+                    print(f"[run_full_update] parsed {parsed_count}/{len(dirty)}")
+        finally:
+            if bree_mod is not None:
+                try:
+                    bree_mod.end_batch()  # one barrel-cache flush for the whole run
                 except Exception:
                     pass
-            if verbose:
-                print(f"[run_full_update] parser invoked on {parsers_invoked} files (deeper Wave 5 + barrel/creative capture)")
-        except Exception as ex:
-            if verbose:
-                print(f"[run_full_update] parser import skipped: {ex}")
 
-        # === Persist pipeline exercise (Phase 3, Wave 5: use extracted helper) ===
-        # Direct call to _exercise_persist_pipeline for daemon/MCP pure path (no sh).
-        # Now includes creative_v1 + barrel tie-in for Gap#1 completeness under python-primary.
-        persist_exercised = False
-        persisted_pairs = 0
-        barrel_creative_tied = False
-        try:
-            cache = ic.load_cache(root)
-            exercised, n = _exercise_persist_pipeline(root, sample_parser_outputs, cache, verbose=verbose)
-            if exercised:
-                ic.save_cache(root, cache)
-                persisted_pairs = n
-                if verbose:
-                    print(f"[run_full_update] persist pipeline exercised via helper (barrel+creative tied in pure path)")
-                # Wave 6 continuation (deeper extraction + broader Gap#1 tie): light ACS summary
-                # ensure under pure primary path too (exercises on-demand persist guarantee for
-                # ACS+CIABRE surfacing even on direct daemon/MCP python-primary calls; bounded).
-                try:
-                    from .import_cache import ensure_acs_summary_persisted
-                    ensure_acs_summary_persisted(cache, root)
-                    if verbose:
-                        print("[run_full_update] ACS summary ensured under python-primary (Gap#1 ACS tie)")
-                except Exception:
-                    pass  # best-effort; full ACS in sh path for now
-            # Squeeze wave (Gap #1 item 3, 2026-05-21): guarantee persist_pipeline_exercised=True whenever
-            # we reach+run the pure persist helper (even if n==0 new pairs from dedup in _exercise_persist_pipeline,
-            # or few dirty files, or parser sampling limit=20 on 1k+ real target). The full exercise path
-            # (dirty detection w/ force_full, sample parse, helper's min(8) loop + creative/barrel_v2 suffixes +
-            # parse_pipeline_line + any() dedup against cache["resolved_pairs"]) was exercised. This mirrors the
-            # prior barrel_creative_tied unconditional set, closes the exact "real dogfood persist... false" FAIL
-            # for RecipeLab pure-path test under --gap1-health (populated real cache + force_full samples hit dups).
-            # Zero new deps, additive comment + flag guarantee only. Persist count may be 0 but flag now reliably set.
-            persist_exercised = True
-            barrel_creative_tied = True
-        except Exception as ex:
-            if verbose:
-                print(f"[run_full_update] persist pipeline exercise skipped (non-fatal): {ex}")
+        result["files_parsed"] = parsed_count
+        result["edges_persisted"] = edges_total
+        if parse_errors:
+            result["parse_errors"] = parse_errors[:10]
+            result["parse_error_count"] = len(parse_errors)
 
-        # A1: Surface first-class reverse dependency index (always, even on partial pure-path exercise).
-        # This exercises the new get_reverse_dependency_stats + ensures the persisted reverse + its
-        # signature are visible to callers of run_full_update (MCP, daemon, CLI --python-primary).
-        reverse_index_info: Dict[str, Any] = {}
+        # === 4. Persist (single save; reload first to pick up the barrel flush) ===
+        cache = ic.load_cache(root) or {}
+        cache.update(new_entries)
+        if force_full:
+            # Drop ghosts: per-file entries whose source no longer exists in scope.
+            # Only safe on an unscoped full rebuild (scoped runs see partial candidates).
+            if not directory and not max_files:
+                valid = {r for r in (_rel(Path(p)) for p in cands) if r}
+                for stale_key in [k for k in cache if not k.startswith("_") and k not in valid]:
+                    cache.pop(stale_key, None)
+
+        # === 5. Graph intelligence (reverse deps, cycles, ACS) ===
         try:
-            from . import import_cache as ic_for_rev
-            cache_for_rev = ic_for_rev.load_cache(root)
-            reverse_index_info = ic_for_rev.get_reverse_dependency_stats(cache_for_rev)
-            # Lightweight bootstrap/demo of A1 maintenance in pure primary (if no index yet, rebuild once
-            # from whatever resolved data the skeleton populated; harmless and shows the path works).
-            if not reverse_index_info.get("has_index") and any(not k.startswith("_") for k in cache_for_rev.keys()):
-                rebuilt_rev = ic_for_rev.rebuild_reverse_dependencies(cache_for_rev)
-                ic_for_rev.set_reverse_dependencies(cache_for_rev, rebuilt_rev)
-                ic_for_rev.save_cache(root, cache_for_rev)
-                reverse_index_info = ic_for_rev.get_reverse_dependency_stats(cache_for_rev)
+            rev = ic.rebuild_reverse_dependencies(cache)
+            ic.set_reverse_dependencies(cache, rev)
+        except Exception as e:
+            result["reverse_index_error"] = str(e)
+        try:
+            cycles_payload = ic.compute_cycles(cache, root=root, use_canonical=use_canonical)
+            cache["_cycles"] = cycles_payload
+            result["cycles"] = {
+                "count": len(cycles_payload.get("sccs", []) or []),
+            }
+            try:
+                cache["_cycle_analyses"] = ic.compute_cycle_analyses(cache, root=root, use_canonical=use_canonical)
+            except Exception:
+                pass
+        except Exception as e:
+            result["cycles"] = {"error": str(e)}
+        ic.save_cache(root, cache)
+        result["persist_pipeline_exercised"] = True
+        try:
+            ic.ensure_acs_summary_persisted(cache, root)
         except Exception:
-            reverse_index_info = {"error": "reverse_index_unavailable_in_skeleton", "target_count": 0}
+            pass
 
-        result.update({
-            "success": True,
-            "files_to_reparse": len(dirty or []),
-            "dirty_sample": [str(p) for p in (dirty or [])[:3]],
-            "parsers_invoked_sample": parsers_invoked,
-            "sample_parsed_files": sample_parsed[:3],
-            "persist_pipeline_exercised": persist_exercised,
-            "sample_persisted_pairs": persisted_pairs,
-            "barrel_creative_tied_in_pure_path": barrel_creative_tied,
-            "use_canonical": use_canonical,
-            "use_python_primary": use_python_primary,
-            "reverse_dependency_index": reverse_index_info,  # A1 first-class exposure
-            "note": "Wave 5: dirty+parser(deep 20)+persist(extracted helper) + barrel_v2/creative_v1 tie-in now deeper in pure Python. "
-                    "Direct daemon/MCP/CLI --python-primary calls without sh. Discovery+env robust for external. "
-                    "Full ACS/CIABRE/cycles still sh for fidelity (progressive Phase 4). "
-                    "A1: reverse_dependency_index (with signature + incremental maintain path) now surfaced.",
-        })
+        # === 6. library.md (atomic; pure Python) ===
+        try:
+            from .library import write_library_md
+            result["library"] = write_library_md(root, cache)
+        except Exception as e:
+            result["library"] = {"success": False, "error": str(e)}
+
+        result["success"] = True
     except Exception as ex:
-        if verbose:
-            print(f"[run_full_update] python-primary steps error (non-fatal for caller): {ex}")
-        result.update({
-            "success": False,
-            "error": str(ex),
-            "use_canonical": use_canonical,
-            "note": "Wave 5 partial: error during Python-primary (deeper pipeline); "
-                    "falling back to sh path recommended for full update.",
-            # M5.1 hardening (gap5 agent scale resilience from report ONLY: 2/4 agents failed "doom loop detected (repeated errors)" on scale/large/MCP e.g. RecipeLlama ~100 tools/7 err /30k+s reaped, ConsistencyMeta ~68t/5e/30ks; no auto backoff/scope/early partial evidence; DoD#5: 2+ full 50k+ w/ 0 doom, auto-scope key dirs, 1-2 retries transient, append partial on err before fail. Small improvement here in incremental (run_full_update) error handling: surfaces repeated-error hint for callers (subagents). #2 zero-dep, #7 multi-agent context (parallel 4+ replacement/manual pattern), #8 boundary (wikifier/cli only; no target dogfood), #9 using exact 100 tools/7 err, 168k u/1363 chains/4min/20+ BRC y/84 edges/6 mismatches/40-65% calibs from reports, honest calib ~30-40% visible contrib to M5.1 code part (ref 9GP#1 spectrum alt BRC+llama+llvm+meta).
-            "agent_resilience_hint_m5.1": "for repeated errors/doom loops (per M5 report): caller subagents use directory=/abs/sub or max_files budget on >10k (e.g. llvm/alt), 1-2 retries + sleep backoff on transient MCP/list_dir, append partial evidence/journal before fail (see also A2 partials in update_maps). 8-step DF + 9GP traces in diary.",
-        })
+        result["error"] = str(ex)
+        result["note"] = "run_full_update failed; the shell update-maps path remains available as fallback."
 
     if verbose:
-        print(f"[run_full_update] completed for {root} (files_to_reparse={result.get('files_to_reparse')})")
+        print(f"[run_full_update] done: parsed {result.get('files_parsed')}/{result.get('files_to_reparse')} "
+              f"dirty files, {result.get('edges_persisted')} edges, library={result.get('library', {}).get('success')}")
 
     return result
 
@@ -611,10 +688,26 @@ def main():
 
     if project_root:
         os.environ["WIKIFIER_PROJECT_ROOT"] = project_root
-        # also set for the child explicitly
-        os.environ.setdefault("WIKIFIER_PROJECT_ROOT", project_root)
     # Wave 4: expose use_canonical to sh 3d blocks + on-demand (MCP/CLI cycles) via env for public surface
     os.environ["WIKIFIER_USE_CANONICAL"] = "1" if use_canonical else "0"
+
+    # `health --summary|--json|--format=...` routes to the Python library
+    # implementation; the sh path prints the full matrix and ignores flags.
+    if filtered_argv and filtered_argv[0] == "health" and any(
+        a in ("--summary", "--json") or a.startswith("--format") for a in filtered_argv[1:]
+    ):
+        fmt = "summary" if "--summary" in filtered_argv else ("json" if "--json" in filtered_argv else "summary")
+        for a in filtered_argv[1:]:
+            if a.startswith("--format="):
+                fmt = a.split("=", 1)[1] or fmt
+        try:
+            import json as _json
+            out = health(project_root=project_root, format=fmt)
+            print(_json.dumps(out, indent=2, ensure_ascii=False) if isinstance(out, (dict, list)) else out)
+            return 0
+        except Exception as e:
+            print(f"[wikifier] health --{fmt} failed: {e}", file=sys.stderr)
+            return 1
 
     # Human sub-project: ensure dashboards are in the target (for MCP + human investigation)
     # index.html = clean human view (chart + files + descriptions + copies); diagnostics.html for technical depth. Works alongside agent MCP/CLI use. No effect on agent SSOT or tools.
@@ -628,12 +721,18 @@ def main():
     # Usage: wikifier update-maps --python-primary [--full] [--target ...]
     # Enables packaged/external full-update without any shell fragility; daemon/MCP can use same.
     # The flag is consumed here; not passed downstream to sh when we take the pure path.
-    python_primary_requested = False
+    # update-maps defaults to the pure-Python pipeline (full parse + canonical
+    # persist + cycles/ACS + atomic library.md). The shell path remains available
+    # via --sh / --legacy-sh (it is slower; kept as a fallback).
+    python_primary_requested = True
     is_update_maps_cmd = False
     stripped_filtered = []
     for a in filtered_argv:
         if a in ("--python-primary", "--use-python-primary", "--python_primary"):
             python_primary_requested = True
+            continue  # consume, do not forward to sh
+        if a in ("--sh", "--legacy-sh", "--no-python-primary"):
+            python_primary_requested = False
             continue  # consume, do not forward to sh
         if a in ("update-maps", "update_maps"):
             is_update_maps_cmd = True
@@ -646,6 +745,14 @@ def main():
         max_files = None
         resume_token = None
         max_time = None
+        for a in argv:
+            if a.startswith("--dir=") or a.startswith("--directory="):
+                directory = a.split("=", 1)[1] or None
+            elif a.startswith("--max-files=") or a.startswith("--max_files="):
+                try:
+                    max_files = int(a.split("=", 1)[1])
+                except ValueError:
+                    pass
         # Micro-step 2: streaming path (has_a2_ux_flags)
         if has_a2_ux_flags:
             print("[wikifier] A2 Python-primary streaming path (delegating to run_update_stream facade)")
@@ -673,16 +780,16 @@ def main():
             return 0
         # Take direct pure-Py path (deeper pipeline in run_full_update); no subprocess sh
         try:
-            force_full = any(x in ("--full", "-f", "--force-full", "--full-rebuild") for x in argv)
             res = run_full_update(
                 root=Path(project_root) if project_root else None,
                 force_full=force_full,
                 verbose=True,
                 use_canonical=use_canonical,
                 use_python_primary=True,
+                directory=directory,
+                max_files=max_files,
             )
             import json
-            print("[wikifier] Python-primary path active (Wave 5 External robustness)")
             print(json.dumps(res, indent=2, default=str))
             sys.exit(0 if res.get("success", False) else 1)
         except Exception as e:
@@ -1063,6 +1170,7 @@ def update_maps(
     directory: Optional[str] = None,
     use_python_primary: bool = True,
     verbose: bool = False,
+    max_files: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Python facade for update-maps with scoping + python-primary preference.
@@ -1078,13 +1186,12 @@ def update_maps(
             verbose=verbose,
             use_canonical=True,
             use_python_primary=use_python_primary,
+            directory=directory,
+            max_files=max_files,
         )
         res = dict(res)  # copy
         res["library_facade"] = True
         res["scoped_directory"] = directory
-        if directory:
-            res.setdefault("note", "")
-            res["note"] += " (directory scoping is advisory in current skeleton; engine-level scoping in later A waves)"
         return res
     except Exception as e:
         return {

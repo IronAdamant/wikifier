@@ -548,14 +548,14 @@ ALL_SEMANTIC_TAGS: Tuple[str, ...] = CONDITIONAL_SEMANTIC_TAGS + DYNAMIC_SEMANTI
 
 
 def is_valid_semantic_tag(tag: str, category: Literal["conditional", "dynamic", "any"] = "any") -> bool:
-    """Future-proof validator. Currently permissive (append-only policy)."""
+    """Check a semantic tag against the known vocabulary (append-only)."""
     if not isinstance(tag, str):
         return False
     if category == "conditional":
         return tag in CONDITIONAL_SEMANTIC_TAGS
     if category == "dynamic":
         return tag in DYNAMIC_SEMANTIC_TAGS
-    return tag in ALL_SEMANTIC_TAGS or True  # allow future additions without breaking
+    return tag in ALL_SEMANTIC_TAGS
 
 
 # =============================================================================

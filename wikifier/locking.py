@@ -54,13 +54,29 @@ For the current scale (including heavy multi-agent dogfooding), project-level
 advisory locking is sufficient, safe, and has been battle-tested.
 """
 
-import fcntl
 import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
+try:
+    import fcntl  # Unix advisory locking
+except ImportError:
+    fcntl = None
+
+try:
+    import msvcrt  # Windows byte-range locking fallback
+except ImportError:
+    msvcrt = None
+
 LOCK_FILE_NAME = ".wikifier_staging/.lock"
+
+# Per-process re-entrancy bookkeeping. flock/msvcrt locks are NOT re-entrant
+# across file descriptors: a second acquire of the same project lock from the
+# same process (e.g. cli.record_change holding the lock while calling
+# health.upsert_entry, which locks again) would block forever. We refcount
+# per resolved root instead, so nested acquires are no-ops.
+_HELD_LOCKS: dict = {}  # {resolved_root_str: {"fd": int, "depth": int}}
 
 
 @contextmanager
@@ -70,7 +86,8 @@ def file_lock(root: Path, timeout: Optional[float] = None):
 
     This is the primary locking primitive used by health.py and import_cache.py.
 
-    Current behavior: blocking acquire (will wait until the lock is free).
+    Behavior: blocking acquire (waits until the lock is free), re-entrant
+    within the same process (nested acquires on the same root are refcounted).
     Timeout support is planned for a future iteration.
 
     Usage (agents rarely need this directly):
@@ -79,16 +96,49 @@ def file_lock(root: Path, timeout: Optional[float] = None):
     """
     lock_path = root / LOCK_FILE_NAME
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        key = str(Path(root).resolve())
+    except OSError:
+        key = str(root)
+
+    held = _HELD_LOCKS.get(key)
+    if held is not None:
+        # Re-entrant acquire from this process: just bump the depth.
+        held["depth"] += 1
+        try:
+            yield
+        finally:
+            held["depth"] -= 1
+        return
 
     lock_fd = None
     try:
         lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        if fcntl is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            # Windows: lock the first byte of the lock file. msvcrt LK_LOCK
+            # retries for ~10s then raises OSError, so loop until acquired
+            # to match the blocking semantics of flock.
+            while True:
+                try:
+                    os.lseek(lock_fd, 0, os.SEEK_SET)
+                    msvcrt.locking(lock_fd, msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    continue
+        # If neither primitive exists, proceed unlocked (advisory best-effort).
+        _HELD_LOCKS[key] = {"fd": lock_fd, "depth": 1}
         yield
     finally:
         if lock_fd is not None:
+            _HELD_LOCKS.pop(key, None)
             try:
-                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                if fcntl is not None:
+                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                elif msvcrt is not None:
+                    os.lseek(lock_fd, 0, os.SEEK_SET)
+                    msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
             finally:
                 os.close(lock_fd)
 
@@ -123,6 +173,8 @@ def is_project_locked(root: Path) -> bool:
     lock_path = root / LOCK_FILE_NAME
     if not lock_path.exists():
         return False
+    if fcntl is None:
+        return False  # no non-blocking probe available on this platform
     try:
         with open(lock_path, "r+") as f:
             # Try a non-blocking lock; if we get it, no one else holds it.
