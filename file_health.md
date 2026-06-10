@@ -20,9 +20,9 @@
 | wikifier/import_cache.py | 🟢 Green | 2026-06-10 19:09:24 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
 | wikifier/parsers/python.py | 🟢 Green | 2026-06-10 09:27:51 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | file_health.md | 🟢 Green | 2026-06-07 12:47:31 AEST | Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1. |
-| CHANGELOG.md | 🟢 Green | 2026-06-10 19:58:00 AEST | Headless-browser verified on all 9 dogfood projects: flowchart svg renders, no error boxes, real data in DOM, file:// banner intact |
+| CHANGELOG.md | 🟢 Green | 2026-06-10 20:00:39 AEST | v4.3.2 release prep; 30/30 tests |
 | CLAUDE.md | 🟢 Green | 2026-06-10 19:09:30 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
-| wikifier/__init__.py | 🟢 Green | 2026-06-10 19:32:40 AEST | v4.3.1 release prep; 30/30 tests |
+| wikifier/__init__.py | 🟢 Green | 2026-06-10 20:00:37 AEST | v4.3.2 release prep; 30/30 tests |
 | wikifier/mcp/__init__.py | 🟢 Green | 2026-06-10 09:27:38 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | wikifier/health.py | 🟢 Green | 2026-06-10 09:27:42 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | wikifier/contracts.py | 🟢 Green | 2026-06-10 09:27:43 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
