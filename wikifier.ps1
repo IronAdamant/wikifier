@@ -163,10 +163,11 @@ dist
     }
     "serve" {
         # Browsers block fetch() on file:// pages, so index.html must be served.
+        # wikifier.serve adds the dashboard's Run/Stop buttons (localhost-only).
         $port = if ($Arguments -and $Arguments[0]) { $Arguments[0] } else { "8787" }
-        Write-Log "Serving $WikifierRoot at http://localhost:$port/index.html (Ctrl+C to stop)"
         Set-Location $WikifierRoot
-        python -m http.server $port --bind 127.0.0.1
+        $env:WIKIFIER_PROJECT_ROOT = $WikifierRoot
+        python -m wikifier.serve $port
     }
     default {
         Write-Err "Unknown command '$Command'. Try 'wikifier help'."

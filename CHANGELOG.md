@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`wikifier serve` is now a real dashboard server** (`wikifier/serve.py`, stdlib-only):
+  alongside static files it exposes localhost-only endpoints the dashboard uses for a
+  **Run update-maps / Full rebuild / Check changes** button row (fixed command whitelist —
+  never caller-supplied argv) and a **Stop server** button ("kill it when done"). Binds
+  127.0.0.1, rejects non-local `Host` headers and cross-origin POSTs. Behind a plain
+  static server the same buttons fall back to copy + auto-refresh.
+
+### Changed
+
+- **Dashboard UI completely rebuilt**: hand-rolled CSS replaces the Tailwind CDN (and its
+  production warning), new layout (header with live-server chip, health pills, actions
+  card with an inline output console, structure map, filterable files list, folder
+  browser), inline SVG favicon (no more `/favicon.ico` 404), `file_health.json` 404s are
+  remembered instead of re-polled every cycle, and `.last_check` heartbeat parsing accepts
+  the CLI's actual timestamp format (the "present but unreadable" badge is gone). All
+  v4.3.x rendering fixes preserved (pinned Mermaid, dual `maxEdges`, auto-start race,
+  `textContent` injection, visible render errors, `file://` banner) and re-verified
+  headless on all 9 dogfood projects in all three modes (wikifier serve / static / file).
+
+### Fixed
+
+- The Wikifier repo's own `library.md` was a fossilized truncation from the retired shell
+  generator (unclosed Mermaid fence — the page correctly reported "no diagram block");
+  regenerated with the real pipeline.
+
 ## [4.3.2] - 2026-06-10
 
 ### Fixed

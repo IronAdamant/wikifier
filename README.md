@@ -105,7 +105,7 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, and any Model Context Pro
 
 ## The Human Layer (Secondary, by Design)
 
-`wikifier init` copies a single static `index.html` into your project: a read-only dashboard showing the Mermaid code-structure chart, files with short descriptions, and a folder browser — useful for humans investigating what the agents know. View it with **`wikifier serve`** (then open http://localhost:8787/index.html) — browsers block `file://` fetches, so a double-clicked index.html can't read the wiki files; the page detects that case and shows you the fix. Command buttons copy the exact CLI command and live-poll for results (a static page can't execute shell commands — that's the browser sandbox working as intended). The agent-facing markdown files and tools remain the single source of truth.
+`wikifier init` copies a single static `index.html` into your project: a dashboard showing the Mermaid code-structure chart, files with short descriptions, and a folder browser — useful for humans investigating what the agents know. View it with **`wikifier serve`** (then open http://localhost:8787/index.html) — browsers block `file://` fetches, so a double-clicked index.html can't read the wiki files; the page detects that case and shows you the fix. When served by `wikifier serve`, the dashboard's buttons genuinely **run** `update-maps`/`check-changes` (whitelisted commands only, localhost-only) and a **Stop server** button shuts the process down when you're done; behind any plain static server the same buttons fall back to copy + auto-refresh. The agent-facing markdown files and tools remain the single source of truth.
 
 ## Intended Use: Strictly Agent-to-Agent
 

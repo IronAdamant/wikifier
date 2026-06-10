@@ -498,15 +498,21 @@ cmd_monitor() {
 
 cmd_serve() {
     # Serve the project folder over localhost so the human dashboard
-    # (index.html) can fetch the wiki artifacts. Browsers block fetch() on
-    # file:// pages, so a double-clicked index.html always shows an empty map
-    # — the dashboard itself now explains this and points here.
+    # (index.html) can fetch the wiki artifacts (browsers block fetch() on
+    # file:// pages). Uses wikifier.serve — a stdlib server that also gives
+    # the dashboard safe localhost-only controls: Run update-maps /
+    # check-changes buttons and a Stop server button.
     local port="${1:-8787}"
     if ! command -v python3 >/dev/null 2>&1; then
-        error "serve requires python3 (uses the stdlib http.server)."
+        error "serve requires python3."
         return 1
     fi
-    log "Serving $PROJECT_ROOT at http://localhost:$port/index.html  (Ctrl+C to stop)"
+    if python3 -c "import wikifier.serve" 2>/dev/null; then
+        WIKIFIER_PROJECT_ROOT="$PROJECT_ROOT" exec python3 -m wikifier.serve "$port"
+    fi
+    # Fallback (wikifier package not importable): plain static server —
+    # dashboard works read-only (no Run/Stop buttons).
+    log "Serving $PROJECT_ROOT at http://localhost:$port/index.html  (Ctrl+C to stop; read-only fallback)"
     ( cd "$PROJECT_ROOT" && exec python3 -m http.server "$port" --bind 127.0.0.1 )
 }
 

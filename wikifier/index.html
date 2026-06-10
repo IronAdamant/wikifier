@@ -1,879 +1,717 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Wiki</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Version PINNED: the bare mermaid@10 alias let the CDN serve different
-         minors with different config schemas (maxEdges top-level vs nested
-         under flowchart), making large-graph rendering nondeterministic. -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
-    <script>
-        // Configure Mermaid ONCE, immediately:
-        // - startOnLoad:false — the default auto-start processes .mermaid
-        //   elements at page load with default config, racing the explicit
-        //   render in loadMermaid().
-        // - maxEdges in BOTH placements — builds differ on where they read it
-        //   (top-level is also a "secure" key, so it must be set here via
-        //   initialize, never via in-diagram directives). Default 500 broke
-        //   every repo whose graph used the generator's 600-edge budget.
-        if (window.mermaid) mermaid.initialize({
-            startOnLoad: false,
-            theme: 'dark',
-            maxEdges: 1500,
-            flowchart: { maxEdges: 1500 }
-        });
-    </script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
-        
-        :root {
-            --font-sans: 'Inter', system_ui, sans-serif;
-        }
-        
-        body {
-            font-family: 'Inter', system_ui, -apple-system, sans-serif;
-        }
-        
-        .font-display {
-            font-family: 'Space Grotesk', 'Inter', sans-serif;
-            font-weight: 600;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Wiki — Wikifier</title>
+<!-- Inline favicon: stops the /favicon.ico 404 on every page load. -->
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="%2310b981"/><text x="16" y="22" font-size="18" font-family="sans-serif" font-weight="bold" text-anchor="middle" fill="%23052e22">W</text></svg>'>
+<!-- Mermaid version PINNED: the bare mermaid@10 alias let the CDN serve
+     different minors with different config schemas (maxEdges top-level vs
+     nested under flowchart), making large-graph rendering nondeterministic. -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+<script>
+    // Configure Mermaid ONCE, immediately:
+    // - startOnLoad:false — the default auto-start processes .mermaid elements
+    //   at page load with default config, racing the explicit render below.
+    // - maxEdges in BOTH placements — builds differ on where they read it
+    //   (it is a "secure" key: must be set here via initialize, never via
+    //   in-diagram directives). The default 500 broke every repo whose graph
+    //   used the generator's 600-edge budget (linux, llvm, airflow...).
+    if (window.mermaid) mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        maxEdges: 1500,
+        flowchart: { maxEdges: 1500 }
+    });
+</script>
+<style>
+    :root {
+        --bg: #0b1018;
+        --panel: #111827;
+        --panel-2: #0d1420;
+        --border: #1f2a3a;
+        --border-soft: #18212f;
+        --text: #e5eaf2;
+        --muted: #8b97a8;
+        --faint: #5c6878;
+        --accent: #10b981;
+        --accent-dark: #065f46;
+        --accent-ink: #052e22;
+        --amber: #f59e0b;
+        --red: #ef4444;
+        --mono: ui-monospace, 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+        background:
+            radial-gradient(1200px 500px at 85% -10%, rgba(16,185,129,.07), transparent 60%),
+            radial-gradient(900px 400px at -10% 0%, rgba(59,130,246,.05), transparent 55%),
+            var(--bg);
+        color: var(--text);
+        font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+        min-height: 100vh;
+    }
+    a { color: #5eead4; }
 
-        .health-green { color: #10b981; }
-        .health-yellow { color: #eab308; }
-        .health-red { color: #ef4444; }
+    /* ---------- header ---------- */
+    header {
+        position: sticky; top: 0; z-index: 40;
+        display: flex; align-items: center; gap: 14px;
+        padding: 12px 22px;
+        background: rgba(11,16,24,.85); backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border-soft);
+    }
+    .logo {
+        width: 34px; height: 34px; border-radius: 9px; flex: none;
+        background: var(--accent); color: var(--accent-ink);
+        display: grid; place-items: center; font-weight: 800; font-size: 18px;
+    }
+    .brand b { font-size: 16px; }
+    .brand .proj { color: var(--muted); font-size: 13px; margin-top: -2px; }
+    .spacer { flex: 1; }
+    .chip {
+        font-size: 12px; padding: 4px 11px; border-radius: 999px;
+        border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+    }
+    .chip.live { border-color: var(--accent-dark); color: #6ee7b7; }
+    .chip.live::before { content: '●'; color: var(--accent); margin-right: 6px; }
+    .chip.static::before { content: '●'; color: var(--faint); margin-right: 6px; }
 
-        .matrix-table {
-            font-size: 0.875rem;
-        }
+    /* ---------- buttons ---------- */
+    button {
+        font: 600 13px/1 inherit; color: var(--text);
+        background: #1a2433; border: 1px solid var(--border);
+        padding: 9px 14px; border-radius: 10px; cursor: pointer;
+        transition: background .12s, border-color .12s, transform .05s;
+        white-space: nowrap;
+    }
+    button:hover { background: #223047; border-color: #2c3c52; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .45; cursor: default; transform: none; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    button.primary:hover { background: #34d399; border-color: #34d399; }
+    button.danger { border-color: #7f1d1d; color: #fca5a5; background: #1f1315; }
+    button.danger:hover { background: #2c1518; border-color: #b91c1c; }
+    button.ghost { background: transparent; }
+    .btnrow { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
 
-        .status-pill {
-            font-size: 0.75rem;
-            padding: 1px 9px;
-            border-radius: 9999px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
+    /* ---------- layout / cards ---------- */
+    main { max-width: 1180px; margin: 0 auto; padding: 22px 22px 60px; }
+    .card {
+        background: var(--panel); border: 1px solid var(--border-soft);
+        border-radius: 16px; padding: 18px 20px; margin-bottom: 18px;
+        box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 8px 24px rgba(0,0,0,.25);
+    }
+    .card h2 {
+        margin: 0 0 4px; font-size: 15px; letter-spacing: .2px;
+        display: flex; align-items: center; gap: 10px;
+    }
+    .card h2 .sub { font-weight: 400; font-size: 12px; color: var(--faint); }
+    .cols { display: grid; grid-template-columns: 3fr 2fr; gap: 18px; }
+    @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
 
-        .section-header {
-            font-size: 0.75rem;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: #64748b;
-        }
+    /* ---------- hero / summary ---------- */
+    .hero { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin: 10px 0 18px; }
+    .hero h1 { margin: 0; font-size: 26px; letter-spacing: -.3px; }
+    .hero p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill {
+        display: inline-flex; align-items: center; gap: 7px;
+        font-size: 12.5px; font-weight: 600; padding: 5px 12px;
+        border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+        background: var(--panel-2);
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .dot.g { background: var(--accent); } .dot.y { background: var(--amber); } .dot.r { background: var(--red); }
 
-        pre {
-            font-size: 0.75rem;
-        }
+    /* ---------- actions ---------- */
+    .console {
+        display: none; margin-top: 12px; padding: 12px 14px;
+        background: #0a0f16; border: 1px solid var(--border-soft); border-radius: 10px;
+        font-family: var(--mono); font-size: 12px; color: #b6c2d2;
+        max-height: 260px; overflow: auto; white-space: pre-wrap;
+    }
+    .console.show { display: block; }
+    .hint { font-size: 12px; color: var(--faint); margin-top: 8px; }
 
-        .command-btn {
-            transition: all 0.1s ease;
-        }
-        .command-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        }
+    /* ---------- mermaid ---------- */
+    #map-wrap {
+        margin-top: 12px; padding: 10px; min-height: 160px;
+        background: var(--panel-2); border: 1px solid var(--border-soft);
+        border-radius: 12px; overflow: auto;
+    }
+    #map-wrap svg { max-width: none; }
+    .errbox {
+        font-size: 13px; padding: 14px; border: 1px solid #92600c;
+        border-radius: 10px; background: #171207;
+    }
+    .errbox b { color: var(--amber); }
+    .errbox code { font-family: var(--mono); font-size: 12px; color: #d9c089; }
 
-        .wikifier-header {
-            background: linear-gradient(90deg, #0f172a 0%, #1e2937 100%);
-        }
+    /* ---------- files list ---------- */
+    .toolbar { display: flex; gap: 9px; align-items: center; margin-top: 10px; }
+    input[type=search] {
+        flex: 1; font: 13px/1.2 inherit; color: var(--text);
+        background: var(--panel-2); border: 1px solid var(--border);
+        border-radius: 10px; padding: 9px 12px; outline: none;
+    }
+    input[type=search]:focus { border-color: var(--accent-dark); }
+    #files { margin-top: 10px; max-height: 560px; overflow: auto; }
+    .frow {
+        display: flex; gap: 10px; padding: 9px 10px; border-radius: 9px;
+        border-bottom: 1px solid var(--border-soft); cursor: pointer;
+    }
+    .frow:hover { background: #15202f; }
+    .frow .dot { margin-top: 6px; flex: none; }
+    .frow .name { font-family: var(--mono); font-size: 12.5px; }
+    .frow .desc { color: var(--muted); font-size: 12px; margin-top: 1px;
+        overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .frow.expanded .desc { display: block; }
 
-        .intel-card {
-            background: #0f172a;
-            border: 1px solid #334155;
-            transition: transform 0.1s ease, border-color 0.1s ease;
-        }
-        .intel-card:hover {
-            border-color: #475569;
-            transform: translateY(-1px);
-        }
-        .intel-severity-critical { color: #f87171; font-weight: 600; }
-        .intel-severity-high { color: #fb923c; font-weight: 600; }
-        .intel-severity-medium { color: #fbbf24; font-weight: 600; }
-        .intel-severity-low { color: #4ade80; font-weight: 600; }
-    </style>
+    /* ---------- folders ---------- */
+    #folders { margin-top: 10px; max-height: 560px; overflow: auto;
+        font-family: var(--mono); font-size: 12.5px; }
+    .dir { color: #5eead4; padding: 4px 0 2px; font-weight: 700; }
+    .dir .count { color: var(--faint); font-weight: 400; }
+    .leaf { color: var(--muted); padding: 1px 0 1px 18px; }
+
+    /* ---------- toast / overlay ---------- */
+    #toast {
+        position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px);
+        background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px;
+        padding: 10px 18px; border-radius: 999px; opacity: 0; pointer-events: none;
+        transition: opacity .2s, transform .2s; z-index: 80;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #overlay {
+        position: fixed; inset: 0; z-index: 90; display: none;
+        background: rgba(7,10,15,.92); backdrop-filter: blur(4px);
+        place-items: center; text-align: center; padding: 30px;
+    }
+    #overlay.show { display: grid; }
+    #overlay .panel { max-width: 460px; }
+    #overlay h2 { font-size: 20px; margin: 0 0 8px; }
+    #overlay p { color: var(--muted); font-size: 14px; }
+    #overlay code { font-family: var(--mono); color: #6ee7b7; }
+
+    .notice {
+        position: sticky; top: 58px; z-index: 35; margin: 0 0 16px;
+        background: #2a1505; border: 1px solid #92600c; border-radius: 12px;
+        padding: 14px 16px; font-size: 13.5px; line-height: 1.6;
+    }
+    .busy::after { content: ''; display: inline-block; width: 11px; height: 11px;
+        border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+        margin-left: 8px; vertical-align: -1px; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    footer { color: var(--faint); font-size: 12px; text-align: center; padding: 8px 0 26px; }
+    footer code { font-family: var(--mono); color: var(--muted); }
+</style>
 </head>
-<body class="bg-slate-950 text-slate-200">
-    <div class="max-w-7xl mx-auto">
-        <!-- Header: clean for humans -->
-        <div class="border-b border-slate-800 px-8 py-5 flex items-center justify-between bg-slate-900">
-            <div class="flex items-center gap-x-3">
-                <div class="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-                    <span class="text-slate-950 font-bold text-xl tracking-tighter">W</span>
-                </div>
-                <div>
-                    <span class="font-display text-2xl font-semibold tracking-tighter">Project Wiki</span>
-                </div>
-                <div class="px-3 py-1 bg-slate-800 border border-slate-700 rounded-full text-xs text-slate-400 font-medium">
-                    Human view • Agent-maintained
-                </div>
-            </div>
-            
-            <div class="flex items-center gap-x-2">
-                <button onclick="window.location.reload()" 
-                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors flex items-center gap-x-2">
-                    <span>Refresh</span>
-                </button>
-                <span class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-500 cursor-help" title="diagnostics.html is the Wikifier maintainer/refactor hub (full architecture, porting checklist, command map, this tool's own source tree). It lives in the Wikifier source (not auto-copied into project wikis). For this project's agent wiki, you are in the right place. Clone or open diagnostics.html from your Wikifier checkout if refactoring the tool itself.">For maintainers</span>
-            </div>
+<body>
+
+<header>
+    <div class="logo">W</div>
+    <div class="brand">
+        <b>Project Wiki</b>
+        <div class="proj" id="proj-name">agent-maintained · human view</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="chip static" id="server-chip">checking server…</span>
+    <button id="btn-refresh" class="ghost" title="Reload wiki data (R)">⟳ Refresh</button>
+    <button id="btn-stop" class="danger" style="display:none" title="Shut down the wikifier serve process">⏻ Stop server</button>
+</header>
+
+<main>
+    <div class="hero">
+        <div>
+            <h1>Project structure &amp; notes</h1>
+            <p>Visual summaries from the agent-maintained wiki — updated automatically.</p>
         </div>
-
-        <div class="px-8 py-8">
-            <!-- Clean minimal status for humans -->
-            <div class="flex items-center justify-between mb-6">
-                <div>
-                    <h1 class="font-display text-3xl tracking-tighter font-semibold">Project structure &amp; notes</h1>
-                    <p class="text-slate-400 mt-0.5 text-sm">Visual summaries from the agent-maintained wiki • Updated automatically</p>
-                </div>
-                
-                <div class="flex items-center gap-x-3">
-                    <div id="health-summary" 
-                         class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2 text-sm">
-                        <!-- Populated by JS: clean pills only -->
-                    </div>
-                    <div id="monitor-status" 
-                         class="flex items-center gap-x-2 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-1.5 text-xs text-slate-400 font-mono cursor-pointer"
-                         onclick="loadMonitorStatus(true)" title="Click to check last update time">
-                        <!-- Populated by JS: simple "Updated Xm ago" -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Quick actions: buttons for the main commands.
-                 Why copy + wait, not direct execute?
-                 This page is a pure static client-side viewer (no server, no privileged code, zero runtime deps).
-                 Browser JS cannot execute host shell commands (security sandbox + design choice for portability and simplicity).
-                 The buttons prepare the exact command and immediately start live monitoring so the results appear automatically once you run the command in your terminal.
-                 This is the intended model: human view on top of agent-executed tools.
-            -->
-            <div class="mb-4 px-1">
-              <div class="text-[10px] text-slate-400 mb-1">Quick actions — click to copy the command + start live auto-update. Paste &amp; run in your terminal (this folder); the page will detect changes and refresh the view automatically.</div>
-              <div class="flex flex-wrap gap-2">
-                <button onclick="copyAndWaitForUpdate('check-changes')" 
-                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
-                  <span>Check for changes</span>
-                </button>
-                <button onclick="copyAndWaitForUpdate('update-maps')" 
-                        class="px-3 py-1.5 text-sm rounded-xl bg-emerald-800 hover:bg-emerald-700 border border-emerald-700 text-emerald-300 flex items-center gap-x-2">
-                  <span>Rebuild structure map</span>
-                </button>
-                <button onclick="copyCommandForRun('monitor &amp;')" 
-                        class="px-3 py-1.5 text-sm rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-x-2">
-                  <span>Start background monitor</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- HERO: The Chart / Tree (what humans see first and clearly) -->
-            <div class="mb-8 bg-slate-900 border border-slate-800 rounded-3xl p-6">
-                <div class="flex items-center justify-between mb-3">
-                    <div>
-                        <span class="font-semibold text-lg">Code structure</span>
-                        <span class="ml-2 text-xs text-slate-500">(imports &amp; dependencies — rebuilt from your code)</span>
-                    </div>
-                    <button onclick="copyAndWaitForUpdate('update-maps')" 
-                            class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">Rebuild tree</button>
-                </div>
-                <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-5 min-h-[340px]">
-                    <!-- NOTE: no class="mermaid" here — that class marks
-                         auto-start targets; the render target is the inner
-                         <pre class="mermaid"> created by loadMermaid(). -->
-                    <div id="mermaid-diagram"></div>
-                </div>
-                <div class="mt-4 flex flex-wrap gap-x-3 gap-y-2">
-                    <button onclick="copyMermaidSource()" 
-                            class="px-4 py-2 rounded-2xl bg-indigo-900/30 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-800 text-sm flex items-center gap-x-2">
-                        📋 Copy structure as text
-                    </button>
-                    <button onclick="copyProjectSnapshot()" 
-                            class="px-4 py-2 rounded-2xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800 text-sm flex items-center gap-x-2">
-                        📋 Copy full snapshot (tree + files + descriptions)
-                    </button>
-                    <span class="text-xs text-slate-500 self-center">Paste directly into docs, emails, or LLM chats — no raw source needed.</span>
-                </div>
-            </div>
-
-            <!-- Files & Descriptions: clean list, desc front and center -->
-            <div class="mb-8">
-                <div class="flex items-center justify-between mb-3 px-1">
-                    <div class="font-semibold text-lg">Files &amp; descriptions</div>
-                    <div class="flex items-center gap-x-2">
-                        <input id="health-dir-filter" type="text" placeholder="Filter path e.g. src/ or frontend/" 
-                               class="text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-1 w-60 font-mono"
-                               oninput="filterFilesList()" onkeydown="if(event.key==='Enter')filterFilesList()">
-                        <button onclick="filterFilesList()" 
-                                class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700">Filter</button>
-                        <button onclick="copyAndWaitForUpdate('check-changes')" 
-                                class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">
-                            Update data
-                        </button>
-                    </div>
-                </div>
-
-                <div id="health-scale-note" class="hidden text-[10px] mb-2 px-2 py-1 bg-amber-900/20 text-amber-300 border border-amber-800 rounded"></div>
-                
-                <div id="files-list" class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden divide-y divide-slate-800">
-                    <!-- Populated by JS as clean rows: path + short desc (from wiki) + status -->
-                </div>
-
-                <!-- Clean full description viewer (appears on row click; human friendly, easy copy) -->
-                <div id="file-desc-viewer" class="hidden mt-3 p-4 bg-slate-950 border border-slate-700 rounded-2xl text-sm">
-                    <div class="flex justify-between items-start mb-2">
-                        <div id="file-desc-path" class="font-mono text-xs text-emerald-400"></div>
-                        <button onclick="hideFileDesc()" class="text-xs text-slate-500 hover:text-slate-300">✕</button>
-                    </div>
-                    <div id="file-desc-body" class="text-slate-200 leading-relaxed text-sm whitespace-pre-wrap max-h-[160px] overflow-auto pr-2"></div>
-                    <div class="mt-3">
-                        <button onclick="copyFileDesc()" class="text-xs px-3 py-1 rounded-lg bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800">Copy full note</button>
-                    </div>
-                </div>
-
-                <div class="mt-3 text-xs text-slate-500 px-2">
-                    Short descriptions are from the agent wiki. Click any row to see the full note and copy it easily.
-                </div>
-            </div>
-
-            <!-- Simple derived folder tree (human file browser feel, from health paths) -->
-            <div class="mb-8">
-                <div class="font-semibold text-sm mb-2 px-1 text-slate-400">Browse by folder</div>
-                <div id="dir-tree" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-sm max-h-[160px] overflow-auto font-mono leading-snug">
-                    <!-- Populated by JS from health file paths -->
-                </div>
-            </div>
-
-            <!-- Minimal human guidance only (no agent contract, no jargon) -->
-            <div class="text-xs text-slate-400 border-t border-slate-800 pt-4">
-                <strong>Keep it fresh:</strong> In this project folder run <code class="bg-slate-900 px-1 py-px rounded">wikifier check-changes &amp;&amp; wikifier update-maps</code> then Refresh above.<br>
-                For continuous updates: <code class="bg-slate-900 px-1 py-px rounded">wikifier monitor &amp;</code> in another terminal. For best auto-reload feel, run <code class="bg-slate-900 px-1 py-px rounded">python -m http.server 8000</code> and open http://localhost:8000/index.html.<br>
-                <span class="text-slate-500">If an old <code>diagnostics.html</code> is present (from earlier inits), you can safely delete it — only this page is needed for the project wiki view. The detailed maintainer view for hacking on Wikifier itself lives in the Wikifier source tree.</span>
-            </div>
-        </div>
+        <div class="spacer"></div>
+        <div class="pills" id="summary-pills"><span class="pill">loading…</span></div>
     </div>
 
-    <script>
-        // Tailwind script
-        function initTailwind() {
-            document.documentElement.style.setProperty('--accent', '#10b981');
+    <!-- ============ actions ============ -->
+    <section class="card" id="actions-card">
+        <h2>Actions <span class="sub" id="actions-sub">…</span></h2>
+        <div class="btnrow" style="margin-top:10px">
+            <button class="primary" id="btn-update"   data-cmd="update-maps">▶ Update map</button>
+            <button id="btn-update-full"              data-cmd="update-maps --full">Full rebuild</button>
+            <button id="btn-check"                    data-cmd="check-changes">Check changes</button>
+            <button class="ghost" id="btn-copy-serve">⧉ Copy “wikifier serve”</button>
+        </div>
+        <div class="console" id="console"></div>
+        <div class="hint" id="actions-hint"></div>
+    </section>
+
+    <!-- ============ structure map ============ -->
+    <section class="card">
+        <h2>Code structure <span class="sub">imports &amp; dependencies, rebuilt from your code</span></h2>
+        <div id="map-wrap"><div class="hint">loading map…</div></div>
+        <div class="btnrow" style="margin-top:12px">
+            <button id="btn-copy-mermaid">⧉ Copy structure as text</button>
+            <button id="btn-copy-snapshot">⧉ Copy full snapshot (tree + files + descriptions)</button>
+            <span class="hint" style="margin:0">Paste directly into docs or LLM chats.</span>
+        </div>
+    </section>
+
+    <!-- ============ files + folders ============ -->
+    <div class="cols">
+        <section class="card">
+            <h2>Files &amp; descriptions <span class="sub" id="files-count"></span></h2>
+            <div class="toolbar">
+                <input type="search" id="filter" placeholder="Filter — e.g. src/ or parser">
+            </div>
+            <div id="files"></div>
+            <div class="hint">Descriptions come from the agent wiki. Click a row to expand its full note.</div>
+        </section>
+        <section class="card">
+            <h2>Browse by folder</h2>
+            <div id="folders"></div>
+        </section>
+    </div>
+
+    <footer>
+        Keep it fresh: <code>wikifier check-changes &amp;&amp; wikifier update-maps</code> — or use the buttons above.
+        The markdown files (<code>library.md</code>, <code>file_health.md</code>) remain the agents’ source of truth.
+    </footer>
+</main>
+
+<div id="toast"></div>
+<div id="overlay"><div class="panel">
+    <h2>Server stopped</h2>
+    <p>The <code>wikifier serve</code> process has shut down and this page is now frozen.
+       To come back, run <code>wikifier serve</code> in the project folder again and reload.</p>
+</div></div>
+
+<script>
+// ============================================================================
+// Wikifier human dashboard — static page over the agent-maintained artifacts.
+// Data sources: file_health.json|.md, library.md, .wikifier_staging/.last_check
+// Optional control surface when served by `wikifier serve` (wikifier/serve.py):
+// /__wikifier/status, /__wikifier/run, /__wikifier/shutdown — localhost only.
+// ============================================================================
+'use strict';
+
+const state = {
+    execMode: false,          // true when served by wikifier.serve (Run/Stop available)
+    serverInfo: null,
+    health: [],               // [{file, status:'g|y|r', updated, reason}]
+    libraryMd: '',
+    jsonMissing: false,       // remember a file_health.json 404 — stop re-polling it
+    running: false,
+    liveWaitTimer: null,
+    lastDataSig: '',
+};
+
+const $ = id => document.getElementById(id);
+
+// ---------- helpers ---------------------------------------------------------
+async function safeFetch(path, fallbackText = '') {
+    try {
+        const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(() => ctrl.abort(), 12000) : null;
+        const res = await fetch(path, ctrl ? { signal: ctrl.signal, cache: 'no-store' } : { cache: 'no-store' });
+        if (timer) clearTimeout(timer);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.text();
+    } catch (e) {
+        return fallbackText;
+    }
+}
+
+function toast(msg, ms = 2200) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._h);
+    t._h = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+async function copyText(text, btn) {
+    try { await navigator.clipboard.writeText(text); } catch (e) { /* clipboard denied */ }
+    if (btn) {
+        const old = btn.textContent;
+        btn.textContent = '✓ Copied';
+        setTimeout(() => { btn.textContent = old; }, 1400);
+    }
+}
+
+function esc(s) {
+    return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+}
+
+function timeAgo(date) {
+    const s = Math.max(0, (Date.now() - date.getTime()) / 1000);
+    if (s < 90) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + 'm ago';
+    if (s < 86400) return Math.round(s / 3600) + 'h ago';
+    return Math.round(s / 86400) + 'd ago';
+}
+
+// ---------- server detection / control --------------------------------------
+async function detectServer() {
+    try {
+        const res = await fetch('/__wikifier/status?cb=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) {
+            const info = await res.json();
+            if (info && info.wikifier_serve) {
+                state.execMode = true;
+                state.serverInfo = info;
+            }
         }
+    } catch (e) { /* plain static server */ }
+    const chip = $('server-chip');
+    if (state.execMode) {
+        chip.textContent = 'wikifier serve · v' + (state.serverInfo.version || '?');
+        chip.classList.add('live'); chip.classList.remove('static');
+        $('btn-stop').style.display = '';
+        $('proj-name').textContent = state.serverInfo.project + ' · agent-maintained';
+        $('actions-sub').textContent = 'buttons run directly on this machine (localhost only)';
+        $('actions-hint').textContent = 'Commands execute in ' + state.serverInfo.root + ' — output appears here and in the serving terminal.';
+    } else {
+        chip.textContent = 'static server (read-only)';
+        $('actions-sub').textContent = 'copy mode — run the copied command in your terminal';
+        $('actions-hint').textContent = 'This server can only read files. For one-click Run/Stop buttons, serve with: wikifier serve';
+        const fromPath = decodeURIComponent(location.pathname.split('/').filter(Boolean).slice(-2, -1)[0] || '');
+        if (fromPath) $('proj-name').textContent = fromPath + ' · agent-maintained';
+    }
+}
 
-        // ==================== V1-P7 DATA & INTEGRATION WIRING (production-grade, defensive, scale-aware) ====================
-        // All vanilla JS. Zero new runtime deps. Consumes generated artifacts primarily.
-        // window.healthData, window.scaleMode etc exposed for other agents / future diagnostics.html
-        window.healthData = [];
-        window.libraryMdCache = '';
-        window.scaleMode = false;
-        const HEALTH_RENDER_CAP = 180; // R1 scale: never flood DOM; filter narrows first
+async function stopServer() {
+    if (!state.execMode) return;
+    if (!confirm('Stop the wikifier serve process? The dashboard will go offline.')) return;
+    try {
+        const res = await fetch('/__wikifier/shutdown', { method: 'POST' });
+        if (res.ok) { $('overlay').classList.add('show'); return; }
+    } catch (e) { /* connection may drop as it stops — that also means success */
+        $('overlay').classList.add('show'); return;
+    }
+    toast('Could not stop the server');
+}
 
-        // Defensive fetch helper (timeout-ish via AbortController if supported)
-        async function safeFetch(path, fallbackText = '') {
+async function runCommand(cmdKey, btn) {
+    if (state.running) return;
+    if (!state.execMode) {  // copy mode fallback: copy + live-wait for artifacts
+        await copyText('wikifier ' + cmdKey, btn);
+        toast('Command copied — run it in your terminal; the page will auto-refresh');
+        startLiveWait();
+        return;
+    }
+    state.running = true;
+    const old = btn.textContent;
+    btn.classList.add('busy'); btn.disabled = true;
+    const con = $('console');
+    con.classList.add('show');
+    con.textContent = '$ wikifier ' + cmdKey + '\nrunning…';
+    try {
+        const res = await fetch('/__wikifier/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd: cmdKey }),
+        });
+        const out = await res.json();
+        con.textContent = '$ wikifier ' + cmdKey + '\n'
+            + (out.output || out.error || '')
+            + '\n— ' + (out.ok ? 'done' : 'FAILED') + ' in ' + (out.duration_s ?? '?') + 's';
+        con.scrollTop = con.scrollHeight;
+        toast(out.ok ? '✓ ' + cmdKey + ' finished — refreshing view' : '✗ ' + cmdKey + ' failed (see output)');
+        await loadAll();
+    } catch (e) {
+        con.textContent += '\nrequest failed: ' + e.message;
+        toast('Request failed — is the server still running?');
+    } finally {
+        state.running = false;
+        btn.classList.remove('busy'); btn.disabled = false;
+        btn.textContent = old;
+    }
+}
+
+// Copy-mode helper: poll the artifacts and refresh when the terminal run lands.
+async function dataSignature() {
+    const lib = await safeFetch('library.md?cb=' + Date.now(), '');
+    const hm = await safeFetch('file_health.md?cb=' + Date.now(), '');
+    return lib.length + ':' + hm.length + ':' + lib.slice(0, 200);
+}
+function startLiveWait() {
+    if (state.liveWaitTimer) return;
+    let ticks = 0;
+    state.liveWaitTimer = setInterval(async () => {
+        ticks++;
+        const sig = await dataSignature();
+        if (state.lastDataSig && sig !== state.lastDataSig) {
+            clearInterval(state.liveWaitTimer); state.liveWaitTimer = null;
+            state.lastDataSig = sig;
+            toast('✓ Data updated — view refreshed');
+            await loadAll();
+        } else if (ticks > 200) {  // ~10 min: stop quietly
+            clearInterval(state.liveWaitTimer); state.liveWaitTimer = null;
+        }
+    }, 3000);
+}
+
+// ---------- health -----------------------------------------------------------
+function statusClass(raw) {
+    if (raw.includes('🟢')) return 'g';
+    if (raw.includes('🟡')) return 'y';
+    if (raw.includes('🔴')) return 'r';
+    return 'y';
+}
+
+function parseHealthMd(md) {
+    const rows = [];
+    let inTable = false;
+    for (let line of md.split('\n')) {
+        line = line.trim();
+        if (line.includes('| File | Status')) { inTable = true; continue; }
+        if (!inTable) continue;
+        if (line.startsWith('|--') || line.startsWith('| --')) continue;
+        if (!line.startsWith('|')) { inTable = false; continue; }
+        const parts = line.split('|').map(p => p.trim());
+        // parts[0] is '' before the leading pipe
+        if (parts.length >= 5 && parts[1]) {
+            rows.push({ file: parts[1], status: statusClass(parts[2] || ''), updated: parts[3] || '', reason: parts[4] || '' });
+        }
+    }
+    return rows;
+}
+
+async function loadHealth() {
+    // file_health.json is optional; remember a 404 so we stop hammering it
+    // on every poll (it showed up as console + server-log noise).
+    if (!state.jsonMissing) {
+        const text = await safeFetch('file_health.json?cb=' + Date.now(), '');
+        if (text) {
             try {
-                const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-                const timer = ctrl ? setTimeout(() => ctrl.abort(), 12000) : null;
-                const res = await fetch(path, ctrl ? {signal: ctrl.signal} : {});
-                if (timer) clearTimeout(timer);
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                return await res.text();
-            } catch (e) {
-                console.warn('[Wikifier wiring] fetch failed for', path, e.message);
-                return fallbackText;
-            }
-        }
-
-        // Robust health row parser (supports both .md table and JSON structure)
-        function parseHealthMd(md) {
-            const rows = [];
-            const lines = md.split('\n');
-            let inTable = false;
-            for (let line of lines) {
-                line = line.trim();
-                if (line.includes('| File | Status') || line.includes('|File|Status')) { inTable = true; continue; }
-                if (!inTable) continue;
-                if (line.startsWith('|---') || line.startsWith('| ---')) continue;
-                if (!line.startsWith('|')) { inTable = false; continue; }
-                const parts = line.split('|').map(p => p.trim()).filter(Boolean);
-                if (parts.length >= 4) {
-                    rows.push({
-                        file: parts[0] || '',
-                        status: parts[1] || '🟡 Yellow',
-                        updated: parts[2] || '',
-                        reason: (parts[3] || '') + (parts[4] ? ' | ' + parts[4] : '')
-                    });
-                }
-            }
-            return rows;
-        }
-
-        // Clean a reason string for human display: keep the intent, drop agent subid/FRESH noise
-        function cleanReasonForHuman(reason) {
-            if (!reason) return 'No description yet.';
-            let r = reason.replace(/\bsubid=[^\s]+/gi, '').replace(/FRESH[^.]*\./gi, '').replace(/\s+/g, ' ').trim();
-            // Take first sentence-ish or first 140 chars for the short desc
-            const first = r.split(/[.!?]\s/)[0] || r;
-            if (first.length > 160) return first.slice(0, 157) + '…';
-            return first || 'No description yet.';
-        }
-
-        // Core load: prefers JSON, fallback MD. Now renders to human files-list + dir-tree.
-        async function loadHealthMatrix(dirFilter = '') {
-            const listEl = document.getElementById('files-list');
-            const summary = document.getElementById('health-summary');
-            const scaleNote = document.getElementById('health-scale-note');
-            
-            if (listEl) listEl.innerHTML = `<div class="px-5 py-8 text-center text-slate-500 text-xs">Loading files &amp; descriptions...</div>`;
-            if (scaleNote) scaleNote.classList.add('hidden');
-
-            let rows = [];
-            let usedJson = false;
-
-            try {
-                const jsonText = await safeFetch('file_health.json');
-                if (jsonText && jsonText.trim().startsWith('{')) {
-                    const data = JSON.parse(jsonText);
-                    const entries = (data && data.entries) || {};
-                    for (const [file, entry] of Object.entries(entries)) {
-                        rows.push({
-                            file,
-                            status: entry.status || '🟡 Yellow',
-                            updated: entry.last_updated || '',
-                            reason: entry.reason || ''
-                        });
-                    }
-                    usedJson = true;
-                }
-            } catch (e) { /* fall to md */ }
-
-            if (rows.length === 0) {
-                const md = await safeFetch('file_health.md', '');
-                if (md) rows = parseHealthMd(md);
-            }
-
-            window.healthData = rows;
-
-            const filterVal = dirFilter || (document.getElementById('health-dir-filter')?.value || '');
-            renderFilesList(rows, filterVal);
-            renderDirTree(rows, filterVal);
-
-            // Clean summary pills (no scale jargon)
-            let green = 0, yellow = 0, red = 0;
-            rows.forEach(r => {
-                if (r.status.includes('Green') || r.status.includes('🟢')) green++;
-                else if (r.status.includes('Yellow') || r.status.includes('🟡')) yellow++;
-                else red++;
-            });
-            if (summary) {
-                if (rows.length === 0) {
-                    summary.innerHTML = `<div class="text-xs text-amber-400 px-3 py-1">No files indexed yet. Run <code class="bg-slate-900 px-1">wikifier check-changes</code></div>`;
-                } else {
-                    summary.innerHTML = `
-                        <div class="flex items-center gap-x-1.5">
-                            <div class="px-2.5 py-0.5 rounded-2xl bg-emerald-900/30 text-emerald-400 flex items-center gap-x-1 text-sm"><span>🟢</span><span class="font-semibold">${green}</span></div>
-                            <div class="px-2.5 py-0.5 rounded-2xl bg-yellow-900/30 text-yellow-400 flex items-center gap-x-1 text-sm"><span>🟡</span><span class="font-semibold">${yellow}</span></div>
-                            <div class="px-2.5 py-0.5 rounded-2xl bg-red-900/30 text-red-400 flex items-center gap-x-1 text-sm"><span>🔴</span><span class="font-semibold">${red}</span></div>
-                            <div class="text-[10px] text-slate-400 ml-1">${rows.length} files</div>
-                        </div>`;
-                }
-            }
-        }
-
-        function renderFilesList(rows, dirFilter = '') {
-            const listEl = document.getElementById('files-list');
-            if (!listEl) return;
-            listEl.innerHTML = '';
-
-            if (!rows || rows.length === 0) {
-                listEl.innerHTML = `<div class="px-5 py-8 text-center">
-                    <div class="text-sm text-slate-400">No files in the wiki yet.</div>
-                    <div class="mt-3">
-                        <button onclick="copyAndWaitForUpdate('check-changes &amp;&amp; update-maps', 'wikifier check-changes &amp;&amp; wikifier update-maps')" 
-                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium">
-                            📋 Copy first-time setup command
-                        </button>
-                    </div>
-                    <div class="mt-2 text-xs text-slate-500">Run <code class="bg-slate-900 px-1">wikifier check-changes &amp;&amp; wikifier update-maps</code> in this project folder, then refresh.</div>
-                </div>`;
+                const data = JSON.parse(text);
+                const entries = data.entries || data;
+                state.health = Object.entries(entries).map(([file, e]) => ({
+                    file,
+                    status: statusClass((e && e.status) || ''),
+                    updated: (e && e.last_updated) || '',
+                    reason: (e && e.reason) || '',
+                }));
                 return;
-            }
-
-            let filtered = rows;
-            const f = (dirFilter || '').trim().toLowerCase();
-            if (f) {
-                filtered = rows.filter(r => (r.file || '').toLowerCase().includes(f));
-            }
-
-            const toRender = filtered.slice(0, 220); // human cap; filter narrows
-
-            toRender.forEach(r => {
-                const row = document.createElement('div');
-                row.className = 'px-4 py-2.5 hover:bg-slate-950 cursor-pointer flex items-start gap-x-3 group';
-                row.onclick = () => showFileDescription(r.file, r.reason, r.status);
-
-                let statusDot = '🟡';
-                if (r.status.includes('Green') || r.status.includes('🟢')) statusDot = '🟢';
-                else if (r.status.includes('Red') || r.status.includes('🔴')) statusDot = '🔴';
-
-                const shortDesc = cleanReasonForHuman(r.reason);
-
-                row.innerHTML = `
-                    <div class="pt-0.5 text-lg leading-none w-5 shrink-0">${statusDot}</div>
-                    <div class="min-w-0 flex-1">
-                        <div class="font-mono text-xs text-slate-200 group-hover:text-emerald-300 truncate">${r.file}</div>
-                        <div class="text-xs text-slate-400 mt-0.5 leading-snug pr-2">${shortDesc}</div>
-                    </div>
-                    <div class="opacity-0 group-hover:opacity-60 text-[10px] text-slate-500 self-center shrink-0">click for full</div>
-                `;
-                listEl.appendChild(row);
-            });
-
-            if (filtered.length === 0 && f) {
-                listEl.innerHTML = `<div class="px-5 py-4 text-xs text-slate-400">No matches for "${f}". Clear the filter or try a broader path.</div>`;
-            }
+            } catch (e) { /* fall through to .md */ }
+        } else {
+            state.jsonMissing = true;
         }
+    }
+    const md = await safeFetch('file_health.md?cb=' + Date.now(), '');
+    state.health = md ? parseHealthMd(md) : [];
+}
 
-        function filterFilesList() {
-            const val = document.getElementById('health-dir-filter')?.value || '';
-            if (window.healthData && window.healthData.length) {
-                renderFilesList(window.healthData, val);
-                renderDirTree(window.healthData, val);
-            } else {
-                loadHealthMatrix(val);
-            }
-        }
+// ---------- heartbeat --------------------------------------------------------
+function parseHeartbeat(text) {
+    const t = text.trim();
+    if (!t) return null;
+    if (/^\d{9,}$/.test(t)) return new Date(parseInt(t, 10) * (t.length > 11 ? 1 : 1000));
+    // "YYYY-MM-DD HH:MM:SS" (local time, the CLI's format) or ISO-ish
+    const iso = t.replace(' ', 'T');
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+}
 
-        // New clean human file description viewer (no agent jargon)
-        let currentDescFile = '';
-        let currentDescText = '';
+async function loadHeartbeat() {
+    const text = await safeFetch('.wikifier_staging/.last_check?cb=' + Date.now(), '');
+    const el = document.createElement('span');
+    el.className = 'pill';
+    if (!text) {
+        el.innerHTML = 'no heartbeat yet';
+    } else {
+        const d = parseHeartbeat(text);
+        el.innerHTML = d ? ('updated ' + esc(timeAgo(d))) : 'updated recently';
+    }
+    el.id = 'hb-pill';
+    const oldEl = $('hb-pill');
+    if (oldEl) oldEl.replaceWith(el); else $('summary-pills').appendChild(el);
+}
 
-        function showFileDescription(file, reason, status) {
-            const viewer = document.getElementById('file-desc-viewer');
-            const pathEl = document.getElementById('file-desc-path');
-            const bodyEl = document.getElementById('file-desc-body');
-            if (!viewer || !pathEl || !bodyEl) return;
+// ---------- renders ----------------------------------------------------------
+function renderSummary() {
+    const c = { g: 0, y: 0, r: 0 };
+    state.health.forEach(r => c[r.status]++);
+    $('summary-pills').innerHTML =
+        `<span class="pill"><span class="dot g"></span>${c.g}</span>` +
+        `<span class="pill"><span class="dot y"></span>${c.y}</span>` +
+        `<span class="pill"><span class="dot r"></span>${c.r}</span>` +
+        `<span class="pill">${state.health.length} files</span>`;
+    loadHeartbeat();
+}
 
-            currentDescFile = file;
-            currentDescText = reason || 'No wiki note recorded yet for this file.';
+const RENDER_CAP = 250;
+function renderFiles() {
+    const q = ($('filter').value || '').toLowerCase();
+    const rows = state.health.filter(r => !q || r.file.toLowerCase().includes(q) || r.reason.toLowerCase().includes(q));
+    const shown = rows.slice(0, RENDER_CAP);
+    $('files-count').textContent = q ? `${rows.length} match` : `${rows.length} tracked`;
+    $('files').innerHTML = shown.map(r => `
+        <div class="frow" data-file="${esc(r.file)}">
+            <span class="dot ${r.status}"></span>
+            <div>
+                <div class="name">${esc(r.file)}</div>
+                <div class="desc">${esc(r.reason)}</div>
+            </div>
+        </div>`).join('')
+        + (rows.length > RENDER_CAP ? `<div class="hint">…and ${rows.length - RENDER_CAP} more — narrow the filter.</div>` : '');
+    $('files').querySelectorAll('.frow').forEach(el => {
+        el.onclick = () => {
+            el.classList.toggle('expanded');
+            copyText(el.dataset.file);
+            toast('Path copied: ' + el.dataset.file, 1400);
+        };
+    });
+}
 
-            pathEl.textContent = `${file}  ${status || ''}`;
-            // Show cleaned full reason (drop only the noisiest tokens)
-            let display = (reason || 'No description.').replace(/\bsubid=[^\s,]+/gi, '').replace(/\(FRESH LAST PASS[^)]*\)/gi, '').trim();
-            bodyEl.textContent = display;
+function renderFolders() {
+    const groups = {};
+    state.health.forEach(r => {
+        const ix = r.file.indexOf('/');
+        const dir = ix === -1 ? '(root)' : r.file.slice(0, ix);
+        (groups[dir] = groups[dir] || []).push(r.file.slice(ix + 1));
+    });
+    $('folders').innerHTML = Object.keys(groups).sort().map(dir => {
+        const files = groups[dir];
+        const head = `<div class="dir">${esc(dir)}/ <span class="count">(${files.length})</span></div>`;
+        const leaves = files.slice(0, 6).map(f => `<div class="leaf">↳ ${esc(f)}</div>`).join('')
+            + (files.length > 6 ? `<div class="leaf">… +${files.length - 6} more</div>` : '');
+        return head + leaves;
+    }).join('') || '<div class="hint">No files tracked yet — run check-changes / update-maps.</div>';
+}
 
-            viewer.classList.remove('hidden');
-            // scroll into view lightly
-            viewer.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }
+// ---------- structure map ----------------------------------------------------
+async function loadMap() {
+    const wrap = $('map-wrap');
+    const md = await safeFetch('library.md?cb=' + Date.now(), '');
+    state.libraryMd = md;
+    if (!md) {
+        wrap.innerHTML = `<div class="errbox"><b>No structure map yet.</b><br>
+            Click <i>Update map</i> above (or run <code>wikifier update-maps</code> in this folder), then refresh.</div>`;
+        return;
+    }
+    const match = md.match(/```mermaid\n([\s\S]*?)```/);
+    if (!match || !match[1].trim()) {
+        wrap.innerHTML = `<div class="errbox"><b>library.md has no diagram block.</b><br>
+            Run <code>wikifier update-maps</code> to regenerate it.</div>`;
+        return;
+    }
+    // textContent (never innerHTML) so the Mermaid source can't be parsed as HTML.
+    wrap.innerHTML = '<pre class="mermaid" style="margin:0;background:transparent"></pre>';
+    wrap.querySelector('.mermaid').textContent = match[1];
+    if (!window.mermaid) {
+        wrap.innerHTML = '<div class="errbox"><b>Mermaid library failed to load</b> (offline?). The map data itself is intact in <code>library.md</code>.</div>';
+        return;
+    }
+    try {
+        // Re-assert the same config as the early <head> init (some builds
+        // re-read it per render; keep both maxEdges placements).
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', maxEdges: 1500, flowchart: { maxEdges: 1500 } });
+        await mermaid.run({ nodes: [wrap.querySelector('.mermaid')] });
+    } catch (e) {
+        // Never fail silently: show what broke + where the intact data lives.
+        const msg = (e && (e.message || e.str)) || String(e);
+        wrap.innerHTML = `<div class="errbox"><b>Structure map could not be rendered</b><br>
+            <code>${esc(String(msg)).slice(0, 300)}</code><br>
+            <span class="hint">The underlying map data in library.md is intact — use “Copy structure as text”.</span></div>`;
+    }
+}
 
-        function hideFileDesc() {
-            const viewer = document.getElementById('file-desc-viewer');
-            if (viewer) viewer.classList.add('hidden');
-        }
+// ---------- exports ----------------------------------------------------------
+function mermaidSource() {
+    const m = (state.libraryMd || '').match(/```mermaid\n([\s\S]*?)```/);
+    return m ? m[1].trim() : '';
+}
 
-        function copyFileDesc() {
-            if (!currentDescText) return;
-            navigator.clipboard.writeText(currentDescText).then(() => {
-                const btns = document.querySelectorAll('#file-desc-viewer button');
-                btns.forEach(b => {
-                    if (b.textContent.includes('Copy')) {
-                        const t = b.textContent;
-                        b.textContent = '✓ Copied';
-                        setTimeout(() => { b.textContent = t; }, 1100);
-                    }
-                });
-            }).catch(() => {});
-        }
+function buildSnapshot() {
+    const c = { g: 0, y: 0, r: 0 };
+    state.health.forEach(r => c[r.status]++);
+    const lines = [];
+    lines.push('# Project snapshot (Wikifier wiki export)');
+    lines.push(`Health: ${c.g} green / ${c.y} yellow / ${c.r} red — ${state.health.length} tracked files`);
+    lines.push('');
+    lines.push('## Files & descriptions');
+    state.health.forEach(r => {
+        const mark = { g: '🟢', y: '🟡', r: '🔴' }[r.status];
+        lines.push(`- ${mark} ${r.file} — ${r.reason}`);
+    });
+    const src = mermaidSource();
+    if (src) {
+        lines.push('');
+        lines.push('## Structure (Mermaid)');
+        lines.push('```mermaid');
+        lines.push(src);
+        lines.push('```');
+    }
+    return lines.join('\n');
+}
 
-        // Simple folder tree derived from health paths (groups by top-level dir)
-        function renderDirTree(rows, dirFilter = '') {
-            const treeEl = document.getElementById('dir-tree');
-            if (!treeEl) return;
+// ---------- file:// guard ----------------------------------------------------
+// Browsers refuse fetch() from file:// pages (unique-origin sandbox), so a
+// double-clicked index.html can never read the wiki artifacts. Show the one
+// command fix instead of failing silently.
+function showFileProtocolNotice() {
+    const main = document.querySelector('main');
+    const div = document.createElement('div');
+    div.className = 'notice';
+    div.id = 'file-protocol-notice';
+    div.innerHTML = `<b>The dashboard can’t read the wiki files when opened directly from disk.</b><br>
+        Browsers block <code>fetch()</code> on <code>file://</code> pages. Serve this folder instead —
+        run one of these in the project folder, then open the link:
+        <div class="btnrow" style="margin-top:9px">
+            <button class="primary" id="fp-serve">⧉ Copy: wikifier serve</button>
+            <button id="fp-py">⧉ Copy: python3 -m http.server 8787</button>
+            <a href="http://localhost:8787/index.html">open http://localhost:8787/index.html</a>
+        </div>`;
+    main.prepend(div);
+    $('fp-serve').onclick = e => copyText('wikifier serve', e.target);
+    $('fp-py').onclick = e => copyText('python3 -m http.server 8787', e.target);
+}
 
-            if (!rows || rows.length === 0) {
-                treeEl.innerHTML = '<span class="text-slate-500 text-xs">No files yet.</span>';
-                return;
-            }
+// ---------- boot -------------------------------------------------------------
+async function loadAll() {
+    await loadHealth();
+    renderSummary();
+    renderFiles();
+    renderFolders();
+    await loadMap();
+    state.lastDataSig = await dataSignature();
+}
 
-            const groups = {};
-            rows.forEach(r => {
-                const f = r.file || '';
-                const top = f.includes('/') ? f.split('/')[0] : '(root)';
-                if (!groups[top]) groups[top] = [];
-                groups[top].push(f);
-            });
+function wire() {
+    $('btn-refresh').onclick = () => { loadAll(); toast('Refreshed'); };
+    $('btn-stop').onclick = stopServer;
+    $('btn-copy-serve').onclick = e => copyText('wikifier serve', e.target);
+    $('btn-copy-mermaid').onclick = e => {
+        const src = mermaidSource();
+        copyText(src || 'No map yet — run wikifier update-maps first.', e.target);
+    };
+    $('btn-copy-snapshot').onclick = e => copyText(buildSnapshot(), e.target);
+    ['btn-update', 'btn-update-full', 'btn-check'].forEach(id => {
+        $(id).onclick = ev => runCommand(ev.target.dataset.cmd, ev.target);
+    });
+    $('filter').addEventListener('input', renderFiles);
+    document.addEventListener('keydown', e => {
+        if (e.key.toLowerCase() === 'r' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) loadAll();
+    });
+}
 
-            const f = (dirFilter || '').trim().toLowerCase();
-            let html = '';
-            Object.keys(groups).sort().forEach(dir => {
-                const files = groups[dir];
-                const matchCount = f ? files.filter(p => p.toLowerCase().includes(f)).length : files.length;
-                if (f && matchCount === 0) return;
-                html += `<div class="mb-0.5"><span class="text-emerald-400">${dir}/</span> <span class="text-slate-500">(${matchCount})</span></div>`;
-                // show up to 3 example files under it (clickable to filter)
-                const examples = files.slice(0, 3);
-                examples.forEach(ex => {
-                    const short = ex.split('/').pop();
-                    html += `<div class="pl-3 text-[11px] text-slate-400 hover:text-emerald-300 cursor-pointer" onclick="document.getElementById('health-dir-filter').value='${ex.split('/').slice(0,2).join('/')}';filterFilesList();">↳ ${short}</div>`;
-                });
-                if (files.length > 3) html += `<div class="pl-3 text-[10px] text-slate-500">… +${files.length-3} more</div>`;
-            });
+async function boot() {
+    if (location.protocol === 'file:') {
+        showFileProtocolNotice();
+        $('server-chip').textContent = 'file:// — not served';
+        return; // skip data loads + polling: every fetch would fail
+    }
+    wire();
+    await detectServer();
+    await loadAll();
+    // Gentle background poll so monitor/agent updates appear automatically.
+    setInterval(() => { if (!state.running) loadAll(); }, 32000);
+}
 
-            treeEl.innerHTML = html || '<span class="text-slate-500">No matching folders.</span>';
-        }
-
-        // (legacy showWikiPurpose + old pane removed; human view uses showFileDescription + #file-desc-viewer now)
-
-        // Monitor status: simple human-friendly "last updated" indicator.
-        async function loadMonitorStatus(forceRefresh = false) {
-            const el = document.getElementById('monitor-status');
-            if (!el) return;
-
-            const tsText = await safeFetch('.wikifier_staging/.last_check', '');
-            const ts = (tsText || '').trim();
-
-            if (!ts) {
-                el.innerHTML = `<span class="text-slate-500 text-xs">No monitor heartbeat yet (run <code>monitor &</code> for live updates)</span>`;
-                return;
-            }
-
-            try {
-                // Be very defensive with the timestamp string
-                const cleaned = ts.replace(/[A-Z].*$/, '').trim(); // drop timezone junk
-                const d = new Date(cleaned);
-                if (isNaN(d.getTime())) throw new Error('bad date');
-
-                const ageMin = Math.round((Date.now() - d.getTime()) / 60000);
-                if (ageMin < 0 || ageMin > 100000) { // obviously bogus
-                    el.innerHTML = `<span class="text-amber-400 text-xs">Heartbeat file present but unreadable</span>`;
-                    return;
-                }
-
-                const isFresh = ageMin < 5;
-                const label = ageMin < 1 ? 'just now' : `${ageMin}m ago`;
-                el.innerHTML = `<span class="${isFresh ? 'text-emerald-400' : 'text-amber-400'}">Updated ${label}</span>`;
-                el.title = isFresh ? 'Monitor is keeping the wiki fresh' : 'Monitor may not be running — data could be stale';
-            } catch(e) {
-                el.innerHTML = `<span class="text-slate-500 text-xs">Monitor status unavailable</span>`;
-            }
-        }
-
-        // Fetch and render health matrix (entrypoint kept for compat) - now delegates to robust impl
-        async function loadHealthMatrixCompat() {
-            await loadHealthMatrix();
-        }
-
-        // ==================== CONTINUED V1-P7 WIRING: legacy load* upgraded + new scale-aware surfaces ====================
-
-        // (loadPending / loadJournal / old journal+pending sections removed from human view — agents use the .md + MCP/CLI directly)
-
-        // Mermaid diagram (kept; cache-bust for monitor-driven reloads)
-        async function loadMermaid() {
-            const container = document.getElementById('mermaid-diagram');
-            // Bust cache so file changes (from monitor/agents) are picked up on poll
-            const md = await safeFetch('library.md?cb=' + Date.now(), '');
-            if (!md) {
-                container.innerHTML = `<div class="text-sm p-4 bg-slate-900 border border-slate-700 rounded">
-                    <div class="font-semibold mb-1">No structure map yet</div>
-                    <div class="text-slate-400">This project hasn't had its import/dependency tree generated yet.</div>
-                    <div class="mt-3">
-                        <button onclick="copyAndWaitForUpdate('update-maps')" 
-                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium w-full sm:w-auto">
-                            📋 Copy command &amp; run wikifier update-maps (first time)
-                        </button>
-                    </div>
-                    <div class="mt-2 text-[10px] text-slate-400">Run the copied command in your terminal <strong>inside this project folder</strong>, then refresh this page (or wait for the ~30s auto update). This is the recommended first step when you open the dashboard in a new project.</div>
-                </div>`;
-
-                // "Automatically on the first run": if this is the very first time the user sees the empty map state in this browser session,
-                // auto-copy the command AND activate live wait/poll mode so once they run it, the tree appears automatically.
-                if (!sessionStorage.getItem('wikifier_first_map_auto_copied')) {
-                    sessionStorage.setItem('wikifier_first_map_auto_copied', '1');
-                    setTimeout(() => {
-                        navigator.clipboard.writeText('wikifier update-maps').then(() => {
-                            // non-intrusive note that we helped
-                            const note = document.createElement('div');
-                            note.className = 'mt-2 text-[10px] text-emerald-400';
-                            note.textContent = '✓ update-maps command auto-copied for first run — paste it in your terminal now.';
-                            const emptyBox = container.querySelector('div');
-                            if (emptyBox) emptyBox.appendChild(note);
-                            // Also start the live wait/poll immediately for the "auto" feel
-                            // (user still needs to execute the command in terminal)
-                            copyAndWaitForUpdate('update-maps', 'wikifier update-maps'); // this will re-copy but mainly starts the banner + poll
-                        }).catch(() => {});
-                    }, 300);
-                }
-                return;
-            }
-            window.libraryMdCache = md;
-
-            // Gentle note if the map was intentionally summarized for very large codebases
-            if (md.includes('LARGE_SCALE') || md.includes('ScaleNote')) {
-                // still render what we have; the note (if any) is already in the markdown
-            }
-
-            const match = md.match(/```mermaid\n([\s\S]*?)```/);
-            if (match && match[1]) {
-                // textContent (not template-in-innerHTML) so the Mermaid source
-                // can never be interpreted as HTML.
-                container.innerHTML = '<pre class="mermaid"></pre>';
-                container.querySelector('.mermaid').textContent = match[1];
-                if (window.mermaid) {
-                    try {
-                        // Re-assert the same config as the early <head> init
-                        // (some builds re-read it per render; keep both maxEdges
-                        // placements — see the comment at the script tag).
-                        mermaid.initialize({
-                            startOnLoad: false,
-                            theme: 'dark',
-                            maxEdges: 1500,
-                            flowchart: { maxEdges: 1500 }
-                        });
-                        await mermaid.run({ nodes: [container.querySelector('.mermaid')] });
-                    } catch(e) {
-                        // Never fail silently: show what broke + how to inspect.
-                        const msg = (e && (e.message || e.str)) || String(e);
-                        container.innerHTML = `<div class="text-sm p-4 bg-slate-900 border border-amber-700 rounded">
-                            <div class="font-semibold mb-1 text-amber-400">Structure map could not be rendered</div>
-                            <div class="text-slate-300 text-xs font-mono">${String(msg).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])).slice(0, 300)}</div>
-                            <div class="mt-2 text-[11px] text-slate-400">The underlying map data in <span class="font-mono">library.md</span> is intact — use "Copy structure as text" or open library.md directly.</div>
-                        </div>`;
-                    }
-                }
-            } else {
-                container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid diagram found in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span> then refresh.</div>`;
-            }
-        }
-
-        // Human export helpers: copy clean text for pasting to LLMs/humans.
-        // These pull from the loaded data (same as agents see via get_file_wiki / health / library).
-        async function copyMermaidSource() {
-            const md = window.libraryMdCache || await safeFetch('library.md?cb=' + Date.now(), '');
-            const match = md.match(/```mermaid\n([\s\S]*?)```/);
-            const src = match ? match[1].trim() : 'No mermaid found. Run update-maps first.';
-            await navigator.clipboard.writeText(src);
-            const btns = document.querySelectorAll('button');
-            // brief feedback on any matching button
-            btns.forEach(b => { if (b.textContent.includes('Mermaid')) { const t = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=t, 1200); }});
-        }
-
-        async function copyProjectSnapshot() {
-            const health = document.getElementById('health-summary') ? document.getElementById('health-summary').innerText.replace(/\s+/g, ' ').trim() : '';
-            const md = window.libraryMdCache || await safeFetch('library.md?cb=' + Date.now(), '');
-            const match = md.match(/```mermaid\n([\s\S]*?)```/);
-            const mermaidSrc = match ? match[1].trim() : '(no tree yet — run wikifier update-maps)';
-
-            // Build clean list of files + short human descriptions from current data
-            let filesSection = '';
-            if (window.healthData && window.healthData.length) {
-                const top = window.healthData.slice(0, 80);
-                filesSection = top.map(r => {
-                    const d = cleanReasonForHuman(r.reason);
-                    return `- \`${r.file}\`: ${d}`;
-                }).join('\n');
-                if (window.healthData.length > 80) filesSection += `\n... +${window.healthData.length - 80} more files (see the page for the rest)`;
-            } else {
-                filesSection = '(Run wikifier check-changes to populate file list + descriptions)';
-            }
-
-            const snap = `# Project structure snapshot
-
-## Dependency tree
-\`\`\`mermaid
-${mermaidSrc}
-\`\`\`
-
-## Health summary
-${health || '(no health data yet)'}
-
-## Files & descriptions (short)
-${filesSection}
-
----
-Generated from this project's agent wiki (file_health + library.md).  
-Open index.html in the project for the live visual version.
-`;
-            await navigator.clipboard.writeText(snap);
-            const btns = document.querySelectorAll('button');
-            btns.forEach(b => { if ((b.textContent || '').toLowerCase().includes('snapshot')) { const t = b.textContent; b.textContent = '✓ Copied'; setTimeout(()=>b.textContent=t, 1200); }});
-        }
-
-        // (loadDependencyIntelligence + intel cards removed from main human view; the Mermaid chart + file descriptions are the focus)
-
-        // (All command surface, intel cards, pending, journal, and their render functions removed from the human dashboard.
-        // Humans see: the chart + files with descriptions + simple folder browser + copy buttons.
-        // Agents and technical users: use the .md files directly, diagnostics.html, MCP, or CLI.)
-
-        // Lightweight runCommand for the human dashboard (only the two we surface prominently)
-        // Helper to copy a ready-to-paste command and give clear next-step feedback
-        function copyCommandForRun(cmd, fullText) {
-            const full = fullText || `wikifier ${cmd}`;
-            navigator.clipboard.writeText(full).then(() => {
-                const msg = document.createElement('div');
-                msg.className = `fixed bottom-4 right-4 bg-emerald-900 border border-emerald-700 px-4 py-3 rounded-2xl text-sm z-50 max-w-xs`;
-                msg.innerHTML = `
-                    <div class="font-medium">Copied to clipboard:</div>
-                    <code class="block mt-1 bg-black/40 px-2 py-1 rounded text-emerald-300 break-all">${full}</code>
-                    <div class="mt-2 text-xs text-emerald-200">Paste &amp; run it in the terminal <strong>inside this project folder</strong>, then click <span class="underline">Refresh</span> above (or wait ~30s).</div>
-                    <button onclick="this.closest('.fixed').remove(); window.location.reload()" class="mt-2 text-xs underline">Refresh dashboard now</button>
-                `;
-                document.body.appendChild(msg);
-                // auto remove after a while if user doesn't interact
-                setTimeout(() => { if (msg.parentNode) msg.parentNode.removeChild(msg); }, 12000);
-            }).catch(() => {
-                // Fallback for browsers that block clipboard
-                const msg = document.createElement('div');
-                msg.className = `fixed bottom-4 right-4 bg-slate-800 border border-slate-700 px-3 py-2 rounded-2xl text-xs z-50`;
-                msg.innerHTML = `Run this in the terminal: <code class="bg-black/40 px-1">${full}</code>`;
-                document.body.appendChild(msg);
-                setTimeout(()=>{ if (msg.parentNode) msg.parentNode.removeChild(msg); }, 4000);
-            });
-
-            // Optimistic: after user likely ran it, the next poll will pick it up
-            if (cmd.includes('check') || cmd.includes('health')) setTimeout(() => loadHealthMatrix && loadHealthMatrix(), 800);
-            if (cmd.includes('update')) setTimeout(() => loadMermaid && loadMermaid(), 800);
-            if (cmd.includes('monitor')) setTimeout(() => loadMonitorStatus && loadMonitorStatus(true), 600);
-        }
-
-        // Enhanced: copy + enter "live waiting" mode with aggressive polling until data appears.
-        // This makes buttons feel like they "trigger" an update (user still runs the copied command in terminal).
-        let waitPollInterval = null;
-        function copyAndWaitForUpdate(cmd, fullText) {
-            const full = fullText || `wikifier ${cmd}`;
-            navigator.clipboard.writeText(full).then(() => {
-                // Show waiting banner
-                let banner = document.getElementById('wait-banner');
-                if (!banner) {
-                    banner = document.createElement('div');
-                    banner.id = 'wait-banner';
-                    banner.className = `fixed top-4 left-1/2 -translate-x-1/2 bg-blue-900 border border-blue-700 px-4 py-2 rounded-2xl text-sm z-50 flex items-center gap-3 shadow-lg`;
-                    document.body.appendChild(banner);
-                }
-                banner.innerHTML = `
-                    <span>Waiting for <code class="bg-black/40 px-1 rounded">${full}</code> to produce data... (auto-polling)</span>
-                    <button onclick="stopWaitPoll(); this.closest('.fixed').remove(); window.location.reload()" class="text-xs underline">I ran it — refresh now</button>
-                `;
-
-                // Clear any old poll
-                if (waitPollInterval) clearInterval(waitPollInterval);
-
-                let attempts = 0;
-                const maxAttempts = 40; // ~2 minutes at 3s intervals
-                waitPollInterval = setInterval(() => {
-                    attempts++;
-                    // Reload the relevant views
-                    if (cmd.includes('update') || cmd.includes('map')) {
-                        loadMermaid();
-                    }
-                    if (cmd.includes('check') || cmd.includes('health')) {
-                        loadHealthMatrix();
-                    }
-                    loadMonitorStatus();
-
-                    // Check if data appeared
-                    const hasMap = !!window.libraryMdCache && window.libraryMdCache.includes('```mermaid');
-                    const hasFiles = window.healthData && window.healthData.length > 0;
-
-                    if ((cmd.includes('update') && hasMap) || (cmd.includes('check') && hasFiles) || (hasMap && hasFiles)) {
-                        stopWaitPoll();
-                        if (banner.parentNode) banner.parentNode.removeChild(banner);
-                        // Show success toast
-                        const success = document.createElement('div');
-                        success.className = `fixed bottom-4 right-4 bg-emerald-900 border border-emerald-700 px-4 py-2 rounded-2xl text-sm z-50`;
-                        success.textContent = '✓ Data updated! View refreshed.';
-                        document.body.appendChild(success);
-                        setTimeout(() => { if (success.parentNode) success.parentNode.removeChild(success); }, 3000);
-                        // Force full reload of views
-                        loadMermaid();
-                        loadHealthMatrix();
-                    } else if (attempts >= maxAttempts) {
-                        stopWaitPoll();
-                        if (banner.parentNode) banner.parentNode.removeChild(banner);
-                    }
-                }, 3000); // aggressive 3s poll while waiting
-            }).catch(() => {
-                // fallback
-                copyCommandForRun(cmd, full);
-            });
-        }
-
-        function stopWaitPoll() {
-            if (waitPollInterval) {
-                clearInterval(waitPollInterval);
-                waitPollInterval = null;
-            }
-        }
-
-        // Legacy / existing buttons still work via the improved helper
-        function runCommand(cmd) {
-            copyCommandForRun(cmd);
-        }
-
-        // Boot: only what the human view needs (chart + files+descs + tree + monitor). Poll for live feel.
-        // Browsers refuse fetch() from file:// pages (unique-origin sandbox),
-        // so a double-clicked index.html can never read the wiki artifacts —
-        // the map stays empty while the console fills with CORS errors. Show
-        // the one-command fix prominently instead of failing silently.
-        function showFileProtocolNotice() {
-            const div = document.createElement('div');
-            div.id = 'file-protocol-notice';
-            div.style.cssText = 'position:sticky;top:0;z-index:60;background:#7c2d12;color:#ffedd5;padding:14px 18px;font-size:14px;line-height:1.6;box-shadow:0 2px 8px rgba(0,0,0,.4)';
-            div.innerHTML = '<strong>The dashboard cannot read the wiki files when opened directly from disk.</strong><br>' +
-                'Browsers block <code>fetch()</code> on <code>file://</code> pages (security sandbox), so the map and file list would stay empty. ' +
-                'Serve this folder over localhost instead — run one of these in the project folder, then open the link:' +
-                '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
-                '<button id="fpCopyServe" style="background:#10b981;color:#06281e;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer">Copy: wikifier serve</button>' +
-                '<button id="fpCopyPy" style="background:#374151;color:#e5e7eb;border:none;border-radius:6px;padding:6px 12px;cursor:pointer">Copy: python3 -m http.server 8787</button>' +
-                '<a href="http://localhost:8787/index.html" style="color:#5eead4;text-decoration:underline">open http://localhost:8787/index.html</a>' +
-                '</div>';
-            document.body.prepend(div);
-            const wire = (id, text) => {
-                const b = document.getElementById(id);
-                if (!b) return;
-                b.onclick = () => navigator.clipboard.writeText(text).then(() => {
-                    const old = b.textContent;
-                    b.textContent = 'Copied ✓';
-                    setTimeout(() => { b.textContent = old; }, 1600);
-                });
-            };
-            wire('fpCopyServe', 'wikifier serve');
-            wire('fpCopyPy', 'python3 -m http.server 8787');
-        }
-
-        function boot() {
-            initTailwind();
-
-            if (location.protocol === 'file:') {
-                showFileProtocolNotice();
-                return; // skip data loads + polling: every fetch would fail
-            }
-
-            loadHealthMatrix();
-            loadMermaid();
-            loadMonitorStatus();
-
-            // ~32s poll so the dashboard feels live when the monitor or agents write updates
-            setInterval(() => {
-                loadHealthMatrix();
-                if (Math.random() < 0.6) loadMermaid();
-                if (Math.random() < 0.4) loadMonitorStatus();
-            }, 32000);
-
-            // Simple keyboard: r refreshes the visible human bits
-            document.addEventListener('keydown', function(e) {
-                if (e.key.toLowerCase() === 'r' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-                    loadHealthMatrix();
-                    loadMermaid();
-                }
-            });
-
-            // no console noise for humans
-        }
-
-        window.onload = boot;
-        // Minimal expose (for diagnostics.html or power users who open console)
-        window.wikifierHumanView = { loadHealthMatrix, filterFilesList, loadMermaid, loadMonitorStatus, copyMermaidSource, copyProjectSnapshot };
-    </script>
+window.onload = boot;
+window.wikifierHumanView = { loadAll, runCommand, stopServer, buildSnapshot };
+</script>
 </body>
 </html>
