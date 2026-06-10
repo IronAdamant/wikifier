@@ -18,7 +18,7 @@
 | diagnostics.html | 🟢 Green | 2026-06-05 08:33:20 AEST | Wiki summary verified accurate after change. |
 | index.html | 🟢 Green | 2026-06-11 00:20:17 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
 | wikifier/import_cache.py | 🟢 Green | 2026-06-10 19:09:24 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
-| wikifier/parsers/python.py | 🟢 Green | 2026-06-10 09:27:51 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
+| wikifier/parsers/python.py | 🟢 Green | 2026-06-11 00:20:53 AEST | Repro now yields 0 garbage edges; 30/30 tests |
 | file_health.md | 🟢 Green | 2026-06-07 12:47:31 AEST | Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1. |
 | CHANGELOG.md | 🟢 Green | 2026-06-11 00:20:20 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
 | CLAUDE.md | 🟢 Green | 2026-06-10 19:09:30 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
