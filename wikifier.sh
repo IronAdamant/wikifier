@@ -1,5 +1,5 @@
 #!/bin/bash
-# wikifier.sh — Wikifier v4.0 Core CLI (Zero-Dependency)
+# wikifier.sh — Wikifier Core CLI (Zero-Dependency)
 # Agent-first shell tool for codebase documentation health & semantic change tracking.
 #
 # Usage:
@@ -1973,8 +1973,12 @@ _try_resolve_bare_internal_import() {
 # ----------------------------- Command Implementations -----------------------------
 
 cmd_help() {
+    # Banner version comes from the installed package (single source of truth
+    # in wikifier/__init__.py) so this text cannot go stale.
+    local _ver
+    _ver=$(python3 -c "import wikifier; print(wikifier.__version__)" 2>/dev/null || true)
+    echo "Wikifier${_ver:+ v$_ver} — Agent-First Codebase Wiki (Zero Dependencies)"
     cat << 'EOF'
-Wikifier v4.0 — Agent-First Codebase Wiki (Zero Dependencies)
 
 Usage: wikifier <command> [arguments]
 

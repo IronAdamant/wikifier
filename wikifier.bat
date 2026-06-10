@@ -1,12 +1,12 @@
 @echo off
-REM wikifier.bat — Wikifier v0.3 Windows launcher
+REM wikifier.bat — Wikifier Windows launcher
 REM Delegates to PowerShell for the real implementation (zero external deps).
 
 setlocal
 
 set SCRIPT_DIR=%~dp0
 
-echo Wikifier v0.3 (Windows)
+echo Wikifier (Windows)
 echo.
 
 if exist "%SCRIPT_DIR%wikifier.ps1" (

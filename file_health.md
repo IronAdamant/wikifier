@@ -5,7 +5,7 @@
 | skills/run.md | 🟢 Green | 2026-06-10 14:33:50 AEST | Docs verified against v4.2.0 behavior (pipeline default, 43x JS parse, deadlock fix, test suite); readable + natural keyword placement |
 | Findings/Milestones-Overview.md | 🟢 Green | 2026-06-07 12:47:32 AEST | Phase 1 narrative trim + prune complete. subid=simplification-cruft-phase-1. |
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-06-04 08:01:45 AEST | M5.3 alt sub completed exit0 1356s + gate pass for alt per M5.3/DoD (BRC19 stable named exact, rec x5+ ~3s, 0corr, growth0, claims4+/1v, chisel10823e/12g, stele270, FRESH/subid/9GP/8DF/calib85-92% record+mark; sim part; 2 subs prior; coord handled; gate active; BRC19; plan.md green). FRESH 3 + subid. subagent_id=m5-gamma-coord-agents. |
-| wikifier.sh | 🟢 Green | 2026-06-10 14:19:41 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
+| wikifier.sh | 🟢 Green | 2026-06-10 14:50:30 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
 | Findings/M5-Dogfood-Assessment-Report.md | 🟢 Green | 2026-06-04 06:52:49 AEST | Step4 9GP section re-confirmed green. subagent_id=m5-phase1-reporter-repl 100%. 9GP/DF |
 | Findings/p6_real_world_validation_report.md | 🟢 Green | 2026-06-04 06:53:34 AEST | M5.1 summary para in p6 marked green. subagent_id=m5-phase1-reporter-repl 100%. 9GP/DF |
 | Findings/M5.1-cross-hardening-analysis.md | 🟢 Green | 2026-06-04 06:49:30 AEST | Wiki summary verified accurate after change. |
@@ -38,3 +38,6 @@
 | wikifier/parsers/javascript.py | 🟢 Green | 2026-06-10 14:19:38 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | tests/ | 🟢 Green | 2026-06-10 14:19:44 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | pyproject.toml | 🟢 Green | 2026-06-10 14:41:19 AEST | Build + twine check pass; clean-room wheel install verified |
+| wikifier.ps1 | 🟢 Green | 2026-06-10 14:50:31 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
+| wikifier.bat | 🟢 Green | 2026-06-10 14:50:33 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
+| .github/workflows/publish.yml | 🟢 Green | 2026-06-10 14:50:34 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |

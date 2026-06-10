@@ -1,4 +1,4 @@
-# wikifier.ps1 — Wikifier v0.3 PowerShell implementation (Windows)
+# wikifier.ps1 — Wikifier PowerShell implementation (Windows)
 # Zero-dependency. Mirrors the most important commands from wikifier.sh
 
 param(
@@ -76,7 +76,7 @@ function Write-Journal {
 switch ($Command.ToLower()) {
     "help" {
         Write-Host @"
-Wikifier v0.3 (PowerShell/Windows)
+Wikifier (PowerShell/Windows)
 
 Core:
   check-changes
