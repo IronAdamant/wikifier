@@ -35,7 +35,7 @@
 | Findings/2026-06-10-Fix-Plan.md | 🟢 Green | 2026-06-10 14:20:33 AEST | Results appended, all phases verified |
 | wikifier/library.py | 🟢 Green | 2026-06-10 14:19:34 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | wikifier/parsers/bree.py | 🟢 Green | 2026-06-10 14:19:36 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
-| wikifier/parsers/javascript.py | 🟢 Green | 2026-06-10 14:19:38 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
+| wikifier/parsers/javascript.py | 🟢 Green | 2026-06-10 15:02:58 AEST | Verified: exports self-test 8/8 (was 2/8), churn 4/4, unittest 28/28, Babylon 300-file A/B identical edges with/without fix (in-tree behavior unchanged) |
 | tests/ | 🟢 Green | 2026-06-10 14:19:44 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | pyproject.toml | 🟢 Green | 2026-06-10 14:41:19 AEST | Build + twine check pass; clean-room wheel install verified |
 | wikifier.ps1 | 🟢 Green | 2026-06-10 14:50:31 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |

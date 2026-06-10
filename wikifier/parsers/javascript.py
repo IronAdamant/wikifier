@@ -190,26 +190,66 @@ except ImportError:
 # (supports direct python -m invocation + cwd in subdir / via-symlink / pnpm-store of
 # pip-installed external monorepo). Central discover now handles logical PWD walk-up.
 def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Path:
-    """Robust project root fallback used throughout JS parser + resolution sites (Wave 3).
+    """Robust project root fallback used throughout JS parser + resolution sites.
 
-    Primary: discover_project_root() (now hardened for symlinks/pnpm stores via $PWD
-    logical ancestors + physical fallbacks). Secondary: WIKIFIER_* env. Tertiary: default/cwd.
-    Mirrors bree.py; defensive for direct-execution, packaged, and deep symlink layouts.
+    Primary: discover_project_root() (hardened for symlinks/pnpm stores).
+    Secondary: WIKIFIER_* env. Tertiary: default/cwd.
+
+    Containment rule: when `default` names the concrete file/dir being
+    resolved, the returned root must CONTAIN it — a root that does not contain
+    the importer cannot resolve its imports. That situation arises whenever a
+    file outside the configured project is parsed (temp fixtures, sibling
+    checkouts, ad-hoc single-file runs). In that case the discovered/env root
+    is rejected and we walk up from the anchor to the nearest directory with a
+    project marker, falling back to the anchor's own directory.
+
+    A literal "." default carries no anchor meaning (callers use it for
+    cache-root lookup) and keeps the historical discovery-first behavior.
     """
+    anchor: Optional[Path] = None
+    if default is not None and str(default) != ".":
+        try:
+            a = Path(default).resolve()
+            anchor = a if a.is_dir() else a.parent
+        except Exception:
+            anchor = None
+
+    def _contains(root: Path) -> bool:
+        if anchor is None:
+            return True
+        try:
+            anchor.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
     try:
         # inside parsers/ -> ..cli sibling
         from ..cli import discover_project_root
         root = discover_project_root()
         if root:
-            return Path(root).resolve()
+            r = Path(root).resolve()
+            if _contains(r):
+                return r
     except Exception:
         pass
     env = os.environ.get("WIKIFIER_PROJECT_ROOT") or os.environ.get("WIKIFIER_ROOT")
     if env:
         try:
-            return Path(env).expanduser().resolve()
+            r = Path(env).expanduser().resolve()
+            if _contains(r):
+                return r
         except Exception:
             pass
+    if anchor is not None:
+        markers = ("package.json", ".git", "pyproject.toml", "monitored_paths.txt", ".wikifier", "node_modules")
+        for cand in (anchor, *anchor.parents):
+            try:
+                if any((cand / m).exists() for m in markers):
+                    return cand
+            except OSError:
+                break
+        return anchor
     if default is not None:
         try:
             return Path(default).resolve()
