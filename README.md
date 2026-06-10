@@ -60,7 +60,7 @@ For external projects or monorepos, always pass an explicit root: `WIKIFIER_PROJ
 
 ## What You Get
 
-- **Fast, real dependency analysis** — Python and JavaScript/TypeScript import parsing (ES modules, CommonJS, dynamic imports, TypeScript path aliases, package.json exports, workspaces), barrel/re-export chain expansion, and per-edge confidence scoring with actionable explanations
+- **Fast, real dependency analysis** — Python and JavaScript/TypeScript import parsing (ES modules, CommonJS, dynamic imports, TypeScript path aliases, package.json exports, workspaces), per-edge confidence scoring with actionable explanations, and **name-routed barrel expansion**: an import through an `export *` barrel resolves to the leaves that actually define the imported symbols, not hundreds of false edges
 - **A pure-Python update pipeline** — `update-maps` parses every changed file in-process, persists a canonical import cache, computes reverse dependencies, Tarjan-based circular dependency detection, and regenerates `library.md` atomically
 - **Incremental everything** — mtime-based dirty detection plus a barrel-aware reverse index means editing one file re-analyzes only its true consumers, even in barrel-heavy monorepos
 - **Autonomous maintenance** — agents log intent with `record-change`, refresh summaries, and `mark-green`; a background `monitor`/daemon keeps the matrix fresh
@@ -75,7 +75,7 @@ Validated by dogfooding on Wikifier itself plus large open-source codebases — 
 | Codebase | Scale | Full `update-maps` |
 |----------|-------|--------------------|
 | llama_index | 3,837 Python files | **~8.5s** (17k import edges, full map) |
-| Babylon.js | 3,905 TypeScript files, barrel-heavy | completes with full 5,389-node map |
+| Babylon.js | 3,905 TypeScript files, barrel-heavy | **~4.5min** full build (44k precise edges, 5,389-node map); scoped re-runs ~80s |
 | Linux kernel / LLVM / Rust | 37k–54k file trees | candidate scan in 3–8s |
 
 JS/TS parsing runs at ~22ms per file; Python at ~1ms. Incremental runs after the first build take seconds. Verified by a stdlib-only test suite (`python -m unittest discover tests`).
@@ -111,16 +111,16 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, and any Model Context Pro
 
 Wikifier is a token-saving wiki layer *for agents*, and deliberately nothing more: not a general documentation generator, not an IDE plugin, not a code search engine for humans. Agents consult the map instead of re-reading sources, keep it current as they work, and create new wiki entries on the fly. The human dashboard is a window into that, not the product.
 
-## What's New in v4.2.0
+## What's New in v4.3.0
 
-A full real-world dogfood sweep (this repo + RecipeLab + 8 large OSS projects) followed by a fix pass for everything it surfaced:
+Precision and performance, validated on real monorepos:
 
-- `update-maps` now defaults to the **pure-Python pipeline**: every changed file actually parsed, canonical cache schema, cycles/ACS/reverse-deps computed, `library.md` regenerated atomically
-- **43× faster JS/TS parsing** (barrel-cache persistence batched per run instead of per chain)
-- Fixed a POSIX lock self-deadlock in the library workflow calls (the likely cause of historical MCP timeouts), barrel-churn invalidation, static-import flag pollution, exclude-pattern globs, `health --summary/--json`, and several shell-path crashes — one of which could destroy an existing `library.md`
-- **New stdlib-only test suite** (28 tests) — the project's first formal regression net
+- **Name-routed barrel expansion** — an import through an `export *` barrel resolves to the leaves that define the imported symbols (on Babylon.js, one 778-edge import became 3 precise edges; repo-wide edge count dropped 89%). Imports with no routable names are capped with the truncation *reported* on the edge — never silent
+- **Thin shell** — the launcher now delegates `update-maps` to the Python pipeline (2,910 → 785 lines; 3m39s → 2s on a small project; a hang-prone legacy code path is gone entirely)
+- **Bounded barrel-cache persistence + memoized root discovery** — Babylon.js's import cache shrank 274MB → 101MB, and a pathological scoped re-run went from 75 minutes to ~80 seconds
+- `imported_names` is now populated on JS/TS edges, and files outside the configured project root resolve correctly (containment rule)
 
-Full details: [`CHANGELOG.md`](CHANGELOG.md) and `Findings/2026-06-10-Dogfood-Refactor-Validation.md`.
+v4.2.0 (same day) made `update-maps` a real full pipeline, fixed the lock deadlock behind historical MCP timeouts, and added the test suite. Full history: [`CHANGELOG.md`](CHANGELOG.md) and `Findings/`.
 
 ## Links
 
