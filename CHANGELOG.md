@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.1] - 2026-06-11
+
+### Changed
+
+- README: human-dashboard screenshot embedded in the Human Layer section
+  (raw.githubusercontent URL so it renders on GitHub and PyPI alike).
+
 ## [4.5.0] - 2026-06-11
 
 ### Added
