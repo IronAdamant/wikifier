@@ -5,7 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Project Wiki</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <!-- Version PINNED: the bare mermaid@10 alias let the CDN serve different
+         minors with different config schemas (maxEdges top-level vs nested
+         under flowchart), making large-graph rendering nondeterministic. -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.3/dist/mermaid.min.js"></script>
+    <script>
+        // Configure Mermaid ONCE, immediately:
+        // - startOnLoad:false — the default auto-start processes .mermaid
+        //   elements at page load with default config, racing the explicit
+        //   render in loadMermaid().
+        // - maxEdges in BOTH placements — builds differ on where they read it
+        //   (top-level is also a "secure" key, so it must be set here via
+        //   initialize, never via in-diagram directives). Default 500 broke
+        //   every repo whose graph used the generator's 600-edge budget.
+        if (window.mermaid) mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            maxEdges: 1500,
+            flowchart: { maxEdges: 1500 }
+        });
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
         
@@ -161,7 +180,10 @@
                             class="text-xs px-3 py-1.5 rounded-xl bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-800">Rebuild tree</button>
                 </div>
                 <div id="mermaid-container" class="bg-slate-950 border border-slate-800 rounded-2xl p-5 min-h-[340px]">
-                    <div id="mermaid-diagram" class="mermaid"></div>
+                    <!-- NOTE: no class="mermaid" here — that class marks
+                         auto-start targets; the render target is the inner
+                         <pre class="mermaid"> created by loadMermaid(). -->
+                    <div id="mermaid-diagram"></div>
                 </div>
                 <div class="mt-4 flex flex-wrap gap-x-3 gap-y-2">
                     <button onclick="copyMermaidSource()" 
@@ -593,12 +615,31 @@
 
             const match = md.match(/```mermaid\n([\s\S]*?)```/);
             if (match && match[1]) {
-                container.innerHTML = `<pre class="mermaid">${match[1]}</pre>`;
+                // textContent (not template-in-innerHTML) so the Mermaid source
+                // can never be interpreted as HTML.
+                container.innerHTML = '<pre class="mermaid"></pre>';
+                container.querySelector('.mermaid').textContent = match[1];
                 if (window.mermaid) {
                     try {
-                        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+                        // Re-assert the same config as the early <head> init
+                        // (some builds re-read it per render; keep both maxEdges
+                        // placements — see the comment at the script tag).
+                        mermaid.initialize({
+                            startOnLoad: false,
+                            theme: 'dark',
+                            maxEdges: 1500,
+                            flowchart: { maxEdges: 1500 }
+                        });
                         await mermaid.run({ nodes: [container.querySelector('.mermaid')] });
-                    } catch(e) { /* ignore render err */ }
+                    } catch(e) {
+                        // Never fail silently: show what broke + how to inspect.
+                        const msg = (e && (e.message || e.str)) || String(e);
+                        container.innerHTML = `<div class="text-sm p-4 bg-slate-900 border border-amber-700 rounded">
+                            <div class="font-semibold mb-1 text-amber-400">Structure map could not be rendered</div>
+                            <div class="text-slate-300 text-xs font-mono">${String(msg).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])).slice(0, 300)}</div>
+                            <div class="mt-2 text-[11px] text-slate-400">The underlying map data in <span class="font-mono">library.md</span> is intact — use "Copy structure as text" or open library.md directly.</div>
+                        </div>`;
+                    }
                 }
             } else {
                 container.innerHTML = `<div class="text-xs text-slate-400 p-4">No Mermaid diagram found in library.md.<br>Run <span class="font-mono text-emerald-400">wikifier update-maps</span> then refresh.</div>`;

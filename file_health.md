@@ -16,11 +16,11 @@
 | wikifier/mcp/README.md | 🟢 Green | 2026-06-10 19:29:34 AEST | Verified: served llvm-project via wikifier serve; library.md/file_health.md/.last_check all 200 over http; banner code present in served page; 30/30 tests; bash -n clean |
 | wikifier/cli.py | 🟢 Green | 2026-06-10 19:09:27 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
 | diagnostics.html | 🟢 Green | 2026-06-05 08:33:20 AEST | Wiki summary verified accurate after change. |
-| index.html | 🟢 Green | 2026-06-10 19:29:22 AEST | Verified: served llvm-project via wikifier serve; library.md/file_health.md/.last_check all 200 over http; banner code present in served page; 30/30 tests; bash -n clean |
+| index.html | 🟢 Green | 2026-06-10 19:57:57 AEST | Headless-browser verified on all 9 dogfood projects: flowchart svg renders, no error boxes, real data in DOM, file:// banner intact |
 | wikifier/import_cache.py | 🟢 Green | 2026-06-10 19:09:24 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
 | wikifier/parsers/python.py | 🟢 Green | 2026-06-10 09:27:51 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | file_health.md | 🟢 Green | 2026-06-07 12:47:31 AEST | Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1. |
-| CHANGELOG.md | 🟢 Green | 2026-06-10 19:32:41 AEST | v4.3.1 release prep; 30/30 tests |
+| CHANGELOG.md | 🟢 Green | 2026-06-10 19:58:00 AEST | Headless-browser verified on all 9 dogfood projects: flowchart svg renders, no error boxes, real data in DOM, file:// banner intact |
 | CLAUDE.md | 🟢 Green | 2026-06-10 19:09:30 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
 | wikifier/__init__.py | 🟢 Green | 2026-06-10 19:32:40 AEST | v4.3.1 release prep; 30/30 tests |
 | wikifier/mcp/__init__.py | 🟢 Green | 2026-06-10 09:27:38 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
@@ -29,7 +29,7 @@
 | wikifier/locking.py | 🟢 Green | 2026-06-10 14:19:39 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | wikifier/daemon.py | 🟢 Green | 2026-06-10 09:27:49 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | wikifier/scripts/wikifier.sh | 🟢 Green | 2026-06-10 19:29:28 AEST | Verified: served llvm-project via wikifier serve; library.md/file_health.md/.last_check all 200 over http; banner code present in served page; 30/30 tests; bash -n clean |
-| wikifier/index.html | 🟢 Green | 2026-06-10 19:29:27 AEST | Verified: served llvm-project via wikifier serve; library.md/file_health.md/.last_check all 200 over http; banner code present in served page; 30/30 tests; bash -n clean |
+| wikifier/index.html | 🟢 Green | 2026-06-10 19:57:59 AEST | Headless-browser verified on all 9 dogfood projects: flowchart svg renders, no error boxes, real data in DOM, file:// banner intact |
 | Logged_issues/2026-06-10-js-barrel-churn-selftest-failure.md | 🟢 Green | 2026-06-10 14:19:50 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | Findings/2026-06-10-Dogfood-Refactor-Validation.md | 🟢 Green | 2026-06-10 09:54:26 AEST | Self-describing findings doc |
 | Findings/2026-06-10-Fix-Plan.md | 🟢 Green | 2026-06-10 14:20:33 AEST | Results appended, all phases verified |

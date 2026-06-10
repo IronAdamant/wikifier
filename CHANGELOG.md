@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Dashboard structure map failed to render on large real-world graphs** (found by
+  headless-browser testing across all 9 dogfood projects; 5 of 9 were broken): Mermaid's
+  default `maxEdges:500` rejected the generator's 600-edge graphs, the unpinned
+  `mermaid@10` CDN alias served builds with *different config schemas* (top-level vs
+  flowchart-nested `maxEdges` — both now set, version pinned to 10.9.3), Mermaid's
+  auto-start raced the configured render (container no longer carries `class="mermaid"`;
+  auto-start disabled immediately at script load), render errors were silently swallowed
+  (`catch { /* ignore */ }` → now a visible error box with the actual message), and the
+  Mermaid source was injected via `innerHTML` (now `textContent`). Verified: all 9 sample
+  projects (incl. linux/llvm/airflow 600-edge graphs) render; `file://` banner intact.
+
 ## [4.3.1] - 2026-06-10
 
 ### Fixed
