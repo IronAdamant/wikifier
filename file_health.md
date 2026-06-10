@@ -37,3 +37,4 @@
 | wikifier/parsers/bree.py | 🟢 Green | 2026-06-10 14:19:36 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | wikifier/parsers/javascript.py | 🟢 Green | 2026-06-10 14:19:38 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | tests/ | 🟢 Green | 2026-06-10 14:19:44 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
+| pyproject.toml | 🟢 Green | 2026-06-10 14:41:19 AEST | Build + twine check pass; clean-room wheel install verified |

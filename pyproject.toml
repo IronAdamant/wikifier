@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wikifier"
+dynamic = ["version"]
 description = "Zero-dependency agent-to-agent codebase wiki for LLMs and AI agents. Autonomously maintained via record-change and mark-green for token-efficient lookup of files, dependencies, health, and summaries — across tiny scripts to 50k+ monorepos. Optional MCP server with rich tools for agents."
 readme = "README.md"
 license = {text = "MIT"}
