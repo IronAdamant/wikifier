@@ -105,6 +105,10 @@ Works with Claude Desktop, Claude Code, Cursor, Cline, and any Model Context Pro
 
 ## The Human Layer (Secondary, by Design)
 
+![Wikifier human dashboard — the project file tree with agent-wiki descriptions, health pills, and one-click Run/Stop controls, served locally by wikifier serve](https://raw.githubusercontent.com/IronAdamant/wikifier/main/screenshot/front_page_review.png)
+
+*The dashboard served by `wikifier serve`: live file tree with wiki descriptions, health status pills, and action buttons that run `update-maps`/`check-changes` directly (localhost-only) — plus a Stop server button for when you're done.*
+
 `wikifier init` copies a single static `index.html` into your project: a dashboard showing the Mermaid code-structure chart, files with short descriptions, and a folder browser — useful for humans investigating what the agents know. View it with **`wikifier serve`** (then open http://localhost:8787/index.html) — browsers block `file://` fetches, so a double-clicked index.html can't read the wiki files; the page detects that case and shows you the fix. When served by `wikifier serve`, the dashboard's buttons genuinely **run** `update-maps`/`check-changes` (whitelisted commands only, localhost-only) and a **Stop server** button shuts the process down when you're done; behind any plain static server the same buttons fall back to copy + auto-refresh. The agent-facing markdown files and tools remain the single source of truth.
 
 ## Intended Use: Strictly Agent-to-Agent

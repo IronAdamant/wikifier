@@ -11,7 +11,7 @@
 | Findings/M5.1-cross-hardening-analysis.md | 🟡 Yellow | 2026-06-10 20:15:48 AEST | mtime changed since last check-changes (auto-detected) |
 | --help | 🟢 Green | 2026-06-04 06:50:01 AEST | Wiki summary verified accurate after change. |
 | M5.3 Cycle1 evidence append: 3 subs spawned+running (alt BRC20 named, trammel48, consist/llvm metrics, 72h gate start, FRESH3, 9GPs/DoD maps, subid=m5.3-coord-agents) | 🔴 Red | 2026-06-04 15:44:23 AEST | DELETED — Historical early M5.3 launch note from coord sub (pre full alt gate pass + sustained monitors). Superseded by complete agent records in M5-Dogfood-Progress.md (alt sub 1356s exit0 gate claim, 2 other subs rich, monitors running). Cleaned as part of post-M5 skills/MCP refresh. |
-| README.md | 🟢 Green | 2026-06-10 20:20:34 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
+| README.md | 🟢 Green | 2026-06-11 00:37:42 AEST | Screenshot committed alongside; absolute URL valid once pushed to main |
 | wikifier/mcp/server.py | 🟡 Yellow | 2026-06-10 20:15:48 AEST | mtime changed since last check-changes (auto-detected) |
 | wikifier/mcp/README.md | 🟡 Yellow | 2026-06-10 20:15:48 AEST | mtime changed since last check-changes (auto-detected) |
 | wikifier/cli.py | 🟢 Green | 2026-06-10 19:09:27 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
@@ -45,3 +45,4 @@
 | wikifier/scripts/wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:33 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier/serve.py | 🟢 Green | 2026-06-10 20:20:23 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | library.md | 🟢 Green | 2026-06-10 20:20:38 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
+| screenshot/front_page_review.png | 🟢 Green | 2026-06-11 00:37:47 AEST | Asset referenced by README |
