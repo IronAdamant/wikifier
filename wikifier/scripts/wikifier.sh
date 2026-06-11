@@ -149,6 +149,29 @@ build_exclude_expr() {
     fi
 }
 
+# Build find(1) exclude arguments from exclude_patterns.txt as a bash array.
+# The string form from build_exclude_expr embeds literal quote characters and
+# cannot be expanded safely into a find command without eval; this array form
+# is what scan commands (check-changes, validate) must use.
+EXCLUDE_FIND_ARGS=()
+build_exclude_find_args() {
+    EXCLUDE_FIND_ARGS=()
+    [[ -f "$EXCLUDE_PATTERNS_FILE" ]] || return 0
+    local pat
+    local parts=()
+    while IFS= read -r pat; do
+        [[ -z "$pat" || "$pat" =~ ^[[:space:]]*# ]] && continue
+        pat=$(echo "$pat" | xargs)
+        [[ -z "$pat" ]] && continue
+        if ((${#parts[@]})); then parts+=(-o); fi
+        # dir-name patterns prune contents; -name catches file globs (*.pyc) and exact basenames
+        parts+=(-path "*/$pat/*" -o -path "*/$pat" -o -name "$pat")
+    done < "$EXCLUDE_PATTERNS_FILE"
+    if ((${#parts[@]})); then
+        EXCLUDE_FIND_ARGS=('!' '(' "${parts[@]}" ')')
+    fi
+}
+
 # Upsert a row in the Markdown health table (very simple but effective)
 # We treat file_health.md as the single source of truth.
 upsert_health() {
@@ -298,8 +321,7 @@ cmd_check_changes() {
         echo "$last_ts" > "$LAST_CHECK_FILE"
     fi
 
-    local exclude
-    exclude=$(build_exclude_expr)
+    build_exclude_find_args
 
     local changed=0
     local changed_files_list=""
@@ -309,7 +331,6 @@ cmd_check_changes() {
         [[ -z "$root" ]] && continue
         [[ ! -e "$root" ]] && { log "Warning: monitored path does not exist: $root"; continue; }
 
-        # shellcheck disable=SC2086
         while IFS= read -r -d '' file; do
             # Skip the wikifier tool's own internal files
             if [[ "$file" == *"/.wikifier_staging/"* || "$file" == *"/journal/"* || \
@@ -327,7 +348,7 @@ cmd_check_changes() {
             write_journal "auto-detected" "$rel_file" "File mtime changed (check-changes)"
 
             changed=$((changed + 1))   # set -e safe (((changed++)) returns 1 at 0)
-        done < <(find "$root" -type f -newermt "$last_ts" -print0 2>/dev/null || true)
+        done < <(find "$root" -type f ${EXCLUDE_FIND_ARGS[@]+"${EXCLUDE_FIND_ARGS[@]}"} -newermt "$last_ts" -print0 2>/dev/null || true)
     done < <(get_monitored_paths)
 
     date '+%Y-%m-%d %H:%M:%S' > "$LAST_CHECK_FILE"
@@ -550,12 +571,11 @@ cmd_validate() {
     log "Validating that every monitored file has a health entry..."
 
     local missing=0
-    local exclude
-    exclude=$(build_exclude_expr)
+    build_exclude_find_args
 
     while IFS= read -r root; do
         [[ -z "$root" ]] && continue
-        find "$root" -type f ! -path "*/.git/*" ! -path "*/.wikifier_staging/*" 2>/dev/null | while read -r f; do
+        find "$root" -type f ! -path "*/.git/*" ! -path "*/.wikifier_staging/*" ${EXCLUDE_FIND_ARGS[@]+"${EXCLUDE_FIND_ARGS[@]}"} 2>/dev/null | while read -r f; do
             local rel
             rel=$(realpath --relative-to="$PROJECT_ROOT" "$f" 2>/dev/null || echo "$f")
             if ! grep -qF "| $rel |" "$FILE_HEALTH" 2>/dev/null; then
