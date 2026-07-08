@@ -1,12 +1,15 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 08:07:44",
+  "last_updated": "2026-07-09 08:30:53",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:55:03",
-      "reason": "4.5.7 verified tests",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "wiki_content_hash": "sha256:43860182e20f5722268e50b2f25a12a216215ffccfc31fc325d38a9ac6e3c7ee",
+      "source_content_hash": "sha256:43860182e20f5722268e50b2f25a12a216215ffccfc31fc325d38a9ac6e3c7ee",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
@@ -52,21 +55,29 @@
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:58:09",
-      "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "wiki_content_hash": "sha256:5a43b25fbc7869ee7a56616a5ae8142878734d666657a6e07e5eb875dd8eed99",
+      "source_content_hash": "sha256:555389922391e4c813c4d39f08742f63bd75a32a07c27467f394d61d28e9981b",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=server.py.wiki.md"
     },
     "wikifier/mcp/README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:27",
-      "reason": "stale yellow cleared",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "wiki_content_hash": "sha256:66266b22a8b8c316d0e29c3ab56f12645cd723ba1425286accc19c4dc8a613e1",
+      "source_content_hash": "sha256:66266b22a8b8c316d0e29c3ab56f12645cd723ba1425286accc19c4dc8a613e1",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=README.md"
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:38",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "source_content_hash": "sha256:20a690b0fff964a090232a7d1c9a27904d9e4879f4096a5c308b75e9b222080c",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured)"
     },
     "diagnostics.html": {
       "status": "🟢 Green",
@@ -82,7 +93,8 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 08:07:44",
       "reason": "post residual-1-5 hygiene mtime clear (subid=residual-1-5-closure)",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)",
+      "source_content_hash": "sha256:4f69a37ec2ddfaee52e9a8b4c906ff4e6cdcbb522da03c0b5db7554886933c01"
     },
     "wikifier/parsers/python.py": {
       "status": "🟢 Green",
@@ -97,9 +109,12 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:42",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "wiki_content_hash": "sha256:d3eca1680f719b30cc365f1af4ce1d64ed252087c19277c641364e528db3be64",
+      "source_content_hash": "sha256:d3eca1680f719b30cc365f1af4ce1d64ed252087c19277c641364e528db3be64",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
@@ -109,9 +124,11 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:41",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "source_content_hash": "sha256:bb0b8b7ee9c53d1d2f2074433aea4e57ece2aefaeca8deb3e3c814fcc4f90758",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -120,9 +137,12 @@
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:58:09",
-      "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "wiki_content_hash": "sha256:e5b0a7ef89c959698d52808877daa6586f2ee47a66889891a5de0057630fdc19",
+      "source_content_hash": "sha256:12aae597e4bfcc54d22f5ef7a431af355c943741875f719845d2c3953a0d9799",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=health.py.wiki.md"
     },
     "wikifier/contracts.py": {
       "status": "🟢 Green",
@@ -443,6 +463,31 @@
       "last_updated": "2026-07-09 08:07:43",
       "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/agent_loop.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "source_content_hash": "sha256:d1779041e2a1d7ec279457c28704c405b7ce09fbb9ebdf99bf3ec157819c4bbb",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured)"
+    },
+    "tests/test_agent_loop.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "source_content_hash": "sha256:1f714de89e76f1ee19b4b5f1992de0720a931aece37f85538ae46da7a8047f02",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured)"
+    },
+    "Findings/agent-first-ideal-loop-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 08:30:53",
+      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "wiki_content_hash": "sha256:299adf9a87a640ea8474b28a8a740d619be4c4447536e44516eaba2de71b0c3d",
+      "source_content_hash": "sha256:299adf9a87a640ea8474b28a8a740d619be4c4447536e44516eaba2de71b0c3d",
+      "last_wiki_refresh": "2026-07-09 08:30:53",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=agent-first-ideal-loop-2026-07-09.md"
     }
   }
 }

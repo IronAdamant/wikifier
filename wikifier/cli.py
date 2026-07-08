@@ -731,6 +731,47 @@ def main():
                 res = suggest_next_actions(project_root=project_root, format=fmt)
                 print(_json.dumps(res, indent=2, default=str) if isinstance(res, dict) else res)
                 return 0
+            if _cmd0 in ("session-bootstrap", "session_bootstrap", "bootstrap", "session-start"):
+                import json as _json
+                res = session_bootstrap(project_root=project_root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("prepare-edit", "prepare_edit", "lookup", "preflight"):
+                import json as _json
+                if not _args:
+                    print("Usage: wikifier prepare-edit <file>", file=sys.stderr)
+                    return 1
+                res = prepare_edit(_args[0], project_root=project_root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("search-journal", "search_journal", "journal-search"):
+                import json as _json
+                q = None
+                f = None
+                i = 0
+                while i < len(_args):
+                    if _args[i] in ("--file", "-f") and i + 1 < len(_args):
+                        f = _args[i + 1]
+                        i += 2
+                        continue
+                    if _args[i] in ("--query", "-q") and i + 1 < len(_args):
+                        q = _args[i + 1]
+                        i += 2
+                        continue
+                    if q is None and not _args[i].startswith("-"):
+                        q = _args[i]
+                    i += 1
+                res = search_journal(project_root=project_root, query=q, file=f)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("why-file", "why_file", "why"):
+                import json as _json
+                if not _args:
+                    print("Usage: wikifier why-file <file>", file=sys.stderr)
+                    return 1
+                res = why_file(_args[0], project_root=project_root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
             if _cmd0 == "validate":
                 import json as _json
                 if _health_mod is not None:
@@ -1124,11 +1165,24 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
             dirty_batch = dirty_list[:max_dirty]
 
             changed_count = 0
+            skipped_mtime_only = 0
+            seeded_baselines = 0
             ghosts_marked = 0
+            if _health_mod is None:
+                result["message"] = "check_changes: health module unavailable"
             if _health_mod is not None:
                 root_res = root.resolve()
                 # Prefer unlocked helpers while we already hold project lock
                 _upsert = getattr(_health_mod, "_do_upsert_entry", None) or _health_mod.upsert_entry
+                classify = getattr(_health_mod, "classify_content_dirty", None)
+                compute_src = getattr(_health_mod, "compute_source_content_hash", None)
+                health_data = None
+                try:
+                    health_data = _health_mod.load_health(root)
+                except Exception:
+                    health_data = {"entries": {}}
+                entries = health_data.setdefault("entries", {}) if isinstance(health_data, dict) else {}
+                health_dirty = False
                 for p in dirty_batch:
                     try:
                         pr = Path(p).resolve()
@@ -1137,13 +1191,65 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                         rel = str(pr.relative_to(root_res))
                     except Exception:
                         continue
-                    _upsert(
-                        root, rel, "🟡 Yellow",
-                        "mtime changed since last check-changes (Python primary auto-detected)"
+                    # Content-honest dirty: mtime candidates still filtered by source hash
+                    stored_hash = None
+                    ent = entries.get(rel) if isinstance(entries, dict) else None
+                    if isinstance(ent, dict):
+                        stored_hash = ent.get("source_content_hash")
+                    verdict = {"content_dirty": True, "reason": "no_classifier", "seed_baseline": False, "hash": None}
+                    if classify is not None:
+                        try:
+                            verdict = classify(pr, stored_hash)
+                        except Exception:
+                            pass
+                    elif compute_src is not None:
+                        try:
+                            live = compute_src(pr)
+                            if stored_hash and live and stored_hash == live:
+                                verdict = {"content_dirty": False, "reason": "content_unchanged", "seed_baseline": False, "hash": live}
+                            elif not stored_hash and live:
+                                verdict = {"content_dirty": False, "reason": "no_baseline", "seed_baseline": True, "hash": live}
+                            elif live and stored_hash and stored_hash != live:
+                                verdict = {"content_dirty": True, "reason": "content_changed", "seed_baseline": False, "hash": live}
+                        except Exception:
+                            pass
+
+                    if verdict.get("seed_baseline") and verdict.get("hash") and isinstance(ent, dict):
+                        ent["source_content_hash"] = verdict["hash"]
+                        entries[rel] = ent
+                        health_dirty = True
+                        seeded_baselines += 1
+                        # Do not Yellow solely for first baseline seed on mtime thrash
+                        continue
+                    if not verdict.get("content_dirty") and verdict.get("reason") == "content_unchanged":
+                        skipped_mtime_only += 1
+                        continue
+                    # Content changed (or unclassifiable): Yellow with content reason
+                    reason = (
+                        "content changed since last trusted baseline (check_changes content-honest)"
+                        if verdict.get("reason") == "content_changed"
+                        else "content change or no baseline (check_changes content-honest auto-detect)"
                     )
-                    _add_to_pending(root, rel, "Auto-detected modification — review and run mark-green after wiki update")
-                    _ensure_journal_entry(root, "auto-detected", rel, "File mtime changed (check_changes Python primary)")
+                    _upsert(root, rel, "🟡 Yellow", reason)
+                    # refresh local entries view after upsert
+                    try:
+                        health_data = _health_mod.load_health(root)
+                        entries = health_data.setdefault("entries", {})
+                        if verdict.get("hash") and rel in entries and isinstance(entries[rel], dict):
+                            # keep prior baseline until mark-green; do not update hash on yellow
+                            pass
+                        health_dirty = False  # upsert already saved
+                    except Exception:
+                        pass
+                    _add_to_pending(root, rel, "Content change auto-detected — review and run mark-green after wiki update")
+                    _ensure_journal_entry(root, "auto-detected", rel, reason)
                     changed_count += 1
+                if health_dirty and health_data is not None:
+                    try:
+                        if hasattr(_health_mod, "save_health"):
+                            _health_mod.save_health(root, health_data)
+                    except Exception:
+                        pass
                 # Keep pending queue aligned with lean monitored_paths (no flood outside scope)
                 if hasattr(_health_mod, "prune_pending_to_monitored"):
                     try:
@@ -1171,6 +1277,8 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
 
             msg = (
                 f"Python-primary check_changes complete: {changed_count} files marked/updated"
+                + (f", {skipped_mtime_only} mtime-only skip(s)" if skipped_mtime_only else "")
+                + (f", {seeded_baselines} content baseline(s) seeded" if seeded_baselines else "")
                 + (f", {ghosts_marked} ghost(s) marked Red" if ghosts_marked else "")
                 + ". Health + pending + journal touched."
             )
@@ -1186,6 +1294,9 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                 "dirty_truncated": dirty_truncated,
                 "max_dirty": max_dirty,
                 "ghosts_marked": ghosts_marked,
+                "skipped_mtime_only": skipped_mtime_only,
+                "seeded_content_baselines": seeded_baselines,
+                "content_honest": True,
                 "message": msg,
             })
     except Exception as e:
@@ -1285,15 +1396,42 @@ def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Pa
 
 
 def mark_green(file: str, reason: str = "", project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
-    """Python-primary mark_green (completes the edit→record→wiki→green ritual)."""
+    """Python-primary mark_green (completes the edit→record→wiki→green ritual).
+
+    Captures source_content_hash baseline (via health.mark_green when available)
+    so subsequent mtime-only thrash does not re-Yellow content-clean files.
+    """
     root = _get_effective_root(project_root)
     result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root)}
     rsn = reason or "Summary updated and verified accurate."
     try:
         lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
         with lock_ctx:
-            if _health_mod is not None:
+            if _health_mod is not None and hasattr(_health_mod, "mark_green"):
+                # Prefer health.mark_green (wiki hash + source_content_hash)
+                if hasattr(_health_mod, "_do_mark_green"):
+                    _health_mod._do_mark_green(root, file, rsn)
+                else:
+                    _health_mod.mark_green(root, file, rsn)
+            elif _health_mod is not None:
                 _health_mod.upsert_entry(root, file, "🟢 Green", rsn)
+                # Best-effort source baseline without full health.mark_green
+                try:
+                    compute = getattr(_health_mod, "compute_source_content_hash", None)
+                    if compute:
+                        src = root / file
+                        h = compute(src if src.is_file() else Path(file))
+                        if h:
+                            data = _health_mod.load_health(root)
+                            ent = data.setdefault("entries", {}).get(file) or {}
+                            if isinstance(ent, dict):
+                                ent["status"] = "🟢 Green"
+                                ent["reason"] = rsn
+                                ent["source_content_hash"] = h
+                                data["entries"][file] = ent
+                                _health_mod.save_health(root, data)
+                except Exception:
+                    pass
             _remove_from_pending(root, file)
             result.update({"success": True, "message": f"Marked 🟢 Green (Python primary). {rsn}"})
     except Exception as e:
@@ -1338,14 +1476,14 @@ def suggest_next_actions(
         if action_y > 0:
             suggestions.append(
                 f"{n}. Review {action_y} *actionable* 🟡 Yellow file(s) "
-                "(mtime/record-change/barrel — not Initial stubs). "
+                "(content/record-change/barrel — not Initial stubs). "
                 "record-change → wiki that file → mark-green. Skip green."
             )
             n += 1
         if stub_y > 0 and action_y == 0 and red == 0:
             suggestions.append(
                 f"{n}. Map-first OK: {stub_y} 🟡 Initial stubs mean \"on the map\", "
-                "NOT \"wiki this tree now\". Lookup via get_file_wiki/deps; "
+                "NOT \"wiki this tree now\". Lookup via prepare_edit/get_file_wiki; "
                 "write prose only when you edit a file, then mark-green."
             )
             n += 1
@@ -1360,10 +1498,12 @@ def suggest_next_actions(
             )
             n += 1
         # Scope hygiene
+        scope_warnings: List[str] = []
         if _health_mod is not None and hasattr(_health_mod, "detect_scope_risks"):
             try:
                 scope = _health_mod.detect_scope_risks(root) or {}
-                for w in (scope.get("warnings") or [])[:2]:
+                scope_warnings = list(scope.get("warnings") or [])
+                for w in scope_warnings[:2]:
                     suggestions.append(f"{n}. SCOPE: {w}")
                     n += 1
             except Exception:
@@ -1373,7 +1513,7 @@ def suggest_next_actions(
         )
         n += 1
         suggestions.append(
-            f"{n}. On yellow/red hotspots, query dependents (get_dependents) before editing callers."
+            f"{n}. On yellow/red hotspots, prepare_edit(file) / dependents before editing callers."
         )
         n += 1
         suggestions.append(
@@ -1382,6 +1522,7 @@ def suggest_next_actions(
         )
 
         acs_note = ""
+        actionable = 0
         if _ic_mod is not None:
             try:
                 cache = _ic_mod.load_cache(root) or {}
@@ -1408,6 +1549,35 @@ def suggest_next_actions(
             except Exception:
                 pass
 
+        # Dispatchable structured actions (agent-first)
+        red_files: List[str] = []
+        action_yellow_files: List[str] = []
+        try:
+            from .agent_loop import build_structured_actions
+            if _health_mod is not None:
+                data = _health_mod.load_health(root)
+                for f, e in (data.get("entries") or {}).items():
+                    if directory and not str(f).startswith(str(directory).rstrip("/") + "/"):
+                        continue
+                    st = str((e or {}).get("status") or "")
+                    reason = str((e or {}).get("reason") or "")
+                    if "Red" in st or "🔴" in st:
+                        red_files.append(f)
+                    elif ("Yellow" in st or "🟡" in st) and "Initial stub" not in reason:
+                        action_yellow_files.append(f)
+            actions = build_structured_actions(
+                red_files=red_files,
+                actionable_yellow_files=action_yellow_files,
+                stub_yellow=stub_y,
+                actionable_yellow=action_y,
+                red=red,
+                acs_actionable=actionable,
+                scope_warnings=scope_warnings,
+                clean=(red == 0 and yellow == 0),
+            )
+        except Exception:
+            actions = []
+
         if format == "json":
             return {
                 "success": True,
@@ -1418,16 +1588,63 @@ def suggest_next_actions(
                 "actionable_yellow": action_y,
                 "health_score": health_sum.get("health_score"),
                 "suggestions": suggestions,
+                "actions": actions,
                 "health_summary": health_sum,
                 "acs_note": acs_note,
                 "selective_work": True,
                 "map_first": True,
             }
-        return "\n".join(suggestions) + (acs_note or "")
+        # Text: prose + compact action lines
+        lines = list(suggestions)
+        if actions:
+            lines.append("Actions (dispatchable):")
+            for a in actions[:12]:
+                tgt = a.get("file") or "—"
+                lines.append(f"  [{a.get('priority')}] {a.get('action')} {tgt}: {a.get('reason')}")
+        return "\n".join(lines) + (acs_note or "")
     except Exception as e:
         if format == "json":
             return {"success": False, "error": str(e), "project_root": str(root)}
         return f"suggest_next_actions error (Python): {e}"
+
+
+def session_bootstrap(
+    project_root: Optional[Union[str, Path]] = None,
+    directory: Optional[str] = None,
+) -> Dict[str, Any]:
+    """One-shot agent session start (delegates to agent_loop.session_bootstrap)."""
+    from .agent_loop import session_bootstrap as _sb
+    return _sb(project_root=project_root, directory=directory)
+
+
+def prepare_edit(
+    file: str,
+    project_root: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
+    """Single-file preflight lookup (wiki/status/deps/dependents)."""
+    from .agent_loop import prepare_edit as _pe
+    return _pe(file, project_root=project_root)
+
+
+def search_journal(
+    project_root: Optional[Union[str, Path]] = None,
+    query: Optional[str] = None,
+    file: Optional[str] = None,
+    max_results: int = 20,
+) -> Dict[str, Any]:
+    """Search journal semantic trail."""
+    from .agent_loop import search_journal as _sj
+    return _sj(project_root=project_root, query=query, file=file, max_results=max_results)
+
+
+def why_file(
+    file: str,
+    project_root: Optional[Union[str, Path]] = None,
+    max_results: int = 10,
+) -> Dict[str, Any]:
+    """Why is this file yellow/red — health reason + journal matches."""
+    from .agent_loop import why_file as _wf
+    return _wf(file, project_root=project_root, max_results=max_results)
 
 
 def update_maps(

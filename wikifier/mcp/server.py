@@ -1,15 +1,18 @@
 """
 Wikifier MCP server — agent-to-agent wiki (optional `pip install wikifier[mcp]`).
 
-AGENT MAP — Core 6 (start here every session):
-  1. get_project_status     — health counts + ACS/BRC snapshot
-  2. check_changes          — dirty / ghosts → yellow/red
-  3. get_files_needing_attention — 🔴/🟡 paths only
-  4. get_file_wiki          — token-cheap file summary
-  5. suggest_next_actions   — selective work (never full-tree re-wiki)
-  6. record_change / mark_green — close the loop after edits
+AGENT MAP — Core daily surface (start here every session):
+  1. session_bootstrap      — one-shot root + health + attention + dispatchable actions
+  2. check_changes          — content-honest dirty / ghosts → yellow/red
+  3. prepare_edit           — single-file preflight (wiki/status/deps/dependents)
+  4. suggest_next_actions   — structured actions[] + selective prose (never full-tree re-wiki)
+  5. record_change          — semantic why (mandatory after edits)
+  6. mark_green             — trust baseline (captures source content hash)
 
-Intel (as needed): get_dependencies, get_dependents, get_cycles, get_barrel_reports
+Also useful core: get_file_wiki, why_file, search_journal, get_files_needing_attention
+
+Advanced intel (non-core): get_dependencies, get_dependents, get_cycles, get_barrel_reports,
+  get_resolution_diagnostics, health(format=json) full intel
 Always pass project_root= for external trees. Deep import maps: Python + JS/TS.
 Run: WIKIFIER_PROJECT_ROOT=/path wikifier-mcp  |  python -m wikifier.mcp.server
 """
@@ -458,24 +461,69 @@ def mark_green(file: str, reason: str = "", project_root: Optional[str] = None) 
 
 @mcp.tool()
 def prepare_edit(file: str, project_root: Optional[str] = None) -> dict:
-    """Stage current mtime before editing a file. Returns structured result (final robustness)."""
+    """Single-file preflight: status, wiki snippet, deps, dependents, cycle/ACS flags.
+
+    Core daily surface — call before substantial edits instead of chaining many tools.
+    """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("prepare-edit", [file], root=root)
-        return {
-            "success": True,
-            "file": file,
-            "message": output,
-            "project_root": str(root),
-            "next_step": "Perform your edit, then call record_change + mark_green."
-        }
+        from wikifier.cli import prepare_edit as _lib_pe
+        res = _lib_pe(file, project_root=root)
+        if isinstance(res, dict):
+            return res
+        return {"success": True, "file": file, "project_root": str(root), "message": str(res)}
     except Exception as e:
         return {
             "success": False,
             "file": file,
             "error": str(e),
-            "project_root": str(root)
+            "project_root": str(root),
         }
+
+
+@mcp.tool()
+def session_bootstrap(
+    project_root: Optional[str] = None,
+    directory: Optional[str] = None,
+) -> dict:
+    """One-shot agent session start: root, readiness, health taxonomy, attention, actions[]."""
+    root = _get_effective_root(project_root)
+    try:
+        from wikifier.cli import session_bootstrap as _lib_sb
+        return _lib_sb(project_root=root, directory=directory)
+    except Exception as e:
+        return {"success": False, "project_root": str(root), "error": str(e)}
+
+
+@mcp.tool()
+def search_journal(
+    query: Optional[str] = None,
+    file: Optional[str] = None,
+    project_root: Optional[str] = None,
+    max_results: int = 20,
+) -> dict:
+    """Search journal semantic trail by query and/or file path."""
+    root = _get_effective_root(project_root)
+    try:
+        from wikifier.cli import search_journal as _lib_sj
+        return _lib_sj(project_root=root, query=query, file=file, max_results=max_results)
+    except Exception as e:
+        return {"success": False, "project_root": str(root), "error": str(e)}
+
+
+@mcp.tool()
+def why_file(
+    file: str,
+    project_root: Optional[str] = None,
+    max_results: int = 10,
+) -> dict:
+    """Health reason + recent journal entries explaining why a file needs attention."""
+    root = _get_effective_root(project_root)
+    try:
+        from wikifier.cli import why_file as _lib_wf
+        return _lib_wf(file, project_root=root, max_results=max_results)
+    except Exception as e:
+        return {"success": False, "file": file, "project_root": str(root), "error": str(e)}
 
 
 @mcp.tool()

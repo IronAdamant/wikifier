@@ -203,7 +203,13 @@ def _normalize_health_entry_local(entry: Dict[str, Any]) -> Dict[str, Any]:
         "last_updated": str(entry.get("last_updated", _timestamp()))[:50],
         "reason": str(entry.get("reason", ""))[:3000],
     }
-    for k in ("wiki_content_hash", "last_meaningful_edit", "last_wiki_refresh", "freshness_provenance"):
+    for k in (
+        "wiki_content_hash",
+        "source_content_hash",
+        "last_meaningful_edit",
+        "last_wiki_refresh",
+        "freshness_provenance",
+    ):
         v = entry.get(k)
         if isinstance(v, str) and v:
             core[k] = v
@@ -221,6 +227,73 @@ def _compute_wiki_content_hash(wiki_path: Optional[Path]) -> Optional[str]:
         return f"sha256:{digest}"
     except Exception:
         return None
+
+
+def compute_source_content_hash(path: Optional[Path]) -> Optional[str]:
+    """Sha256 of source file bytes for content-honest dirty detection (agent-first).
+
+    Returns ``sha256:<hex>`` or None if unreadable. Used so mtime-only thrash does
+    not auto-Yellow green files after mark-green captured a baseline.
+    """
+    if not path:
+        return None
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return None
+        digest = hashlib.sha256(p.read_bytes()).hexdigest()
+        return f"sha256:{digest}"
+    except Exception:
+        return None
+
+
+def classify_content_dirty(
+    path: Path,
+    stored_hash: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Classify whether *source* content differs from a stored baseline hash.
+
+    Pure helper for check_changes / tests. Does not mutate health.
+
+    Returns dict:
+      content_dirty: bool — True if agent should treat as content change
+      missing: bool
+      hash: live hash or None
+      reason: stable token (content_unchanged | content_changed | no_baseline | missing)
+      seed_baseline: True when caller should record hash without Yellowing (first observe)
+    """
+    live = compute_source_content_hash(path)
+    if live is None:
+        return {
+            "content_dirty": False,
+            "missing": True,
+            "hash": None,
+            "reason": "missing",
+            "seed_baseline": False,
+        }
+    if not stored_hash:
+        return {
+            "content_dirty": False,
+            "missing": False,
+            "hash": live,
+            "reason": "no_baseline",
+            "seed_baseline": True,
+        }
+    if stored_hash == live:
+        return {
+            "content_dirty": False,
+            "missing": False,
+            "hash": live,
+            "reason": "content_unchanged",
+            "seed_baseline": False,
+        }
+    return {
+        "content_dirty": True,
+        "missing": False,
+        "hash": live,
+        "reason": "content_changed",
+        "seed_baseline": False,
+    }
 
 
 def _is_stale_wiki(root: Path, file: str, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -719,6 +792,21 @@ def _do_mark_green(root: Path, file: str, reason: str = "") -> None:
     _do_upsert_entry(root, file, "🟢 Green", effective_reason)
     # Now layer the wiki refresh fields (separate durable step)
     _do_mark_wiki_refresh(root, file, wiki_hash, effective_reason, provenance=prov)
+    # Agent-first: baseline *source* bytes so mtime-only thrash does not re-Yellow
+    try:
+        src = Path(root) / file
+        if not src.is_file():
+            src = Path(file) if Path(file).is_file() else src
+        src_hash = compute_source_content_hash(src)
+        if src_hash:
+            data = load_health(root)
+            ent = data.setdefault("entries", {}).get(file)
+            if isinstance(ent, dict):
+                ent["source_content_hash"] = src_hash
+                data["entries"][file] = ent
+                save_health(root, data)
+    except Exception:
+        pass
     _do_remove_from_pending(root, file)
 
 

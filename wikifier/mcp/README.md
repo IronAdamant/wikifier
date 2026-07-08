@@ -6,6 +6,25 @@ Wikifier provides a powerful, first-class **MCP server** using the Model Context
 
 This allows AI coding agents to treat Wikifier as a native, transparent, and conservative codebase memory system for the strict agent-to-agent wiki use case.
 
+## Core daily surface (4.6+)
+
+Use these every session; ignore advanced intel unless needed:
+
+| Tool | Role |
+|------|------|
+| `session_bootstrap` | One-shot root + health + attention + dispatchable `actions[]` |
+| `check_changes` | Content-honest dirty/ghosts (not mtime-only theater) |
+| `prepare_edit` | Single-file preflight: wiki, status, deps, dependents |
+| `suggest_next_actions` | Selective work; JSON includes structured `actions[]` |
+| `record_change` | Semantic *why* after edits |
+| `mark_green` | Trust + source content-hash baseline |
+
+Also core-adjacent: `why_file`, `search_journal`, `get_file_wiki`, `get_files_needing_attention`.
+
+**Advanced (non-core):** `get_cycles`, `get_barrel_reports`, `get_resolution_diagnostics`, full `health(format=json)` dependency_intel.
+
+CLI mirrors: `session-bootstrap`, `prepare-edit`, `why-file`, `search-journal`, `suggest-next --json`.
+
 ## Installation (Zero-Dependency Core + Optional MCP)
 
 The entire project is **explicitly zero-dependency** by design:

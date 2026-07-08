@@ -42,13 +42,16 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 | Need | Use |
 |------|-----|
 | First-run map | `init` → `update-maps` → `health --summary` → `suggest-next` |
-| Steady-state | `check-changes` → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
-| Lookup | MCP Core 6: status, check_changes, needing_attention, get_file_wiki, suggest, record/mark |
-| Deps / cycles | `get_dependencies`, `get_dependents`, `get_cycles` (json) |
+| **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]` |
+| Steady-state | `check-changes` (content-honest) → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
+| **Preflight edit** | `prepare_edit` / CLI `prepare-edit <file>` — wiki + status + deps + dependents |
+| **Why / journal** | `why_file` / `search_journal` — semantic trail, not mtime theater |
+| Lookup Core | `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green` |
+| Advanced intel | `get_dependencies`, `get_dependents`, `get_cycles`, barrel/diagnostics — not daily Core |
 | Deletion | `record-deletion` |
 | Long-horizon prep | `autonomous-status` / `readiness`; then `daemon start` with lean monitor |
 | Hygiene | `seed-health`, `prune-pending`, `prune-health`, `validate` |
-| Code entry | `cli.py` dispatch + `health.py` + parsers — self-tests in `tests/` + `tests/selftest/` |
+| Code entry | `cli.py` + `agent_loop.py` + `health.py` + parsers — tests in `tests/` |
 
 **Do not open megamodules** (`javascript.py` ~2.6k, `import_cache.py` ~2.3k, `bree.py` ~2k) for workflow decisions — use tools + this table.
 
@@ -61,30 +64,31 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 **Copy this exact block into the system prompt or the very first instruction of every new LLM session that uses Wikifier:**
 
 ```
-You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 — package 4.5.x).
+You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 — package 4.6.x).
 
 This is strictly an agent-to-agent wiki for token saving: map lookup (health + file wikis + deps) instead of full sources; selective wiki updates; not a human docs product or Jira.
 
-SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and 🟡 Yellow files. Do not re-summarize 🟢 Green files or the whole tree. First-run builds the structural map; wiki depth is filled as you touch files.
+SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and 🟡 Yellow files. Do not re-summarize 🟢 Green files or the whole tree. First-run builds the structural map; wiki depth is filled as you touch files. check-changes is content-honest (mtime-only thrash does not re-Yellow when source hash matches mark-green baseline).
 
 FIRST ACTIONS:
-1. Prefer MCP tools when connected (get_project_status, get_file_wiki, check_changes, suggest_next_actions, get_dependencies, …). Always pass project_root= for external projects.
+1. Prefer MCP Core: session_bootstrap, check_changes, prepare_edit, suggest_next_actions (use actions[]), record_change, mark_green. Always pass project_root= for external projects.
 2. CLI/library fallback:
-     WIKIFIER_PROJECT_ROOT=/path/to/target python -m wikifier check-changes
-     python -m wikifier health --summary
-     python -m wikifier suggest-next   # or suggest_next_actions(format="json")
-     ... edit only red/yellow sources ...
+     WIKIFIER_PROJECT_ROOT=/path/to/target python -m wikifier session-bootstrap
+     python -m wikifier check-changes
+     python -m wikifier suggest-next --json   # actions[] dispatchable
+     python -m wikifier prepare-edit path/to/file
+     ... edit only red/actionable yellow sources ...
      python -m wikifier record-change "path/to/file" "why (semantic). Include subid if agent work."
      ... update that file's wiki only ...
      python -m wikifier mark-green "path/to/file" "reason"
      if imports changed: python -m wikifier update-maps [--directory=src/]
      if file removed: python -m wikifier record-deletion "path" "why"
      python -m wikifier health --summary
-3. Optional background: `python -m wikifier monitor` or daemon for mtime heartbeat — you still own wiki + mark-green.
-4. Prioritize 🔴 then 🟡 from health/pending. Lookup greens via get_file_wiki; do not rewrite them.
-5. Agent docs edits: record-change + mark-green.
+3. Optional background: `python -m wikifier monitor` or daemon — you still own wiki + mark-green.
+4. Prioritize 🔴 then actionable 🟡. Lookup greens via prepare_edit / get_file_wiki; do not rewrite them.
+5. why_file / search_journal for semantic trail.
 6. Always explicit project_root / WIKIFIER_PROJECT_ROOT for external/multi-project work.
-7. End turn: health + suggest_next_actions.
+7. End turn: health + suggest_next_actions (json).
 
 Never skip record-change — semantic audit trail (journal + health + pending).
 

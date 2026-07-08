@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.0] - 2026-07-09
+
+### Added
+
+- **Agent-first ideal loop (Core surface):**
+  - `session_bootstrap` — one-shot session start (root, health taxonomy, attention, dispatchable `actions[]`)
+  - `prepare_edit` — single-file preflight (status, wiki, deps, dependents, cycle/ACS flags)
+  - `search_journal` / `why_file` — semantic trail query (not mtime theater)
+  - CLI: `session-bootstrap`, `prepare-edit`, `search-journal`, `why-file`
+  - MCP tools mirror library; Core daily surface documented in protocol + MCP README
+- **`wikifier/agent_loop.py`** — pure helpers for bootstrap, preflight, journal, action builder
+- **`suggest_next_actions` JSON `actions[]`** — dispatchable objects (`action`, `file`, `priority`, `reason`, `preflight`)
+- **Content-honest dirty detection:** `source_content_hash` baseline on mark-green;
+  `check_changes` skips mtime-only thrash when content hash matches; real rewrites still Yellow
+- `health.classify_content_dirty` / `compute_source_content_hash`
+- Findings: `Findings/agent-first-ideal-loop-2026-07-09.md`
+- Tests: `tests/test_agent_loop.py`
+
+### Changed
+
+- Protocol session block (4.6.x) prioritizes Core bootstrap/prepare_edit/content-honest check
+- Deferred (explicit): wiki section-patch API, `attach` profiles
+
 ## [4.5.9] - 2026-07-09
 
 ### Fixed

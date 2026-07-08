@@ -42,7 +42,12 @@ from .cli import (
     suggest_next_actions,
     update_maps,
     health,  # flat convenience func (delegates to the health module + adds scoping)
+    session_bootstrap,
+    prepare_edit,
+    search_journal,
+    why_file,
 )
+from . import agent_loop
 
 # Re-export module under a non-shadowed name (G5). sys.modules['wikifier.health']
 # remains the real module; package attribute `health` is intentionally the function.
@@ -71,4 +76,4 @@ from .contracts import (
     compute_acs_confidence,
 )
 
-__version__ = "4.5.9"
+__version__ = "4.6.0"
