@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 06:34:55",
+  "last_updated": "2026-07-09 07:07:11",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:08",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:55:03",
+      "reason": "4.5.7 verified tests",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/Milestones-Overview.md": {
@@ -52,8 +52,8 @@
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:59",
-      "reason": "v4.5.5 count_pending",
+      "last_updated": "2026-07-09 06:55:03",
+      "reason": "4.5.7 verified tests",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/README.md": {
@@ -64,8 +64,8 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "diagnostics.html": {
@@ -97,8 +97,8 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "CLAUDE.md": {
@@ -109,8 +109,8 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/mcp/__init__.py": {
@@ -120,8 +120,8 @@
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/contracts.py": {
@@ -137,8 +137,8 @@
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:34",
-      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/scripts/wikifier.sh": {
@@ -242,8 +242,8 @@
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/resolution.py": {
@@ -412,6 +412,24 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:48",
       "reason": "verified 53 tests; dogfood validate 0/8",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "Findings/long-horizon-autonomous-ops.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+    },
+    "Findings/dogfood-goal-pass1-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "Findings/dogfood-goal-pass2-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 07:07:11",
+      "reason": "goal verification complete",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     }
   }

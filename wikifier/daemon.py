@@ -166,6 +166,42 @@ def log(msg: str, also_to_file: bool = True) -> None:
 # Core check runner (used by both initial, periodic, and post-sleep paths)
 # =============================================================================
 
+def _write_heartbeat(event: str, ok: bool, detail: str = "") -> None:
+    """Persist last daemon success/failure for autonomous-status / long-horizon ops."""
+    try:
+        import json as _json
+        path = ensure_state_dir() / "daemon_heartbeat.json"
+        prev = {}
+        if path.exists():
+            try:
+                prev = _json.loads(path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                prev = {}
+        fail_streak = int(prev.get("consecutive_failures", 0) or 0)
+        if ok:
+            fail_streak = 0
+        else:
+            fail_streak += 1
+        payload = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "event": event,
+            "ok": ok,
+            "detail": (detail or "")[:400],
+            "consecutive_failures": fail_streak,
+            "project_root": str(
+                (discover_project_root() if discover_project_root else Path.cwd()).resolve()
+            ),
+        }
+        path.write_text(_json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        if fail_streak >= 5:
+            log(
+                f"LONG-HORIZON WARN: {fail_streak} consecutive daemon step failures — "
+                "inspect daemon.log; consider lean monitored_paths / WIKIFIER_DAEMON_MAPS=0"
+            )
+    except Exception:
+        pass
+
+
 def _run_check_changes(reason: str) -> None:
     """
     Run the check-changes command in a robust way.
@@ -185,16 +221,18 @@ def _run_check_changes(reason: str) -> None:
             env=os.environ.copy(),
         )
         if result.returncode != 0:
-            log(
-                f"check-changes failed (reason={reason}): "
-                f"{(result.stderr or '')[:500]}"
-            )
+            msg = (result.stderr or "")[:500]
+            log(f"check-changes failed (reason={reason}): {msg}")
+            _write_heartbeat(f"check-changes:{reason}", False, msg)
             return
         log(f"check-changes completed (reason={reason})")
+        _write_heartbeat(f"check-changes:{reason}", True)
     except subprocess.TimeoutExpired:
         log(f"check-changes timed out (reason={reason})")
+        _write_heartbeat(f"check-changes:{reason}", False, "timeout")
     except Exception as e:
         log(f"check-changes error (reason={reason}): {e}")
+        _write_heartbeat(f"check-changes:{reason}", False, str(e))
 
 
 def _run_python_primary_update(reason: str, force_full: bool = False) -> None:
@@ -215,13 +253,20 @@ def _run_python_primary_update(reason: str, force_full: bool = False) -> None:
         files = res.get("files_to_reparse", 0)
         persisted = res.get("sample_persisted_pairs", 0)
         tied = res.get("barrel_creative_tied_in_pure_path", False)
+        ok = bool(res.get("success", True))
         log(
             f"python-primary update completed (reason={reason}): "
             f"files_to_reparse={files} persisted_pairs={persisted} barrel_creative_tied={tied} "
-            f"root={res.get('root')}"
+            f"root={res.get('root')} success={ok}"
+        )
+        _write_heartbeat(
+            f"update-maps:{reason}",
+            ok,
+            f"parsed={res.get('files_parsed')} edges={res.get('edges_persisted')}",
         )
     except Exception as e:
         log(f"python-primary update error (reason={reason}): {e}")
+        _write_heartbeat(f"update-maps:{reason}", False, str(e))
 
 
 # =============================================================================
@@ -246,29 +291,76 @@ def daemon_loop() -> None:
 
     last_check = time.time()
     last_maps = 0.0
+    last_metrics = 0.0
+    # Metrics cadence (seconds); default 1h for soak growth without spam
+    try:
+        metrics_iv = max(0, int(os.environ.get("WIKIFIER_DAEMON_METRICS_INTERVAL", "3600") or "3600"))
+    except ValueError:
+        metrics_iv = 3600
+
+    def _maybe_metrics(reason: str, force: bool = False) -> None:
+        nonlocal last_metrics
+        if metrics_iv <= 0 and not force:
+            return
+        now_m = time.time()
+        if not force and metrics_iv > 0 and (now_m - last_metrics) < metrics_iv:
+            return
+        try:
+            from . import health as health_mod
+            if hasattr(health_mod, "write_metrics_snapshot"):
+                root = None
+                if discover_project_root is not None:
+                    try:
+                        root = discover_project_root()
+                    except Exception:
+                        root = None
+                snap = health_mod.write_metrics_snapshot(
+                    root or Path.cwd(),
+                    source=f"daemon:{reason}",
+                )
+                log(
+                    f"metrics-snapshot (reason={reason}): "
+                    f"staging_bytes={snap.get('staging_bytes')} "
+                    f"score={snap.get('health_score')} ok={snap.get('success')}"
+                )
+                last_metrics = now_m
+        except Exception as me:
+            log(f"metrics-snapshot error (reason={reason}): {me}")
+
     _run_check_changes("initial start / resume")
     if maps_on:
         _run_python_primary_update("initial start / resume", force_full=False)
         last_maps = time.time()
+    _maybe_metrics("initial", force=True)
 
     while True:
-        time.sleep(POLL_INTERVAL_DEFAULT)
+        try:
+            time.sleep(POLL_INTERVAL_DEFAULT)
 
-        now = time.time()
-        gap = now - last_check
+            now = time.time()
+            gap = now - last_check
 
-        if gap > SLEEP_THRESHOLD_SECONDS:
-            log(f"Wake detected (gap of {int(gap)}s). Forced check-changes + optional maps.")
-            _run_check_changes("post-sleep resume")
-            if maps_on:
-                _run_python_primary_update("post-sleep resume", force_full=False)
+            if gap > SLEEP_THRESHOLD_SECONDS:
+                log(f"Wake detected (gap of {int(gap)}s). Forced check-changes + optional maps.")
+                _run_check_changes("post-sleep resume")
+                if maps_on:
+                    _run_python_primary_update("post-sleep resume", force_full=False)
+                    last_maps = time.time()
+                _maybe_metrics("post-sleep", force=True)
+
+            _run_check_changes("periodic")
+            if maps_on and maps_iv > 0 and (time.time() - last_maps) >= maps_iv:
+                _run_python_primary_update("periodic maps interval", force_full=False)
                 last_maps = time.time()
-
-        _run_check_changes("periodic")
-        if maps_on and maps_iv > 0 and (time.time() - last_maps) >= maps_iv:
-            _run_python_primary_update("periodic maps interval", force_full=False)
-            last_maps = time.time()
-        last_check = time.time()
+            _maybe_metrics("periodic")
+            last_check = time.time()
+        except KeyboardInterrupt:
+            raise
+        except Exception as loop_err:
+            # Never die on a single cycle — long-horizon autonomous ops requirement
+            log(f"daemon loop error (continuing): {loop_err}")
+            _write_heartbeat("loop", False, str(loop_err))
+            time.sleep(POLL_INTERVAL_DEFAULT)
 
 
 # =============================================================================

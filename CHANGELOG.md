@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.8] - 2026-07-09
+
+### Added
+
+- **Long-horizon metrics snapshot**: `write_metrics_snapshot` /
+  `wikifier metrics-snapshot` writes `.wikifier_staging/metrics_latest.json` and
+  appends `metrics_history.jsonl` (bounded 500 samples) with staging/cache size,
+  health taxonomy, ghosts, scope flags, daemon fail streak.
+- Daemon periodic metrics (`WIKIFIER_DAEMON_METRICS_INTERVAL`, default 3600s) +
+  force snapshot on start/wake.
+- `assess_autonomous_readiness` includes latest metrics + optional growth delta
+  across recent samples.
+
+## [4.5.7] - 2026-07-09
+
+### Added
+
+- **Map-first health taxonomy**: `stub_yellow` / `actionable_yellow` + `health_score`
+  (`Map Ready` | `Good` | `Needs Attention` | `Critical`). Stubs ≠ unfinished wiki.
+- **`wikifier autonomous-status`** (`readiness`): long-horizon checklist — scope risks,
+  ghosts, cache/staging size, daemon PID + `daemon_heartbeat.json`, blockers/recs.
+- **`detect_scope_risks`**: bare `.` monitor + multi-project parent container warnings.
+- Daemon **heartbeat** + consecutive-failure warn; loop never dies on one cycle error.
+- Protocol notes for map-first, dual scope, CLI `--target`, long-horizon soak honesty.
+
+### Fixed
+
+- **CLI `--target` / `--project-root`**: flags no longer left as `argv[0]`
+  (`wikifier --target /path health --summary` works).
+- **`suggest_next_actions`**: does not bulk-push “wiki all N yellow stubs”; separates
+  actionable yellows vs map-first stubs; surfaces scope risks.
+
 ## [4.5.6] - 2026-07-09
 
 ### Fixed

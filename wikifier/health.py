@@ -3,13 +3,15 @@ Documentation health matrix (agent-first).
 
 AGENT MAP:
   load_health / save_health / upsert_entry — file_health.json SSOT (+ regenerate .md)
-  get_summary / get_files_needing_attention — 🟢🟡🔴 counts and lists
+  get_summary — 🟢🟡🔴 + stub_yellow/actionable_yellow + health_score (Map Ready|…)
+  assess_autonomous_readiness / detect_scope_risks — long-horizon + dual-scope
   find_ghost_entries / validate_health — map-first gaps + ghosts (parseable sources only)
   seed_health_from_map — backfill 🟡 stubs from import_cache (warm-cache safe)
   prune_pending_to_monitored / prune_health_outside_monitored — lean-monitor hygiene
   mark_green / heal_stubs / apply_barrel_invalidation_reports — status mutations
-  CLI: seed-health | prune-pending | prune-health | validate | health --summary
+  CLI: autonomous-status | seed-health | prune-pending | prune-health | validate
 Agents: prefer MCP health / check_changes / mark_green; only open this for matrix policy.
+  Map Ready ≠ wiki-done — never bulk-wiki Initial stubs.
 
 JSON Schema (v2 - additive from v1):
 {
@@ -1149,6 +1151,359 @@ def validate_health(root: Path) -> Dict[str, Any]:
     }
 
 
+def detect_scope_risks(root: Path) -> Dict[str, Any]:
+    """Dual-scope + multi-project root misuse detector (agent hygiene)."""
+    root = _coerce_root(root)
+    warnings: List[str] = []
+    monitored = _read_monitored_rel_roots(root)
+    bare_dot = monitored == ["."] or monitored == []
+    if bare_dot:
+        warnings.append(
+            "monitored_paths is bare '.' — check-changes will thrash on large trees. "
+            "Prefer lean package roots (e.g. src/, library/std/src)."
+        )
+
+    # Parent multi-project container heuristic
+    child_projects = 0
+    sample_children: List[str] = []
+    try:
+        for p in root.iterdir():
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            if (p / ".git").exists() or (p / "file_health.json").exists() or (
+                p / ".wikifier_staging" / "import_cache.json"
+            ).exists():
+                child_projects += 1
+                if len(sample_children) < 8:
+                    sample_children.append(p.name)
+    except Exception:
+        pass
+    if child_projects >= 3:
+        warnings.append(
+            f"project_root looks like a multi-project container ({child_projects} child "
+            f"projects e.g. {sample_children}). Always target a *child* project path, "
+            "never the parent folder (e.g. cloned_sample_projects)."
+        )
+    name = root.name.lower()
+    if name in ("cloned_sample_projects", "coding_projects", "repos", "samples"):
+        warnings.append(
+            f"Directory name '{root.name}' often holds many repos — confirm project_root "
+            "is a single project, not the container."
+        )
+
+    return {
+        "monitored_roots": monitored,
+        "bare_dot_monitor": bare_dot,
+        "child_project_count": child_projects,
+        "child_project_sample": sample_children,
+        "warnings": warnings,
+        "ok": len(warnings) == 0,
+    }
+
+
+def _staging_byte_total(staging: Path, cache_path: Path) -> int:
+    if not staging.exists():
+        return 0
+    total = 0
+    try:
+        for p in staging.rglob("*"):
+            if p.is_file():
+                try:
+                    total += p.stat().st_size
+                except Exception:
+                    pass
+    except Exception:
+        try:
+            return cache_path.stat().st_size if cache_path.exists() else 0
+        except Exception:
+            return 0
+    return total
+
+
+def write_metrics_snapshot(
+    root: Path,
+    source: str = "manual",
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Append a long-horizon metrics sample under .wikifier_staging/.
+
+    Files:
+      - metrics_latest.json  (last sample, overwrite)
+      - metrics_history.jsonl (append-only; pruned to last 500 lines)
+
+    Call from CLI, readiness assessment, or daemon periodic ticks.
+    Does not claim multi-day soak; enables measurable growth over calendar time.
+    """
+    root = _coerce_root(root)
+    staging = root / ".wikifier_staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    cache_path = staging / "import_cache.json"
+    summary = get_summary(root)
+    scope = detect_scope_risks(root)
+    ghosts = find_ghost_entries(root)
+    cache_bytes = cache_path.stat().st_size if cache_path.exists() else 0
+    staging_bytes = _staging_byte_total(staging, cache_path)
+    journal_files = 0
+    journal_root = root / "journal"
+    if journal_root.exists():
+        journal_files = sum(1 for _ in journal_root.rglob("*.md"))
+
+    heartbeat = None
+    hb_path = staging / "daemon_heartbeat.json"
+    if hb_path.exists():
+        try:
+            heartbeat = json.loads(hb_path.read_text(encoding="utf-8"))
+        except Exception:
+            heartbeat = {"error": "unreadable"}
+
+    snap: Dict[str, Any] = {
+        "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": source,
+        "root": str(root),
+        "health_score": summary.get("health_score"),
+        "total": summary.get("total"),
+        "green": summary.get("green"),
+        "yellow": summary.get("yellow"),
+        "red": summary.get("red"),
+        "stub_yellow": summary.get("stub_yellow"),
+        "actionable_yellow": summary.get("actionable_yellow"),
+        "pending_updates": summary.get("pending_updates"),
+        "ghost_count": len(ghosts),
+        "cache_bytes": cache_bytes,
+        "staging_bytes": staging_bytes,
+        "journal_files": journal_files,
+        "bare_dot_monitor": scope.get("bare_dot_monitor"),
+        "scope_ok": scope.get("ok"),
+        "daemon_heartbeat_ok": (heartbeat or {}).get("ok") if isinstance(heartbeat, dict) else None,
+        "daemon_fail_streak": (heartbeat or {}).get("consecutive_failures")
+        if isinstance(heartbeat, dict)
+        else None,
+    }
+    if extra:
+        snap["extra"] = extra
+
+    latest_path = staging / "metrics_latest.json"
+    hist_path = staging / "metrics_history.jsonl"
+    try:
+        latest_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
+        with open(hist_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(snap, ensure_ascii=False) + "\n")
+        # Bound history (last 500 samples)
+        try:
+            lines = hist_path.read_text(encoding="utf-8").splitlines()
+            if len(lines) > 500:
+                hist_path.write_text("\n".join(lines[-500:]) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+        snap["success"] = True
+        snap["metrics_latest_path"] = str(latest_path)
+        snap["metrics_history_path"] = str(hist_path)
+    except Exception as e:
+        snap["success"] = False
+        snap["error"] = str(e)
+    return snap
+
+
+def read_metrics_history(root: Path, limit: int = 20) -> List[Dict[str, Any]]:
+    """Return up to `limit` most recent metrics samples (newest last)."""
+    root = _coerce_root(root)
+    hist_path = root / ".wikifier_staging" / "metrics_history.jsonl"
+    if not hist_path.exists():
+        return []
+    out: List[Dict[str, Any]] = []
+    try:
+        lines = hist_path.read_text(encoding="utf-8").splitlines()
+        for ln in lines[-max(1, min(limit, 500)) :]:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                out.append(json.loads(ln))
+            except Exception:
+                continue
+    except Exception:
+        return []
+    return out
+
+
+def assess_autonomous_readiness(
+    root: Path,
+    write_metrics: bool = True,
+) -> Dict[str, Any]:
+    """Long-horizon autonomous ops checklist (map + daemon + scope + state).
+
+    Does not replace multi-day soak evidence; surfaces *whether* a target is
+    configured safely enough for unattended check-changes/daemon loops.
+    Optionally appends a metrics snapshot for growth tracking over calendar time.
+    """
+    root = _coerce_root(root)
+    summary = get_summary(root)
+    scope = detect_scope_risks(root)
+    ghosts = find_ghost_entries(root)
+    pending_n = count_pending(root)
+
+    staging = root / ".wikifier_staging"
+    cache_path = staging / "import_cache.json"
+    lock_path = staging / ".lock"
+    pid_path = staging / "wikifier.pid"
+    heartbeat_path = staging / "daemon_heartbeat.json"
+    log_path = staging / "daemon.log"
+    metrics_latest_path = staging / "metrics_latest.json"
+
+    cache_bytes = cache_path.stat().st_size if cache_path.exists() else 0
+    staging_bytes = _staging_byte_total(staging, cache_path)
+
+    journal_root = root / "journal"
+    journal_days = 0
+    journal_files = 0
+    if journal_root.exists():
+        for p in journal_root.rglob("*.md"):
+            journal_files += 1
+        try:
+            journal_days = len({p.parent for p in journal_root.rglob("*.md")})
+        except Exception:
+            pass
+
+    daemon_running = False
+    daemon_pid = None
+    if pid_path.exists():
+        try:
+            daemon_pid = int(pid_path.read_text(encoding="utf-8").strip())
+            os.kill(daemon_pid, 0)
+            daemon_running = True
+        except Exception:
+            daemon_running = False
+
+    heartbeat = None
+    if heartbeat_path.exists():
+        try:
+            with open(heartbeat_path, "r", encoding="utf-8") as f:
+                heartbeat = json.load(f)
+        except Exception:
+            heartbeat = {"error": "unreadable"}
+
+    has_health = (root / "file_health.json").exists() or (root / "file_health.md").exists()
+    has_library = (root / "library.md").exists()
+    has_cache = cache_path.exists()
+
+    metrics_snap = None
+    if write_metrics:
+        try:
+            metrics_snap = write_metrics_snapshot(root, source="autonomous-status")
+        except Exception as e:
+            metrics_snap = {"success": False, "error": str(e)}
+
+    history = read_metrics_history(root, limit=5)
+    growth_note = None
+    if len(history) >= 2:
+        try:
+            a, b = history[0], history[-1]
+            da = int(b.get("staging_bytes") or 0) - int(a.get("staging_bytes") or 0)
+            growth_note = {
+                "samples": len(history),
+                "staging_bytes_delta": da,
+                "first_ts": a.get("ts"),
+                "last_ts": b.get("ts"),
+            }
+        except Exception:
+            growth_note = None
+
+    blockers: List[str] = []
+    recs: List[str] = []
+    if not has_cache and not has_library:
+        blockers.append("No import map (run update-maps first).")
+    if not has_health:
+        blockers.append("No file_health — run seed-health or update-maps.")
+    if scope["warnings"]:
+        recs.extend(scope["warnings"])
+    if len(ghosts) > 50:
+        blockers.append(f"Many ghost health keys ({len(ghosts)}); run record-deletion / prune.")
+    elif ghosts:
+        recs.append(f"{len(ghosts)} ghost health entries — clean with record-deletion.")
+    if pending_n > 500:
+        recs.append(
+            f"pending_updates={pending_n} is large; run prune-pending (auto-detected noise)."
+        )
+    if cache_bytes > 200 * 1024 * 1024:
+        recs.append(
+            f"import_cache is large ({cache_bytes // (1024*1024)}MB); "
+            "prefer scoped update-maps and lean monitors for long runs."
+        )
+    if staging_bytes > 500 * 1024 * 1024:
+        recs.append(f".wikifier_staging ~{staging_bytes // (1024*1024)}MB — watch disk growth.")
+    if not daemon_running:
+        recs.append(
+            "Daemon not running. For long-horizon: "
+            "`WIKIFIER_PROJECT_ROOT=… wikifier daemon start` "
+            "(maps interval default 600s; WIKIFIER_DAEMON_MAPS=0 for check-only)."
+        )
+    else:
+        recs.append(f"Daemon running (PID {daemon_pid}).")
+    recs.append(
+        "Metrics: write_metrics_snapshot / `wikifier metrics-snapshot`; "
+        "history at .wikifier_staging/metrics_history.jsonl for soak growth."
+    )
+
+    score = summary.get("health_score") or "Unknown"
+    # Readiness tier for unattended ops (not M5 95% soak claim)
+    if blockers:
+        readiness = "blocked"
+    elif scope["warnings"] and summary.get("actionable_yellow", 0) == 0 and summary.get("red", 0) == 0:
+        readiness = "map_ok_scope_risk"
+    elif score in ("Map Ready", "Good") and not scope["bare_dot_monitor"]:
+        readiness = "ready_for_daemon"
+    elif score == "Needs Attention" and summary.get("red", 0) == 0:
+        readiness = "ready_with_agent_wiki_work"
+    else:
+        readiness = "not_ready"
+
+    return {
+        "success": True,
+        "root": str(root),
+        "readiness": readiness,
+        "health_score": score,
+        "health_summary": summary,
+        "scope": scope,
+        "ghost_count": len(ghosts),
+        "pending_updates": pending_n,
+        "artifacts": {
+            "has_health": has_health,
+            "has_library": has_library,
+            "has_cache": has_cache,
+            "cache_bytes": cache_bytes,
+            "staging_bytes": staging_bytes,
+            "journal_files": journal_files,
+            "journal_day_dirs": journal_days,
+            "metrics_latest": str(metrics_latest_path) if metrics_latest_path.exists() else None,
+        },
+        "daemon": {
+            "running": daemon_running,
+            "pid": daemon_pid,
+            "heartbeat": heartbeat,
+            "log": str(log_path) if log_path.exists() else None,
+            "maps_env": {
+                "WIKIFIER_DAEMON_MAPS": os.environ.get("WIKIFIER_DAEMON_MAPS", "1"),
+                "WIKIFIER_DAEMON_MAPS_INTERVAL": os.environ.get(
+                    "WIKIFIER_DAEMON_MAPS_INTERVAL", "600"
+                ),
+            },
+        },
+        "metrics": metrics_snap,
+        "metrics_growth": growth_note,
+        "lock_path": str(lock_path),
+        "blockers": blockers,
+        "recommendations": recs,
+        "long_horizon_note": (
+            "ready_for_daemon = safe config for unattended check-changes/maps heartbeat. "
+            "It is NOT a multi-day 0-corruption soak proof (M5.3). "
+            "For soak: run daemon on 1–3 lean-monitored targets, append metrics-snapshot "
+            "periodically, watch staging_bytes delta in metrics_history.jsonl, "
+            "daemon_heartbeat consecutive_failures, and journal continuity over >=72h."
+        ),
+        "map_first_note": summary.get("map_first_note"),
+    }
+
+
 # ----------------------------- apply_barrel... (continues) -----------------------------
 
 def apply_barrel_invalidation_reports(
@@ -1203,33 +1558,84 @@ def apply_barrel_invalidation_reports(
     return updated
 
 
+def _is_map_first_stub_entry(entry: Dict[str, Any]) -> bool:
+    """True for map-first Initial stubs (not agent-action work items)."""
+    if not isinstance(entry, dict):
+        return False
+    reason = str(entry.get("reason") or "")
+    prov = str(entry.get("freshness_provenance") or "")
+    blob = (reason + " " + prov).lower()
+    if "initial stub" in blob:
+        return True
+    if "seed_health_from_map" in blob or "seed_health_for_monitored" in blob:
+        return True
+    if "present in dependency map" in blob:
+        return True
+    if "parseable source under monitored" in blob:
+        return True
+    return False
+
+
+def _compute_health_score(
+    red: int,
+    yellow: int,
+    stub_yellow: int,
+    actionable_yellow: int,
+) -> str:
+    """Agent-facing readiness label (map-first aware).
+
+    Map Ready  — no reds, only map-first stubs (or empty); do NOT treat as unfinished wiki.
+    Good       — clean green-heavy tree, few actionable yellows
+    Needs Attention — actionable yellows / pending work (not mere stubs)
+    Critical   — reds
+    """
+    if red >= 3:
+        return "Critical"
+    if red > 0:
+        return "Needs Attention"
+    if actionable_yellow > 0:
+        return "Needs Attention"
+    if yellow > 0 and stub_yellow >= yellow and actionable_yellow == 0:
+        return "Map Ready"
+    if yellow == 0:
+        return "Good"
+    if yellow < 5:
+        return "Good"
+    return "Needs Attention"
+
+
 def get_summary(root: Path, directory: Optional[str] = None, include_stale: bool = False) -> Dict[str, Any]:
     """Return a summary of the health matrix (fast even for large repos; sharded by dir).
 
-    If directory is provided, only counts files under that subdirectory.
-    This enables scalable views in massive monorepos (e.g. health per package).
-    M2 B: include_stale=True adds bounded stale_wiki count (via B3 detector) for
-    practical summary-only views without full materialization.
+    Map-first taxonomy (additive fields):
+      stub_yellow — Initial stub / map-seed rows (lookup OK; wiki on edit)
+      actionable_yellow — real work (mtime, record-change, barrel stale, …)
+      health_score — \"Map Ready\" | \"Good\" | \"Needs Attention\" | \"Critical\"
+
+    Agents must not treat stub_yellow as \"I understand this file.\"
     """
     health = load_health(root)
-    # Phase 5e (66): health.get_summary (format=summary path) promoted as first-class default/recommended for 20k+ creative monorepos (O(k) sharded, complements compute_acs_summary + ACS/CIABRE/BRC bounded via deque; per crit2/5 + 48/58).
     entries = health.get("entries", {})
 
     green = yellow = red = 0
+    stub_yellow = actionable_yellow = 0
     total = 0
 
     for file_path, entry in entries.items():
         if directory:
-            # Normalize paths for comparison
             if not file_path.startswith(directory.rstrip('/') + '/'):
                 continue
 
         total += 1
-        status = entry.get("status", "")
+        status = entry.get("status", "") if isinstance(entry, dict) else ""
         if "🟢" in status:
             green += 1
         elif "🟡" in status:
             yellow += 1
+            if _is_map_first_stub_entry(entry if isinstance(entry, dict) else {}):
+                stub_yellow += 1
+            else:
+                actionable_yellow += 1
         elif "🔴" in status:
             red += 1
 
@@ -1237,12 +1643,20 @@ def get_summary(root: Path, directory: Optional[str] = None, include_stale: bool
         pending_n = count_pending(root)
     except Exception:
         pending_n = 0
+    score = _compute_health_score(red, yellow, stub_yellow, actionable_yellow)
     out = {
         "total": total,
         "green": green,
         "yellow": yellow,
         "red": red,
+        "stub_yellow": stub_yellow,
+        "actionable_yellow": actionable_yellow,
         "pending_updates": pending_n,
+        "health_score": score,
+        "map_first_note": (
+            "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. "
+            "Prefer actionable_yellow / red for work. health_score Map Ready ≠ wiki-done."
+        ),
         "directory": directory or ".",
         "version": health.get("version", 2),
         "last_updated": health.get("last_updated")

@@ -10,12 +10,15 @@
 **Package 4.5.x + gap-closure notes (additive; protocol still v0.6):**
 - File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
 - **First-run:** `init` → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
-- **Steady-state selective work:** only 🔴/🟡 (never re-wiki 🟢 unless required). ACS suggestions use `actionable_low_conf_edges` (stdlib/external bare demoted).
-- **Deletions:** `record-deletion` + check-changes ghost detection (missing paths → Red DELETED).
-- **Languages:** deep import maps = Python, JS/TS, Rust, Go, C/C++, C#, Java (regex; not full toolchain resolution). journal/pending = audit queue, not Jira.
-- **Huge monorepos:** lean `monitored_paths.txt` (package roots, not bare `.`). Optional `WIKIFIER_CHECK_CHANGES_MAX` (default 2000). `update-maps` seeds Yellow health stubs for newly parsed files (map-first).
-- **Monitor:** optional background `monitor`/`daemon` for mtime heartbeat; agents still own wiki/mark-green.
-- Health module: use `importlib.import_module("wikifier.health")` or `wikifier.health_module` — `from wikifier import health` is the *function*.
+- **Map-first ≠ wiki-done:** `health_score` **Map Ready** + many 🟡 *Initial stubs* means structural coverage only. Do **not** bulk-wiki stubs. Wiki a file when you edit it, then `mark-green`. Prefer `actionable_yellow` / 🔴 over raw yellow counts.
+- **Steady-state selective work:** only 🔴 and *actionable* 🟡 (never re-wiki 🟢; never re-wiki the whole stub set). ACS uses `actionable_low_conf_edges`.
+- **Dual scope:** `monitored_paths` = check-changes/health scope (keep lean). `update-maps --directory=` / `--max-files=` = map walk. Never set `project_root` to a multi-repo parent (e.g. `cloned_sample_projects`).
+- **CLI target:** `wikifier --target /abs/project health --summary` (flags stripped before the command). Or `WIKIFIER_PROJECT_ROOT=…`.
+- **Long-horizon:** `wikifier autonomous-status` (or `readiness`) before unattended runs; daemon writes `.wikifier_staging/daemon_heartbeat.json`. Soak ≥72h is still evidence work, not automatic.
+- **Deletions:** `record-deletion` + ghost detection. **Languages:** py/js/ts/rust/go/c/c#/java (regex). journal/pending = audit queue, not Jira.
+- **Huge monorepos:** lean `monitored_paths.txt` (not bare `.`). `WIKIFIER_CHECK_CHANGES_MAX` default 2000. Hygiene: `seed-health`, `prune-pending`, `prune-health`.
+- **Monitor/daemon:** mtime heartbeat; agents still own wiki/mark-green. `WIKIFIER_DAEMON_MAPS_INTERVAL` default 600s; `WIKIFIER_DAEMON_MAPS=0` for check-only.
+- Health module: `importlib.import_module("wikifier.health")` or `wikifier.health_module` — `from wikifier import health` is the *function*.
 
 **v0.6 migration notes (packages v4.2.0–v4.3.0)** — changes are additive or strictly-better defaults; v0.5 agent behavior keeps working:
 - `update-maps` (CLI) now runs the **pure-Python full pipeline**: every dirty file is parsed in-process, the canonical per-file cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `--python-primary` is accepted but redundant; the in-shell first-pass was retired entirely (wikifier.sh's update-maps delegates to this pipeline; `--sh`/`--legacy-sh` are deprecated no-ops). Scoping is explicit via `--directory=`/`--max-files=` and reported in the result (`files_skipped`) — there are no silent caps.
@@ -39,11 +42,15 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 | Need | Use |
 |------|-----|
 | First-run map | `init` → `update-maps` → `health --summary` → `suggest-next` |
-| Steady-state | `check-changes` → edit 🔴/🟡 only → `record-change` → wiki → `mark-green` |
+| Steady-state | `check-changes` → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
 | Lookup | MCP Core 6: status, check_changes, needing_attention, get_file_wiki, suggest, record/mark |
 | Deps / cycles | `get_dependencies`, `get_dependents`, `get_cycles` (json) |
 | Deletion | `record-deletion` |
-| Code entry | `wikifier/cli.py` (dispatch) + `wikifier/health.py` + parsers — self-tests live in `tests/` + `tests/selftest/` |
+| Long-horizon prep | `autonomous-status` / `readiness`; then `daemon start` with lean monitor |
+| Hygiene | `seed-health`, `prune-pending`, `prune-health`, `validate` |
+| Code entry | `cli.py` dispatch + `health.py` + parsers — self-tests in `tests/` + `tests/selftest/` |
+
+**Do not open megamodules** (`javascript.py` ~2.6k, `import_cache.py` ~2.3k, `bree.py` ~2k) for workflow decisions — use tools + this table.
 
 **CLI pure-Python vs shell:** mutators and maps prefer `python -m wikifier …`. Shell still owns `init`, `monitor`, `daemon`, `serve`, `journal`.  
 **Scope:** `monitored_paths` = change detection; `exclude_patterns` + optional `--directory` = map walk.  

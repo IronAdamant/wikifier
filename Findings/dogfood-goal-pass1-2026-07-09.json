@@ -1,0 +1,365 @@
+{
+  "pass": 1,
+  "version": "4.5.8",
+  "ts": "2026-07-08T21:04:04.150162+00:00",
+  "success_count": 8,
+  "total": 8,
+  "results": [
+    {
+      "project": "airflow",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/airflow",
+      "plan": {
+        "directory": "airflow-core/src",
+        "max_files": 100,
+        "force_full": false
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 0
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/airflow",
+        "parseable": 1444,
+        "parsed": 0,
+        "edges": 0,
+        "langs": {},
+        "seeded": 0
+      },
+      "health": {
+        "total": 1445,
+        "green": 0,
+        "yellow": 1445,
+        "red": 0,
+        "stub_yellow": 1444,
+        "actionable_yellow": 1,
+        "pending_updates": 0,
+        "health_score": "Needs Attention",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:01:28"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 8.76
+    },
+    {
+      "project": "Babylon.js",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/Babylon.js",
+      "plan": {
+        "directory": "packages/dev/core/src",
+        "max_files": 100,
+        "force_full": false
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 0
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/Babylon.js",
+        "parseable": 1644,
+        "parsed": 0,
+        "edges": 0,
+        "langs": {},
+        "seeded": 0
+      },
+      "health": {
+        "total": 1644,
+        "green": 0,
+        "yellow": 1644,
+        "red": 0,
+        "stub_yellow": 1640,
+        "actionable_yellow": 4,
+        "pending_updates": 0,
+        "health_score": "Needs Attention",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:01:42"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 14.27
+    },
+    {
+      "project": "dotnet-dotnet",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/dotnet-dotnet",
+      "plan": {
+        "directory": "src",
+        "max_files": 80,
+        "force_full": true
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 26
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/dotnet-dotnet",
+        "parseable": 104289,
+        "parsed": 80,
+        "edges": 292,
+        "langs": {
+          ".py": 1,
+          ".cs": 79
+        },
+        "seeded": 0
+      },
+      "health": {
+        "total": 26,
+        "green": 0,
+        "yellow": 26,
+        "red": 0,
+        "stub_yellow": 0,
+        "actionable_yellow": 26,
+        "pending_updates": 0,
+        "health_score": "Needs Attention",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:02:50"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 67.2
+    },
+    {
+      "project": "linux",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/linux",
+      "plan": {
+        "directory": "init",
+        "max_files": 50,
+        "force_full": true
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 0
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/linux",
+        "parseable": 13,
+        "parsed": 13,
+        "edges": 239,
+        "langs": {
+          ".c": 11,
+          ".h": 2
+        },
+        "seeded": 0
+      },
+      "health": {
+        "total": 13,
+        "green": 0,
+        "yellow": 13,
+        "red": 0,
+        "stub_yellow": 13,
+        "actionable_yellow": 0,
+        "pending_updates": 0,
+        "health_score": "Map Ready",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:02:57"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 7.03
+    },
+    {
+      "project": "llama_index",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llama_index",
+      "plan": {
+        "directory": null,
+        "max_files": 200,
+        "force_full": false
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 0
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llama_index",
+        "parseable": 3837,
+        "parsed": 0,
+        "edges": 0,
+        "langs": {},
+        "seeded": 0
+      },
+      "health": {
+        "total": 724,
+        "green": 0,
+        "yellow": 724,
+        "red": 0,
+        "stub_yellow": 724,
+        "actionable_yellow": 0,
+        "pending_updates": 0,
+        "health_score": "Map Ready",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:03:00"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 3.33
+    },
+    {
+      "project": "llvm-project",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llvm-project",
+      "plan": {
+        "directory": "llvm/lib/Support",
+        "max_files": 100,
+        "force_full": true
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 324
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llvm-project",
+        "parseable": 192,
+        "parsed": 100,
+        "edges": 541,
+        "langs": {
+          ".cpp": 89,
+          ".c": 8,
+          ".h": 3
+        },
+        "seeded": 0
+      },
+      "health": {
+        "total": 424,
+        "green": 0,
+        "yellow": 424,
+        "red": 0,
+        "stub_yellow": 107,
+        "actionable_yellow": 317,
+        "pending_updates": 0,
+        "health_score": "Needs Attention",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:03:25"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 24.7
+    },
+    {
+      "project": "redox",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/redox",
+      "plan": {
+        "directory": null,
+        "max_files": null,
+        "force_full": true
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 0
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/redox",
+        "parseable": 31,
+        "parsed": 31,
+        "edges": 175,
+        "langs": {
+          ".c": 5,
+          ".cpp": 1,
+          ".go": 1,
+          ".java": 1,
+          ".js": 1,
+          ".py": 1,
+          ".rs": 21
+        },
+        "seeded": 0
+      },
+      "health": {
+        "total": 27,
+        "green": 0,
+        "yellow": 27,
+        "red": 0,
+        "stub_yellow": 2,
+        "actionable_yellow": 25,
+        "pending_updates": 0,
+        "health_score": "Needs Attention",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:03:25"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 0.31
+    },
+    {
+      "project": "rust",
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/rust",
+      "plan": {
+        "directory": "library/std/src",
+        "max_files": 150,
+        "force_full": true
+      },
+      "version": "4.5.8",
+      "pass": 1,
+      "success": true,
+      "check_changes": {
+        "success": true,
+        "changes": 519
+      },
+      "update_maps": {
+        "success": true,
+        "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/rust",
+        "parseable": 669,
+        "parsed": 150,
+        "edges": 805,
+        "langs": {
+          ".rs": 150
+        },
+        "seeded": 0
+      },
+      "health": {
+        "total": 669,
+        "green": 0,
+        "yellow": 669,
+        "red": 0,
+        "stub_yellow": 628,
+        "actionable_yellow": 41,
+        "pending_updates": 0,
+        "health_score": "Needs Attention",
+        "map_first_note": "Yellow Initial stubs = map coverage only; wiki prose is optional until you edit. Prefer actionable_yellow / red for work. health_score Map Ready \u2260 wiki-done.",
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 07:04:03"
+      },
+      "validate_missing": 0,
+      "issues": [],
+      "seconds": 38.15
+    }
+  ]
+}

@@ -1709,14 +1709,34 @@ def get_project_status(
                 yellow=summary["yellow"],
                 red=summary["red"],
                 pending_updates=pending_count,
-                health_score="Good" if summary["red"] == 0 and summary["yellow"] < 5 else "Needs Attention" if summary["red"] < 3 else "Critical"
+                health_score=str(
+                    summary.get("health_score")
+                    or (
+                        "Good"
+                        if summary["red"] == 0 and summary["yellow"] < 5
+                        else "Needs Attention"
+                        if summary["red"] < 3
+                        else "Critical"
+                    )
+                ),
             )
-            # attach dep intel (additive, agents can now use for ACS filtering without separate calls)
+            # attach dep intel + map-first taxonomy (additive)
             if isinstance(base, dict):
                 base["dependency_intel"] = dep_intel
+                for k in (
+                    "stub_yellow",
+                    "actionable_yellow",
+                    "map_first_note",
+                    "health_score",
+                ):
+                    if k in summary:
+                        base[k] = summary[k]
             else:
                 try:
                     base.dependency_intel = dep_intel  # type: ignore[attr-defined]
+                    for k in ("stub_yellow", "actionable_yellow", "map_first_note"):
+                        if k in summary:
+                            setattr(base, k, summary[k])
                 except Exception:
                     pass
             return base
@@ -1784,14 +1804,15 @@ Use get_files_needing_attention() for the actual list. Use get_cycles(analysis=T
                 if l.strip().startswith("- ") and not l.strip().startswith("- (")
             ])
         green = yellow = red = total = 0
+        summary_fb: dict = {}
         try:
             import importlib
             health_module = importlib.import_module("wikifier.health")
-            summary = health_module.get_summary(root, directory)
-            total = int(summary.get("total", 0) or 0)
-            green = int(summary.get("green", 0) or 0)
-            yellow = int(summary.get("yellow", 0) or 0)
-            red = int(summary.get("red", 0) or 0)
+            summary_fb = health_module.get_summary(root, directory) or {}
+            total = int(summary_fb.get("total", 0) or 0)
+            green = int(summary_fb.get("green", 0) or 0)
+            yellow = int(summary_fb.get("yellow", 0) or 0)
+            red = int(summary_fb.get("red", 0) or 0)
         except Exception:
             # Last resort: emoji-aware (+ legacy tag) counts from health text.
             try:
@@ -1804,13 +1825,22 @@ Use get_files_needing_attention() for the actual list. Use get_cycles(analysis=T
                 pass
 
         if format == "json":
+            _hs = summary_fb.get("health_score")
+            if not _hs:
+                _hs = (
+                    "Good"
+                    if red == 0 and yellow < 5
+                    else "Needs Attention"
+                    if red < 3
+                    else "Critical"
+                )
             return ProjectHealthSummary(
                 total_files=total or (green + yellow + red),
                 green=green,
                 yellow=yellow,
                 red=red,
                 pending_updates=pending_count,
-                health_score="Good" if red == 0 and yellow < 5 else "Needs Attention" if red < 3 else "Critical"
+                health_score=str(_hs)
             )
 
         dir_str = f" (in {directory})" if directory else ""

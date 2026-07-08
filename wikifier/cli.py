@@ -728,18 +728,20 @@ def main():
     i = 0
     while i < len(argv):
         arg = argv[i]
+        # Consume --target / --project-root so the *command* remains filtered_argv[0]
+        # (previously left --target as argv[0] → "Unknown command: --target").
         if arg in ("--target", "--project-root") and i + 1 < len(argv):
             project_root = argv[i + 1]
-            filtered_argv.append(arg)
-            filtered_argv.append(argv[i + 1])
             i += 2
             continue
         elif arg.startswith("--target="):
             project_root = arg.split("=", 1)[1]
-            filtered_argv.append(arg)
+            i += 1
+            continue
         elif arg.startswith("--project-root="):
             project_root = arg.split("=", 1)[1]
-            filtered_argv.append(arg)
+            i += 1
+            continue
         elif arg in ("--use-canonical", "--use_canonical"):
             use_canonical = True
             filtered_argv.append(arg)
@@ -893,6 +895,30 @@ def main():
                     return 1
                 root = _get_effective_root(project_root)
                 res = _health_mod.prune_health_outside_monitored(root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in (
+                "autonomous-status",
+                "autonomous_status",
+                "readiness",
+                "long-horizon",
+            ):
+                import json as _json
+                if _health_mod is None or not hasattr(_health_mod, "assess_autonomous_readiness"):
+                    print("[wikifier] health.assess_autonomous_readiness unavailable", file=sys.stderr)
+                    return 1
+                root = _get_effective_root(project_root)
+                res = _health_mod.assess_autonomous_readiness(root)
+                print(_json.dumps(res, indent=2, default=str))
+                # exit 0 only when not blocked
+                return 0 if res.get("readiness") != "blocked" else 2
+            if _cmd0 in ("metrics-snapshot", "metrics_snapshot", "metrics"):
+                import json as _json
+                if _health_mod is None or not hasattr(_health_mod, "write_metrics_snapshot"):
+                    print("[wikifier] write_metrics_snapshot unavailable", file=sys.stderr)
+                    return 1
+                root = _get_effective_root(project_root)
+                res = _health_mod.write_metrics_snapshot(root, source="cli")
                 print(_json.dumps(res, indent=2, default=str))
                 return 0 if res.get("success") else 1
         except Exception as e:
@@ -1419,12 +1445,14 @@ def suggest_next_actions(
     """
     root = _get_effective_root(project_root)
     try:
-        red = yellow = 0
+        red = yellow = stub_y = action_y = 0
         health_sum: Dict[str, Any] = {}
         if _health_mod is not None:
             health_sum = _health_mod.get_summary(root, directory) or {}
-            red = health_sum.get("red", 0)
-            yellow = health_sum.get("yellow", 0)
+            red = int(health_sum.get("red", 0) or 0)
+            yellow = int(health_sum.get("yellow", 0) or 0)
+            stub_y = int(health_sum.get("stub_yellow", 0) or 0)
+            action_y = int(health_sum.get("actionable_yellow", yellow - stub_y) or 0)
 
         suggestions: List[str] = []
         n = 1
@@ -1434,10 +1462,23 @@ def suggest_next_actions(
                 "Do not re-wiki 🟢 Green files."
             )
             n += 1
-        if yellow > 0:
+        if action_y > 0:
             suggestions.append(
-                f"{n}. Review the {yellow} 🟡 Yellow file(s) only — record-change intent, refresh wiki, mark-green. "
-                "Skip green unless a dependent of a yellow/red requires it."
+                f"{n}. Review {action_y} *actionable* 🟡 Yellow file(s) "
+                "(mtime/record-change/barrel — not Initial stubs). "
+                "record-change → wiki that file → mark-green. Skip green."
+            )
+            n += 1
+        if stub_y > 0 and action_y == 0 and red == 0:
+            suggestions.append(
+                f"{n}. Map-first OK: {stub_y} 🟡 Initial stubs mean \"on the map\", "
+                "NOT \"wiki this tree now\". Lookup via get_file_wiki/deps; "
+                "write prose only when you edit a file, then mark-green."
+            )
+            n += 1
+        elif stub_y > 0 and action_y > 0:
+            suggestions.append(
+                f"{n}. Ignore {stub_y} map-first stubs for bulk work; only actionable yellows need wiki."
             )
             n += 1
         if red == 0 and yellow == 0:
@@ -1445,6 +1486,15 @@ def suggest_next_actions(
                 f"{n}. Health is clean (no red/yellow). Do not re-summarize the tree; use the map for lookup only."
             )
             n += 1
+        # Scope hygiene
+        if _health_mod is not None and hasattr(_health_mod, "detect_scope_risks"):
+            try:
+                scope = _health_mod.detect_scope_risks(root) or {}
+                for w in (scope.get("warnings") or [])[:2]:
+                    suggestions.append(f"{n}. SCOPE: {w}")
+                    n += 1
+            except Exception:
+                pass
         suggestions.append(
             f"{n}. Run `update_maps(directory=...)` only if imports/structure changed (not for wiki-only edits)."
         )
@@ -1453,7 +1503,10 @@ def suggest_next_actions(
             f"{n}. On yellow/red hotspots, query dependents (get_dependents) before editing callers."
         )
         n += 1
-        suggestions.append(f"{n}. Review journal/ for recent record-change intent (self-audit).")
+        suggestions.append(
+            f"{n}. Long-horizon: `wikifier autonomous-status` before unattended daemon; "
+            "lean monitored_paths; never parent multi-repo folders as project_root."
+        )
 
         acs_note = ""
         if _ic_mod is not None:
@@ -1488,10 +1541,14 @@ def suggest_next_actions(
                 "project_root": str(root),
                 "red": red,
                 "yellow": yellow,
+                "stub_yellow": stub_y,
+                "actionable_yellow": action_y,
+                "health_score": health_sum.get("health_score"),
                 "suggestions": suggestions,
                 "health_summary": health_sum,
                 "acs_note": acs_note,
                 "selective_work": True,
+                "map_first": True,
             }
         return "\n".join(suggestions) + (acs_note or "")
     except Exception as e:

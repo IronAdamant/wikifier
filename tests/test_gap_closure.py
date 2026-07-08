@@ -190,6 +190,84 @@ class TestPendingAndPollutionHygiene(TempProjectTestCase):
         self.assertIn("gone_real.py", entries2)
 
 
+class TestMapFirstTaxonomyAndReadiness(TempProjectTestCase):
+    def test_stub_yellow_is_map_ready_not_needs_attention(self):
+        health_mod = importlib.import_module("wikifier.health")
+        health_mod.upsert_entry(
+            self.root, "a.py", "🟡 Yellow",
+            "Initial stub — present in dependency map; agent should wiki + mark-green when editing",
+        )
+        health_mod.upsert_entry(
+            self.root, "b.py", "🟡 Yellow",
+            "Initial stub — parseable source under monitored_paths; agent should wiki + mark-green when editing",
+        )
+        s = health_mod.get_summary(self.root)
+        self.assertEqual(s.get("stub_yellow"), 2)
+        self.assertEqual(s.get("actionable_yellow"), 0)
+        self.assertEqual(s.get("health_score"), "Map Ready")
+
+    def test_actionable_yellow_needs_attention(self):
+        health_mod = importlib.import_module("wikifier.health")
+        health_mod.upsert_entry(
+            self.root, "a.py", "🟡 Yellow",
+            "mtime changed since last check-changes (Python primary auto-detected)",
+        )
+        s = health_mod.get_summary(self.root)
+        self.assertEqual(s.get("actionable_yellow"), 1)
+        self.assertEqual(s.get("health_score"), "Needs Attention")
+
+    def test_suggest_does_not_bulk_wiki_stubs(self):
+        health_mod = importlib.import_module("wikifier.health")
+        health_mod.upsert_entry(self.root, "a.py", "🟡 Yellow", "Initial stub — present in dependency map")
+        text = cli.suggest_next_actions(project_root=self.root, format="text")
+        self.assertIn("Map-first", text)
+        self.assertNotIn("Review the 1 🟡 Yellow file(s) only", text)
+
+    def test_detect_multi_project_container(self):
+        health_mod = importlib.import_module("wikifier.health")
+        for name in ("proj_a", "proj_b", "proj_c"):
+            d = self.root / name
+            d.mkdir()
+            (d / ".git").mkdir()
+        scope = health_mod.detect_scope_risks(self.root)
+        self.assertGreaterEqual(scope.get("child_project_count"), 3)
+        self.assertFalse(scope.get("ok"))
+        self.assertTrue(any("multi-project" in w.lower() for w in scope.get("warnings") or []))
+
+    def test_autonomous_readiness_shape(self):
+        health_mod = importlib.import_module("wikifier.health")
+        (self.root / "monitored_paths.txt").write_text("src\n", encoding="utf-8")
+        self.write("src/app.py", "x=1\n")
+        health_mod.upsert_entry(self.root, "src/app.py", "🟡 Yellow", "Initial stub — present in dependency map")
+        r = health_mod.assess_autonomous_readiness(self.root)
+        self.assertTrue(r.get("success"))
+        self.assertIn(r.get("readiness"), (
+            "blocked", "map_ok_scope_risk", "ready_for_daemon",
+            "ready_with_agent_wiki_work", "not_ready",
+        ))
+        self.assertIn("long_horizon_note", r)
+        self.assertIn("metrics", r)
+
+    def test_write_metrics_snapshot_history(self):
+        health_mod = importlib.import_module("wikifier.health")
+        (self.root / "monitored_paths.txt").write_text("src\n", encoding="utf-8")
+        self.write("src/app.py", "x=1\n")
+        health_mod.upsert_entry(self.root, "src/app.py", "🟢 Green", "ok")
+        s1 = health_mod.write_metrics_snapshot(self.root, source="test1")
+        self.assertTrue(s1.get("success"))
+        latest = self.root / ".wikifier_staging" / "metrics_latest.json"
+        hist = self.root / ".wikifier_staging" / "metrics_history.jsonl"
+        self.assertTrue(latest.exists())
+        self.assertTrue(hist.exists())
+        s2 = health_mod.write_metrics_snapshot(self.root, source="test2")
+        self.assertTrue(s2.get("success"))
+        rows = health_mod.read_metrics_history(self.root, limit=10)
+        self.assertGreaterEqual(len(rows), 2)
+        self.assertEqual(rows[-1].get("source"), "test2")
+        self.assertIn("staging_bytes", rows[-1])
+        self.assertIn("health_score", rows[-1])
+
+
 class TestMapFirstHealthAndValidate(TempProjectTestCase):
     def test_deep_relative_keys_are_under_root(self):
         """Regression: deep monorepo rel paths must not be treated as abs pollution."""
