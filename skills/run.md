@@ -2,10 +2,12 @@
 
 **Formerly "Wikifier Skills & Commands". This is the authoritative, versioned specification for agent behavior when using Wikifier.**
 
-**Version**: v0.6 (v4.2.0 real-pipeline + reliability update)  
-**Date**: 2026-06-10  
+**Version**: v0.6 (v4.2.0 real-pipeline + reliability update; package current **4.5.x**)  
+**Date**: 2026-06-10 (package notes refreshed 2026-07-09)  
 **Status**: Active. Supersedes v0.5.  
 **See also**: `README.md` (Intended Use section: strictly agent-to-agent wiki for token saving), M5-Dogfood-Assessment-Report.md, Findings/2026-06-10-Dogfood-Refactor-Validation.md, and the library in wikifier/.
+
+**Package 4.5.x notes (additive; protocol still v0.6):** File Tree as primary structure view in `library.md` + dashboard pan/zoom graph; `wikifier serve` with real Run/Stop controls; Python parser no longer leaks `#`-comment text into edges; MCP `get_project_status` / `get_files_needing_attention` use library+emoji health statuses (not legacy `[GREEN]` tags). Full history: `CHANGELOG.md`.
 
 **v0.6 migration notes (packages v4.2.0–v4.3.0)** — changes are additive or strictly-better defaults; v0.5 agent behavior keeps working:
 - `update-maps` (CLI) now runs the **pure-Python full pipeline**: every dirty file is parsed in-process, the canonical per-file cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `--python-primary` is accepted but redundant; the in-shell first-pass was retired entirely (wikifier.sh's update-maps delegates to this pipeline; `--sh`/`--legacy-sh` are deprecated no-ops). Scoping is explicit via `--directory=`/`--max-files=` and reported in the result (`files_skipped`) — there are no silent caps.

@@ -683,8 +683,17 @@ def main():
             filtered_argv.append(arg)
         i += 1
 
-    # Micro-step 2 (A2 CLI wiring): detect streaming UX flags after parsing
-    a2_flag_markers = ("--stream", "--stream=", "--resume", "--resume_token", "--max-time", "--max_time", "--progress", "--summary", "--partial", "--dir=", "--directory=", "--max-files", "--max_files", "--format", "--format=summary", "--format=stream")
+    # Micro-step 2 (A2 CLI wiring): detect streaming UX flags after parsing.
+    # --max-files / --directory are normal run_full_update scoping options and
+    # must NOT force the stream facade (agents expect batch JSON + files_skipped).
+    a2_flag_markers = (
+        "--stream", "--stream=",
+        "--resume", "--resume_token",
+        "--max-time", "--max_time",
+        "--progress",
+        "--partial",
+        "--format=stream",
+    )
     has_a2_ux_flags = any(any(a == m or a.startswith(m) for m in a2_flag_markers) for a in filtered_argv)
 
     if project_root:
@@ -708,6 +717,37 @@ def main():
             return 0
         except Exception as e:
             print(f"[wikifier] health --{fmt} failed: {e}", file=sys.stderr)
+            return 1
+
+    # Mandatory workflow commands: pure-Python primary (updates file_health.json + md).
+    # Shell upsert_health only patches the .md and on macOS `realpath --relative-to`
+    # is unavailable, so it used to store absolute paths as health keys.
+    if filtered_argv:
+        _cmd0 = filtered_argv[0].replace("_", "-")
+        _args = filtered_argv[1:]
+        try:
+            if _cmd0 == "check-changes":
+                res = check_changes(project_root=project_root)
+                n = int(res.get("changes_detected") or 0)
+                print("[wikifier] Running incremental change detection...")
+                if n:
+                    print(f"[wikifier] Detected {n} changed file(s). See pending_updates.md and file_health.md.")
+                else:
+                    print("[wikifier] No new changes detected.")
+                if res.get("message"):
+                    print(res["message"])
+                return 0 if res.get("success", True) else 1
+            if _cmd0 == "record-change" and len(_args) >= 2:
+                res = record_change(_args[0], " ".join(_args[1:]), project_root=project_root)
+                print(res.get("message") or res)
+                return 0 if res.get("success") else 1
+            if _cmd0 == "mark-green" and len(_args) >= 1:
+                reason = " ".join(_args[1:]) if len(_args) > 1 else ""
+                res = mark_green(_args[0], reason, project_root=project_root)
+                print(res.get("message") or res)
+                return 0 if res.get("success") else 1
+        except Exception as e:
+            print(f"[wikifier] Python-primary {_cmd0} failed: {e}", file=sys.stderr)
             return 1
 
     # Human sub-project: ensure dashboards are in the target (for MCP + human investigation)

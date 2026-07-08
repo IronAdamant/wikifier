@@ -48,11 +48,11 @@ WIKIFIER_PROJECT_ROOT=/abs/path wikifier-mcp   # MCP server (requires pip instal
 ./scripts/publish.sh [test|prod]       # PyPI release (build + twine)
 ```
 
-**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; 28 tests covering parsers, cache schema, cycles, barrel invalidation, health workflow). Run it after any core change. Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
+**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; 30 tests covering parsers, cache schema, cycles, barrel invalidation, health workflow). Run it after any core change. Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
 
 ## Architecture
 
-Pipeline: **scan → parse → resolve → cache → health → artifacts**, all under `wikifier/` (~9.6k LOC pure stdlib).
+Pipeline: **scan → parse → resolve → cache → health → artifacts**, all under `wikifier/` (~19.8k LOC pure stdlib; package version in `wikifier/__init__.py`, currently 4.5.x).
 
 - `cli.py` — entry point, unified project-root discovery (env var → `.wikifier/`/marker walk → `.git`/manifest markers → cwd), and `run_full_update()` — the pure-Python pipeline (dirty detection → parsers → persist → cycles → ACS).
 - `parsers/python.py`, `parsers/javascript.py` — regex-based import extraction (zero-dep), returning a rich shared contract per edge: resolved path, confidence score/reasons/explanation, dynamic/conditional analysis, barrel info, strategy provenance.

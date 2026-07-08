@@ -9,16 +9,25 @@
 > the agent wiki (file_health). The dependency graph is further below.
 
 ```text
-Wikifier/  (45 files)
+Wikifier/  (53 files)
 ├── .github/
 │   └── workflows/
 │       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
 ├── Findings/
 │   ├── 2026-06-10-Dogfood-Refactor-Validation.md — Self-describing findings doc
-│   └── 2026-06-10-Fix-Plan.md — Results appended, all phases verified
+│   ├── 2026-06-10-Fix-Plan.md — Results appended, all phases verified
+│   ├── M5-Dogfood-Assessment-Report.md — kept; stale yellow cleared
+│   ├── M5-Dogfood-Progress.md — kept; stale yellow cleared
+│   ├── M5.1-cross-hardening-analysis.md — kept; stale yellow cleared
+│   ├── Milestones-Overview.md — kept; stale yellow cleared
+│   └── p6_real_world_validation_report.md — kept; stale yellow cleared
 ├── Logged_issues/
 │   ├── 2026-06-10-brc-scoped-rerun-pathology.md — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
 │   └── 2026-06-10-js-barrel-churn-selftest-failure.md — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
+├── screenshot/
+│   └── front_page_review.png — Asset referenced by README
+├── skills/
+│   └── run.md — 4.5.x protocol notes
 ├── tests/
 │   ├── __init__.py
 │   ├── _base.py
@@ -29,41 +38,42 @@ Wikifier/  (45 files)
 │   └── test_parsers.py
 ├── wikifier/
 │   ├── mcp/
+│   │   ├── README.md — stale yellow cleared
 │   │   ├── __init__.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   │   └── server.py
+│   │   └── server.py — post-assess-hygiene complete: emoji status fallback (subid=post-assess-hygiene)
 │   ├── parsers/
 │   │   ├── __init__.py
 │   │   ├── bree.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
 │   │   ├── cdia.py
-│   │   ├── javascript.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
-│   │   └── python.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
+│   │   ├── javascript.py — post-assess-hygiene complete: central_resolve hot path (subid=post-assess-hygiene)
+│   │   └── python.py — Repro now yields 0 garbage edges; 30/30 tests
 │   ├── scripts/
 │   │   ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-│   │   └── wikifier.sh — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-│   ├── __init__.py — v4.4.0 release prep; 30/30 tests
+│   │   └── wikifier.sh — synced with root; portable rel paths (subid=post-assess-hygiene)
+│   ├── __init__.py — stale yellow cleared after update-maps (subid=post-assess-hygiene)
 │   ├── __main__.py
-│   ├── cli.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   ├── cli.py — post-assess-hygiene complete: pure-Py workflow + max-files (subid=post-assess-hygiene)
 │   ├── contracts.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
 │   ├── daemon.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
 │   ├── diagnostics.py
 │   ├── health.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
 │   ├── import_cache.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
-│   ├── index.html — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-│   ├── library.py — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
+│   ├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
+│   ├── library.py — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 │   ├── locking.py — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
 │   ├── resolution.py
 │   └── serve.py — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-├── CHANGELOG.md — v4.4.0 release prep; 30/30 tests
-├── CLAUDE.md — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
-├── README.md — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── CHANGELOG.md — v4.5.1 docs release; 30/30 tests
+├── CLAUDE.md — LOC ~19.8k + 30 tests
+├── README.md — What's New v4.5.x
 ├── diagnostics.html — Wiki summary verified accurate after change.
 ├── file_health.md — Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survi…
-├── index.html — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 ├── library.md — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
 ├── pyproject.toml — Build + twine check pass; clean-room wheel install verified
 ├── wikifier.bat — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
 ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-└── wikifier.sh — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+└── wikifier.sh — post-assess-hygiene complete: portable rel paths + launcher sync (subid=post-assess-hygien…
 ```
 
 ## Dependency Graph (Mermaid)
@@ -283,7 +293,7 @@ graph TD
     wikifier_mcp_server_py -.-> json
     wikifier_mcp_server_py -.-> wikifier_import_cache
     wikifier_mcp_server_py -.-> time
-    wikifier_mcp_server_py -.-> wikifier_health
+    wikifier_mcp_server_py -.-> importlib
     wikifier_mcp_server_py -.-> argparse
     wikifier_mcp_server_py -.-> mcp_server_fastmcp
     wikifier_mcp_server_py -.-> pydantic
@@ -291,6 +301,7 @@ graph TD
     wikifier_mcp_server_py -.-> typing
     wikifier_mcp_server_py -.-> datetime
     wikifier_mcp_server_py -.-> wikifier_cli
+    wikifier_mcp_server_py -. ? .-> wikifier_health
     wikifier_parsers_bree_py -.-> json
     wikifier_parsers_bree_py -.-> re
     wikifier_parsers_bree_py -.-> warnings
@@ -481,8 +492,10 @@ graph TD
 | wikifier/locking.py | pathlib → pathlib | medium |
 | wikifier/locking.py | typing → typing | medium |
 | wikifier/mcp/__init__.py | .server → wikifier/mcp/server.py | high |
+| wikifier/mcp/server.py | "wikifier.health" → wikifier.health | low |
 | wikifier/mcp/server.py | argparse → argparse | medium |
 | wikifier/mcp/server.py | datetime → datetime | medium |
+| wikifier/mcp/server.py | importlib → importlib | medium |
 | wikifier/mcp/server.py | json → json | medium |
 | wikifier/mcp/server.py | mcp.server.fastmcp → mcp.server.fastmcp | medium |
 | wikifier/mcp/server.py | os → os | medium |
@@ -494,7 +507,6 @@ graph TD
 | wikifier/mcp/server.py | time → time | medium |
 | wikifier/mcp/server.py | typing → typing | medium |
 | wikifier/mcp/server.py | wikifier.cli → wikifier.cli | medium |
-| wikifier/mcp/server.py | wikifier.health → wikifier.health | medium |
 | wikifier/mcp/server.py | wikifier.import_cache → wikifier.import_cache | medium |
 | wikifier/parsers/bree.py | .. → wikifier | medium |
 | wikifier/parsers/bree.py | ..cli → wikifier/cli.py | high |
@@ -594,18 +606,18 @@ Top cyclic clusters:
 
 ## Reverse Dependencies ("Who depends on me")
 
-**Targets with dependents**: 13 | **Total reverse edges**: 36
+**Targets with dependents**: 13 | **Total reverse edges**: 37
 
 **High-impact modules (most reverse dependents)**:
 - `wikifier` ← 8 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/health.py, wikifier/import_cache.py)
 - `wikifier/cli.py` ← 7 files depend on it (e.g. wikifier/__init__.py, wikifier/__main__.py, wikifier/daemon.py, wikifier/import_cache.py)
 - `wikifier/contracts.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/import_cache.py, wikifier/resolution.py)
 - `wikifier/resolution.py` ← 4 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py, wikifier/parsers/bree.py, wikifier/parsers/javascript.py)
+- `wikifier.health` ← 2 files depend on it (e.g. tests/test_health.py, wikifier/mcp/server.py)
 - `wikifier.parsers` ← 2 files depend on it (e.g. wikifier/parsers/javascript.py, wikifier/parsers/python.py)
 - `wikifier/parsers/__init__.py` ← 2 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py)
 - `wikifier/parsers/bree.py` ← 2 files depend on it (e.g. wikifier/import_cache.py, wikifier/parsers/javascript.py)
 - `wikifier/parsers/cdia.py` ← 2 files depend on it (e.g. wikifier/parsers/javascript.py, wikifier/parsers/python.py)
-- `wikifier.health` ← 1 files depend on it (e.g. tests/test_health.py)
 - `wikifier/import_cache.py` ← 1 files depend on it (e.g. wikifier/cli.py)
 
 ## Barrel Expansions
@@ -618,10 +630,18 @@ Top cyclic clusters:
 
 ## Conditional & Dynamic Intelligence
 
-**Conditional imports detected**: 1
-**Dynamic imports detected**: 1
+**Conditional imports detected**: 9
+**Dynamic imports detected**: 9
 
 Sample conditional imports (fragile / feature-flagged paths):
 - `tests/test_health.py` → `"wikifier.health"`  (ctx: )
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
 Sample dynamic imports (runtime / template-driven):
 - `tests/test_health.py` → `"wikifier.health"`  (type: static)
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)
+- `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)

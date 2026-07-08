@@ -1,9 +1,10 @@
 {
+  "_comment": "Portable MCP definition for Wikifier. The actual launcher requires a per-machine 'pip install -e \"[mcp]\"' (Python >=3.10) on the host where Grok runs. Grok user config (~/.grok/config.toml) takes precedence for the same server name.",
   "mcpServers": {
     "wikifier": {
-      "command": "/home/aron/.local/bin/wikifier-mcp",
-      "args": [],
-      "description": "Wikifier - Agent-first codebase wiki, health matrix, and dependency intelligence (MCP mode)"
+      "command": "python3",
+      "args": ["-m", "wikifier.mcp.server"],
+      "description": "Wikifier - agent-to-agent codebase wiki (install per-machine with python3 -m pip install -e '.[mcp]' using a Python >= 3.10, then set WIKIFIER_PROJECT_ROOT or pass project_root=)"
     }
   }
 }

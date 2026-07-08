@@ -338,8 +338,16 @@ cmd_check_changes() {
                 continue
             fi
 
+            # Portable project-relative path. GNU realpath --relative-to is not on
+            # macOS BSD realpath; falling back to the absolute path polluted health
+            # keys (and shell upsert only patched .md, not file_health.json).
             local rel_file
-            rel_file=$(realpath --relative-to="$PROJECT_ROOT" "$file" 2>/dev/null || echo "$file")
+            case "$file" in
+                "$PROJECT_ROOT"/*) rel_file="${file#"$PROJECT_ROOT"/}" ;;
+                *)
+                    rel_file=$(python3 -c "from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().relative_to(Path(sys.argv[2]).resolve()))" "$file" "$PROJECT_ROOT" 2>/dev/null || echo "$file")
+                    ;;
+            esac
 
             upsert_health "$rel_file" "🟡 Yellow" "mtime changed since last check-changes (auto-detected)"
             # Collect for delta barrel reports (Wave continuation: pass changed list to BRC get_reports for O(changed) + rich auto-Yellow only on relevant)
@@ -577,7 +585,12 @@ cmd_validate() {
         [[ -z "$root" ]] && continue
         find "$root" -type f ! -path "*/.git/*" ! -path "*/.wikifier_staging/*" ${EXCLUDE_FIND_ARGS[@]+"${EXCLUDE_FIND_ARGS[@]}"} 2>/dev/null | while read -r f; do
             local rel
-            rel=$(realpath --relative-to="$PROJECT_ROOT" "$f" 2>/dev/null || echo "$f")
+            case "$f" in
+                "$PROJECT_ROOT"/*) rel="${f#"$PROJECT_ROOT"/}" ;;
+                *)
+                    rel=$(python3 -c "from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().relative_to(Path(sys.argv[2]).resolve()))" "$f" "$PROJECT_ROOT" 2>/dev/null || echo "$f")
+                    ;;
+            esac
             if ! grep -qF "| $rel |" "$FILE_HEALTH" 2>/dev/null; then
                 echo "🔴 MISSING WIKI ENTRY: $rel"
                 ((missing++)) || true

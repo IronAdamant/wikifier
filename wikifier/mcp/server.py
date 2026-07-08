@@ -643,7 +643,8 @@ def health(
     root = _get_effective_root(project_root)
 
     try:
-        import wikifier.health as health_module
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
 
         if format == "summary":
             summary = health_module.get_summary(root, directory)
@@ -744,7 +745,8 @@ def list_healable_stubs(
     """
     root = _get_effective_root(project_root)
     try:
-        import wikifier.health as health_module
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
         candidates = health_module.get_healable_stubs(
             root, min_wiki_length=min_wiki_length, directory=directory
         )
@@ -793,7 +795,8 @@ def heal_stubs(
     """
     root = _get_effective_root(project_root)
     try:
-        import wikifier.health as health_module
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
         count = health_module.heal_outdated_stubs(
             root, min_wiki_length=min_wiki_length, dry_run=dry_run
         )
@@ -1571,13 +1574,15 @@ def get_files_needing_attention(
     root = _get_effective_root(project_root)
 
     try:
-        import wikifier.health as health_module
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
 
+        # Health matrix stores emoji statuses (🟢/🟡/🔴), not [RED]/[YELLOW] tags.
         status_filter = None
         if status == "red":
-            status_filter = "[RED]"
+            status_filter = "🔴"
         elif status == "yellow":
-            status_filter = "[YELLOW]"
+            status_filter = "🟡"
 
         files = health_module.get_files_needing_attention(root, status_filter, directory)
 
@@ -1604,25 +1609,30 @@ def get_files_needing_attention(
         if not files:
             return "No files currently need attention."
 
-        red = [f for f in files if "[RED]" in f]  # This won't work well since we only have paths
-        # Better: we don't have status here easily. Let's just list them.
         return "Files needing attention:\n" + "\n".join(f"- {f}" for f in files)
 
     except Exception:
-        # Fallback
+        # Library fallback — avoid shell text parsing ([RED] tags vs emoji).
         root = _get_effective_root(project_root)
-        output = _run_wikifier_command("health", root=root)
-        lines = []
-        for line in output.splitlines():
-            if "[RED]" in line or "[YELLOW]" in line:
-                if directory and not line.strip().startswith(f"| {directory}"):
-                    continue
-                if status == "red" and "[RED]" not in line:
-                    continue
-                if status == "yellow" and "[YELLOW]" not in line:
-                    continue
-                lines.append(line.strip())
-        return "\n".join(lines) if lines else "No files currently need attention."
+        try:
+            import importlib
+            health_module = importlib.import_module("wikifier.health")
+            status_filter = "🔴" if status == "red" else ("🟡" if status == "yellow" else None)
+            files = health_module.get_files_needing_attention(root, status_filter, directory)
+            if format == "json":
+                return {
+                    "project_root": str(root),
+                    "directory": directory or ".",
+                    "status_filter": status,
+                    "files": files,
+                    "count": len(files),
+                    "acs_low_conf_context": None,
+                }
+            if not files:
+                return "No files currently need attention."
+            return "Files needing attention:\n" + "\n".join(f"- {f}" for f in files)
+        except Exception:
+            return "No files currently need attention."
 
 
 @mcp.tool()
@@ -1638,7 +1648,8 @@ def get_project_status(
     root = _get_effective_root(project_root)
 
     try:
-        import wikifier.health as health_module
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
         summary = health_module.get_summary(root, directory)
         pending = _read_file_safe("pending_updates.md", root=root)
 
@@ -1763,19 +1774,35 @@ Pending updates: {pending_count}
 Use get_files_needing_attention() for the actual list. Use get_cycles(analysis=True) + get_dependencies(format="json") for ACS confidence_explanation Recommendations."""
 
     except Exception:
-        # Fallback to shell + text parsing
+        # Prefer library summary over shell text parsing. Live health text uses
+        # emoji (🟢/🟡/🔴); counting legacy [GREEN]/[YELLOW]/[RED] tags always
+        # yielded zeros and lied to agents.
         root = _get_effective_root(project_root)
-        health = _run_wikifier_command("health", root=root)
         pending = _read_file_safe("pending_updates.md", root=root)
-
-        red = health.count("[RED]")
-        yellow = health.count("[YELLOW]")
-        green = health.count("[GREEN]")
         pending_count = len([l for l in pending.splitlines() if l.strip() and not l.startswith("#")])
+        green = yellow = red = total = 0
+        try:
+            import importlib
+            health_module = importlib.import_module("wikifier.health")
+            summary = health_module.get_summary(root, directory)
+            total = int(summary.get("total", 0) or 0)
+            green = int(summary.get("green", 0) or 0)
+            yellow = int(summary.get("yellow", 0) or 0)
+            red = int(summary.get("red", 0) or 0)
+        except Exception:
+            # Last resort: emoji-aware (+ legacy tag) counts from health text.
+            try:
+                health_text = _run_wikifier_command("health", root=root)
+                green = health_text.count("🟢") + health_text.count("[GREEN]")
+                yellow = health_text.count("🟡") + health_text.count("[YELLOW]")
+                red = health_text.count("🔴") + health_text.count("[RED]")
+                total = green + yellow + red
+            except Exception:
+                pass
 
         if format == "json":
             return ProjectHealthSummary(
-                total_files=green + yellow + red,
+                total_files=total or (green + yellow + red),
                 green=green,
                 yellow=yellow,
                 red=red,
@@ -1884,7 +1911,8 @@ def suggest_next_actions(
     root = _get_effective_root(project_root)
 
     try:
-        import wikifier.health as health_module
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
         summary = health_module.get_summary(root, directory)
         red = summary["red"]
         yellow = summary["yellow"]

@@ -938,7 +938,21 @@ def _follow_reexports(
         if target_module.startswith('.'):
             level = len(re.match(r'\.+', target_module).group())
             resolved = _resolve_relative_import(current_file, target_module, level)
-            resolved_path = _try_resolve_relative_path(current_file, target_module)
+            # Prefer central_resolve directly (R4); avoid the deprecated shim on the
+            # hot path so tests/production do not emit DeprecationWarning.
+            resolved_path = None
+            try:
+                if central_resolve is not None:
+                    proj_root = _get_project_root_fallback(current_file.parent)
+                    r = central_resolve(target_module, str(current_file), proj_root)
+                    resolved_path = r.resolved_file
+            except Exception:
+                resolved_path = None
+            if not resolved_path:
+                # Silent legacy FS fallthrough (same body as deprecated shim tail).
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    resolved_path = _try_resolve_relative_path(current_file, target_module)
             if not resolved_path:
                 return [{
                     "module": resolved,
