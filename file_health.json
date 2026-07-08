@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 07:07:11",
+  "last_updated": "2026-07-09 08:07:44",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -52,8 +52,8 @@
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:55:03",
-      "reason": "4.5.7 verified tests",
+      "last_updated": "2026-07-09 07:58:09",
+      "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/README.md": {
@@ -64,8 +64,8 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
+      "last_updated": "2026-07-09 08:07:38",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "diagnostics.html": {
@@ -80,8 +80,8 @@
     },
     "wikifier/import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:34",
-      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "last_updated": "2026-07-09 08:07:44",
+      "reason": "post residual-1-5 hygiene mtime clear (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/python.py": {
@@ -97,8 +97,8 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
+      "last_updated": "2026-07-09 08:07:42",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "CLAUDE.md": {
@@ -109,8 +109,8 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
+      "last_updated": "2026-07-09 08:07:41",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/mcp/__init__.py": {
@@ -120,8 +120,8 @@
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
+      "last_updated": "2026-07-09 07:58:09",
+      "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/contracts.py": {
@@ -137,8 +137,8 @@
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
+      "last_updated": "2026-07-09 07:58:09",
+      "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/scripts/wikifier.sh": {
@@ -174,14 +174,14 @@
     },
     "wikifier/parsers/bree.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:34",
-      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "last_updated": "2026-07-09 08:07:40",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:34",
-      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "last_updated": "2026-07-09 08:07:40",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/": {
@@ -242,8 +242,8 @@
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
+      "last_updated": "2026-07-09 08:07:42",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/resolution.py": {
@@ -430,6 +430,18 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 07:07:11",
       "reason": "goal verification complete",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/project_root.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 08:07:38",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "Findings/residual-1-5-closure-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 08:07:43",
+      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     }
   }

@@ -121,8 +121,8 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
     from subdirs of user monorepos. Safe, zero-dep, never raises.
     """
     try:
-        # parsers/ subpackage -> ..cli
-        from ..cli import discover_project_root
+        # Load-safe: project_root (not cli) — avoids bree→cli→import_cache→bree cycle
+        from ..project_root import discover_project_root
         root = discover_project_root()
         if root:
             return Path(root).resolve()

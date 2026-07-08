@@ -993,6 +993,54 @@ def _edge_is_external_noise(pair: Dict[str, Any]) -> bool:
     return False
 
 
+def _edge_is_dynamic_literal_noise(pair: Dict[str, Any]) -> bool:
+    """True for dynamic imports of static string literals (not agent actionable risk).
+
+    ACS v1.2: demote importlib.import_module(\"pkg\"), __import__(\"pkg\"), and other
+    is_dynamic + dynamic_type=static string-literal edges. These are intentional runtime
+    loads (often optional/try fallbacks), not unresolved project graph holes.
+
+    Keep as telemetry (still in low_conf_edges) but exclude from actionable_low_conf_edges.
+    """
+    if not isinstance(pair, dict):
+        return False
+    reasons = pair.get("confidence_reasons") or []
+    reason_l = " ".join(str(r).lower() for r in reasons if isinstance(r, str))
+    is_dyn = bool(pair.get("is_dynamic")) or ("dynamic" in reason_l)
+    if not is_dyn:
+        return False
+
+    dtype = str(pair.get("dynamic_type") or "").lower()
+    raw = str(pair.get("raw") or pair.get("raw_module") or pair.get("module") or "").strip()
+    expl = str(pair.get("confidence_explanation") or "")
+    resolved = str(pair.get("resolved") or "").strip()
+
+    # Explicit importlib / __import__ traces → always non-actionable for ACS
+    # (includes static string loads and parser traces that mention the call form).
+    if "import_module(" in expl or "__import__(" in expl or "importlib.import_module" in expl:
+        return True
+
+    # dynamic_type=static means LDSI recovered a concrete string literal
+    if dtype in ("static", "string", "literal"):
+        # Quoted raw like "\"wikifier.health\"" or '"./x"'
+        if (raw.startswith("\"") and raw.endswith("\"")) or (raw.startswith("'") and raw.endswith("'")):
+            return True
+        # Unquoted but resolved/raw is a dotted package name (no path variables)
+        cand = raw or resolved
+        if cand and "${" not in cand and "+" not in cand:
+            inner = cand.strip().strip("\"'")
+            if inner and not any(ch in inner for ch in ("/", "\\", " ", "(", ")")):
+                # pure module id literal (e.g. wikifier.health) — not a computed path
+                if "." in inner or inner.isidentifier():
+                    return True
+    return False
+
+
+def _edge_is_non_actionable_noise(pair: Dict[str, Any]) -> bool:
+    """Union of external/stdlib noise + dynamic-literal noise (ACS actionable filter)."""
+    return _edge_is_external_noise(pair) or _edge_is_dynamic_literal_noise(pair)
+
+
 def compute_acs_summary(
     cache: Dict[str, Any],
     max_samples: int = 5,
@@ -1013,6 +1061,9 @@ def compute_acs_summary(
       - external_noise_edges: count of scored edges classified as external noise
       - sample_actionable_low_conf_explanations: samples for agent action only
     Agents should prefer actionable_* for next-steps; low_conf_edges remains full telemetry.
+
+    ACS v1.2: also demotes dynamic string-literal noise (importlib.import_module(\"…\"),
+    is_dynamic+dynamic_type=static) from actionable counts. Full low_conf telemetry unchanged.
     """
     # Phase 5e (66): compute_acs_summary + get_acs_summary promoted first-class default (O(k) bounded samples via ACS/CIABRE, deque-style in practice) for 20k+ creative; format=summary paths in MCP/CLI/health default to this + barrel summary (per 48/58/50/57, crit2/5 long-term WS A).
     t0 = time.time()
@@ -1021,6 +1072,7 @@ def compute_acs_summary(
     low_count = 0
     actionable_low = 0
     external_noise = 0
+    dynamic_literal_noise = 0
     reason_counts: Dict[str, int] = {}
     samples: List[str] = []  # full expls for lowest-risk (prioritized)
 
@@ -1037,9 +1089,13 @@ def compute_acs_summary(
             sc = p.get("confidence_score")
             expl = p.get("confidence_explanation") or ""
             reasons = p.get("confidence_reasons") or []
-            is_noise = _edge_is_external_noise(p)
-            if is_noise:
+            is_ext = _edge_is_external_noise(p)
+            is_dyn_lit = _edge_is_dynamic_literal_noise(p)
+            is_noise = is_ext or is_dyn_lit
+            if is_ext:
                 external_noise += 1
+            if is_dyn_lit:
+                dynamic_literal_noise += 1
             if isinstance(sc, (int, float)):
                 scf = float(sc)
                 sum_score += scf
@@ -1073,13 +1129,14 @@ def compute_acs_summary(
     top_reasons = sorted(reason_counts.items(), key=lambda x: -x[1])[:6]
 
     return {
-        "acs_version": "1.1",
+        "acs_version": "1.2",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_scored_edges": total,
         "avg_confidence": avg,
         "low_conf_edges": low_count,
         "actionable_low_conf_edges": actionable_low,
         "external_noise_edges": external_noise,
+        "dynamic_literal_noise_edges": dynamic_literal_noise,
         "low_conf_threshold": low_threshold,
         "top_risk_reasons": dict(top_reasons),
         "sample_low_conf_explanations": samples,  # full Recommendation text for agents
@@ -1116,12 +1173,12 @@ def ensure_acs_summary_persisted(
       always-available oracle in primary surfaces without requiring explicit update first.
     """
     acs = get_acs_summary(cache)
-    # G4: recompute when missing OR pre-1.1 summaries (no actionable_low_conf_edges)
+    # G4/v1.2: recompute when missing OR pre-1.2 summaries (dynamic-literal demotion)
     needs = (
         not acs
         or acs.get("total_scored_edges", 0) == 0
         or "actionable_low_conf_edges" not in acs
-        or str(acs.get("acs_version") or "") < "1.1"
+        or str(acs.get("acs_version") or "") < "1.2"
     )
     if needs:
         acs = compute_acs_summary(cache)
@@ -1705,8 +1762,8 @@ def get_low_confidence_edges(
     Complements get_unresolved_imports; used for ACS-style hotspots.
     Includes full provenance/diagnostic when present (from python/JS parity).
 
-    actionable_only=True (G4): skip external/bare/stdlib noise so agents do not treat
-    `import json` as a wiki/refactor action item.
+    actionable_only=True (G4/v1.2): skip external/bare/stdlib + dynamic-literal noise so
+    agents do not treat `import json` or importlib.import_module(\"pkg\") as action items.
     """
     results: List[Dict[str, Any]] = []
     for rel, data in cache.items():
@@ -1714,7 +1771,7 @@ def get_low_confidence_edges(
             for p in (data.get("resolved_pairs") or []):
                 if not isinstance(p, dict):
                     continue
-                if actionable_only and _edge_is_external_noise(p):
+                if actionable_only and _edge_is_non_actionable_noise(p):
                     continue
                 score = p.get("confidence_score")
                 conf_str = (p.get("confidence") or p.get("resolution_confidence") or "").lower()
@@ -1727,7 +1784,7 @@ def get_low_confidence_edges(
                 except Exception:
                     is_low = conf_str in ("low", "unresolved")
                 if is_low or not p.get("resolved_path"):
-                    if actionable_only and not p.get("resolved_path") and _edge_is_external_noise(p):
+                    if actionable_only and not p.get("resolved_path") and _edge_is_non_actionable_noise(p):
                         continue
                     entry = dict(p)
                     entry.setdefault("src", rel)
@@ -1855,7 +1912,8 @@ def generate_update_events(
     # Defensive root
     if root is None:
         try:
-            from .cli import discover_project_root
+            # Load-safe: project_root (not cli) — avoids import_cache→cli→import_cache cycle
+            from .project_root import discover_project_root
             root = discover_project_root()
         except Exception:
             root = Path(".").resolve()

@@ -9,7 +9,7 @@
 > the agent wiki (file_health). The dependency graph is further below.
 
 ```text
-Wikifier/  (69 files)
+Wikifier/  (75 files)
 ├── .github/
 │   └── workflows/
 │       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
@@ -20,7 +20,12 @@ Wikifier/  (69 files)
 │   ├── M5-Dogfood-Progress.md — kept; stale yellow cleared
 │   ├── M5.1-cross-hardening-analysis.md — kept; stale yellow cleared
 │   ├── Milestones-Overview.md — kept; stale yellow cleared
+│   ├── dogfood-goal-pass1-2026-07-09.json — goal verification complete
+│   ├── dogfood-goal-pass2-2026-07-09.json — goal verification complete
+│   ├── dogfood-hygiene-fix-2026-07-09.json — verified 53 tests; dogfood validate 0/8
+│   ├── dogfood-hygiene-fix-2026-07-09.md — verified 53 tests; dogfood validate 0/8
 │   ├── gap-closure-report.md — G12 closed; 39/39 tests
+│   ├── long-horizon-autonomous-ops.md — goal verification complete
 │   └── p6_real_world_validation_report.md — kept; stale yellow cleared
 ├── Logged_issues/
 │   ├── 2026-06-10-brc-scoped-rerun-pathology.md — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
@@ -28,59 +33,60 @@ Wikifier/  (69 files)
 ├── screenshot/
 │   └── front_page_review.png — Asset referenced by README
 ├── skills/
-│   └── run.md — G12 closed; 39/39 tests
+│   └── run.md — 4.5.7 verified tests
 ├── tests/
 │   ├── selftest/
-│   │   ├── __init__.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   │   ├── run_cdia_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   │   ├── run_contracts_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   │   ├── run_javascript_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   │   ├── run_python_parser_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   │   └── run_resolution_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── __init__.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── _base.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── run_all.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── test_barrel_invalidation.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── test_gap_closure.py — v4.5.5 hygiene tests green
-│   ├── test_health.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── test_import_cache.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── test_multi_lang_parsers.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── test_parsers.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── __init__.py — hygiene session complete 4.5.6; 53 tests OK
+│   │   ├── run_cdia_selftest.py — hygiene session complete 4.5.6; 53 tests OK
+│   │   ├── run_contracts_selftest.py — hygiene session complete 4.5.6; 53 tests OK
+│   │   ├── run_javascript_selftest.py — hygiene session complete 4.5.6; 53 tests OK
+│   │   ├── run_python_parser_selftest.py — hygiene session complete 4.5.6; 53 tests OK
+│   │   └── run_resolution_selftest.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── __init__.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── _base.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── run_all.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── test_barrel_invalidation.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── test_gap_closure.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
+│   ├── test_health.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── test_import_cache.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── test_multi_lang_parsers.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── test_parsers.py — hygiene session complete 4.5.6; 53 tests OK
 │   └── test_selftest_wrappers.py — G12 closed; 39/39 tests
 ├── wikifier/
 │   ├── mcp/
 │   │   ├── README.md — stale yellow cleared
 │   │   ├── __init__.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   │   └── server.py — v4.5.5 count_pending
+│   │   └── server.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
 │   ├── parsers/
 │   │   ├── __init__.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
-│   │   ├── _edge.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── _edge.py — hygiene session complete 4.5.6; 53 tests OK
 │   │   ├── bree.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   │   ├── c_cpp.py — dogfood llvm/linux
 │   │   ├── cdia.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   │   ├── csharp.py — dogfood dotnet
 │   │   ├── go_lang.py — dogfood
-│   │   ├── java.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── java.py — hygiene session complete 4.5.6; 53 tests OK
 │   │   ├── javascript.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   │   ├── python.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   │   └── rust.py — dogfood rust/redox
 │   ├── scripts/
 │   │   ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
 │   │   └── wikifier.sh — synced with root; portable rel paths (subid=post-assess-hygiene)
-│   ├── __init__.py — v4.5.5; package version
-│   ├── __main__.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── cli.py — v4.5.5 flag-path guards
+│   ├── __init__.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
+│   ├── __main__.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── cli.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
 │   ├── contracts.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
-│   ├── daemon.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
-│   ├── diagnostics.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
-│   ├── health.py — v4.5.5 pollution prune + pending normalize; 49 tests
+│   ├── daemon.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
+│   ├── diagnostics.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── health.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
 │   ├── import_cache.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   ├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 │   ├── library.py — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 │   ├── locking.py — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
+│   ├── project_root.py
 │   ├── resolution.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   └── serve.py — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-├── CHANGELOG.md — v4.5.5 Fixed notes
+├── CHANGELOG.md — goal verification complete
 ├── CLAUDE.md — test count synced to 49
 ├── README.md — lang table
 ├── diagnostics.html — Wiki summary verified accurate after change.
@@ -141,6 +147,7 @@ graph TD
         wikifier_parsers_javascript_py["javascript.py"]
         wikifier_parsers_python_py["python.py"]
         wikifier_parsers_rust_py["rust.py"]
+        wikifier_project_root_py["project_root.py"]
         wikifier_resolution_py["resolution.py"]
         wikifier_serve_py["serve.py"]
     end
@@ -161,6 +168,7 @@ graph TD
         json["json"]
         mcp_server_fastmcp["mcp.server.fastmcp"]
         msvcrt["msvcrt"]
+        name["name"]
         os["os"]
         pathlib["pathlib"]
         platform["platform"]
@@ -189,6 +197,7 @@ graph TD
         wikifier_parsers_cdia["wikifier.parsers.cdia"]
         wikifier_parsers_javascript["wikifier.parsers.javascript"]
         wikifier_parsers_python["wikifier.parsers.python"]
+        wikifier_project_root["wikifier.project_root"]
         wikifier_resolution["wikifier.resolution"]
     end
     wikifier_serve_py -.-> json
@@ -247,6 +256,7 @@ graph TD
     wikifier_cli_py -.-> pathlib
     wikifier_cli_py -.-> typing
     wikifier_cli_py -.-> contextlib
+    wikifier_cli_py --> wikifier_project_root_py
     wikifier_cli_py --> wikifier_contracts_py
     wikifier_cli_py -.-> datetime
     wikifier_cli_py -.-> wikifier
@@ -269,10 +279,12 @@ graph TD
     wikifier_daemon_py -.-> signal
     wikifier_daemon_py -.-> platform
     wikifier_daemon_py -.-> subprocess
+    wikifier_daemon_py -.-> json
     wikifier_daemon_py -.-> datetime
     wikifier_daemon_py -.-> pathlib
     wikifier_daemon_py -.-> typing
     wikifier_daemon_py --> wikifier_cli_py
+    wikifier_daemon_py -.-> wikifier
     wikifier_diagnostics_py -.-> json
     wikifier_diagnostics_py -.-> dataclasses
     wikifier_diagnostics_py -.-> enum
@@ -302,7 +314,7 @@ graph TD
     wikifier_import_cache_py --> wikifier_resolution_py
     wikifier_import_cache_py --> wikifier_parsers_bree_py
     wikifier_import_cache_py -.-> dataclasses
-    wikifier_import_cache_py --> wikifier_cli_py
+    wikifier_import_cache_py --> wikifier_project_root_py
     wikifier_import_cache_py --> wikifier_parsers___init___py
     wikifier_library_py -.-> json
     wikifier_library_py -.-> os
@@ -345,7 +357,7 @@ graph TD
     wikifier_parsers_bree_py -.-> dataclasses
     wikifier_parsers_bree_py -.-> pathlib
     wikifier_parsers_bree_py -.-> typing
-    wikifier_parsers_bree_py --> wikifier_cli_py
+    wikifier_parsers_bree_py --> wikifier_project_root_py
     wikifier_parsers_bree_py --> wikifier_resolution_py
     wikifier_parsers_bree_py -.-> wikifier_resolution
     wikifier_parsers_bree_py -.-> wikifier
@@ -369,7 +381,7 @@ graph TD
     wikifier_parsers_javascript_py -.-> wikifier
     wikifier_parsers_javascript_py --> wikifier_resolution_py
     wikifier_parsers_javascript_py -.-> wikifier_resolution
-    wikifier_parsers_javascript_py --> wikifier_cli_py
+    wikifier_parsers_javascript_py --> wikifier_project_root_py
     wikifier_parsers_javascript_py -.-> wikifier_contracts
     wikifier_parsers_python_py -.-> re
     wikifier_parsers_python_py -.-> sys
@@ -421,7 +433,11 @@ graph TD
     tests_test_gap_closure_py -.-> unittest
     tests_test_gap_closure_py -.-> wikifier
     tests_test_gap_closure_py -.-> tests__base
+    tests_test_gap_closure_py -.-> wikifier_project_root
+    tests_test_gap_closure_py -.-> wikifier_cli
+    tests_test_gap_closure_py -.-> pathlib
     tests_test_gap_closure_py -. ? .-> wikifier_health
+    tests_test_gap_closure_py -. ? .-> name
     tests_test_multi_lang_parsers_py -.-> unittest
     tests_test_multi_lang_parsers_py -.-> importlib
     tests_test_multi_lang_parsers_py -.-> os
@@ -455,8 +471,11 @@ graph TD
     wikifier_parsers_rust_py -.-> pathlib
     wikifier_parsers_rust_py -.-> typing
     wikifier_parsers_rust_py --> wikifier_parsers__edge_py
+    wikifier_project_root_py -.-> os
+    wikifier_project_root_py -.-> pathlib
+    wikifier_project_root_py -.-> typing
     classDef external fill:#eeeeee,stroke:#888888,stroke-dasharray: 3 3
-    class argparse,base64,collections,contextlib,dataclasses,datetime,enum,fcntl,fnmatch,hashlib,http_server,importlib,importlib_resources,json,mcp_server_fastmcp,msvcrt,os,pathlib,platform,pydantic,re,runpy,shutil,signal,subprocess,sys,tempfile,tests__base,textwrap,threading,time,traceback,typing,unittest,warnings,wikifier_cli,wikifier_contracts,wikifier_diagnostics,wikifier_import_cache,wikifier_parsers,wikifier_parsers_bree,wikifier_parsers_cdia,wikifier_parsers_javascript,wikifier_parsers_python,wikifier_resolution external
+    class argparse,base64,collections,contextlib,dataclasses,datetime,enum,fcntl,fnmatch,hashlib,http_server,importlib,importlib_resources,json,mcp_server_fastmcp,msvcrt,name,os,pathlib,platform,pydantic,re,runpy,shutil,signal,subprocess,sys,tempfile,tests__base,textwrap,threading,time,traceback,typing,unittest,warnings,wikifier_cli,wikifier_contracts,wikifier_diagnostics,wikifier_import_cache,wikifier_parsers,wikifier_parsers_bree,wikifier_parsers_cdia,wikifier_parsers_javascript,wikifier_parsers_python,wikifier_project_root,wikifier_resolution external
 ```
 
 ## Resolved Dependencies
@@ -506,9 +525,13 @@ graph TD
 | tests/test_barrel_invalidation.py | wikifier.parsers.javascript → wikifier.parsers.javascript | medium |
 | tests/test_gap_closure.py | "wikifier.health" → wikifier.health | low |
 | tests/test_gap_closure.py | importlib → importlib | medium |
+| tests/test_gap_closure.py | name → name | low |
+| tests/test_gap_closure.py | pathlib → pathlib | medium |
 | tests/test_gap_closure.py | tests._base → tests._base | medium |
 | tests/test_gap_closure.py | unittest → unittest | medium |
 | tests/test_gap_closure.py | wikifier → wikifier | medium |
+| tests/test_gap_closure.py | wikifier.cli → wikifier.cli | medium |
+| tests/test_gap_closure.py | wikifier.project_root → wikifier.project_root | medium |
 | tests/test_health.py | "wikifier.health" → wikifier.health | low |
 | tests/test_health.py | datetime → datetime | medium |
 | tests/test_health.py | importlib → importlib | medium |
@@ -546,6 +569,7 @@ graph TD
 | wikifier/cli.py | .import_cache → wikifier/import_cache.py | high |
 | wikifier/cli.py | .library → wikifier/library.py | high |
 | wikifier/cli.py | .parsers → wikifier/parsers/__init__.py | high |
+| wikifier/cli.py | .project_root → wikifier/project_root.py | high |
 | wikifier/cli.py | .resolution → wikifier/resolution.py | high |
 | wikifier/cli.py | contextlib → contextlib | medium |
 | wikifier/cli.py | datetime → datetime | medium |
@@ -567,8 +591,10 @@ graph TD
 | wikifier/contracts.py | json → json | medium |
 | wikifier/contracts.py | pathlib → pathlib | medium |
 | wikifier/contracts.py | typing → typing | medium |
+| wikifier/daemon.py | . → wikifier | medium |
 | wikifier/daemon.py | .cli → wikifier/cli.py | high |
 | wikifier/daemon.py | datetime → datetime | medium |
+| wikifier/daemon.py | json → json | medium |
 | wikifier/daemon.py | os → os | medium |
 | wikifier/daemon.py | pathlib → pathlib | medium |
 | wikifier/daemon.py | platform → platform | medium |
@@ -592,10 +618,10 @@ graph TD
 | wikifier/health.py | sys → sys | medium |
 | wikifier/health.py | typing → typing | medium |
 | wikifier/import_cache.py | . → wikifier | medium |
-| wikifier/import_cache.py | .cli → wikifier/cli.py | high |
 | wikifier/import_cache.py | .contracts → wikifier/contracts.py | high |
 | wikifier/import_cache.py | .parsers → wikifier/parsers/__init__.py | high |
 | wikifier/import_cache.py | .parsers.bree → wikifier/parsers/bree.py | high |
+| wikifier/import_cache.py | .project_root → wikifier/project_root.py | high |
 | wikifier/import_cache.py | .resolution → wikifier/resolution.py | high |
 | wikifier/import_cache.py | collections → collections | medium |
 | wikifier/import_cache.py | dataclasses → dataclasses | medium |
@@ -642,7 +668,7 @@ graph TD
 | wikifier/parsers/__init__.py | . → wikifier.parsers | medium |
 | wikifier/parsers/_edge.py | typing → typing | medium |
 | wikifier/parsers/bree.py | .. → wikifier | medium |
-| wikifier/parsers/bree.py | ..cli → wikifier/cli.py | high |
+| wikifier/parsers/bree.py | ..project_root → wikifier/project_root.py | high |
 | wikifier/parsers/bree.py | ..resolution → wikifier/resolution.py | high |
 | wikifier/parsers/bree.py | dataclasses → dataclasses | medium |
 | wikifier/parsers/bree.py | hashlib → hashlib | medium |
@@ -678,7 +704,7 @@ graph TD
 | wikifier/parsers/java.py | typing → typing | medium |
 | wikifier/parsers/javascript.py | . → wikifier.parsers | medium |
 | wikifier/parsers/javascript.py | .. → wikifier | medium |
-| wikifier/parsers/javascript.py | ..cli → wikifier/cli.py | high |
+| wikifier/parsers/javascript.py | ..project_root → wikifier/project_root.py | high |
 | wikifier/parsers/javascript.py | ..resolution → wikifier/resolution.py | high |
 | wikifier/parsers/javascript.py | .bree → wikifier/parsers/bree.py | high |
 | wikifier/parsers/javascript.py | .cdia → wikifier/parsers/cdia.py | high |
@@ -709,6 +735,9 @@ graph TD
 | wikifier/parsers/rust.py | pathlib → pathlib | medium |
 | wikifier/parsers/rust.py | re → re | medium |
 | wikifier/parsers/rust.py | typing → typing | medium |
+| wikifier/project_root.py | os → os | medium |
+| wikifier/project_root.py | pathlib → pathlib | medium |
+| wikifier/project_root.py | typing → typing | medium |
 | wikifier/resolution.py | .contracts → wikifier/contracts.py | high |
 | wikifier/resolution.py | base64 → base64 | medium |
 | wikifier/resolution.py | dataclasses → dataclasses | medium |
@@ -731,42 +760,36 @@ graph TD
 
 ## Circular Dependencies
 
-**Status**: 1 cyclic cluster(s) involving 3 file(s). Largest cluster size: 3
-**Signals across cycles**: dynamic=0 | conditional=0 | via_barrel=0
-
-Top cyclic clusters:
-- 1. size=3 : wikifier/cli.py → wikifier/import_cache.py → wikifier/parsers/bree.py
-    **SEVERITY**: MEDIUM (score=14.5, blast=6) | top rec: audit_and_directional_split — Classic mutual dependency; break directionally after identifying owner of the abstraction.
+✅ No circular dependencies detected in the current dependency graph.
 
 ## ACS Risk Snapshot
 
-**Scored edges**: 81 | **avg_confidence**: 0.66 | **low-confidence**: 37 (threshold 0.65)
-**Top risk reasons**: base:high:44, base:medium:28, no_resolved_path:28, base:low:9
+**Scored edges**: 118 | **avg_confidence**: 0.58 | **low-confidence**: 63 (threshold 0.65)
+**Top risk reasons**: base:high:55, base:medium:37, no_resolved_path:37, base:low:26
 **Sample low-confidence edges**:
   1. Base low (0.05). conditional context; ternary semantics; computed_path semantics; detector:TernaryDetector; trace: TernaryDetector=importlib.import_module("wikifier.health")
 
-#. Recommendation: Runtime conditional, feature-controlled or barrel-mediated — behavior or target may vary by deployment/build; inspect predicate + usage site before relying on the edge for changes.
-  2. Base low (0.05). creative registry_map (LDSI/CDIA); conditional context; control_flow semantics; ternary semantics; trace: ControlFlowDetector=try; TernaryDetector=importlib.import_module("wikifier.health")
 
-. Recommendation: Extremely creative dynamic (tagged template / registry map / multi-cond feature / call-produced path) — CDIA detectors fired; supply static mappings or treat as runtime-only for dependency graphs.
-  3. Base low (0.05). creative registry_map (LDSI/CDIA); conditional context; control_flow semantics; ternary semantics; trace: ControlFlowDetector=try; TernaryDetector=importlib.import_module("wikifier.health")
-. Recommendation: Extremely creative dynamic (tagged template / registry map / multi-cond feature / call-produced path) — CDIA detectors fired; supply static mappings or treat as runtime-only for dependency graphs.
+. Recommendation: Runtime conditional, feature-controlled or barrel-mediated — behavior or target may vary by deployment/build; inspect predicate + usage site before relying on the edge for changes.
+  2. Base low (0.05). opaque dynamic expression; high complexity; conditional_dynamic semantics; creative registry_map (LDSI/CDIA); trace: ControlFlowDetector=if; TernaryDetector=import_module(" in expl or "__import__(" in e. Recommendation: Opaque or high-complexity dynamic resolution — refactor to static import or introduce explicit runtime guard; current edge is unsuitable for static analysis tooling.
+  3. Base low (0.05). opaque dynamic expression; high complexity; conditional_dynamic semantics; creative registry_map (LDSI/CDIA); trace: ControlFlowDetector=if; TernaryDetector=__import__(" in expl:
+        if dtype in ("s. Recommendation: Opaque or high-complexity dynamic resolution — refactor to static import or introduce explicit runtime guard; current edge is unsuitable for static analysis tooling.
 
 ## Reverse Dependencies ("Who depends on me")
 
-**Targets with dependents**: 14 | **Total reverse edges**: 45
+**Targets with dependents**: 17 | **Total reverse edges**: 49
 
 **High-impact modules (most reverse dependents)**:
-- `wikifier` ← 8 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/health.py, wikifier/import_cache.py)
-- `wikifier/cli.py` ← 7 files depend on it (e.g. wikifier/__init__.py, wikifier/__main__.py, wikifier/daemon.py, wikifier/import_cache.py)
+- `wikifier` ← 9 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/daemon.py, wikifier/health.py)
 - `wikifier/parsers/_edge.py` ← 5 files depend on it (e.g. wikifier/parsers/c_cpp.py, wikifier/parsers/csharp.py, wikifier/parsers/go_lang.py, wikifier/parsers/java.py)
 - `wikifier.health` ← 4 files depend on it (e.g. tests/test_gap_closure.py, tests/test_health.py, tests/test_multi_lang_parsers.py, wikifier/mcp/server.py)
+- `wikifier/cli.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/__main__.py, wikifier/daemon.py, wikifier/serve.py)
 - `wikifier/contracts.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/import_cache.py, wikifier/resolution.py)
+- `wikifier/project_root.py` ← 4 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py, wikifier/parsers/bree.py, wikifier/parsers/javascript.py)
 - `wikifier/resolution.py` ← 4 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py, wikifier/parsers/bree.py, wikifier/parsers/javascript.py)
 - `wikifier.parsers` ← 3 files depend on it (e.g. wikifier/parsers/__init__.py, wikifier/parsers/javascript.py, wikifier/parsers/python.py)
 - `wikifier/parsers/__init__.py` ← 2 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py)
 - `wikifier/parsers/bree.py` ← 2 files depend on it (e.g. wikifier/import_cache.py, wikifier/parsers/javascript.py)
-- `wikifier/parsers/cdia.py` ← 2 files depend on it (e.g. wikifier/parsers/javascript.py, wikifier/parsers/python.py)
 
 ## Barrel Expansions
 
@@ -778,18 +801,32 @@ Top cyclic clusters:
 
 ## Conditional & Dynamic Intelligence
 
-**Conditional imports detected**: 13
-**Dynamic imports detected**: 13
+**Conditional imports detected**: 27
+**Dynamic imports detected**: 27
 
 Sample conditional imports (fragile / feature-flagged paths):
 - `tests/test_health.py` → `"wikifier.health"`  (ctx: )
-- `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
-- `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
+- `wikifier/import_cache.py` → `import_module(" in expl or "__import__(" in expl:
+        if dtype in ("static", "string", "literal", "") or raw.startswith(("\"", "'", "\\\"")):
+            return True`  (ctx: )
+- `wikifier/import_cache.py` → `__import__(" in expl:
+        if dtype in ("static", "string", "literal", "") or raw.startswith(("\"", "'", "\\\"")):
+            return True
+
+    
+    if dtype in ("static", "stri`  (ctx: )
 - `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
 - `wikifier/mcp/server.py` → `"wikifier.health"`  (ctx: )
 Sample dynamic imports (runtime / template-driven):
 - `tests/test_health.py` → `"wikifier.health"`  (type: static)
-- `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)
-- `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)
+- `wikifier/import_cache.py` → `import_module(" in expl or "__import__(" in expl:
+        if dtype in ("static", "string", "literal", "") or raw.startswith(("\"", "'", "\\\"")):
+            return True`  (type: expression)
+- `wikifier/import_cache.py` → `__import__(" in expl:
+        if dtype in ("static", "string", "literal", "") or raw.startswith(("\"", "'", "\\\"")):
+            return True
+
+    
+    if dtype in ("static", "stri`  (type: expression)
 - `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)
 - `wikifier/mcp/server.py` → `"wikifier.health"`  (type: static)

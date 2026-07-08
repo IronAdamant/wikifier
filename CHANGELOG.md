@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.9] - 2026-07-09
+
+### Fixed
+
+- **Load-time cycle break**: moved `discover_project_root` to `wikifier/project_root.py`.
+  `import_cache` / `bree` / `javascript` no longer import `cli` for root discovery
+  (cli ↔ import_cache ↔ bree SCC eliminated after `update-maps`).
+- **ACS v1.2 actionable demotion**: dynamic string-literal noise
+  (`importlib.import_module("…")`, `__import__`, `dynamic_type=static`) excluded from
+  `actionable_low_conf_edges` while remaining in full low-conf telemetry.
+  Additive field `dynamic_literal_noise_edges`.
+
+### Tests
+
+- `TestLoadSafetyNoImportCycle`, `test_dynamic_literal_noise_demoted_from_actionable`
+  in `tests/test_gap_closure.py`.
+
+### Evidence
+
+- Findings: `Findings/residual-1-5-closure-2026-07-09.md` (cycle, ACS, exports self-tests,
+  Babylon packages/dev barrel dogfood, llama_index soak rails).
+
 ## [4.5.8] - 2026-07-09
 
 ### Added

@@ -103,6 +103,85 @@ class TestAcsActionableG4(TempProjectTestCase):
             for p in action
         ))
 
+    def test_dynamic_literal_noise_demoted_from_actionable(self):
+        """ACS v1.2: importlib.import_module(\"pkg\") static dynamics are not actionable."""
+        dyn_lit = {
+            "raw": "\"wikifier.health\"",
+            "resolved": "wikifier.health",
+            "resolved_path": None,
+            "is_dynamic": True,
+            "dynamic_type": "static",
+            "confidence_score": 0.05,
+            "confidence_reasons": [
+                "base:low", "conditional_context", "dynamic",
+                "detector:TernaryDetector",
+            ],
+            "confidence_explanation": (
+                'Base low (0.05). TernaryDetector=importlib.import_module("wikifier.health"). '
+                "Recommendation: Runtime optional load is expected noise."
+            ),
+            "resolution_metadata": {"strategy": "python-dynamic"},
+        }
+        project_fragile = {
+            "raw": "./missing_local",
+            "resolved": "missing_local",
+            "resolved_path": None,
+            "is_dynamic": False,
+            "confidence_score": 0.35,
+            "confidence_reasons": ["base:low", "no_resolved_path"],
+            "confidence_explanation": "Unresolved project-local. Recommendation: fix path.",
+            "diagnostic": {"category": "project"},
+            "resolution_metadata": {"strategy": "relative-fs"},
+        }
+        cache = {
+            "mod.py": {
+                "mtime": 1,
+                "resolved_pairs": [dyn_lit, project_fragile],
+            }
+        }
+        self.assertTrue(ic._edge_is_dynamic_literal_noise(dyn_lit))
+        self.assertFalse(ic._edge_is_dynamic_literal_noise(project_fragile))
+        summary = ic.compute_acs_summary(cache)
+        self.assertEqual(summary.get("acs_version"), "1.2")
+        self.assertGreaterEqual(summary["low_conf_edges"], 2)
+        self.assertEqual(summary["actionable_low_conf_edges"], 1)
+        self.assertGreaterEqual(summary.get("dynamic_literal_noise_edges", 0), 1)
+        action = ic.get_low_confidence_edges(cache, actionable_only=True)
+        self.assertEqual(len(action), 1)
+        self.assertIn("missing_local", str(action[0].get("raw") or action[0].get("resolved")))
+
+
+class TestLoadSafetyNoImportCycle(unittest.TestCase):
+    """Load-time safety: core modules import without circular-import failure."""
+
+    def test_import_wikifier_and_cycle_trio(self):
+        import importlib
+        import wikifier
+        self.assertTrue(hasattr(wikifier, "discover_project_root"))
+        # Fresh submodule loads (project_root breaks former cli↔cache↔bree SCC)
+        for name in (
+            "wikifier.project_root",
+            "wikifier.cli",
+            "wikifier.import_cache",
+            "wikifier.parsers.bree",
+        ):
+            mod = importlib.import_module(name)
+            self.assertIsNotNone(mod)
+        from wikifier.project_root import discover_project_root as dpr
+        from wikifier.cli import discover_project_root as dpr_cli
+        self.assertIs(dpr, dpr_cli)
+        root = dpr()
+        self.assertTrue(root.exists())
+
+    def test_bree_does_not_import_cli_at_module_level(self):
+        """Static check: bree source must not load-time import wikifier.cli."""
+        from pathlib import Path
+        bree_src = Path(__file__).resolve().parents[1] / "wikifier" / "parsers" / "bree.py"
+        text = bree_src.read_text(encoding="utf-8")
+        self.assertNotIn("from ..cli import", text)
+        self.assertNotIn("from wikifier.cli import", text)
+        self.assertIn("from ..project_root import", text)
+
 
 class TestGhostAndDeletionG7(TempProjectTestCase):
     def test_find_ghost_and_record_deletion(self):

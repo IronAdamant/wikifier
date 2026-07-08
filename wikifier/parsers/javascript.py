@@ -216,7 +216,7 @@ def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Pa
 
     try:
         # inside parsers/ -> ..cli sibling
-        from ..cli import discover_project_root
+        from ..project_root import discover_project_root
         root = discover_project_root()
         if root:
             r = Path(root).resolve()
