@@ -4,7 +4,7 @@
 |------|--------|--------------|-----------------|
 | --help | 🟢 Green | 2026-06-04 06:50:01 AEST | Wiki summary verified accurate after change. |
 | .github/workflows/publish.yml | 🟢 Green | 2026-06-10 14:50:34 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
-| CHANGELOG.md | 🟢 Green | 2026-06-11 00:41:01 AEST | v4.5.1 docs release; 30/30 tests |
+| CHANGELOG.md | 🟢 Green | 2026-07-09 05:11:43 | v4.5.2 notes |
 | CLAUDE.md | 🟢 Green | 2026-07-09 05:02:27 | LOC ~19.8k + 30 tests |
 | Findings/2026-06-10-Dogfood-Refactor-Validation.md | 🟢 Green | 2026-06-10 09:54:26 AEST | Self-describing findings doc |
 | Findings/2026-06-10-Fix-Plan.md | 🟢 Green | 2026-06-10 14:20:33 AEST | Results appended, all phases verified |
@@ -28,7 +28,7 @@
 | wikifier.bat | 🟢 Green | 2026-06-10 14:50:33 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
 | wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:31 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier.sh | 🟢 Green | 2026-07-09 05:02:49 | post-assess-hygiene complete: portable rel paths + launcher sync (subid=post-assess-hygiene) |
-| wikifier/__init__.py | 🟢 Green | 2026-07-09 05:02:49 | stale yellow cleared after update-maps (subid=post-assess-hygiene) |
+| wikifier/__init__.py | 🟢 Green | 2026-07-09 05:11:43 | v4.5.2 |
 | wikifier/cli.py | 🟢 Green | 2026-07-09 05:05:10 | post-assess: pure-Py workflow routing (subid=post-assess-hygiene) |
 | wikifier/contracts.py | 🟢 Green | 2026-06-10 09:27:43 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | wikifier/daemon.py | 🟢 Green | 2026-06-10 09:27:49 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |

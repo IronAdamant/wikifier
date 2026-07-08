@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 05:09:07",
+  "last_updated": "2026-07-09 05:11:43",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -105,8 +105,9 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-11 00:41:01 AEST",
-      "reason": "v4.5.1 docs release; 30/30 tests"
+      "last_updated": "2026-07-09 05:11:43",
+      "reason": "v4.5.2 notes",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
@@ -116,8 +117,8 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:49",
-      "reason": "stale yellow cleared after update-maps (subid=post-assess-hygiene)",
+      "last_updated": "2026-07-09 05:11:43",
+      "reason": "v4.5.2",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/mcp/__init__.py": {

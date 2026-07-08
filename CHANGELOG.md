@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.2] - 2026-07-09
+
+### Fixed
+
+- **MCP `get_project_status` / `get_files_needing_attention` zero counts**: loading
+  `wikifier.health` via `import wikifier.health as …` bound the package convenience
+  *function* (name shadow), not the module. Tools now use
+  `importlib.import_module("wikifier.health")`. Status filters use emoji (🟢/🟡/🔴);
+  fallbacks no longer count legacy `[GREEN]` tags that never appear in live output.
+- **CLI `check-changes` / `record-change` / `mark-green` pure-Python path**: these
+  no longer depend on the shell upsert (which only patched `file_health.md` and, on
+  macOS, stored absolute paths because BSD `realpath` lacks `--relative-to`).
+- **`update-maps --max-files=N`** no longer forces the A2 streaming facade; it uses
+  the normal `run_full_update` batch path with `files_skipped` reporting.
+- Shell launcher: portable project-relative paths for check-changes/validate; root
+  `wikifier.sh` kept in sync with the packaged copy.
+
+### Changed
+
+- README simplified for human readability (agent-first scope, natural discovery terms).
+- Findings pruned to lean keep-set (M5 dogfood + recent validation); CLAUDE.md /
+  protocol notes updated for ~19.8k LOC and 4.5.x.
+
 ## [4.5.1] - 2026-06-11
 
 ### Changed
