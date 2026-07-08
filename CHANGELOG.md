@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.4] - 2026-07-09
+
+### Added
+
+- **Multi-language parsers** (zero-dep regex, shared edge contract): Rust, Go, C/C++,
+  C#, Java — wired into `update-maps` candidate scan + `languages_parsed` result field.
+- **Health stub seeding**: newly parsed files get a 🟡 “Initial stub” health row (map-first).
+- **`WIKIFIER_CHECK_CHANGES_MAX`** (default 2000) and **`WIKIFIER_CHECK_CHANGES_GHOST_MAX`**
+  (default 200); result reports `dirty_total` / `dirty_truncated`.
+- Dogfood lean `monitored_paths` guidance for huge monorepos; sample-project README.
+
+### Changed
+
+- Default dirty-mark cap raised from 200 → 2000 to reduce thrash under broad monitors.
+- README/protocol language table covers all deep-map languages + honesty limits.
+
 ## [4.5.3] - 2026-07-09
 
 ### Added

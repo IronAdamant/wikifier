@@ -174,7 +174,13 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
         ".pnpm", ".yarn", ".store", "store", "virtual-store", ".pnp",
         ".pnp.cjs", "node_modules/.pnpm", "node_modules/.yarn"
     }
-    exts = (".py", ".js", ".ts", ".jsx", ".tsx")
+    # Deep-map languages (agent multi-lang dogfood)
+    exts = (
+        ".py", ".js", ".ts", ".jsx", ".tsx",
+        ".rs", ".go",
+        ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh",
+        ".cs", ".java",
+    )
     try:
         root = Path(root).resolve()
     except Exception:
@@ -500,6 +506,26 @@ def run_full_update(
         from .parsers import javascript as js_parser
         from .parsers import python as py_parser
         try:
+            from .parsers import rust as rust_parser
+        except Exception:
+            rust_parser = None
+        try:
+            from .parsers import go_lang as go_parser
+        except Exception:
+            go_parser = None
+        try:
+            from .parsers import c_cpp as c_cpp_parser
+        except Exception:
+            c_cpp_parser = None
+        try:
+            from .parsers import csharp as csharp_parser
+        except Exception:
+            csharp_parser = None
+        try:
+            from .parsers import java as java_parser
+        except Exception:
+            java_parser = None
+        try:
             from .parsers import bree as bree_mod
         except Exception:
             bree_mod = None
@@ -521,10 +547,28 @@ def run_full_update(
             except Exception:
                 return None
 
+        def _parse_file(fstr: str, low: str):
+            if low.endswith((".js", ".ts", ".jsx", ".tsx")):
+                return js_parser.parse_javascript_imports(fstr) or []
+            if low.endswith(".py"):
+                return py_parser.parse_python_imports(fstr) or []
+            if low.endswith(".rs") and rust_parser is not None:
+                return rust_parser.parse_rust_imports(fstr) or []
+            if low.endswith(".go") and go_parser is not None:
+                return go_parser.parse_go_imports(fstr) or []
+            if low.endswith((".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh")) and c_cpp_parser is not None:
+                return c_cpp_parser.parse_c_cpp_imports(fstr) or []
+            if low.endswith(".cs") and csharp_parser is not None:
+                return csharp_parser.parse_csharp_imports(fstr) or []
+            if low.endswith(".java") and java_parser is not None:
+                return java_parser.parse_java_imports(fstr) or []
+            return None
+
         new_entries: Dict[str, Dict[str, Any]] = {}
         edges_total = 0
         parsed_count = 0
         parse_errors: List[Dict[str, str]] = []
+        lang_counts: Dict[str, int] = {}
 
         if bree_mod is not None:
             try:
@@ -536,11 +580,8 @@ def run_full_update(
                 fstr = str(f)
                 low = fstr.lower()
                 try:
-                    if low.endswith((".js", ".ts", ".jsx", ".tsx")):
-                        edges = js_parser.parse_javascript_imports(fstr) or []
-                    elif low.endswith(".py"):
-                        edges = py_parser.parse_python_imports(fstr) or []
-                    else:
+                    edges = _parse_file(fstr, low)
+                    if edges is None:
                         continue
                 except Exception as pe:
                     parse_errors.append({"file": fstr, "error": f"{type(pe).__name__}: {pe}"})
@@ -557,6 +598,8 @@ def run_full_update(
                 }
                 parsed_count += 1
                 edges_total += len(pairs)
+                ext = Path(low).suffix.lower() or "unknown"
+                lang_counts[ext] = lang_counts.get(ext, 0) + 1
                 if verbose and parsed_count % 200 == 0:
                     print(f"[run_full_update] parsed {parsed_count}/{len(dirty)}")
         finally:
@@ -568,9 +611,27 @@ def run_full_update(
 
         result["files_parsed"] = parsed_count
         result["edges_persisted"] = edges_total
+        result["languages_parsed"] = lang_counts
         if parse_errors:
             result["parse_errors"] = parse_errors[:10]
             result["parse_error_count"] = len(parse_errors)
+
+        # Seed health stubs for newly parsed files (map-first wiki: agents fill prose later)
+        health_seeded = 0
+        if _health_mod is not None and new_entries:
+            try:
+                existing = (_health_mod.load_health(root) or {}).get("entries") or {}
+                for rel in new_entries:
+                    if rel in existing:
+                        continue
+                    _health_mod.upsert_entry(
+                        root, rel, "🟡 Yellow",
+                        "Initial stub — parsed into map; agent should wiki + mark-green when editing"
+                    )
+                    health_seeded += 1
+            except Exception:
+                health_seeded = 0
+        result["health_stubs_seeded"] = health_seeded
 
         # === 4. Persist (single save; reload first to pick up the barrel flush) ===
         cache = ic.load_cache(root) or {}
@@ -1079,11 +1140,28 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                 except Exception:
                     pass
 
+            # Cap is configurable: WIKIFIER_CHECK_CHANGES_MAX (default 2000; was hard 200).
+            # Huge monorepos with monitored_paths=. can still thrash — prefer lean monitored paths.
+            try:
+                max_dirty = int(os.environ.get("WIKIFIER_CHECK_CHANGES_MAX", "2000") or "2000")
+            except ValueError:
+                max_dirty = 2000
+            max_dirty = max(1, min(max_dirty, 50000))
+            try:
+                max_ghosts = int(os.environ.get("WIKIFIER_CHECK_CHANGES_GHOST_MAX", "200") or "200")
+            except ValueError:
+                max_ghosts = 200
+            max_ghosts = max(1, min(max_ghosts, 10000))
+
+            dirty_list = list(dirty or [])
+            dirty_truncated = len(dirty_list) > max_dirty
+            dirty_batch = dirty_list[:max_dirty]
+
             changed_count = 0
             ghosts_marked = 0
             if _health_mod is not None:
                 root_res = root.resolve()
-                for p in (dirty or [])[:200]:  # bounded for skeleton safety at scale
+                for p in dirty_batch:
                     try:
                         pr = Path(p).resolve()
                         if not str(pr).startswith(str(root_res)):
@@ -1102,7 +1180,8 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                 # G7: surface ghost health entries (tracked path missing on disk, not already DELETED)
                 try:
                     if hasattr(_health_mod, "find_ghost_entries"):
-                        for g in (_health_mod.find_ghost_entries(root) or [])[:50]:
+                        ghosts_all = _health_mod.find_ghost_entries(root) or []
+                        for g in ghosts_all[:max_ghosts]:
                             _health_mod.upsert_entry(
                                 root, g, "🔴 Red",
                                 "DELETED — path missing on disk (check_changes ghost detection)"
@@ -1115,15 +1194,24 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                 except Exception:
                     pass
 
+            msg = (
+                f"Python-primary check_changes complete: {changed_count} files marked/updated"
+                + (f", {ghosts_marked} ghost(s) marked Red" if ghosts_marked else "")
+                + ". Health + pending + journal touched."
+            )
+            if dirty_truncated:
+                msg += (
+                    f" Note: dirty set truncated to {max_dirty} of {len(dirty_list)} "
+                    f"(set WIKIFIER_CHECK_CHANGES_MAX or lean monitored_paths.txt)."
+                )
             result.update({
                 "success": True,
                 "changes_detected": changed_count,
+                "dirty_total": len(dirty_list),
+                "dirty_truncated": dirty_truncated,
+                "max_dirty": max_dirty,
                 "ghosts_marked": ghosts_marked,
-                "message": (
-                    f"Python-primary check_changes complete: {changed_count} files marked/updated"
-                    + (f", {ghosts_marked} ghost(s) marked Red" if ghosts_marked else "")
-                    + ". Health + pending + journal touched."
-                ),
+                "message": msg,
             })
     except Exception as e:
         result["error"] = str(e)

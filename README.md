@@ -8,7 +8,19 @@
 
 Wikifier is an **agent-to-agent** tool: it builds a living map of a project (health matrix, dependency graph, short file summaries) and agents keep that map current as they work. Humans can peek via a small dashboard; the product is the agent loop, not a general docs site or IDE.
 
-Works from small scripts to large monorepos. **Deep import maps** cover **Python + JavaScript/TypeScript** (barrels, cycles, incremental updates). Other languages can still use health/journal/watch; they won’t get full import graphs until a parser exists.
+Works from small scripts to large monorepos. **Deep import/include maps** (zero-dep regex parsers):
+
+| Language | Extensions | Notes |
+|----------|------------|--------|
+| Python | `.py` | full ACS/CDIA path |
+| JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` | barrels (BREE), dynamic/CDIA |
+| Rust | `.rs` | `use` / `mod` / `extern crate` |
+| Go | `.go` | `import` / import blocks |
+| C / C++ | `.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh` | `#include` (local + system) |
+| C# | `.cs` | `using` namespaces |
+| Java | `.java` | `import` / `import static` |
+
+Health/journal still work for any monitored path. Parsers are **pragmatic regex** (not full cargo/`go.mod`/classpath/`-I` resolution). Prefer **lean `monitored_paths.txt`** on huge monorepos; raise dirty cap with `WIKIFIER_CHECK_CHANGES_MAX` (default 2000) only when needed.
 
 ## Why
 
@@ -58,7 +70,7 @@ MCP **Core 6** (start every session): `get_project_status`, `check_changes`, `ge
 
 ## What you get
 
-- **Import analysis** — Python + JS/TS (ESM, CommonJS, dynamic imports, path aliases, package exports); per-edge confidence; name-routed barrel expansion (precise leaves, not edge explosion)
+- **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust, Go, C/C++ includes, C# usings; per-edge confidence; name-routed barrel expansion for TS/JS
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
 - **Selective agent work** — health + suggest bias to 🔴/🟡 only; ACS *actionable* low-conf excludes stdlib/external noise
 - **Scale** — reverse index + barrel invalidation so one edit doesn’t re-scan the monorepo

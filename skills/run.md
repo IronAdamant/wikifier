@@ -12,7 +12,8 @@
 - **First-run:** `init` → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
 - **Steady-state selective work:** only 🔴/🟡 (never re-wiki 🟢 unless required). ACS suggestions use `actionable_low_conf_edges` (stdlib/external bare demoted).
 - **Deletions:** `record-deletion` + check-changes ghost detection (missing paths → Red DELETED).
-- **Languages:** deep import maps = Python + JS/TS. journal/pending = audit queue, not Jira.
+- **Languages:** deep import maps = Python, JS/TS, Rust, Go, C/C++, C#, Java (regex; not full toolchain resolution). journal/pending = audit queue, not Jira.
+- **Huge monorepos:** lean `monitored_paths.txt` (package roots, not bare `.`). Optional `WIKIFIER_CHECK_CHANGES_MAX` (default 2000). `update-maps` seeds Yellow health stubs for newly parsed files (map-first).
 - **Monitor:** optional background `monitor`/`daemon` for mtime heartbeat; agents still own wiki/mark-green.
 - Health module: use `importlib.import_module("wikifier.health")` or `wikifier.health_module` — `from wikifier import health` is the *function*.
 

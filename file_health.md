@@ -17,7 +17,7 @@
 | Logged_issues/2026-06-10-brc-scoped-rerun-pathology.md | 🟢 Green | 2026-06-10 19:09:35 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested |
 | Logged_issues/2026-06-10-js-barrel-churn-selftest-failure.md | 🟢 Green | 2026-06-10 14:19:50 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
 | M5.3 Cycle1 evidence append: 3 subs spawned+running (alt BRC20 named, trammel48, consist/llvm metrics, 72h gate start, FRESH3, 9GPs/DoD maps, subid=m5.3-coord-agents) | 🔴 Red | 2026-06-04 15:44:23 AEST | DELETED — Historical early M5.3 launch note from coord sub (pre full alt gate pass + sustained monitors). Superseded by complete agent records in M5-Dogfood-Progress.md (alt sub 1356s exit0 gate claim, 2 other subs rich, monitors running). Cleaned as part of post-M5 skills/MCP refresh. |
-| README.md | 🟢 Green | 2026-07-09 05:40:09 | G12 closed; 39/39 tests |
+| README.md | 🟢 Green | 2026-07-09 05:52:23 | lang table |
 | diagnostics.html | 🟢 Green | 2026-06-05 08:33:20 AEST | Wiki summary verified accurate after change. |
 | file_health.md | 🟢 Green | 2026-06-07 12:47:31 AEST | Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1. |
 | index.html | 🟢 Green | 2026-06-11 00:20:17 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
@@ -32,7 +32,7 @@
 | wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:31 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier.sh | 🟢 Green | 2026-07-09 05:32:45 | gap-closure swarm verified 34/34 tests |
 | wikifier/__init__.py | 🟢 Green | 2026-07-09 05:32:44 | gap-closure swarm verified 34/34 tests |
-| wikifier/cli.py | 🟢 Green | 2026-07-09 05:40:02 | G12 closed; 39/39 tests |
+| wikifier/cli.py | 🟢 Green | 2026-07-09 05:52:23 | multi-lang pipeline |
 | wikifier/contracts.py | 🟢 Green | 2026-07-09 05:40:06 | G12 closed; 39/39 tests |
 | wikifier/daemon.py | 🟢 Green | 2026-07-09 05:32:45 | gap-closure swarm verified 34/34 tests |
 | wikifier/health.py | 🟢 Green | 2026-07-09 05:40:05 | G12 closed; 39/39 tests |
@@ -44,9 +44,13 @@
 | wikifier/mcp/__init__.py | 🟢 Green | 2026-06-10 09:27:38 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | wikifier/mcp/server.py | 🟢 Green | 2026-07-09 05:40:04 | G12 closed; 39/39 tests |
 | wikifier/parsers/bree.py | 🟢 Green | 2026-07-09 05:40:05 | G12 closed; 39/39 tests |
+| wikifier/parsers/c_cpp.py | 🟢 Green | 2026-07-09 05:52:22 | dogfood llvm/linux |
 | wikifier/parsers/cdia.py | 🟢 Green | 2026-07-09 05:40:08 | G12 closed; 39/39 tests |
+| wikifier/parsers/csharp.py | 🟢 Green | 2026-07-09 05:52:22 | dogfood dotnet |
+| wikifier/parsers/go_lang.py | 🟢 Green | 2026-07-09 05:52:22 | dogfood |
 | wikifier/parsers/javascript.py | 🟢 Green | 2026-07-09 05:40:04 | G12 closed; 39/39 tests |
 | wikifier/parsers/python.py | 🟢 Green | 2026-07-09 05:40:07 | G12 closed; 39/39 tests |
+| wikifier/parsers/rust.py | 🟢 Green | 2026-07-09 05:52:21 | dogfood rust/redox |
 | wikifier/resolution.py | 🟢 Green | 2026-07-09 05:40:07 | G12 closed; 39/39 tests |
 | wikifier/scripts/wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:33 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier/scripts/wikifier.sh | 🟢 Green | 2026-07-09 05:02:49 | synced with root; portable rel paths (subid=post-assess-hygiene) |

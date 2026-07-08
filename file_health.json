@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 05:40:10",
+  "last_updated": "2026-07-09 05:52:23",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -56,8 +56,8 @@
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:09",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 05:52:23",
+      "reason": "lang table",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/server.py": {
@@ -74,8 +74,8 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:02",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 05:52:23",
+      "reason": "multi-lang pipeline",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "diagnostics.html": {
@@ -272,6 +272,30 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:40:10",
       "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/rust.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:52:21",
+      "reason": "dogfood rust/redox",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/go_lang.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:52:22",
+      "reason": "dogfood",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/c_cpp.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:52:22",
+      "reason": "dogfood llvm/linux",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/csharp.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:52:22",
+      "reason": "dogfood dotnet",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     }
   }

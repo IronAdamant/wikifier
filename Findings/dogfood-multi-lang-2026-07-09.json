@@ -1,0 +1,229 @@
+[
+  {
+    "project": "llama_index",
+    "seconds": 3.42,
+    "success": true,
+    "directory": null,
+    "max_files": null,
+    "force_full": false,
+    "parseable_files": 3837,
+    "files_parsed": 0,
+    "files_to_reparse": 0,
+    "edges_persisted": 0,
+    "languages_parsed": {},
+    "check_changes": 0,
+    "health": {
+      "total": 0,
+      "green": 0,
+      "yellow": 0,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:48:24"
+    },
+    "library_nodes": 6113,
+    "library_edges": 16182
+  },
+  {
+    "project": "airflow",
+    "seconds": 9.27,
+    "success": true,
+    "directory": "airflow-core/src",
+    "max_files": 80,
+    "force_full": false,
+    "parseable_files": 1444,
+    "files_parsed": 0,
+    "files_to_reparse": 0,
+    "edges_persisted": 0,
+    "languages_parsed": {},
+    "check_changes": 56,
+    "health": {
+      "total": 62,
+      "green": 0,
+      "yellow": 62,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:48:26"
+    },
+    "library_nodes": 10011,
+    "library_edges": 45668
+  },
+  {
+    "project": "Babylon.js",
+    "seconds": 13.92,
+    "success": true,
+    "directory": "packages/dev/core/src",
+    "max_files": 80,
+    "force_full": false,
+    "parseable_files": 1644,
+    "files_parsed": 0,
+    "files_to_reparse": 0,
+    "edges_persisted": 0,
+    "languages_parsed": {},
+    "check_changes": 0,
+    "health": {
+      "total": 48,
+      "green": 0,
+      "yellow": 48,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 04:53:10"
+    },
+    "library_nodes": 5388,
+    "library_edges": 37958
+  },
+  {
+    "project": "redox",
+    "seconds": 0.39,
+    "success": true,
+    "directory": null,
+    "max_files": null,
+    "force_full": true,
+    "parseable_files": 30,
+    "files_parsed": 30,
+    "files_to_reparse": 30,
+    "edges_persisted": 175,
+    "languages_parsed": {
+      ".c": 5,
+      ".cpp": 1,
+      ".go": 1,
+      ".js": 1,
+      ".py": 1,
+      ".rs": 21
+    },
+    "check_changes": 28,
+    "health": {
+      "total": 28,
+      "green": 0,
+      "yellow": 28,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:48:47"
+    },
+    "library_nodes": 151,
+    "library_edges": 156
+  },
+  {
+    "project": "rust",
+    "seconds": 13.97,
+    "success": true,
+    "directory": "library/std/src",
+    "max_files": 150,
+    "force_full": true,
+    "parseable_files": 669,
+    "files_parsed": 150,
+    "files_to_reparse": 669,
+    "edges_persisted": 805,
+    "languages_parsed": {
+      ".rs": 150
+    },
+    "check_changes": 200,
+    "health": {
+      "total": 176,
+      "green": 0,
+      "yellow": 176,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:48:58"
+    },
+    "library_nodes": 769,
+    "library_edges": 1095
+  },
+  {
+    "project": "llvm-project",
+    "seconds": 31.91,
+    "success": true,
+    "directory": "llvm/lib/Support",
+    "max_files": 100,
+    "force_full": true,
+    "parseable_files": 192,
+    "files_parsed": 100,
+    "files_to_reparse": 192,
+    "edges_persisted": 541,
+    "languages_parsed": {
+      ".cpp": 89,
+      ".c": 8,
+      ".h": 3
+    },
+    "check_changes": 200,
+    "health": {
+      "total": 200,
+      "green": 0,
+      "yellow": 200,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:49:24"
+    },
+    "library_nodes": 3625,
+    "library_edges": 11472
+  },
+  {
+    "project": "linux",
+    "seconds": 20.51,
+    "success": true,
+    "directory": "init",
+    "max_files": 50,
+    "force_full": true,
+    "parseable_files": 13,
+    "files_parsed": 13,
+    "files_to_reparse": 13,
+    "edges_persisted": 239,
+    "languages_parsed": {
+      ".c": 11,
+      ".h": 2
+    },
+    "check_changes": 200,
+    "health": {
+      "total": 166,
+      "green": 0,
+      "yellow": 166,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:49:48"
+    },
+    "library_nodes": 817,
+    "library_edges": 1962
+  },
+  {
+    "project": "dotnet-dotnet",
+    "seconds": 128.74,
+    "success": true,
+    "directory": "src",
+    "max_files": 100,
+    "force_full": true,
+    "parseable_files": 104193,
+    "files_parsed": 100,
+    "files_to_reparse": 104193,
+    "edges_persisted": 359,
+    "languages_parsed": {
+      ".py": 1,
+      ".cs": 99
+    },
+    "check_changes": 200,
+    "health": {
+      "total": 62,
+      "green": 0,
+      "yellow": 62,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 05:51:00"
+    },
+    "library_nodes": 954,
+    "library_edges": 3345
+  }
+]
