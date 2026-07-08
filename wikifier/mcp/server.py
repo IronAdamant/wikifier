@@ -1,26 +1,17 @@
 """
-Wikifier MCP Server
+Wikifier MCP server — agent-to-agent wiki (optional `pip install wikifier[mcp]`).
 
-A Model Context Protocol (MCP) server exposing Wikifier as an
-**agent-to-agent codebase wiki** for token-efficient file lookup (health
-matrix, get_file_wiki, barrel reports), autonomous wiki summary updates,
-and creation of new wiki entries as agents work. Strictly for that purpose
-(see README "Intended Use" and skills/run.md).
+AGENT MAP — Core 6 (start here every session):
+  1. get_project_status     — health counts + ACS/BRC snapshot
+  2. check_changes          — dirty / ghosts → yellow/red
+  3. get_files_needing_attention — 🔴/🟡 paths only
+  4. get_file_wiki          — token-cheap file summary
+  5. suggest_next_actions   — selective work (never full-tree re-wiki)
+  6. record_change / mark_green — close the loop after edits
 
-Validated on external projects from ~1k to 79k+ files. Commands run with a
-60s timeout and actionable errors; on very large or barrel-heavy targets,
-tools fall back gracefully to the CLI/library path.
-
-Run with:
-    python -m wikifier.mcp.server
-    or
-    wikifier-mcp
-
-Always pass project_root= (or WIKIFIER_PROJECT_ROOT) for external/user
-projects.
-
-This module requires the optional 'mcp' extra. The core wikifier package
-must remain importable without it (zero-dependency contract).
+Intel (as needed): get_dependencies, get_dependents, get_cycles, get_barrel_reports
+Always pass project_root= for external trees. Deep import maps: Python + JS/TS.
+Run: WIKIFIER_PROJECT_ROOT=/path wikifier-mcp  |  python -m wikifier.mcp.server
 """
 
 try:
@@ -1900,75 +1891,20 @@ def suggest_next_actions(
     directory: Optional[str] = None,
     format: Literal["text", "json"] = "text"
 ) -> str | dict:
-    """Suggest high-value next actions based on current state.
+    """Suggest high-value next actions based on current state (G3/G4 selective work).
 
-    Light ACS + CIABRE integration (Gap #1 surfacing uniformity): when low-confidence edges present,
-    includes actionable item referencing the on-demand _acs_summary (now guaranteed via ensure in get_project_status/health)
-    + full Recommendations for auto low-conf filtering/prioritization by agents. Mirrors cycles/CIABRE patterns.
+    Delegates to library `wikifier.cli.suggest_next_actions`: prioritizes 🔴 then 🟡 only
+    (never full-tree re-wiki of greens). ACS suggestions use *actionable* low-conf
+    (excludes stdlib/external bare noise); full telemetry remains in dependency_intel.
     """
-    suggestions = []
-
     root = _get_effective_root(project_root)
-
     try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-        summary = health_module.get_summary(root, directory)
-        red = summary["red"]
-        yellow = summary["yellow"]
-    except Exception:
-        health = _run_wikifier_command("health", root=root)
-        red = health.count("🔴")
-        yellow = health.count("🟡")
-
-    if red > 0:
-        suggestions.append(f"1. Tackle the {red} 🔴 Red file(s) first — they are highest priority.")
-    if yellow > 0:
-        suggestions.append(f"2. Review the {yellow} 🟡 Yellow files.")
-
-    suggestions.append("3. Run `update_maps()` if structure or imports have changed.")
-    suggestions.append("4. Use `get_dependents()` on core or frequently changed files.")
-    suggestions.append("5. Review the journal for recent activity.")
-
-    # Light ACS integration for auto low-conf filtering (Gap #1 ACS+CIABRE Surfacing Uniformity next wave).
-    # Uses ensure_ for on-demand persistence guarantee so agents always see fresh aggregates + sample Recommendations.
-    # High-value: surfaces actionable "review low conf" without requiring separate get_dependencies scan or library grep.
-    try:
-        import wikifier.import_cache as ic
-        cache = ic.load_cache(root)
-        acs = ic.ensure_acs_summary_persisted(cache, root)
-        low = int(acs.get("low_conf_edges", 0) or 0)
-        if low > 0:
-            avg = acs.get("avg_confidence", 0)
-            top_reasons = list((acs.get("top_risk_reasons") or {}).keys())[:2]
-            reasons_str = f" top reasons: {', '.join(top_reasons)}" if top_reasons else ""
-            sample = ""
-            samples = acs.get("sample_low_conf_explanations") or []
-            if samples:
-                s0 = samples[0]
-                # richer: quote a verbatim Recommendation snippet for immediate action (no extra call)
-                if "Recommendation:" in s0:
-                    rec_part = s0.split("Recommendation:", 1)[1].strip()[:120]
-                    sample = f" e.g. Recommendation: {rec_part}"
-            suggestions.append(
-                f"6. Review {low} low-confidence dependency edge(s) (ACS avg={avg}; threshold 0.65{reasons_str}{sample}) — "
-                f"see get_project_status() (ACS Risk Snapshot + samples) or get_dependencies(format=\"json\", low_confidence_only=True) for full "
-                f"confidence_explanation Recommendations (quote verbatim). Use for filtering low-trust edges before refactors. "
-                f"Cross with get_cycles(analysis=True) for CIABRE v1.3 recs on affected cycles."
-            )
-    except Exception:
-        pass  # light: never break suggestions on ACS side-load
-
-    if format == "json":
-        return {
-            "project_root": str(root),
-            "directory": directory or ".",
-            "red": red,
-            "yellow": yellow,
-            "suggestions": suggestions
-        }
-
-    return "\n".join(suggestions)
+        from wikifier.cli import suggest_next_actions as _lib_suggest
+        return _lib_suggest(project_root=str(root), directory=directory, format=format)
+    except Exception as e:
+        if format == "json":
+            return {"success": False, "error": str(e), "project_root": str(root)}
+        return f"suggest_next_actions error: {e}"
 
 
 # =============================================================================

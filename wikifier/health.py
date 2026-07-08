@@ -1,19 +1,13 @@
 """
-Wikifier Health Matrix - Scalable Implementation (M2-Rem-02 + Health B)
+Documentation health matrix (agent-first).
 
-This module provides fast, scalable operations on the Documentation Health Matrix.
-It is designed to work well from small projects (< 300 files) all the way to massive
-monorepos (10k+ files). M2 Health B extensions add durable wiki freshness tracking
-(wiki_content_hash + last_meaningful_edit correlated to journal semantic events),
-policy-driven healing, stale detection, sharded views, and self-hosting hygiene —
-all zero-dependency, observable, and production-safe under concurrency.
-
-Architecture (Durable + Observable):
-- `file_health.json` primary source (fast dict, versioned, additive migration).
-- Contracts in contracts.py (HealthEntry_v1) are the single source of truth for shapes.
-- Every mutation of freshness fields carries 'freshness_provenance' for explainability.
-- `file_health.md` is a generated human-readable view (no freshness fields to keep readable).
-- Small projects: full fidelity. Massive: summary/sharded + lazy full views preferred.
+AGENT MAP:
+  load_health / save_health / upsert_entry — file_health.json SSOT (+ regenerate .md)
+  get_summary / get_files_needing_attention — 🟢🟡🔴 counts and lists
+  find_ghost_entries / validate_health — missing disk paths vs missing wiki rows
+  mark_green / heal_stubs / apply_barrel_invalidation_reports — status mutations
+  CLI: python -m wikifier.health <summary|validate|heal-stubs|...>
+Agents: prefer MCP health / check_changes / mark_green; only open this for matrix policy.
 
 JSON Schema (v2 - additive from v1):
 {
@@ -697,6 +691,41 @@ def _build_simple_exclude_set(root: Path) -> set:
     return exc
 
 
+def find_ghost_entries(root: Path) -> List[str]:
+    """G7: Health keys that look like project files but no longer exist on disk.
+
+    Skips explicit DELETED audit rows and non-path historical note keys (no slash /
+    no common source suffix). Used by check_changes + validate.
+    """
+    root = Path(root).resolve()
+    health = load_health(root)
+    ghosts: List[str] = []
+    source_suffixes = (
+        ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".md", ".json",
+        ".sh", ".toml", ".yaml", ".yml",
+    )
+    for key, entry in (health.get("entries") or {}).items():
+        if not isinstance(key, str) or not key or key.startswith("/"):
+            # absolute keys are pollution; treat as ghost-like for cleanup lists
+            if isinstance(key, str) and key.startswith("/"):
+                ghosts.append(key)
+            continue
+        reason = str((entry or {}).get("reason") or "")
+        status = str((entry or {}).get("status") or "")
+        if "DELETED" in reason or "DELETED" in status:
+            continue
+        # Skip free-form historical notes without a path shape
+        if "/" not in key and not key.endswith(source_suffixes):
+            continue
+        p = root / key
+        try:
+            if not p.exists():
+                ghosts.append(key)
+        except Exception:
+            ghosts.append(key)
+    return sorted(set(ghosts))
+
+
 def validate_health(root: Path) -> Dict[str, Any]:
     """
     Reliable, subshell-free implementation of 'validate'.
@@ -704,6 +733,7 @@ def validate_health(root: Path) -> Dict[str, Any]:
     missing from the health matrix (JSON or migrated MD).
     Returns structured result for shell/Python/MCP callers.
     Always succeeds (exit code driven by caller); never mutates state.
+    G7: also reports ghost_entries (health keys with missing disk paths).
     """
     health = load_health(root)
     entries = health.get("entries", {})
@@ -749,9 +779,12 @@ def validate_health(root: Path) -> Dict[str, Any]:
                     missing.append(rel)
 
     missing = sorted(set(missing))  # dedup + stable
+    ghosts = find_ghost_entries(root)
     return {
         "missing_count": len(missing),
         "missing": missing,
+        "ghost_count": len(ghosts),
+        "ghosts": ghosts,
         "total_scanned": total_scanned,
         "health_entries": len(known),
         "root": str(root)

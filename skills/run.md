@@ -3,11 +3,18 @@
 **Formerly "Wikifier Skills & Commands". This is the authoritative, versioned specification for agent behavior when using Wikifier.**
 
 **Version**: v0.6 (v4.2.0 real-pipeline + reliability update; package current **4.5.x**)  
-**Date**: 2026-06-10 (package notes refreshed 2026-07-09)  
+**Date**: 2026-06-10 (package notes refreshed 2026-07-09; gap-closure contract 2026-07-09)  
 **Status**: Active. Supersedes v0.5.  
-**See also**: `README.md` (Intended Use section: strictly agent-to-agent wiki for token saving), M5-Dogfood-Assessment-Report.md, Findings/2026-06-10-Dogfood-Refactor-Validation.md, and the library in wikifier/.
+**See also**: `README.md`, `Findings/gap-closure-report.md`, and the library in wikifier/.
 
-**Package 4.5.x notes (additive; protocol still v0.6):** File Tree as primary structure view in `library.md` + dashboard pan/zoom graph; `wikifier serve` with real Run/Stop controls; Python parser no longer leaks `#`-comment text into edges; MCP `get_project_status` / `get_files_needing_attention` use library+emoji health statuses (not legacy `[GREEN]` tags). Full history: `CHANGELOG.md`.
+**Package 4.5.x + gap-closure notes (additive; protocol still v0.6):**
+- File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
+- **First-run:** `init` → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
+- **Steady-state selective work:** only 🔴/🟡 (never re-wiki 🟢 unless required). ACS suggestions use `actionable_low_conf_edges` (stdlib/external bare demoted).
+- **Deletions:** `record-deletion` + check-changes ghost detection (missing paths → Red DELETED).
+- **Languages:** deep import maps = Python + JS/TS. journal/pending = audit queue, not Jira.
+- **Monitor:** optional background `monitor`/`daemon` for mtime heartbeat; agents still own wiki/mark-green.
+- Health module: use `importlib.import_module("wikifier.health")` or `wikifier.health_module` — `from wikifier import health` is the *function*.
 
 **v0.6 migration notes (packages v4.2.0–v4.3.0)** — changes are additive or strictly-better defaults; v0.5 agent behavior keeps working:
 - `update-maps` (CLI) now runs the **pure-Python full pipeline**: every dirty file is parsed in-process, the canonical per-file cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `--python-primary` is accepted but redundant; the in-shell first-pass was retired entirely (wikifier.sh's update-maps delegates to this pipeline; `--sh`/`--legacy-sh` are deprecated no-ops). Scoping is explicit via `--directory=`/`--max-files=` and reported in the result (`files_skipped`) — there are no silent caps.
@@ -24,33 +31,54 @@ This protocol + the Python package + MCP server form the bridge for consistent, 
 
 **This file is the primary contract for any LLM or agent operating Wikifier.**
 
+## Agent architecture (navigability — G12)
+
+Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to decide workflow. Use this map:
+
+| Need | Use |
+|------|-----|
+| First-run map | `init` → `update-maps` → `health --summary` → `suggest-next` |
+| Steady-state | `check-changes` → edit 🔴/🟡 only → `record-change` → wiki → `mark-green` |
+| Lookup | MCP Core 6: status, check_changes, needing_attention, get_file_wiki, suggest, record/mark |
+| Deps / cycles | `get_dependencies`, `get_dependents`, `get_cycles` (json) |
+| Deletion | `record-deletion` |
+| Code entry | `wikifier/cli.py` (dispatch) + `wikifier/health.py` + parsers — self-tests live in `tests/` + `tests/selftest/` |
+
+**CLI pure-Python vs shell:** mutators and maps prefer `python -m wikifier …`. Shell still owns `init`, `monitor`, `daemon`, `serve`, `journal`.  
+**Scope:** `monitored_paths` = change detection; `exclude_patterns` + optional `--directory` = map walk.  
+**Human HTML** is secondary observation only.
+
 ## Mandatory New-Session Rule
 
 **Copy this exact block into the system prompt or the very first instruction of every new LLM session that uses Wikifier:**
 
 ```
-You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 — v4.2.0).
+You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 — package 4.5.x).
 
-This is strictly an agent-to-agent wiki for token saving: quick file lookup (health matrix + file wikis + BRC + stele instead of full sources), autonomous wiki summary updates, and creation of new wiki entries as you work. It should not be used for anything more.
+This is strictly an agent-to-agent wiki for token saving: map lookup (health + file wikis + deps) instead of full sources; selective wiki updates; not a human docs product or Jira.
 
-FIRST ACTIONS (mandatory, post-M5 hardened):
-1. If the Wikifier MCP server is connected, prefer its tools (get_project_status, get_file_wiki, check_changes, get_barrel_reports, suggest_next_actions, etc.). Always pass project_root= for external/user projects (e.g. RecipeLab_alt, ConsistencyHub, llvm subs).
-2. If MCP times out or is unavailable (rare since v4.2.0 fixed the workflow-call deadlock and batched barrel persistence; historically seen on BRC-heavy or 50k+ scale targets), fall back immediately to reliable CLI/library:
+SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and 🟡 Yellow files. Do not re-summarize 🟢 Green files or the whole tree. First-run builds the structural map; wiki depth is filled as you touch files.
+
+FIRST ACTIONS:
+1. Prefer MCP tools when connected (get_project_status, get_file_wiki, check_changes, suggest_next_actions, get_dependencies, …). Always pass project_root= for external projects.
+2. CLI/library fallback:
      WIKIFIER_PROJECT_ROOT=/path/to/target python -m wikifier check-changes
-     python -m wikifier health --summary   # or format=json/summary for machine use (token-efficient lookup)
-     ... perform edit on source ...
-     python -m wikifier record-change "path/to/file" "concise semantic reason (why, not what). Include subid if agent work."
-     ... write/update the wiki summary for the file ...
-     python -m wikifier mark-green "path/to/file" "Reason for Green (e.g. after autonomous agent update)."
-     if imports changed: python -m wikifier update-maps [--directory=src/]  # pure-Python full pipeline by default (v4.2.0)
      python -m wikifier health --summary
-3. For sustained agent work: launch `python -m wikifier monitor` (or wikifier.sh monitor) in bg / daemon for 30s "Pruned 0 / No new" heartbeat + auto BRC healing. Use .last_check + health for observability.
-4. Immediately consult the small health matrix (file_health.md or health --summary) + pending_updates.md. Prioritise 🔴 then 🟡. Use this for quick reference instead of full file reads to save tokens.
-5. For edits to agent-maintained docs (e.g. this protocol, README, Findings/M5-*.md): precede with FRESH 3 hygiene (grep for 0 def matches on the target .md), use record-change + mark-green.
-6. Always pass explicit project_root / WIKIFIER_PROJECT_ROOT for any external or multi-project work (M5 lesson: absolute monitored_paths.txt, no pollution).
-7. Re-validate with health + suggest_next_actions (or equivalent) at end of turn/session. Use monitor for long-running.
+     python -m wikifier suggest-next   # or suggest_next_actions(format="json")
+     ... edit only red/yellow sources ...
+     python -m wikifier record-change "path/to/file" "why (semantic). Include subid if agent work."
+     ... update that file's wiki only ...
+     python -m wikifier mark-green "path/to/file" "reason"
+     if imports changed: python -m wikifier update-maps [--directory=src/]
+     if file removed: python -m wikifier record-deletion "path" "why"
+     python -m wikifier health --summary
+3. Optional background: `python -m wikifier monitor` or daemon for mtime heartbeat — you still own wiki + mark-green.
+4. Prioritize 🔴 then 🟡 from health/pending. Lookup greens via get_file_wiki; do not rewrite them.
+5. Agent docs edits: record-change + mark-green.
+6. Always explicit project_root / WIKIFIER_PROJECT_ROOT for external/multi-project work.
+7. End turn: health + suggest_next_actions.
 
-Never skip record-change — it is the semantic audit trail (journal + health + pending + BRC).
+Never skip record-change — semantic audit trail (journal + health + pending).
 
 **M5+ notes (2026-06)**: 
 - External projects: always explicit root. CLI is battle-tested fallback (M5.1 MCP reliability: 60s timeout + better errors; M5 dogfood on alt BRC exact named services, 79k llvm, etc.).

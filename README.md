@@ -8,65 +8,63 @@
 
 Wikifier is an **agent-to-agent** tool: it builds a living map of a project (health matrix, dependency graph, short file summaries) and agents keep that map current as they work. Humans can peek via a small dashboard; the product is the agent loop, not a general docs site or IDE.
 
-Works from small scripts to large monorepos (Python + JavaScript/TypeScript imports, barrels, cycles, incremental updates).
+Works from small scripts to large monorepos. **Deep import maps** cover **Python + JavaScript/TypeScript** (barrels, cycles, incremental updates). Other languages can still use health/journal/watch; they won’t get full import graphs until a parser exists.
 
 ## Why
 
 Context windows are finite. Re-reading a large file to answer “what is this and who depends on it?” wastes tokens.
 
-Wikifier keeps a small set of artifacts agents can query:
-
 | Artifact | Role |
 |----------|------|
 | `file_health.md` | 🟢 / 🟡 / 🔴 matrix — what to trust, what to fix first |
 | `library.md` | File tree, Mermaid dependency map, import tables, cycles + confidence |
-| `*.wiki.md` | Short per-file “what this is for” notes (agent-maintained) |
-| `journal/` | Semantic *why* trail from `record-change` |
+| `*.wiki.md` | Short per-file “what this is for” notes (**agent-maintained** prose) |
+| `journal/` + `pending_updates.md` | Semantic *why* trail + work queue (audit, **not** a full issue tracker) |
 
-Lookup beats re-ingest. That’s the whole idea.
+**Map first, wiki depth second:** `update-maps` builds the structural map automatically. Rich per-file wiki text is filled by agents as they work — not a free full-repo “understand everything” pass on init.
 
-## Quick start
+## First run (bootstrap the map)
 
 ```bash
 pip install wikifier            # pure Python stdlib core — no runtime deps
 pip install wikifier[mcp]       # optional Model Context Protocol (MCP) server
 
 cd /path/to/your/project
-wikifier init
-wikifier update-maps            # dependency graph + library.md
-wikifier check-changes
-wikifier health --summary
+wikifier init                   # seeds + human index.html
+wikifier update-maps            # full structural map → library.md + import cache
+wikifier health --summary       # matrix counts
+wikifier suggest-next           # or MCP suggest_next_actions — 🔴/🟡 only
 ```
 
-Always set an explicit root for external trees:
+Always set an explicit root for external trees: `WIKIFIER_PROJECT_ROOT=/abs/path wikifier …`
 
-```bash
-WIKIFIER_PROJECT_ROOT=/abs/path/to/project wikifier check-changes
-```
-
-## Agent loop
+## Steady state (only touch what needs it)
 
 Full protocol: [`skills/run.md`](skills/run.md).
 
 ```bash
-wikifier check-changes
-# prioritize 🔴 then 🟡 in file_health.md / pending_updates.md
-# ... edit source ...
+wikifier check-changes          # yellow dirty files; red ghosts (missing paths)
+# prioritize 🔴 then 🟡 — do NOT re-wiki 🟢 Green files
+# ... edit only those sources ...
 wikifier record-change "path/file.py" "why this changed"   # required
-# ... refresh that file’s wiki summary ...
+# ... refresh that file’s wiki summary only ...
 wikifier mark-green "path/file.py"
-wikifier update-maps            # if imports/structure changed
+wikifier update-maps            # only if imports/structure changed
+# removals:
+wikifier record-deletion "path/gone.py" "why removed"
 ```
 
-`record-change` logs intent a git diff can’t reconstruct for the next agent (or human).
+MCP **Core 6** (start every session): `get_project_status`, `check_changes`, `get_files_needing_attention`, `get_file_wiki`, `suggest_next_actions`, `record_change` / `mark_green`. Intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`. Always pass `project_root=` for external trees.
 
 ## What you get
 
 - **Import analysis** — Python + JS/TS (ESM, CommonJS, dynamic imports, path aliases, package exports); per-edge confidence; name-routed barrel expansion (precise leaves, not edge explosion)
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
+- **Selective agent work** — health + suggest bias to 🔴/🟡 only; ACS *actionable* low-conf excludes stdlib/external noise
 - **Scale** — reverse index + barrel invalidation so one edit doesn’t re-scan the monorepo
-- **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients (`get_project_status`, `get_dependencies`, `get_file_wiki`, `record_change`, …)
+- **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
 - **Zero core dependencies** — stdlib only; forks can add their own stack on top
+- **Agent navigability** — short **AGENT MAP** docstrings on core modules; self-tests under `tests/` (not buried in parsers)
 
 ## Performance (measured)
 
@@ -86,13 +84,16 @@ Tests: `python -m unittest discover tests` (stdlib only).
 | `wikifier check-changes` | Incremental scan → health / pending |
 | `wikifier record-change <file> "reason"` | Log *why* (required after edits) |
 | `wikifier mark-green <file>` | Mark wiki current |
+| `wikifier record-deletion <file> "reason"` | Mark removed paths 🔴 + prune barrel refs |
+| `wikifier suggest-next` | Next actions (🔴/🟡 only) |
 | `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + `library.md` |
 | `wikifier health [--summary\|--json]` | Health matrix (machine-friendly flags) |
+| `wikifier validate` | Missing wiki rows + ghost paths |
 | `wikifier cycles` | Circular deps + break hints |
-| `wikifier monitor` / `daemon` | Background maintenance |
+| `wikifier monitor` / `daemon` | Background maintenance (`WIKIFIER_DAEMON_MAPS=0` for check-only) |
 | `wikifier serve` | Localhost dashboard with Run/Stop |
 
-Library: `from wikifier import check_changes, record_change, mark_green, health, update_maps`.
+Library: `from wikifier import check_changes, record_change, mark_green, suggest_next_actions, update_maps, health`.
 
 ## MCP
 
@@ -113,6 +114,8 @@ Setup and tool list: [`wikifier/mcp/README.md`](wikifier/mcp/README.md).
 
 **In:** agent-maintained codebase wiki, dependency intelligence, token-saving lookup for LLMs and coding agents.  
 **Out:** general human documentation systems, IDE plugins, “docs for everyone” product growth.
+
+**Agent navigability:** Prefer protocol ([`skills/run.md`](skills/run.md)) + MCP Core 6 over reading 20k LOC of parsers/cache. Production modules carry a short **AGENT MAP** docstring; self-tests live under `tests/` and `tests/selftest/`, not inline at the bottom of parsers.
 
 ## Links
 

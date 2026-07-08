@@ -1,33 +1,13 @@
 """
-Barrel & Re-export Analysis Engine (BREE) — Limitation #4 of Gap #1
+BREE — barrel / re-export expansion for JS/TS (agent-first).
 
-Pluggable, extensible, production-grade subsystem for detecting, extracting,
-and expanding exotic barrel files and re-export chains in massive monorepos.
-
-================================================================================
-CLEAR IMPLEMENTATION ROADMAP (as produced by this long-term subagent)
-================================================================================
-
-This document (embedded for self-containment and long-term maintainability)
-captures the disciplined roadmap executed here. It was reviewed against the
-previous Subagent #4 high-level proposal (pluggable BREE with SpecifierResolver,
-multi-strategy BarrelDetector, ReexportExtractor (lightweight+AST), ExportsMapHandler
-with wildcard/condition support, policy-driven ChainExpander, registry, precomp
-& bounded work) and the concrete state of wikifier/parsers/javascript.py (v0.3.2+).
-
-PHASE 0 — AUDIT & FOUNDATION (completed in this session)
-- Audited current barrel logic: _looks_like_barrel_file (name+relative-import heuristic),
-  _extract_barrel_reexports (lightweight regex over EXPORT_PATTERNS covering * , { }, type,
-  export * as, etc.), _follow_reexports (recursive with visited cycle guard + depth),
-  _resolve_from_exports + _pick_target + helpers (pragmatic but exact-match only; no *),
-  integration points in parse_javascript_imports (probe vs explicit path, metadata
-  via_barrel/barrel_depth/barrel_chain/is_conditional propagation + confidence rules).
-- Identified exotic gaps: package.json "exports" wildcards ("./*"), complex/conditional
-  exports objects, deeper or mixed-strategy chains, future patterns (framework-specific
-  barrels, TS project references, build-tool virtual barrels), desire for AST path
-  without forcing heavy deps, monorepo precomputation to avoid O(n) re-probes.
-- Confirmed rich metadata contract must be 100% preserved (additive only).
-- Zero-dependency philosophy + incremental opt-in power retained.
+AGENT MAP:
+  get_bree_engine() / BarrelReexportAnalysisEngine.expand_chain — follow export *
+  BarrelResolutionCache — mtime cache + reverse index for invalidation
+  Used by javascript.py parse path; surfaces via_barrel on edges
+  Stale importers → check_changes / BRC auto-yellow (not automatic wiki rewrite)
+Agents: use get_barrel_reports / get_dependents; open this only for barrel bugs.
+Zero-dep, bounded depth, cycle-safe.
 
 PHASE 1 — ABSTRACTIONS & REGISTRY (this file, core of deliverable)
 - Core data models: ReexportHop, BarrelInfo, ExpansionPolicy, ExpandedChainResult.

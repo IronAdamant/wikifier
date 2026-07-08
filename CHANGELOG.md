@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.3] - 2026-07-09
+
+### Added
+
+- **Agent first-run / steady-state contract** in README + protocol: map first, wiki
+  prose agent-filled; selective 🔴/🟡 work only.
+- **ACS v1.1** fields: `actionable_low_conf_edges`, `external_noise_edges` (stdlib /
+  bare demoted for agent next-steps; full telemetry retained).
+- **Ghost detection**: missing disk paths → Red DELETED on check-changes;
+  `find_ghost_entries` / validate ghosts; `record-deletion` CLI + BRC prune.
+- **CLI pure-Python routes**: `suggest-next`, `record-deletion`, `validate`.
+- **AGENT MAP** docstrings on core modules; self-tests moved to `tests/selftest/`.
+- **MCP Core 6** documented (status, check_changes, needing_attention, wiki, suggest, record/mark).
+- Daemon: `WIKIFIER_DAEMON_MAPS_INTERVAL` (default 600s) and `WIKIFIER_DAEMON_MAPS=0`.
+
+### Fixed
+
+- Agent navigability (G12): no inlined parser harnesses at bottom of production modules;
+  protocol architecture table for agents.
+
+### Changed
+
+- `suggest_next_actions` prioritizes health red/yellow and actionable ACS only.
+- `init` prints agent first-run next steps (not only human serve).
+
 ## [4.5.2] - 2026-07-09
 
 ### Fixed

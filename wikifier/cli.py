@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """
-Wikifier CLI Entry Point
+Wikifier CLI / library entry (agent-first).
 
-Detects the current platform and launches the appropriate Wikifier script.
-This allows users to run `wikifier` after `pip install wikifier`.
+AGENT MAP (read this, not the whole file):
+  Pure-Python (python -m wikifier …): check-changes, record-change, mark-green,
+    record-deletion, suggest-next, validate, health --summary|--json, update-maps
+  Shell fallback (wikifier.sh): init, monitor, daemon, journal, issues, serve,
+    heal-stubs, cycles, plain health matrix text
+  Library: check_changes, record_change, mark_green, record_deletion,
+    suggest_next_actions, update_maps, run_full_update, health (fn), discover_project_root
+  Scope: monitored_paths → check-changes; exclude_patterns + walk → update-maps
+  Self-tests: tests/ + tests/selftest/ (not inlined here)
 """
 
 import os
@@ -746,6 +753,32 @@ def main():
                 res = mark_green(_args[0], reason, project_root=project_root)
                 print(res.get("message") or res)
                 return 0 if res.get("success") else 1
+            if _cmd0 == "record-deletion" and len(_args) >= 1:
+                reason = " ".join(_args[1:]) if len(_args) > 1 else "removed"
+                res = record_deletion(_args[0], reason, project_root=project_root)
+                print(res.get("message") or res)
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("suggest-next", "suggest-next-actions", "suggest"):
+                import json as _json
+                fmt = "text"
+                for a in _args:
+                    if a in ("--json", "--format=json"):
+                        fmt = "json"
+                res = suggest_next_actions(project_root=project_root, format=fmt)
+                print(_json.dumps(res, indent=2, default=str) if isinstance(res, dict) else res)
+                return 0
+            if _cmd0 == "validate":
+                import json as _json
+                if _health_mod is not None:
+                    root = _get_effective_root(project_root)
+                    res = _health_mod.validate_health(root)
+                    ghosts = []
+                    if hasattr(_health_mod, "find_ghost_entries"):
+                        ghosts = _health_mod.find_ghost_entries(root)
+                    res["ghost_count"] = len(ghosts)
+                    res["ghosts"] = ghosts[:50]
+                    print(_json.dumps(res, indent=2, default=str))
+                    return 0 if res.get("missing_count", 0) == 0 else 1
         except Exception as e:
             print(f"[wikifier] Python-primary {_cmd0} failed: {e}", file=sys.stderr)
             return 1
@@ -1047,6 +1080,7 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                     pass
 
             changed_count = 0
+            ghosts_marked = 0
             if _health_mod is not None:
                 root_res = root.resolve()
                 for p in (dirty or [])[:200]:  # bounded for skeleton safety at scale
@@ -1065,10 +1099,31 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                     _ensure_journal_entry(root, "auto-detected", rel, "File mtime changed (check_changes Python primary)")
                     changed_count += 1
 
+                # G7: surface ghost health entries (tracked path missing on disk, not already DELETED)
+                try:
+                    if hasattr(_health_mod, "find_ghost_entries"):
+                        for g in (_health_mod.find_ghost_entries(root) or [])[:50]:
+                            _health_mod.upsert_entry(
+                                root, g, "🔴 Red",
+                                "DELETED — path missing on disk (check_changes ghost detection)"
+                            )
+                            _add_to_pending(
+                                root, g,
+                                "File missing on disk — run record-deletion or archival cleanup"
+                            )
+                            ghosts_marked += 1
+                except Exception:
+                    pass
+
             result.update({
                 "success": True,
                 "changes_detected": changed_count,
-                "message": f"Python-primary check_changes complete: {changed_count} files marked/updated. Health + pending + journal touched.",
+                "ghosts_marked": ghosts_marked,
+                "message": (
+                    f"Python-primary check_changes complete: {changed_count} files marked/updated"
+                    + (f", {ghosts_marked} ghost(s) marked Red" if ghosts_marked else "")
+                    + ". Health + pending + journal touched."
+                ),
             })
     except Exception as e:
         result["error"] = str(e)
@@ -1118,17 +1173,41 @@ def record_change(file: str, reason: str, project_root: Optional[Union[str, Path
 
 
 def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
-    """Python-primary record_deletion (symmetric to record_change)."""
+    """Python-primary record_deletion (symmetric to record_change).
+
+    G7: marks 🔴 DELETED, pending + journal, and best-effort prunes barrel cache
+    references so deleted paths do not keep invalidating importers forever.
+    """
     root = _get_effective_root(project_root)
     result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root), "action": "deletion"}
     try:
         lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
         with lock_ctx:
+            rel = file
+            try:
+                pp = Path(file)
+                if pp.is_absolute():
+                    rel = str(pp.resolve().relative_to(root.resolve()))
+            except Exception:
+                rel = file
             if _health_mod is not None:
-                _health_mod.upsert_entry(root, file, "🔴 Red", f"DELETED — {reason}")
-            _add_to_pending(root, file, f"File was deleted. Consider wiki archival. {reason}")
-            _ensure_journal_entry(root, "record-deletion", file, reason or "No reason provided.")
-            result.update({"success": True, "message": "Recorded deletion (Python primary)."})
+                _health_mod.upsert_entry(root, rel, "🔴 Red", f"DELETED — {reason}")
+            _add_to_pending(root, rel, f"File was deleted. Consider wiki archival. {reason}")
+            _ensure_journal_entry(root, "record-deletion", rel, reason or "No reason provided.")
+            prune_stats: Dict[str, Any] = {}
+            if _ic_mod is not None:
+                try:
+                    prune_stats = _ic_mod.prune_barrel_resolutions(
+                        root, deleted_files=[rel]
+                    ) or {}
+                except Exception as pe:
+                    prune_stats = {"error": str(pe)}
+            result.update({
+                "success": True,
+                "file": rel,
+                "message": "Recorded deletion (Python primary).",
+                "barrel_prune": prune_stats,
+            })
     except Exception as e:
         result["error"] = str(e)
     return result
@@ -1161,6 +1240,10 @@ def suggest_next_actions(
 
     Uses health summary + import_cache ACS low-conf integration for actionable output.
     Structured in json; text for human. Cross-refs protocol.
+
+    G3: Prioritize 🔴 then 🟡 only — never suggest re-wiki of green or full-tree
+    re-summarize. G4: ACS suggestions use actionable_low_conf_edges (excludes
+    stdlib/external bare noise).
     """
     root = _get_effective_root(project_root)
     try:
@@ -1172,23 +1255,58 @@ def suggest_next_actions(
             yellow = health_sum.get("yellow", 0)
 
         suggestions: List[str] = []
+        n = 1
         if red > 0:
-            suggestions.append(f"1. Tackle the {red} 🔴 Red file(s) first — they are highest priority.")
+            suggestions.append(
+                f"{n}. Tackle the {red} 🔴 Red file(s) first (get_files_needing_attention status=red). "
+                "Do not re-wiki 🟢 Green files."
+            )
+            n += 1
         if yellow > 0:
-            suggestions.append(f"2. Review the {yellow} 🟡 Yellow files.")
-        suggestions.append("3. Run `update_maps(directory=...)` (Python primary) if imports/structure changed.")
-        suggestions.append("4. Query dependents/dependencies on hot files (via import_cache or MCP).")
-        suggestions.append("5. Review journal/ for recent record-change intent.")
+            suggestions.append(
+                f"{n}. Review the {yellow} 🟡 Yellow file(s) only — record-change intent, refresh wiki, mark-green. "
+                "Skip green unless a dependent of a yellow/red requires it."
+            )
+            n += 1
+        if red == 0 and yellow == 0:
+            suggestions.append(
+                f"{n}. Health is clean (no red/yellow). Do not re-summarize the tree; use the map for lookup only."
+            )
+            n += 1
+        suggestions.append(
+            f"{n}. Run `update_maps(directory=...)` only if imports/structure changed (not for wiki-only edits)."
+        )
+        n += 1
+        suggestions.append(
+            f"{n}. On yellow/red hotspots, query dependents (get_dependents) before editing callers."
+        )
+        n += 1
+        suggestions.append(f"{n}. Review journal/ for recent record-change intent (self-audit).")
 
         acs_note = ""
         if _ic_mod is not None:
             try:
                 cache = _ic_mod.load_cache(root) or {}
                 acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
-                low = int(acs.get("low_conf_edges", 0) or 0)
-                if low > 0:
-                    suggestions.append(f"6. Review {low} low-confidence edges (see health json 'dependency_intel').")
-                    acs_note = f" ACS low-conf active (avg={acs.get('avg_confidence')})."
+                actionable = int(acs.get("actionable_low_conf_edges", acs.get("low_conf_edges", 0)) or 0)
+                raw_low = int(acs.get("low_conf_edges", 0) or 0)
+                noise = int(acs.get("external_noise_edges", 0) or 0)
+                if actionable > 0:
+                    n += 1
+                    suggestions.append(
+                        f"{n}. Review {actionable} actionable low-confidence *project* edges "
+                        f"(not stdlib/external; full low_conf telemetry={raw_low}, external_noise={noise}). "
+                        "See health json dependency_intel / get_dependencies(low_confidence_only=True)."
+                    )
+                    acs_note = (
+                        f" ACS actionable_low={actionable} (raw_low={raw_low}, external_noise={noise}, "
+                        f"avg={acs.get('avg_confidence')})."
+                    )
+                elif raw_low > 0:
+                    acs_note = (
+                        f" ACS: {raw_low} low-conf edges are mostly external/stdlib noise "
+                        f"(actionable=0); no agent action required for those."
+                    )
             except Exception:
                 pass
 
@@ -1201,6 +1319,7 @@ def suggest_next_actions(
                 "suggestions": suggestions,
                 "health_summary": health_sum,
                 "acs_note": acs_note,
+                "selective_work": True,
             }
         return "\n".join(suggestions) + (acs_note or "")
     except Exception as e:

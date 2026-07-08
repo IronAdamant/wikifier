@@ -748,9 +748,15 @@ EOT
 
     PROJECT_ROOT="$old_project"
 
-    log "✅ Wikifier initialised in $target_dir . Edit monitored_paths.txt to point at your real codebase (or subdirs for monorepos)."
+    log "✅ Wikifier initialised in $target_dir . Edit monitored_paths.txt (change detection scope; map uses excludes + optional --directory)."
     log "   Recommended: export WIKIFIER_PROJECT_ROOT=$target_dir  (or cd there and use ./wikifier.sh)"
-    log "   Human layer: run 'wikifier serve' and open http://localhost:8787/index.html for this project's code structure chart + files + descriptions (browsers block file:// fetches, so don't double-click index.html — the page will tell you the same). Use the copy buttons for clean text exports (tree + snapshot) to LLMs or teammates."
+    log "   Agent first-run (map first, wiki prose later):"
+    log "     1) wikifier update-maps"
+    log "     2) wikifier health --summary"
+    log "     3) wikifier suggest-next   # or MCP suggest_next_actions — 🔴/🟡 only"
+    log "   Steady-state: check-changes → edit red/yellow only → record-change → wiki → mark-green → update-maps if imports changed."
+    log "   Deep import maps: Python + JS/TS. journal/pending = audit queue (not an issue tracker)."
+    log "   Human layer (secondary): wikifier serve → http://localhost:8787/index.html (not file://)."
 }
 
 cmd_cycles() {

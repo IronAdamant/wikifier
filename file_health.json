@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 05:11:43",
+  "last_updated": "2026-07-09 05:40:10",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:27",
-      "reason": "4.5.x protocol notes",
+      "last_updated": "2026-07-09 05:40:08",
+      "reason": "G12 closed; 39/39 tests",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/Milestones-Overview.md": {
@@ -22,8 +22,8 @@
     },
     "wikifier.sh": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:49",
-      "reason": "post-assess-hygiene complete: portable rel paths + launcher sync (subid=post-assess-hygiene)",
+      "last_updated": "2026-07-09 05:32:45",
+      "reason": "gap-closure swarm verified 34/34 tests",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/M5-Dogfood-Assessment-Report.md": {
@@ -56,14 +56,14 @@
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:09:07",
-      "reason": "Concise agent-first README; SOE terms woven naturally",
+      "last_updated": "2026-07-09 05:40:09",
+      "reason": "G12 closed; 39/39 tests",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:05:10",
-      "reason": "post-assess: importlib unshadow health module in MCP (subid=post-assess-hygiene)",
+      "last_updated": "2026-07-09 05:40:04",
+      "reason": "G12 closed; 39/39 tests",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/README.md": {
@@ -74,8 +74,8 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:05:10",
-      "reason": "post-assess: pure-Py workflow routing (subid=post-assess-hygiene)",
+      "last_updated": "2026-07-09 05:40:02",
+      "reason": "G12 closed; 39/39 tests",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "diagnostics.html": {
@@ -90,13 +90,15 @@
     },
     "wikifier/import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 19:09:24 AEST",
-      "reason": "Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested"
+      "last_updated": "2026-07-09 05:40:03",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/python.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-11 00:20:53 AEST",
-      "reason": "Repro now yields 0 garbage edges; 30/30 tests"
+      "last_updated": "2026-07-09 05:40:07",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "file_health.md": {
       "status": "🟢 Green",
@@ -117,8 +119,8 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:11:43",
-      "reason": "v4.5.2",
+      "last_updated": "2026-07-09 05:32:44",
+      "reason": "gap-closure swarm verified 34/34 tests",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/mcp/__init__.py": {
@@ -128,13 +130,15 @@
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 09:27:42 AEST",
-      "reason": "Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged."
+      "last_updated": "2026-07-09 05:40:05",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/contracts.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 09:27:43 AEST",
-      "reason": "Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged."
+      "last_updated": "2026-07-09 05:40:06",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
@@ -143,8 +147,9 @@
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 09:27:49 AEST",
-      "reason": "Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged."
+      "last_updated": "2026-07-09 05:32:45",
+      "reason": "gap-closure swarm verified 34/34 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/scripts/wikifier.sh": {
       "status": "🟢 Green",
@@ -179,13 +184,14 @@
     },
     "wikifier/parsers/bree.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 19:09:22 AEST",
-      "reason": "Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested"
+      "last_updated": "2026-07-09 05:40:05",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:49",
-      "reason": "post-assess-hygiene complete: central_resolve hot path (subid=post-assess-hygiene)",
+      "last_updated": "2026-07-09 05:40:04",
+      "reason": "G12 closed; 39/39 tests",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/": {
@@ -237,6 +243,36 @@
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:37:47 AEST",
       "reason": "Asset referenced by README"
+    },
+    "Findings/gap-closure-report.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:40:10",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_gap_closure.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:32:46",
+      "reason": "gap-closure swarm verified 34/34 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/resolution.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:40:07",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/cdia.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:40:08",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_selftest_wrappers.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 05:40:10",
+      "reason": "G12 closed; 39/39 tests",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     }
   }
 }

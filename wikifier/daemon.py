@@ -43,8 +43,23 @@ except Exception:
 # =============================================================================
 
 DAEMON_NAME = "wikifier"
-POLL_INTERVAL_DEFAULT = 30  # seconds
+POLL_INTERVAL_DEFAULT = 30  # seconds — check-changes heartbeat
+# G11: do NOT run full update-maps every poll on large monorepos (was 30s → IO bomb).
+# Override: WIKIFIER_DAEMON_MAPS_INTERVAL (seconds; 0 = never periodic maps, only start/wake).
+# WIKIFIER_DAEMON_MAPS=0 disables all background update-maps (check-changes only; like monitor).
 SLEEP_THRESHOLD_SECONDS = 120  # if sleep gap > this, treat as wake-from-sleep and force check
+
+
+def _maps_enabled() -> bool:
+    return os.environ.get("WIKIFIER_DAEMON_MAPS", "1").strip() not in ("0", "false", "no")
+
+
+def _maps_interval_sec() -> int:
+    raw = os.environ.get("WIKIFIER_DAEMON_MAPS_INTERVAL", "600")
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 600
 
 LOG_DIR_NAME = ".wikifier_staging"
 LOG_FILE_NAME = "daemon.log"
@@ -217,15 +232,24 @@ def daemon_loop() -> None:
     """
     The actual background loop.
 
-    Runs check-changes + (Wave 5) python-primary run_full_update periodically/post-sleep/initial.
-    Direct pure-Py call (no sh) for full-update robustness on packaged/external monorepos.
-    Post-sleep always runs both check + update (full freshness after lid/suspend).
+    - Every POLL_INTERVAL: check-changes (health/mtime heartbeat).
+    - update-maps (run_full_update): at most every WIKIFIER_DAEMON_MAPS_INTERVAL
+      (default 600s), plus once at start and on wake — not every 30s (G11).
+    - WIKIFIER_DAEMON_MAPS=0 → check-changes only (monitor-like).
     """
-    log("Wikifier daemon started.")
+    maps_iv = _maps_interval_sec()
+    maps_on = _maps_enabled()
+    log(
+        f"Wikifier daemon started (check every {POLL_INTERVAL_DEFAULT}s; "
+        f"maps={'off' if not maps_on else f'every {maps_iv}s' if maps_iv else 'start/wake only'})."
+    )
 
     last_check = time.time()
+    last_maps = 0.0
     _run_check_changes("initial start / resume")
-    _run_python_primary_update("initial start / resume", force_full=False)
+    if maps_on:
+        _run_python_primary_update("initial start / resume", force_full=False)
+        last_maps = time.time()
 
     while True:
         time.sleep(POLL_INTERVAL_DEFAULT)
@@ -234,12 +258,16 @@ def daemon_loop() -> None:
         gap = now - last_check
 
         if gap > SLEEP_THRESHOLD_SECONDS:
-            log(f"Wake detected (gap of {int(gap)}s). Running forced check-changes + python-primary update.")
+            log(f"Wake detected (gap of {int(gap)}s). Forced check-changes + optional maps.")
             _run_check_changes("post-sleep resume")
-            _run_python_primary_update("post-sleep resume", force_full=False)
+            if maps_on:
+                _run_python_primary_update("post-sleep resume", force_full=False)
+                last_maps = time.time()
 
         _run_check_changes("periodic")
-        _run_python_primary_update("periodic", force_full=False)
+        if maps_on and maps_iv > 0 and (time.time() - last_maps) >= maps_iv:
+            _run_python_primary_update("periodic maps interval", force_full=False)
+            last_maps = time.time()
         last_check = time.time()
 
 

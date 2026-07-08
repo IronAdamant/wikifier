@@ -1,16 +1,15 @@
 """
-Import Cache for Incremental update-maps (M2-Rem-03)
+Import cache + graph intelligence (agent-first).
 
-Stores parsed import information per file so that only changed files
-need to be re-parsed on subsequent update-maps runs.
-
-This design is intended to scale from small projects to massive monorepos.
-
-M2 A0/A2: Now also hosts the minimal streaming generator skeleton
-(generate_update_events) that yields ProgressEvent_v1 (with full provenance,
-ACS/CIABRE hooks, barrel/cycle signals, ScopeSpec_v1, checkpoint/resumption).
-The real pipeline integration is future work (A2+); this is the clean contract
-foundation only. All changes additive + backward compatible.
+AGENT MAP:
+  load_cache / save_cache          — .wikifier_staging/import_cache.json
+  compute_files_needing_reparse    — dirty set for update-maps
+  maintain reverse deps / cycles   — _reverse_dependencies, _cycles, CIABRE
+  compute_acs_summary              — ACS; prefer actionable_low_conf_edges (G4)
+  invalidate_stale_barrel_entries  — BRC importers for check-changes yellow
+  generate_update_events           — streaming/partial UX (optional)
+  Reserved keys: _cycles, _acs_summary, _barrel_*, _reverse_*
+Agents: use update_maps / get_dependencies / get_cycles — not this file end-to-end.
 """
 
 import json
@@ -968,6 +967,32 @@ def _ciabre_summary(analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
 # Recommendation samples for agents without full get_dependencies scan.
 # =============================================================================
 
+def _edge_is_external_noise(pair: Dict[str, Any]) -> bool:
+    """True for stdlib / third-party / bare-external edges (not project-internal risk).
+
+    G4: these are valid telemetry but must not drive agent "fix the wiki / harden
+    imports" actions. Diagnostic category and resolution strategy are authoritative.
+    """
+    if not isinstance(pair, dict):
+        return False
+    diag = pair.get("diagnostic") if isinstance(pair.get("diagnostic"), dict) else {}
+    cat = str(diag.get("category") or "").lower()
+    if cat in ("external_or_bare", "external", "stdlib", "third_party", "builtin"):
+        return True
+    meta = pair.get("resolution_metadata") if isinstance(pair.get("resolution_metadata"), dict) else {}
+    strat = str(meta.get("strategy") or "").lower()
+    if "bare-or-external" in strat or strat in ("external", "stdlib", "python-bare-or-external"):
+        return True
+    reasons = pair.get("confidence_reasons") or []
+    for r in reasons:
+        if not isinstance(r, str):
+            continue
+        rl = r.lower()
+        if rl in ("external", "stdlib", "third_party") or "external_or_bare" in rl:
+            return True
+    return False
+
+
 def compute_acs_summary(
     cache: Dict[str, Any],
     max_samples: int = 5,
@@ -982,16 +1007,25 @@ def compute_acs_summary(
 
     Returns stable shape with full (not truncated) confidence_explanation samples
     so agents can quote Recommendation: verbatim.
+
+    G4 additive fields (backward compatible):
+      - actionable_low_conf_edges: low-conf edges excluding external/bare/stdlib noise
+      - external_noise_edges: count of scored edges classified as external noise
+      - sample_actionable_low_conf_explanations: samples for agent action only
+    Agents should prefer actionable_* for next-steps; low_conf_edges remains full telemetry.
     """
     # Phase 5e (66): compute_acs_summary + get_acs_summary promoted first-class default (O(k) bounded samples via ACS/CIABRE, deque-style in practice) for 20k+ creative; format=summary paths in MCP/CLI/health default to this + barrel summary (per 48/58/50/57, crit2/5 long-term WS A).
     t0 = time.time()
     total = 0
     sum_score = 0.0
     low_count = 0
+    actionable_low = 0
+    external_noise = 0
     reason_counts: Dict[str, int] = {}
     samples: List[str] = []  # full expls for lowest-risk (prioritized)
 
-    low_items: List[tuple] = []  # (score, expl) for sorting top risks
+    low_items: List[tuple] = []  # (score, expl) all low
+    actionable_items: List[tuple] = []  # (score, expl) project-internal low only
 
     for rel, data in cache.items():
         if not isinstance(rel, str) or rel.startswith("_") or not isinstance(data, dict):
@@ -1003,6 +1037,9 @@ def compute_acs_summary(
             sc = p.get("confidence_score")
             expl = p.get("confidence_explanation") or ""
             reasons = p.get("confidence_reasons") or []
+            is_noise = _edge_is_external_noise(p)
+            if is_noise:
+                external_noise += 1
             if isinstance(sc, (int, float)):
                 scf = float(sc)
                 sum_score += scf
@@ -1010,6 +1047,10 @@ def compute_acs_summary(
                     low_count += 1
                     if expl:
                         low_items.append((scf, expl))
+                    if not is_noise:
+                        actionable_low += 1
+                        if expl:
+                            actionable_items.append((scf, expl))
             # aggregate reasons (filterable by agents)
             for r in reasons:
                 if isinstance(r, str) and r:
@@ -1022,18 +1063,27 @@ def compute_acs_summary(
         safe_expl = expl if len(expl) <= 450 else expl[:447] + "..."
         samples.append(safe_expl)
 
+    actionable_items.sort(key=lambda x: x[0])
+    actionable_samples: List[str] = []
+    for scf, expl in actionable_items[:max_samples]:
+        safe_expl = expl if len(expl) <= 450 else expl[:447] + "..."
+        actionable_samples.append(safe_expl)
+
     avg = round(sum_score / total, 2) if total > 0 else 0.0
     top_reasons = sorted(reason_counts.items(), key=lambda x: -x[1])[:6]
 
     return {
-        "acs_version": "1.0",
+        "acs_version": "1.1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_scored_edges": total,
         "avg_confidence": avg,
         "low_conf_edges": low_count,
+        "actionable_low_conf_edges": actionable_low,
+        "external_noise_edges": external_noise,
         "low_conf_threshold": low_threshold,
         "top_risk_reasons": dict(top_reasons),
         "sample_low_conf_explanations": samples,  # full Recommendation text for agents
+        "sample_actionable_low_conf_explanations": actionable_samples,
         "compute_time_ms": int((time.time() - t0) * 1000),
     }
 
@@ -1066,7 +1116,14 @@ def ensure_acs_summary_persisted(
       always-available oracle in primary surfaces without requiring explicit update first.
     """
     acs = get_acs_summary(cache)
-    if not acs or acs.get("total_scored_edges", 0) == 0:
+    # G4: recompute when missing OR pre-1.1 summaries (no actionable_low_conf_edges)
+    needs = (
+        not acs
+        or acs.get("total_scored_edges", 0) == 0
+        or "actionable_low_conf_edges" not in acs
+        or str(acs.get("acs_version") or "") < "1.1"
+    )
+    if needs:
         acs = compute_acs_summary(cache)
         set_acs_summary(cache, acs)
         if root is not None:
@@ -1637,18 +1694,27 @@ def get_unresolved_imports(cache: Dict[str, Any], max_results: int = 50) -> List
 
 
 def get_low_confidence_edges(
-    cache: Dict[str, Any], *, threshold: float = 0.65, max_results: int = 50
+    cache: Dict[str, Any],
+    *,
+    threshold: float = 0.65,
+    max_results: int = 50,
+    actionable_only: bool = False,
 ) -> List[Dict[str, Any]]:
     """Return bounded edges where confidence_score < threshold (or legacy low/unresolved).
 
     Complements get_unresolved_imports; used for ACS-style hotspots.
     Includes full provenance/diagnostic when present (from python/JS parity).
+
+    actionable_only=True (G4): skip external/bare/stdlib noise so agents do not treat
+    `import json` as a wiki/refactor action item.
     """
     results: List[Dict[str, Any]] = []
     for rel, data in cache.items():
         if isinstance(rel, str) and not rel.startswith("_") and isinstance(data, dict):
             for p in (data.get("resolved_pairs") or []):
                 if not isinstance(p, dict):
+                    continue
+                if actionable_only and _edge_is_external_noise(p):
                     continue
                 score = p.get("confidence_score")
                 conf_str = (p.get("confidence") or p.get("resolution_confidence") or "").lower()
@@ -1661,6 +1727,8 @@ def get_low_confidence_edges(
                 except Exception:
                     is_low = conf_str in ("low", "unresolved")
                 if is_low or not p.get("resolved_path"):
+                    if actionable_only and not p.get("resolved_path") and _edge_is_external_noise(p):
+                        continue
                     entry = dict(p)
                     entry.setdefault("src", rel)
                     results.append(entry)
@@ -1754,44 +1822,9 @@ def prune_barrel_resolutions(
         return {"pruned": 0, "error": str(e), "max_age_days": max_age_days}
 
 
-if __name__ == "__main__":
-    import sys
-    print("Wikifier Import Cache module. Import it from Python or use via shell helpers.")
-
-
-# =============================================================================
-# M2 A0 + early A2: Minimal Streaming Skeleton (generator foundation)
-# =============================================================================
-#
-# Purpose (per long-term plan):
-# - Provide a *clean, typed, versioned event-yielding generator* that later waves
-#   (A2 full streaming UX, CLI --resume, MCP partials, scoped subtree) can build on
-#   without re-architecting.
-# - Events are *always* ProgressEvent_v1 shaped (via contracts.create_progress_event
-#   or direct dataclass) and carry:
-#     * Provenance (actor, session, intent, parent)
-#     * ACS + CIABRE hooks (partials, refs, low_conf deltas)
-#     * Barrel + cycle signals (depth, via, scc, severity)
-#     * ScopeSpec_v1 (directory/globs/focus + budgets)
-#     * Checkpoint tokens + resumable hints (for pause/resume on massive repos)
-# - Zero new dependencies. Uses only stdlib + existing wikifier.* (contracts,
-#   locking patterns, compute_* helpers).
-# - **NOT a full implementation**: No real dirty detection, parsing, cycles, ACS,
-#   CIABRE, or persist yet inside the generator. Synthetic milestone events only,
-#   to prove the shape + consumption contract. Real wiring = A2+.
-# - Backward compatible: new function only. Existing callers of load/save/compute_*
-#   unaffected.
-# - Future: this generator will become the heart of run_full_update streaming mode,
-#   daemon background updates, etc.
-#
-# Usage skeleton (for consumers written in A2+):
-#   from wikifier.import_cache import generate_update_events
-#   for event in generate_update_events(root, scope={"directory": "src/"}, run_id="..."):
-#       if event["event_type"] == "partial_ready":
-#           ... act on PartialResult ...
-#       if event.get("checkpoint_token"):
-#           save_checkpoint(...)
-# =============================================================================
+# --- Streaming update events (generate_update_events) ---
+# Event-shaped generator for scoped/partial update-maps (ProgressEvent_v1 + ACS hooks).
+# Agents: prefer run_full_update / update_maps unless streaming UX is required.
 
 def generate_update_events(
     root: Optional[Path] = None,
