@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 05:52:23",
+  "last_updated": "2026-07-09 06:14:09",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -44,16 +44,6 @@
       "reason": "kept; stale yellow cleared",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
-    "--help": {
-      "status": "🟢 Green",
-      "last_updated": "2026-06-04 06:50:01 AEST",
-      "reason": "Wiki summary verified accurate after change."
-    },
-    "M5.3 Cycle1 evidence append: 3 subs spawned+running (alt BRC20 named, trammel48, consist/llvm metrics, 72h gate start, FRESH3, 9GPs/DoD maps, subid=m5.3-coord-agents)": {
-      "status": "🔴 Red",
-      "last_updated": "2026-06-04 15:44:23 AEST",
-      "reason": "DELETED — Historical early M5.3 launch note from coord sub (pre full alt gate pass + sustained monitors). Superseded by complete agent records in M5-Dogfood-Progress.md (alt sub 1356s exit0 gate claim, 2 other subs rich, monitors running). Cleaned as part of post-M5 skills/MCP refresh."
-    },
     "README.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:23",
@@ -62,8 +52,8 @@
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:04",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:59",
+      "reason": "v4.5.5 count_pending",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/README.md": {
@@ -74,8 +64,8 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:52:23",
-      "reason": "multi-lang pipeline",
+      "last_updated": "2026-07-09 06:13:59",
+      "reason": "v4.5.5 flag-path guards",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "diagnostics.html": {
@@ -90,14 +80,14 @@
     },
     "wikifier/import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:03",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/python.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:07",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "file_health.md": {
@@ -107,20 +97,20 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:11:43",
-      "reason": "v4.5.2 notes",
+      "last_updated": "2026-07-09 06:13:59",
+      "reason": "v4.5.5 Fixed notes",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:27",
-      "reason": "LOC ~19.8k + 30 tests",
+      "last_updated": "2026-07-09 06:14:09",
+      "reason": "test count synced to 49",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:32:44",
-      "reason": "gap-closure swarm verified 34/34 tests",
+      "last_updated": "2026-07-09 06:13:59",
+      "reason": "v4.5.5; package version",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/mcp/__init__.py": {
@@ -130,14 +120,14 @@
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:05",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:59",
+      "reason": "v4.5.5 pollution prune + pending normalize; 49 tests",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/contracts.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:06",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/locking.py": {
@@ -147,8 +137,8 @@
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:32:45",
-      "reason": "gap-closure swarm verified 34/34 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/scripts/wikifier.sh": {
@@ -184,14 +174,14 @@
     },
     "wikifier/parsers/bree.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:05",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:04",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/": {
@@ -252,20 +242,20 @@
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:32:46",
-      "reason": "gap-closure swarm verified 34/34 tests",
+      "last_updated": "2026-07-09 06:14:00",
+      "reason": "v4.5.5 hygiene tests green",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/resolution.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:07",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/cdia.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:08",
-      "reason": "G12 closed; 39/39 tests",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_selftest_wrappers.py": {
@@ -296,6 +286,12 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:22",
       "reason": "dogfood dotnet",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/__init__.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:13:34",
+      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     }
   }

@@ -123,6 +123,72 @@ class TestGhostAndDeletionG7(TempProjectTestCase):
         self.assertIn("🔴", entries["gone.py"]["status"])
         self.assertIn("DELETED", entries["gone.py"]["reason"])
 
+    def test_record_deletion_rejects_flag_paths(self):
+        res = cli.record_deletion("--help", "oops", project_root=self.root)
+        self.assertFalse(res.get("success"))
+        self.assertIn("flag", (res.get("error") or "").lower())
+
+
+class TestPendingAndPollutionHygiene(TempProjectTestCase):
+    def test_pending_empty_marker_not_counted_and_no_dual_state(self):
+        health_mod = importlib.import_module("wikifier.health")
+        # Dual-state pollution (historical bug): empty marker + real items
+        p = self.root / "pending_updates.md"
+        p.write_text(
+            "# Pending Updates\n\n(no active items)\n- src/a.py: review\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(health_mod.count_pending(self.root), 1)
+        # Normalize via remove of the only item → empty marker only
+        health_mod.remove_from_pending(self.root, "src/a.py")
+        text = p.read_text(encoding="utf-8")
+        self.assertIn("no pending", text.lower())
+        self.assertNotIn("- src/a.py", text)
+        self.assertEqual(health_mod.count_pending(self.root), 0)
+        # Add clears empty marker
+        health_mod.add_to_pending(self.root, "src/b.py", "need wiki")
+        text2 = p.read_text(encoding="utf-8")
+        self.assertIn("- src/b.py:", text2)
+        self.assertNotIn("no pending", text2.lower())
+        self.assertNotIn("no active", text2.lower())
+        self.assertEqual(health_mod.count_pending(self.root), 1)
+        summary = health_mod.get_summary(self.root)
+        self.assertEqual(summary["pending_updates"], 1)
+
+    def test_superseded_and_flag_deleted_keys_pruned(self):
+        health_mod = importlib.import_module("wikifier.health")
+        # Inject pollution keys directly then save
+        data = {
+            "version": 2,
+            "last_updated": "2026-01-01",
+            "entries": {
+                "M5.3 Cycle1 evidence append: 3 subs spawned": {
+                    "status": "🔴 Red",
+                    "reason": "DELETED — Historical early M5.3 launch note",
+                    "last_updated": "2026-01-01",
+                },
+                "--help": {
+                    "status": "🔴 Red",
+                    "reason": "DELETED — removed",
+                    "last_updated": "2026-01-01",
+                },
+                "real.py": {
+                    "status": "🟢 Green",
+                    "reason": "ok",
+                    "last_updated": "2026-01-01",
+                },
+            },
+        }
+        health_mod.save_health(self.root, data)
+        entries = health_mod.load_health(self.root)["entries"]
+        self.assertNotIn("M5.3 Cycle1 evidence append: 3 subs spawned", entries)
+        self.assertNotIn("--help", entries)
+        self.assertIn("real.py", entries)
+        # Real path DELETED audit is kept
+        health_mod.upsert_entry(self.root, "gone_real.py", "🔴 Red", "DELETED — intentional")
+        entries2 = health_mod.load_health(self.root)["entries"]
+        self.assertIn("gone_real.py", entries2)
+
 
 if __name__ == "__main__":
     unittest.main()

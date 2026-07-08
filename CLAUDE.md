@@ -48,7 +48,7 @@ WIKIFIER_PROJECT_ROOT=/abs/path wikifier-mcp   # MCP server (requires pip instal
 ./scripts/publish.sh [test|prod]       # PyPI release (build + twine)
 ```
 
-**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; 30 tests covering parsers, cache schema, cycles, barrel invalidation, health workflow). Run it after any core change. Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
+**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; ~49 tests covering parsers, cache schema, cycles, barrel invalidation, health workflow, gap-closure hygiene). Run it after any core change. Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
 
 ## Architecture
 

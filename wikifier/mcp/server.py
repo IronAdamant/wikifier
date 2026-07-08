@@ -1644,7 +1644,13 @@ def get_project_status(
         summary = health_module.get_summary(root, directory)
         pending = _read_file_safe("pending_updates.md", root=root)
 
-        pending_count = len([l for l in pending.splitlines() if l.strip() and not l.startswith("#")])
+        if hasattr(health_module, "count_pending"):
+            pending_count = int(health_module.count_pending(root))
+        else:
+            pending_count = len([
+                l for l in pending.splitlines()
+                if l.strip().startswith("- ") and not l.strip().startswith("- (")
+            ])
 
         # ACS + CIABRE + Wave 2 Barrel/BRC surfacing uniformity: lightweight stats + invalidation reports foundation in project status (MCP primary for agents)
         dep_intel = {}
@@ -1770,7 +1776,13 @@ Use get_files_needing_attention() for the actual list. Use get_cycles(analysis=T
         # yielded zeros and lied to agents.
         root = _get_effective_root(project_root)
         pending = _read_file_safe("pending_updates.md", root=root)
-        pending_count = len([l for l in pending.splitlines() if l.strip() and not l.startswith("#")])
+        if hasattr(health_module, "count_pending"):
+            pending_count = int(health_module.count_pending(root))
+        else:
+            pending_count = len([
+                l for l in pending.splitlines()
+                if l.strip().startswith("- ") and not l.strip().startswith("- (")
+            ])
         green = yellow = red = total = 0
         try:
             import importlib

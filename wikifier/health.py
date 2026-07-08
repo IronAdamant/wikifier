@@ -64,12 +64,59 @@ def _coerce_root(root) -> Path:
 
 
 # Post-v4.0 + M5.3 gate complete + cleanup hygiene:
-# Aggressively prune superseded historical wiki-note entries (e.g. early "M5.3 Cycle1 evidence append (from early coord, before alt gate pass)")
-# that survive under-root checks because they live under "Findings/" but are not maintained agent reference docs (Progress etc).
-# These pollute the health matrix / pending_updates that agents use for token-efficient lookup.
-# Keep real M5 docs (Progress, Milestones, Assessment, p6, M5.1-cross) + current gate/4.0 records.
-# Explicit Red "DELETED" audit records from record-deletion are intentionally kept (1 non-Green historical marker is useful/observable).
+# Aggressively prune superseded historical wiki-note entries (e.g. early "M5.3 Cycle1 evidence append …")
+# that are free-form note keys, not real project paths. These pollute the health matrix that agents use.
+# Keep real M5 docs (Progress, Milestones, Assessment, p6, M5.1-cross).
+# Real path deletions via record-deletion (e.g. "src/foo.py" + 🔴 DELETED) stay as audit rows.
+# Free-form DELETED non-path keys (e.g. accidental `record-deletion --help`) are always pruned.
 SUPERSEDED_PATTERNS = ["m5.3 cycle1", "cycle1 evidence append", "early m5.3 launch note", "m5.3 cycle1 evidence"]
+
+# Path-like health keys (real files we may keep as DELETED audits). Everything else that is
+# already DELETED and not path-shaped is pollution.
+_SOURCE_SUFFIXES = (
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".md", ".json",
+    ".sh", ".toml", ".yaml", ".yml", ".html", ".css", ".rs", ".go", ".java",
+    ".cs", ".c", ".h", ".cpp", ".hpp", ".cc",
+)
+
+
+def _looks_like_path_key(key: str) -> bool:
+    """True if health key looks like a project-relative or absolute file path."""
+    if not key or not isinstance(key, str):
+        return False
+    if key.startswith(("-", "--")):
+        return False
+    if "/" in key or "\\" in key:
+        return True
+    return key.endswith(_SOURCE_SUFFIXES)
+
+
+def _is_pollution_health_key(key: str, entry: Optional[Dict[str, Any]] = None) -> bool:
+    """Keys that must never remain in the agent-facing health matrix."""
+    if not isinstance(key, str) or not key:
+        return True
+    kl = key.lower()
+    if any(p in kl for p in SUPERSEDED_PATTERNS):
+        return True
+    ent = entry or {}
+    reason = str(ent.get("reason") or "")
+    status = str(ent.get("status") or "")
+    # Accidental flag keys / free-form notes already marked DELETED (not real paths).
+    if not _looks_like_path_key(key) and ("DELETED" in reason or "DELETED" in status):
+        return True
+    return False
+
+
+def _prune_entries(root: Path, entries: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop out-of-tree pollution + superseded free-form note keys."""
+    pruned: Dict[str, Any] = {}
+    for k, v in (entries or {}).items():
+        if not _entry_is_under_root(root, k):
+            continue
+        if _is_pollution_health_key(k, v if isinstance(v, dict) else None):
+            continue
+        pruned[k] = v
+    return pruned
 
 
 def _get_health_path(root: "str | Path") -> Path:
@@ -273,23 +320,9 @@ def load_health(root: "str | Path") -> Dict[str, Any]:
         data["entries"] = normalized_entries
         if version < 2:
             data["version"] = 2  # mark for future save; additive, no breakage
-        # M5 dogfood fix: immediately drop any out-of-tree pollution entries persisted from
-        # prior bad cross-project or cwd-mismatched runs (e.g. worktree paths in external targets).
-        # Views (get_*) will be clean; next save will persist pruned json.
-        entries = data.get("entries", {}) or {}
-        pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
-        # Post-v4.0 superseded historical prune (see SUPERSEDED_PATTERNS at top).
-        # Leave explicit Red DELETED audit records (they are the agent-visible archival marker).
-        for k in list(pruned.keys()):
-            kl = str(k).lower()
-            if any(p in kl for p in SUPERSEDED_PATTERNS):
-                ent = pruned.get(k, {})
-                status = str(ent.get("status", ""))
-                reason = str(ent.get("reason", "")).lower()
-                if status.startswith("🔴") and ("deleted" in reason or "superseded" in reason):
-                    continue  # keep the audit Red
-                del pruned[k]
-        data["entries"] = pruned
+        # M5 dogfood fix: drop out-of-tree + free-form superseded/DELETED pollution.
+        # Views (get_*) are clean; next save persists pruned json.
+        data["entries"] = _prune_entries(root, data.get("entries", {}) or {})
         return data
 
     # Migration path: if JSON doesn't exist but MD does
@@ -306,20 +339,7 @@ def load_health(root: "str | Path") -> Dict[str, Any]:
                 norm[k] = _normalize_health_entry_local(v)
         migrated["entries"] = norm
         migrated["version"] = 2
-        # M5: prune pollution on migrate too (same as json path)
-        entries = migrated.get("entries", {}) or {}
-        pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
-        # Post-v4.0 superseded historical prune (see SUPERSEDED_PATTERNS at top).
-        for k in list(pruned.keys()):
-            kl = str(k).lower()
-            if any(p in kl for p in SUPERSEDED_PATTERNS):
-                ent = pruned.get(k, {})
-                status = str(ent.get("status", ""))
-                reason = str(ent.get("reason", "")).lower()
-                if status.startswith("🔴") and ("deleted" in reason or "superseded" in reason):
-                    continue
-                del pruned[k]
-        migrated["entries"] = pruned
+        migrated["entries"] = _prune_entries(root, migrated.get("entries", {}) or {})
         return migrated
 
     # Fresh project (start at v2 with Health B fields ready)
@@ -350,21 +370,9 @@ def _do_save_health(root: "str | Path", health_data: Dict[str, Any]) -> None:
     health_data["last_updated"] = _timestamp()
     health_data["version"] = 2  # B durable: ensure v2 on every save (additive fields)
 
-    # M5: always prune out-of-tree on save so target's file_health.json stays clean forever
+    # M5: always prune out-of-tree + free-form pollution so file_health.json stays clean
     if "entries" in health_data:
-        entries = health_data.get("entries") or {}
-        pruned = {k: v for k, v in entries.items() if _entry_is_under_root(root, k)}
-        # Post-v4.0 superseded historical prune (see SUPERSEDED_PATTERNS at top).
-        for k in list(pruned.keys()):
-            kl = str(k).lower()
-            if any(p in kl for p in SUPERSEDED_PATTERNS):
-                ent = pruned.get(k, {})
-                status = str(ent.get("status", ""))
-                reason = str(ent.get("reason", "")).lower()
-                if status.startswith("🔴") and ("deleted" in reason or "superseded" in reason):
-                    continue
-                del pruned[k]
-        health_data["entries"] = pruned
+        health_data["entries"] = _prune_entries(root, health_data.get("entries") or {})
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(health_data, f, indent=2, ensure_ascii=False)
@@ -450,11 +458,9 @@ def _do_upsert_entry(root: "str | Path", file: str, status: str, reason: str = "
     file = _normalize_to_relative(root, file)
     if not _entry_is_under_root(root, file):
         return
-    # Post-v4.0: skip superseded historical names (unless this is explicitly recording a Red DELETED audit).
-    kl = file.lower()
-    if any(p in kl for p in SUPERSEDED_PATTERNS):
-        if not (status.startswith("🔴") and ("deleted" in reason.lower() or "superseded" in reason.lower())):
-            return
+    # Never re-introduce free-form superseded notes or flag-key pollution.
+    if _is_pollution_health_key(file, {"status": status, "reason": reason}):
+        return
     health = load_health(root)
     existing = health.get("entries", {}).get(file, {})
     # Start from normalized existing to keep B fields
@@ -479,40 +485,74 @@ def _do_upsert_entry(root: "str | Path", file: str, status: str, reason: str = "
 # These ensure pending_updates.md mutations are atomic with health under the project lock
 # (per locking.py contract). Eliminates races/duplicates with add_pending from shell/monitor.
 
+_EMPTY_PENDING_MARKER = "(no pending items — run check-changes after making edits)"
+_EMPTY_PENDING_LINES = [
+    "# Pending Updates",
+    "",
+    _EMPTY_PENDING_MARKER,
+]
+
+
 def _get_pending_path(root: Path) -> Path:
     return root / PENDING_MD
+
+
+def _is_pending_item_line(ln: str) -> bool:
+    """True for real work-queue bullets (`- path: msg`), not headers/empty markers."""
+    s = (ln or "").strip()
+    return s.startswith("- ") and not s.startswith("- (")
+
+
+def _is_empty_pending_marker(ln: str) -> bool:
+    s = (ln or "").strip().lower()
+    if not s or s.startswith("#"):
+        return False
+    return "no pending" in s or "no active items" in s or s == _EMPTY_PENDING_MARKER.lower()
+
+
+def _pending_item_lines(lines: List[str]) -> List[str]:
+    return [ln for ln in lines if _is_pending_item_line(ln)]
+
+
+def _normalize_pending_lines(lines: List[str]) -> List[str]:
+    """Canonical pending_updates.md: header + empty marker XOR bullet list (never both)."""
+    items = _pending_item_lines(lines or [])
+    if not items:
+        return list(_EMPTY_PENDING_LINES)
+    seen = set()
+    uniq: List[str] = []
+    for it in items:
+        if it not in seen:
+            seen.add(it)
+            uniq.append(it)
+    return ["# Pending Updates", ""] + uniq
 
 
 def _read_pending_lines(root: Path) -> List[str]:
     """Read pending file as list of lines; return sensible default header if missing."""
     p = _get_pending_path(root)
     if not p.exists():
-        return [
-            "# Pending Updates",
-            "",
-            "(no pending items — run check-changes after making edits)"
-        ]
+        return list(_EMPTY_PENDING_LINES)
     try:
         with open(p, "r", encoding="utf-8") as f:
             return f.read().splitlines(keepends=False)
     except Exception:
-        # On read error, conservative: return current content best effort or default
-        return ["# Pending Updates", "", "(no pending items — run check-changes after making edits)"]
+        return list(_EMPTY_PENDING_LINES)
 
 
 def _write_pending_lines(root: Path, lines: List[str]) -> None:
-    """Atomic-ish write of pending (tmp + mv for safety on most FS)."""
+    """Atomic-ish write of pending (tmp + mv). Always normalized (no dual empty+items)."""
     p = _get_pending_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
+    normalized = _normalize_pending_lines(lines)
     tmp = p.with_suffix(".tmp")
     try:
         with open(tmp, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        os.replace(tmp, p)  # atomic rename on POSIX
+            f.write("\n".join(normalized) + "\n")
+        os.replace(tmp, p)
     except Exception:
-        # Fallback direct write
         with open(p, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+            f.write("\n".join(normalized) + "\n")
         try:
             if tmp.exists():
                 tmp.unlink()
@@ -520,13 +560,19 @@ def _write_pending_lines(root: Path, lines: List[str]) -> None:
             pass
 
 
+def count_pending(root: Path) -> int:
+    """Count real pending work items (bullet lines only; empty markers ignored)."""
+    return len(_pending_item_lines(_read_pending_lines(root)))
+
+
 def _do_remove_from_pending(root: Path, file: str) -> int:
-    """Internal: idempotent remove of any lines containing file (fixed-string, like grep -vF)."""
+    """Internal: idempotent remove of any item lines containing file (fixed-string)."""
     lines = _read_pending_lines(root)
-    new_lines = [ln for ln in lines if file not in ln]
-    removed = len(lines) - len(new_lines)
-    if removed > 0:
-        _write_pending_lines(root, new_lines)
+    items_before = _pending_item_lines(lines)
+    new_items = [ln for ln in items_before if file not in ln]
+    removed = len(items_before) - len(new_items)
+    # Always rewrite so dual "(no active)" + items and stale markers get fixed.
+    _write_pending_lines(root, new_items)
     return removed
 
 
@@ -540,12 +586,13 @@ def remove_from_pending(root: Path, file: str) -> int:
 
 
 def _do_add_to_pending(root: Path, file: str, msg: str) -> None:
-    """Internal add (idempotent: no exact dup entry)."""
+    """Internal add (idempotent). Strips empty markers when real items exist."""
     lines = _read_pending_lines(root)
     entry = f"- {file}: {msg}"
-    if entry not in lines:
-        lines.append(entry)
-        _write_pending_lines(root, lines)
+    items = _pending_item_lines(lines)
+    if entry not in items:
+        items.append(entry)
+    _write_pending_lines(root, items)
 
 
 def add_to_pending(root: Path, file: str, msg: str) -> None:
@@ -875,12 +922,16 @@ def get_summary(root: Path, directory: Optional[str] = None, include_stale: bool
         elif "🔴" in status:
             red += 1
 
+    try:
+        pending_n = count_pending(root)
+    except Exception:
+        pending_n = 0
     out = {
         "total": total,
         "green": green,
         "yellow": yellow,
         "red": red,
-        "pending_updates": 0,
+        "pending_updates": pending_n,
         "directory": directory or ".",
         "version": health.get("version", 2),
         "last_updated": health.get("last_updated")

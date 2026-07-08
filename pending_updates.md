@@ -1,3 +1,3 @@
 # Pending Updates
 
-(no active items)
+(no pending items — run check-changes after making edits)

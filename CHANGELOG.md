@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.5] - 2026-07-09
+
+### Fixed
+
+- **Health pollution prune**: free-form superseded note keys (e.g. historical M5.3
+  cycle1 evidence appends) and non-path `DELETED` keys (e.g. accidental
+  `record-deletion --help`) are always dropped from the matrix — they no longer
+  pin a permanent 🔴 and break agent trust scoring.
+- **`record-deletion` / `record-change` / `mark-green` CLI**: `--help` / flag-like
+  first args print usage instead of treating the flag as a file path.
+- **`pending_updates.md` dual-state**: empty marker (`(no active items)` /
+  `(no pending items…)`) can no longer coexist with real bullet items; writers
+  normalize to header+empty **or** header+items.
+- **`get_summary.pending_updates`**: counts real bullet items via `count_pending`
+  (was hard-coded `0`). MCP project status uses the same counter.
+
+### Tests
+
+- Gap-closure suite: pending dual-state, pollution prune, flag-path rejection
+  (49 unittest cases total).
+
 ## [4.5.4] - 2026-07-09
 
 ### Added

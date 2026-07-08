@@ -805,16 +805,40 @@ def main():
                 if res.get("message"):
                     print(res["message"])
                 return 0 if res.get("success", True) else 1
-            if _cmd0 == "record-change" and len(_args) >= 2:
+            if _cmd0 == "record-change":
+                if not _args or _args[0] in ("--help", "-h", "help"):
+                    print('Usage: wikifier record-change <file> "<reason>"')
+                    return 0
+                if _args[0].startswith("-") or len(_args) < 2:
+                    print('Usage: wikifier record-change <file> "<reason>"', file=sys.stderr)
+                    return 1
                 res = record_change(_args[0], " ".join(_args[1:]), project_root=project_root)
                 print(res.get("message") or res)
                 return 0 if res.get("success") else 1
-            if _cmd0 == "mark-green" and len(_args) >= 1:
+            if _cmd0 == "mark-green":
+                if not _args or _args[0] in ("--help", "-h", "help"):
+                    print("Usage: wikifier mark-green <file> [reason]")
+                    return 0
+                if _args[0].startswith("-"):
+                    print("Usage: wikifier mark-green <file> [reason]", file=sys.stderr)
+                    return 1
                 reason = " ".join(_args[1:]) if len(_args) > 1 else ""
                 res = mark_green(_args[0], reason, project_root=project_root)
                 print(res.get("message") or res)
                 return 0 if res.get("success") else 1
-            if _cmd0 == "record-deletion" and len(_args) >= 1:
+            if _cmd0 == "record-deletion":
+                # Guard: `record-deletion --help` must not treat `--help` as a file path
+                # (that polluted health with a 🔴 DELETED "--help" key).
+                if not _args or _args[0] in ("--help", "-h", "help"):
+                    print('Usage: wikifier record-deletion <file> "<reason>"')
+                    return 0
+                if _args[0].startswith("-"):
+                    print(
+                        'Usage: wikifier record-deletion <file> "<reason>"\n'
+                        "  <file> must be a project path, not a flag.",
+                        file=sys.stderr,
+                    )
+                    return 1
                 reason = " ".join(_args[1:]) if len(_args) > 1 else "removed"
                 res = record_deletion(_args[0], reason, project_root=project_root)
                 print(res.get("message") or res)
@@ -1039,8 +1063,14 @@ def _ensure_journal_entry(root: Path, action: str, file: str, reason: str) -> No
 
 
 def _add_to_pending(root: Path, file: str, msg: str) -> None:
-    """Pure-Py pending_updates.md appender (skeleton, matches sh add_pending)."""
+    """Append to pending_updates.md via health helpers (normalized empty/items)."""
     try:
+        if _health_mod is not None and hasattr(_health_mod, "add_to_pending"):
+            # Caller may already hold project lock (re-entrant).
+            _health_mod._do_add_to_pending(root, file, msg) if hasattr(
+                _health_mod, "_do_add_to_pending"
+            ) else _health_mod.add_to_pending(root, file, msg)
+            return
         p = root / "pending_updates.md"
         line = f"- {file}: {msg}\n"
         with open(p, "a", encoding="utf-8") as f:
@@ -1050,8 +1080,14 @@ def _add_to_pending(root: Path, file: str, msg: str) -> None:
 
 
 def _remove_from_pending(root: Path, file: str) -> None:
-    """Best-effort removal (used by mark_green skeleton)."""
+    """Best-effort removal (used by mark_green). Prefers health normalizer."""
     try:
+        if _health_mod is not None and hasattr(_health_mod, "_do_remove_from_pending"):
+            _health_mod._do_remove_from_pending(root, file)
+            return
+        if _health_mod is not None and hasattr(_health_mod, "remove_from_pending"):
+            _health_mod.remove_from_pending(root, file)
+            return
         p = root / "pending_updates.md"
         if p.exists():
             lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if file not in ln]
@@ -1265,9 +1301,13 @@ def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Pa
 
     G7: marks 🔴 DELETED, pending + journal, and best-effort prunes barrel cache
     references so deleted paths do not keep invalidating importers forever.
+    Rejects flag-like paths (`--help`) so CLI misuse cannot pollute health.
     """
     root = _get_effective_root(project_root)
     result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root), "action": "deletion"}
+    if not file or str(file).startswith("-") or str(file) in ("--help", "-h", "help"):
+        result["error"] = "file must be a project path, not a flag/empty string"
+        return result
     try:
         lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
         with lock_ctx:
@@ -1279,7 +1319,11 @@ def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Pa
             except Exception:
                 rel = file
             if _health_mod is not None:
-                _health_mod.upsert_entry(root, rel, "🔴 Red", f"DELETED — {reason}")
+                # Prefer unlocked upsert when we already hold the project lock.
+                if hasattr(_health_mod, "_do_upsert_entry"):
+                    _health_mod._do_upsert_entry(root, rel, "🔴 Red", f"DELETED — {reason}")
+                else:
+                    _health_mod.upsert_entry(root, rel, "🔴 Red", f"DELETED — {reason}")
             _add_to_pending(root, rel, f"File was deleted. Consider wiki archival. {reason}")
             _ensure_journal_entry(root, "record-deletion", rel, reason or "No reason provided.")
             prune_stats: Dict[str, Any] = {}
