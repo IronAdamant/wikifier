@@ -190,5 +190,85 @@ class TestPendingAndPollutionHygiene(TempProjectTestCase):
         self.assertIn("gone_real.py", entries2)
 
 
+class TestMapFirstHealthAndValidate(TempProjectTestCase):
+    def test_deep_relative_keys_are_under_root(self):
+        """Regression: deep monorepo rel paths must not be treated as abs pollution."""
+        health_mod = importlib.import_module("wikifier.health")
+        deep = "airflow-core/src/airflow/api/client/local_client.py"
+        self.assertTrue(health_mod._entry_is_under_root(self.root, deep))
+        self.assertTrue(health_mod._entry_is_under_root(self.root, "pkg/a.py"))
+
+    def test_seed_health_from_map_creates_stubs(self):
+        health_mod = importlib.import_module("wikifier.health")
+        from wikifier import import_cache as ic
+
+        self.write("pkg/a.py", "import b\n")
+        self.write("pkg/b.py", "x=1\n")
+        self.write("README.md", "# hi\n")
+        cache = {}
+        ic.update_file_data(cache, "pkg/a.py", mtime=1, imports=["b"], resolved_pairs=[])
+        ic.update_file_data(cache, "pkg/b.py", mtime=1, imports=[], resolved_pairs=[])
+        ic.save_cache(self.root, cache)
+
+        # No health file yet
+        self.assertFalse((self.root / "file_health.json").exists())
+        res = health_mod.seed_health_from_map(self.root)
+        self.assertTrue(res.get("success"))
+        self.assertGreaterEqual(res.get("seeded"), 2)
+        entries = health_mod.load_health(self.root)["entries"]
+        self.assertIn("pkg/a.py", entries)
+        self.assertIn("pkg/b.py", entries)
+        self.assertTrue(entries["pkg/a.py"]["status"].startswith("🟡"))
+
+    def test_validate_ignores_non_source_and_reports_mapped_gaps(self):
+        health_mod = importlib.import_module("wikifier.health")
+        from wikifier import import_cache as ic
+
+        self.write("src/app.py", "print(1)\n")
+        self.write("src/notes.md", "docs\n")
+        self.write("src/logo.png", "x")
+        (self.root / "monitored_paths.txt").write_text("src\n", encoding="utf-8")
+        cache = {}
+        ic.update_file_data(cache, "src/app.py", mtime=1, imports=[], resolved_pairs=[])
+        ic.update_file_data(cache, "src/other.py", mtime=1, imports=[], resolved_pairs=[])
+        ic.save_cache(self.root, cache)
+
+        # No health yet — in-scope mapped + monitored parseable gaps
+        v = health_mod.validate_health(self.root)
+        self.assertTrue(v.get("map_first"))
+        self.assertGreaterEqual(v.get("mapped_in_scope_without_health_count", 0), 1)
+        self.assertGreaterEqual(v.get("missing_count", 0), 1)
+        # notes.md / logo.png must not appear as monitored-source gaps
+        mon_missing = v.get("missing_monitored_source") or []
+        self.assertTrue(all(not m.endswith(".md") and not m.endswith(".png") for m in mon_missing))
+
+        health_mod.seed_health_from_map(self.root)  # only_monitored default
+        # Seed in-scope map keys; app.py on disk + mapped in-scope covered
+        v2 = health_mod.validate_health(self.root)
+        self.assertEqual(v2.get("mapped_in_scope_without_health_count"), 0)
+        # missing_count may still include on-disk sources not in map (ok if 0 after seed of map keys only)
+        self.assertEqual(v2.get("mapped_in_scope_without_health_count"), 0)
+
+    def test_prune_pending_and_health_to_monitored(self):
+        health_mod = importlib.import_module("wikifier.health")
+        (self.root / "monitored_paths.txt").write_text("src\n", encoding="utf-8")
+        self.write("src/keep.py", "k=1\n")
+        self.write("other/out.py", "o=1\n")
+        health_mod.upsert_entry(self.root, "src/keep.py", "🟡 Yellow", "in scope")
+        health_mod.upsert_entry(self.root, "other/out.py", "🟡 Yellow", "out of scope")
+        health_mod.add_to_pending(self.root, "src/keep.py", "need wiki")
+        health_mod.add_to_pending(self.root, "other/out.py", "noise")
+
+        pr = health_mod.prune_pending_to_monitored(self.root)
+        self.assertEqual(pr.get("removed"), 1)
+        self.assertEqual(health_mod.count_pending(self.root), 1)
+
+        hr = health_mod.prune_health_outside_monitored(self.root)
+        self.assertEqual(hr.get("removed"), 1)
+        entries = health_mod.load_health(self.root)["entries"]
+        self.assertIn("src/keep.py", entries)
+        self.assertNotIn("other/out.py", entries)
+
+
 if __name__ == "__main__":
     unittest.main()

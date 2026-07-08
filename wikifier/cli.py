@@ -616,23 +616,6 @@ def run_full_update(
             result["parse_errors"] = parse_errors[:10]
             result["parse_error_count"] = len(parse_errors)
 
-        # Seed health stubs for newly parsed files (map-first wiki: agents fill prose later)
-        health_seeded = 0
-        if _health_mod is not None and new_entries:
-            try:
-                existing = (_health_mod.load_health(root) or {}).get("entries") or {}
-                for rel in new_entries:
-                    if rel in existing:
-                        continue
-                    _health_mod.upsert_entry(
-                        root, rel, "🟡 Yellow",
-                        "Initial stub — parsed into map; agent should wiki + mark-green when editing"
-                    )
-                    health_seeded += 1
-            except Exception:
-                health_seeded = 0
-        result["health_stubs_seeded"] = health_seeded
-
         # === 4. Persist (single save; reload first to pick up the barrel flush) ===
         cache = ic.load_cache(root) or {}
         cache.update(new_entries)
@@ -668,6 +651,27 @@ def run_full_update(
             ic.ensure_acs_summary_persisted(cache, root)
         except Exception:
             pass
+
+        # === 5b. Map-first health stubs (always backfill; warm cache safe) ===
+        # 0-dirty incremental runs never used to create file_health.json — fixed here.
+        health_seeded = 0
+        if _health_mod is not None and hasattr(_health_mod, "seed_health_from_map"):
+            try:
+                max_seed = int(os.environ.get("WIKIFIER_HEALTH_SEED_MAX", "20000") or "20000")
+                map_keys = [k for k in cache if isinstance(k, str) and k and not k.startswith("_")]
+                seed_res = _health_mod.seed_health_from_map(
+                    root, map_keys=map_keys, max_new=max_seed,
+                )
+                health_seeded = int(seed_res.get("seeded") or 0)
+                if hasattr(_health_mod, "seed_health_for_monitored_sources"):
+                    disk_res = _health_mod.seed_health_for_monitored_sources(
+                        root, max_new=max_seed,
+                    )
+                    health_seeded += int(disk_res.get("seeded") or 0)
+            except Exception as se:
+                result["health_seed_error"] = str(se)
+                health_seeded = 0
+        result["health_stubs_seeded"] = health_seeded
 
         # === 6. library.md (atomic; pure Python) ===
         try:
@@ -857,13 +861,40 @@ def main():
                 if _health_mod is not None:
                     root = _get_effective_root(project_root)
                     res = _health_mod.validate_health(root)
-                    ghosts = []
-                    if hasattr(_health_mod, "find_ghost_entries"):
-                        ghosts = _health_mod.find_ghost_entries(root)
-                    res["ghost_count"] = len(ghosts)
-                    res["ghosts"] = ghosts[:50]
                     print(_json.dumps(res, indent=2, default=str))
+                    # Map-first: exit 0 when map is covered (or no map + no monitored source gaps)
                     return 0 if res.get("missing_count", 0) == 0 else 1
+            if _cmd0 in ("seed-health", "seed-health-from-map"):
+                import json as _json
+                if _health_mod is None:
+                    print("[wikifier] health module unavailable", file=sys.stderr)
+                    return 1
+                root = _get_effective_root(project_root)
+                res = _health_mod.seed_health_from_map(root)
+                if hasattr(_health_mod, "seed_health_for_monitored_sources"):
+                    disk = _health_mod.seed_health_for_monitored_sources(root)
+                    res["disk_seeded"] = disk.get("seeded")
+                    res["seeded_total"] = int(res.get("seeded") or 0) + int(disk.get("seeded") or 0)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("prune-pending", "prune-pending-monitored"):
+                import json as _json
+                if _health_mod is None:
+                    print("[wikifier] health module unavailable", file=sys.stderr)
+                    return 1
+                root = _get_effective_root(project_root)
+                res = _health_mod.prune_pending_to_monitored(root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("prune-health-monitored", "prune-health"):
+                import json as _json
+                if _health_mod is None:
+                    print("[wikifier] health module unavailable", file=sys.stderr)
+                    return 1
+                root = _get_effective_root(project_root)
+                res = _health_mod.prune_health_outside_monitored(root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
         except Exception as e:
             print(f"[wikifier] Python-primary {_cmd0} failed: {e}", file=sys.stderr)
             return 1
@@ -1197,6 +1228,8 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
             ghosts_marked = 0
             if _health_mod is not None:
                 root_res = root.resolve()
+                # Prefer unlocked helpers while we already hold project lock
+                _upsert = getattr(_health_mod, "_do_upsert_entry", None) or _health_mod.upsert_entry
                 for p in dirty_batch:
                     try:
                         pr = Path(p).resolve()
@@ -1205,13 +1238,20 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                         rel = str(pr.relative_to(root_res))
                     except Exception:
                         continue
-                    _health_mod.upsert_entry(
+                    _upsert(
                         root, rel, "🟡 Yellow",
                         "mtime changed since last check-changes (Python primary auto-detected)"
                     )
                     _add_to_pending(root, rel, "Auto-detected modification — review and run mark-green after wiki update")
                     _ensure_journal_entry(root, "auto-detected", rel, "File mtime changed (check_changes Python primary)")
                     changed_count += 1
+                # Keep pending queue aligned with lean monitored_paths (no flood outside scope)
+                if hasattr(_health_mod, "prune_pending_to_monitored"):
+                    try:
+                        pr = _health_mod.prune_pending_to_monitored(root)
+                        result["pending_pruned"] = pr.get("removed", 0)
+                    except Exception:
+                        pass
 
                 # G7: surface ghost health entries (tracked path missing on disk, not already DELETED)
                 try:

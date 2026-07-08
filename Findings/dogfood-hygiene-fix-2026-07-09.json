@@ -1,0 +1,165 @@
+{
+  "version": "4.5.5",
+  "rows": [
+    {
+      "project": "airflow",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 1445,
+        "green": 0,
+        "yellow": 1445,
+        "red": 0,
+        "pending_updates": 0,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:48"
+      },
+      "pending": 0,
+      "pending_pruned": 0
+    },
+    {
+      "project": "Babylon.js",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 1644,
+        "green": 0,
+        "yellow": 1644,
+        "red": 0,
+        "pending_updates": 0,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:50"
+      },
+      "pending": 0,
+      "pending_pruned": 0
+    },
+    {
+      "project": "dotnet-dotnet",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 26,
+        "green": 0,
+        "yellow": 26,
+        "red": 0,
+        "pending_updates": 26,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:08"
+      },
+      "pending": 26,
+      "pending_pruned": 0
+    },
+    {
+      "project": "linux",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 13,
+        "green": 0,
+        "yellow": 13,
+        "red": 0,
+        "pending_updates": 0,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:08"
+      },
+      "pending": 0,
+      "pending_pruned": 0
+    },
+    {
+      "project": "llama_index",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 724,
+        "green": 0,
+        "yellow": 724,
+        "red": 0,
+        "pending_updates": 0,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:53"
+      },
+      "pending": 0,
+      "pending_pruned": 0
+    },
+    {
+      "project": "llvm-project",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 424,
+        "green": 0,
+        "yellow": 424,
+        "red": 0,
+        "pending_updates": 324,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:54"
+      },
+      "pending": 324,
+      "pending_pruned": 0
+    },
+    {
+      "project": "redox",
+      "seed_map": 0,
+      "seed_disk": 0,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 27,
+        "green": 0,
+        "yellow": 27,
+        "red": 0,
+        "pending_updates": 25,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:33:10"
+      },
+      "pending": 25,
+      "pending_pruned": 0
+    },
+    {
+      "project": "rust",
+      "seed_map": 0,
+      "seed_disk": 278,
+      "validate_missing": 0,
+      "mapped_in_scope_gap": 0,
+      "mon_source_gap": 0,
+      "health": {
+        "total": 669,
+        "green": 0,
+        "yellow": 669,
+        "red": 0,
+        "pending_updates": 519,
+        "directory": ".",
+        "version": 2,
+        "last_updated": "2026-07-09 06:34:10"
+      },
+      "pending": 519,
+      "pending_pruned": 0
+    }
+  ]
+}

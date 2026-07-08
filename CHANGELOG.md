@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.6] - 2026-07-09
+
+### Fixed
+
+- **Deep relative health keys**: `_entry_is_under_root` no longer treats path depth
+  `>5` as absolute. Monorepo keys like `airflow-core/src/.../file.py` seed and
+  persist correctly (was blocking map→health backfill on large trees).
+- **Warm-cache missing health**: `update-maps` always runs `seed_health_from_map`
+  (+ monitored on-disk parseable stub pass) so `file_health.json` is created even
+  when 0 files re-parse (fixes llama_index-style maps-without-health).
+- **Validate map-first**: only parseable sources under `monitored_paths`; primary
+  `missing_count` is in-scope map + monitored gaps (not every README under `.`).
+- **Yellow/pending floods**: `prune_pending_to_monitored` drops out-of-scope and
+  auto-detected thrash; `prune_health_outside_monitored` keeps lean matrices.
+
+### Added
+
+- CLI: `seed-health`, `prune-pending`, `prune-health`
+- Library: `seed_health_from_map`, `seed_health_for_monitored_sources`,
+  `prune_pending_to_monitored`, `prune_health_outside_monitored`
+
 ## [4.5.5] - 2026-07-09
 
 ### Fixed

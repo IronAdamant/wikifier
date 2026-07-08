@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 06:14:09",
+  "last_updated": "2026-07-09 06:34:55",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -64,8 +64,8 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:59",
-      "reason": "v4.5.5 flag-path guards",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "diagnostics.html": {
@@ -97,8 +97,8 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:59",
-      "reason": "v4.5.5 Fixed notes",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "CLAUDE.md": {
@@ -109,8 +109,8 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:59",
-      "reason": "v4.5.5; package version",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/mcp/__init__.py": {
@@ -120,8 +120,8 @@
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:59",
-      "reason": "v4.5.5 pollution prune + pending normalize; 49 tests",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/contracts.py": {
@@ -242,8 +242,8 @@
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:14:00",
-      "reason": "v4.5.5 hygiene tests green",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/resolution.py": {
@@ -292,6 +292,126 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:13:34",
       "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/__init__.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/_base.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/run_all.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/selftest/__init__.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/selftest/run_cdia_selftest.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/selftest/run_contracts_selftest.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/selftest/run_javascript_selftest.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/selftest/run_python_parser_selftest.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/selftest/run_resolution_selftest.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_barrel_invalidation.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_health.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_import_cache.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_multi_lang_parsers.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "tests/test_parsers.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/__main__.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/diagnostics.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/_edge.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "wikifier/parsers/java.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:55",
+      "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "Findings/dogfood-hygiene-fix-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+    },
+    "Findings/dogfood-hygiene-fix-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 06:34:48",
+      "reason": "verified 53 tests; dogfood validate 0/8",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     }
   }

@@ -9,7 +9,7 @@
 > the agent wiki (file_health). The dependency graph is further below.
 
 ```text
-Wikifier/  (53 files)
+Wikifier/  (69 files)
 ├── .github/
 │   └── workflows/
 │       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
@@ -20,6 +20,7 @@ Wikifier/  (53 files)
 │   ├── M5-Dogfood-Progress.md — kept; stale yellow cleared
 │   ├── M5.1-cross-hardening-analysis.md — kept; stale yellow cleared
 │   ├── Milestones-Overview.md — kept; stale yellow cleared
+│   ├── gap-closure-report.md — G12 closed; 39/39 tests
 │   └── p6_real_world_validation_report.md — kept; stale yellow cleared
 ├── Logged_issues/
 │   ├── 2026-06-10-brc-scoped-rerun-pathology.md — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
@@ -27,45 +28,61 @@ Wikifier/  (53 files)
 ├── screenshot/
 │   └── front_page_review.png — Asset referenced by README
 ├── skills/
-│   └── run.md — 4.5.x protocol notes
+│   └── run.md — G12 closed; 39/39 tests
 ├── tests/
-│   ├── __init__.py
-│   ├── _base.py
-│   ├── run_all.py
-│   ├── test_barrel_invalidation.py
-│   ├── test_health.py
-│   ├── test_import_cache.py
-│   └── test_parsers.py
+│   ├── selftest/
+│   │   ├── __init__.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── run_cdia_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── run_contracts_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── run_javascript_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── run_python_parser_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   └── run_resolution_selftest.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── __init__.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── _base.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── run_all.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── test_barrel_invalidation.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── test_gap_closure.py — v4.5.5 hygiene tests green
+│   ├── test_health.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── test_import_cache.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── test_multi_lang_parsers.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── test_parsers.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   └── test_selftest_wrappers.py — G12 closed; 39/39 tests
 ├── wikifier/
 │   ├── mcp/
 │   │   ├── README.md — stale yellow cleared
 │   │   ├── __init__.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   │   └── server.py — post-assess-hygiene complete: emoji status fallback (subid=post-assess-hygiene)
+│   │   └── server.py — v4.5.5 count_pending
 │   ├── parsers/
-│   │   ├── __init__.py
-│   │   ├── bree.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
-│   │   ├── cdia.py
-│   │   ├── javascript.py — post-assess-hygiene complete: central_resolve hot path (subid=post-assess-hygiene)
-│   │   └── python.py — Repro now yields 0 garbage edges; 30/30 tests
+│   │   ├── __init__.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   │   ├── _edge.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── bree.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   │   ├── c_cpp.py — dogfood llvm/linux
+│   │   ├── cdia.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   │   ├── csharp.py — dogfood dotnet
+│   │   ├── go_lang.py — dogfood
+│   │   ├── java.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   │   ├── javascript.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   │   ├── python.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   │   └── rust.py — dogfood rust/redox
 │   ├── scripts/
 │   │   ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
 │   │   └── wikifier.sh — synced with root; portable rel paths (subid=post-assess-hygiene)
-│   ├── __init__.py — stale yellow cleared after update-maps (subid=post-assess-hygiene)
-│   ├── __main__.py
-│   ├── cli.py — post-assess-hygiene complete: pure-Py workflow + max-files (subid=post-assess-hygiene)
-│   ├── contracts.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   ├── daemon.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   ├── diagnostics.py
-│   ├── health.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   ├── import_cache.py — Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung increm…
+│   ├── __init__.py — v4.5.5; package version
+│   ├── __main__.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── cli.py — v4.5.5 flag-path guards
+│   ├── contracts.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   ├── daemon.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
+│   ├── diagnostics.py — Initial stub — parsed into map; agent should wiki + mark-green when editing
+│   ├── health.py — v4.5.5 pollution prune + pending normalize; 49 tests
+│   ├── import_cache.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   ├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 │   ├── library.py — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 │   ├── locking.py — v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/…
-│   ├── resolution.py
+│   ├── resolution.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   └── serve.py — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-├── CHANGELOG.md — v4.5.1 docs release; 30/30 tests
-├── CLAUDE.md — LOC ~19.8k + 30 tests
-├── README.md — What's New v4.5.x
+├── CHANGELOG.md — v4.5.5 Fixed notes
+├── CLAUDE.md — test count synced to 49
+├── README.md — lang table
 ├── diagnostics.html — Wiki summary verified accurate after change.
 ├── file_health.md — Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survi…
 ├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
@@ -73,7 +90,7 @@ Wikifier/  (53 files)
 ├── pyproject.toml — Build + twine check pass; clean-room wheel install verified
 ├── wikifier.bat — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
 ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-└── wikifier.sh — post-assess-hygiene complete: portable rel paths + launcher sync (subid=post-assess-hygien…
+└── wikifier.sh — gap-closure swarm verified 34/34 tests
 ```
 
 ## Dependency Graph (Mermaid)
@@ -87,10 +104,18 @@ graph TD
     subgraph tests
         tests__base_py["_base.py"]
         tests_run_all_py["run_all.py"]
+        tests_selftest_run_cdia_selftest_py["run_cdia_selftest.py"]
+        tests_selftest_run_contracts_selftest_py["run_contracts_selftest.py"]
+        tests_selftest_run_javascript_selftest_py["run_javascript_selftest.py"]
+        tests_selftest_run_python_parser_selftest_py["run_python_parser_selftest.py"]
+        tests_selftest_run_resolution_selftest_py["run_resolution_selftest.py"]
         tests_test_barrel_invalidation_py["test_barrel_invalidation.py"]
+        tests_test_gap_closure_py["test_gap_closure.py"]
         tests_test_health_py["test_health.py"]
         tests_test_import_cache_py["test_import_cache.py"]
+        tests_test_multi_lang_parsers_py["test_multi_lang_parsers.py"]
         tests_test_parsers_py["test_parsers.py"]
+        tests_test_selftest_wrappers_py["test_selftest_wrappers.py"]
     end
     subgraph wikifier
         wikifier___init___py["__init__.py"]
@@ -106,10 +131,16 @@ graph TD
         wikifier_mcp___init___py["__init__.py"]
         wikifier_mcp_server_py["server.py"]
         wikifier_parsers___init___py["__init__.py"]
+        wikifier_parsers__edge_py["_edge.py"]
         wikifier_parsers_bree_py["bree.py"]
+        wikifier_parsers_c_cpp_py["c_cpp.py"]
         wikifier_parsers_cdia_py["cdia.py"]
+        wikifier_parsers_csharp_py["csharp.py"]
+        wikifier_parsers_go_lang_py["go_lang.py"]
+        wikifier_parsers_java_py["java.py"]
         wikifier_parsers_javascript_py["javascript.py"]
         wikifier_parsers_python_py["python.py"]
+        wikifier_parsers_rust_py["rust.py"]
         wikifier_resolution_py["resolution.py"]
         wikifier_serve_py["serve.py"]
     end
@@ -135,6 +166,7 @@ graph TD
         platform["platform"]
         pydantic["pydantic"]
         re["re"]
+        runpy["runpy"]
         shutil["shutil"]
         signal["signal"]
         subprocess["subprocess"]
@@ -154,6 +186,7 @@ graph TD
         wikifier_import_cache["wikifier.import_cache"]
         wikifier_parsers["wikifier.parsers"]
         wikifier_parsers_bree["wikifier.parsers.bree"]
+        wikifier_parsers_cdia["wikifier.parsers.cdia"]
         wikifier_parsers_javascript["wikifier.parsers.javascript"]
         wikifier_parsers_python["wikifier.parsers.python"]
         wikifier_resolution["wikifier.resolution"]
@@ -199,6 +232,7 @@ graph TD
     tests_test_parsers_py -.-> tests__base
     tests_test_parsers_py -.-> wikifier_parsers_python
     tests_test_parsers_py -.-> wikifier_parsers_javascript
+    wikifier___init___py -.-> sys
     wikifier___init___py -.-> wikifier
     wikifier___init___py --> wikifier_cli_py
     wikifier___init___py --> wikifier_contracts_py
@@ -224,7 +258,6 @@ graph TD
     wikifier_contracts_py -.-> base64
     wikifier_contracts_py -.-> json
     wikifier_contracts_py -.-> fnmatch
-    wikifier_contracts_py -.-> sys
     wikifier_contracts_py -.-> dataclasses
     wikifier_contracts_py -.-> typing
     wikifier_contracts_py -.-> datetime
@@ -302,6 +335,7 @@ graph TD
     wikifier_mcp_server_py -.-> datetime
     wikifier_mcp_server_py -.-> wikifier_cli
     wikifier_mcp_server_py -. ? .-> wikifier_health
+    wikifier_parsers___init___py -.-> wikifier_parsers
     wikifier_parsers_bree_py -.-> json
     wikifier_parsers_bree_py -.-> re
     wikifier_parsers_bree_py -.-> warnings
@@ -318,8 +352,6 @@ graph TD
     wikifier_parsers_cdia_py -.-> re
     wikifier_parsers_cdia_py -.-> base64
     wikifier_parsers_cdia_py -.-> json
-    wikifier_parsers_cdia_py -.-> tempfile
-    wikifier_parsers_cdia_py -.-> sys
     wikifier_parsers_cdia_py -.-> dataclasses
     wikifier_parsers_cdia_py -.-> typing
     wikifier_parsers_cdia_py -.-> pathlib
@@ -329,8 +361,6 @@ graph TD
     wikifier_parsers_javascript_py -.-> sys
     wikifier_parsers_javascript_py -.-> warnings
     wikifier_parsers_javascript_py -.-> wikifier_diagnostics
-    wikifier_parsers_javascript_py -.-> tempfile
-    wikifier_parsers_javascript_py -.-> shutil
     wikifier_parsers_javascript_py -.-> pathlib
     wikifier_parsers_javascript_py -.-> typing
     wikifier_parsers_javascript_py --> wikifier_parsers_bree_py
@@ -341,14 +371,11 @@ graph TD
     wikifier_parsers_javascript_py -.-> wikifier_resolution
     wikifier_parsers_javascript_py --> wikifier_cli_py
     wikifier_parsers_javascript_py -.-> wikifier_contracts
-    wikifier_parsers_javascript_py -.-> wikifier_parsers_bree
-    wikifier_parsers_javascript_py -.-> wikifier_import_cache
     wikifier_parsers_python_py -.-> re
     wikifier_parsers_python_py -.-> sys
     wikifier_parsers_python_py -.-> wikifier_diagnostics
     wikifier_parsers_python_py -.-> tempfile
     wikifier_parsers_python_py -.-> os
-    wikifier_parsers_python_py -.-> json
     wikifier_parsers_python_py -.-> pathlib
     wikifier_parsers_python_py -.-> typing
     wikifier_parsers_python_py -.-> wikifier_parsers
@@ -361,13 +388,75 @@ graph TD
     wikifier_resolution_py -.-> os
     wikifier_resolution_py -.-> re
     wikifier_resolution_py -.-> time
-    wikifier_resolution_py -.-> tempfile
     wikifier_resolution_py -.-> dataclasses
     wikifier_resolution_py -.-> pathlib
     wikifier_resolution_py -.-> typing
     wikifier_resolution_py --> wikifier_contracts_py
+    tests_selftest_run_cdia_selftest_py -.-> sys
+    tests_selftest_run_cdia_selftest_py -.-> tempfile
+    tests_selftest_run_cdia_selftest_py -.-> pathlib
+    tests_selftest_run_cdia_selftest_py -.-> wikifier_parsers_cdia
+    tests_selftest_run_contracts_selftest_py -.-> sys
+    tests_selftest_run_contracts_selftest_py -.-> pathlib
+    tests_selftest_run_contracts_selftest_py -.-> wikifier_contracts
+    tests_selftest_run_javascript_selftest_py -.-> sys
+    tests_selftest_run_javascript_selftest_py -.-> wikifier_parsers_javascript
+    tests_selftest_run_javascript_selftest_py -.-> json
+    tests_selftest_run_javascript_selftest_py -.-> tempfile
+    tests_selftest_run_javascript_selftest_py -.-> os
+    tests_selftest_run_javascript_selftest_py -.-> shutil
+    tests_selftest_run_javascript_selftest_py -.-> pathlib
+    tests_selftest_run_javascript_selftest_py -.-> wikifier_parsers_bree
+    tests_selftest_run_javascript_selftest_py -.-> wikifier_import_cache
+    tests_selftest_run_python_parser_selftest_py -.-> sys
+    tests_selftest_run_python_parser_selftest_py -.-> json
+    tests_selftest_run_python_parser_selftest_py -.-> pathlib
+    tests_selftest_run_python_parser_selftest_py -.-> wikifier_parsers_python
+    tests_selftest_run_resolution_selftest_py -.-> sys
+    tests_selftest_run_resolution_selftest_py -.-> tempfile
+    tests_selftest_run_resolution_selftest_py -.-> os
+    tests_selftest_run_resolution_selftest_py -.-> pathlib
+    tests_selftest_run_resolution_selftest_py -.-> wikifier_resolution
+    tests_test_gap_closure_py -.-> importlib
+    tests_test_gap_closure_py -.-> unittest
+    tests_test_gap_closure_py -.-> wikifier
+    tests_test_gap_closure_py -.-> tests__base
+    tests_test_gap_closure_py -. ? .-> wikifier_health
+    tests_test_multi_lang_parsers_py -.-> unittest
+    tests_test_multi_lang_parsers_py -.-> importlib
+    tests_test_multi_lang_parsers_py -.-> os
+    tests_test_multi_lang_parsers_py -.-> time
+    tests_test_multi_lang_parsers_py -.-> pathlib
+    tests_test_multi_lang_parsers_py -.-> tests__base
+    tests_test_multi_lang_parsers_py -.-> wikifier_parsers
+    tests_test_multi_lang_parsers_py -.-> wikifier_cli
+    tests_test_multi_lang_parsers_py -. ? .-> wikifier_health
+    tests_test_selftest_wrappers_py -.-> runpy
+    tests_test_selftest_wrappers_py -.-> unittest
+    tests_test_selftest_wrappers_py -.-> pathlib
+    wikifier_parsers__edge_py -.-> typing
+    wikifier_parsers_c_cpp_py -.-> re
+    wikifier_parsers_c_cpp_py -.-> pathlib
+    wikifier_parsers_c_cpp_py -.-> typing
+    wikifier_parsers_c_cpp_py --> wikifier_parsers__edge_py
+    wikifier_parsers_csharp_py -.-> re
+    wikifier_parsers_csharp_py -.-> pathlib
+    wikifier_parsers_csharp_py -.-> typing
+    wikifier_parsers_csharp_py --> wikifier_parsers__edge_py
+    wikifier_parsers_go_lang_py -.-> re
+    wikifier_parsers_go_lang_py -.-> pathlib
+    wikifier_parsers_go_lang_py -.-> typing
+    wikifier_parsers_go_lang_py --> wikifier_parsers__edge_py
+    wikifier_parsers_java_py -.-> re
+    wikifier_parsers_java_py -.-> pathlib
+    wikifier_parsers_java_py -.-> typing
+    wikifier_parsers_java_py --> wikifier_parsers__edge_py
+    wikifier_parsers_rust_py -.-> re
+    wikifier_parsers_rust_py -.-> pathlib
+    wikifier_parsers_rust_py -.-> typing
+    wikifier_parsers_rust_py --> wikifier_parsers__edge_py
     classDef external fill:#eeeeee,stroke:#888888,stroke-dasharray: 3 3
-    class argparse,base64,collections,contextlib,dataclasses,datetime,enum,fcntl,fnmatch,hashlib,http_server,importlib,importlib_resources,json,mcp_server_fastmcp,msvcrt,os,pathlib,platform,pydantic,re,shutil,signal,subprocess,sys,tempfile,tests__base,textwrap,threading,time,traceback,typing,unittest,warnings,wikifier_cli,wikifier_contracts,wikifier_diagnostics,wikifier_import_cache,wikifier_parsers,wikifier_parsers_bree,wikifier_parsers_javascript,wikifier_parsers_python,wikifier_resolution external
+    class argparse,base64,collections,contextlib,dataclasses,datetime,enum,fcntl,fnmatch,hashlib,http_server,importlib,importlib_resources,json,mcp_server_fastmcp,msvcrt,os,pathlib,platform,pydantic,re,runpy,shutil,signal,subprocess,sys,tempfile,tests__base,textwrap,threading,time,traceback,typing,unittest,warnings,wikifier_cli,wikifier_contracts,wikifier_diagnostics,wikifier_import_cache,wikifier_parsers,wikifier_parsers_bree,wikifier_parsers_cdia,wikifier_parsers_javascript,wikifier_parsers_python,wikifier_resolution external
 ```
 
 ## Resolved Dependencies
@@ -384,12 +473,42 @@ graph TD
 | tests/run_all.py | pathlib → pathlib | medium |
 | tests/run_all.py | sys → sys | medium |
 | tests/run_all.py | unittest → unittest | medium |
+| tests/selftest/run_cdia_selftest.py | pathlib → pathlib | medium |
+| tests/selftest/run_cdia_selftest.py | sys → sys | medium |
+| tests/selftest/run_cdia_selftest.py | tempfile → tempfile | medium |
+| tests/selftest/run_cdia_selftest.py | wikifier.parsers.cdia → wikifier.parsers.cdia | medium |
+| tests/selftest/run_contracts_selftest.py | pathlib → pathlib | medium |
+| tests/selftest/run_contracts_selftest.py | sys → sys | medium |
+| tests/selftest/run_contracts_selftest.py | wikifier.contracts → wikifier.contracts | medium |
+| tests/selftest/run_javascript_selftest.py | json → json | medium |
+| tests/selftest/run_javascript_selftest.py | os → os | medium |
+| tests/selftest/run_javascript_selftest.py | pathlib → pathlib | medium |
+| tests/selftest/run_javascript_selftest.py | shutil → shutil | medium |
+| tests/selftest/run_javascript_selftest.py | sys → sys | medium |
+| tests/selftest/run_javascript_selftest.py | tempfile → tempfile | medium |
+| tests/selftest/run_javascript_selftest.py | wikifier.import_cache → wikifier.import_cache | medium |
+| tests/selftest/run_javascript_selftest.py | wikifier.parsers.bree → wikifier.parsers.bree | medium |
+| tests/selftest/run_javascript_selftest.py | wikifier.parsers.javascript → wikifier.parsers.javascript | medium |
+| tests/selftest/run_python_parser_selftest.py | json → json | medium |
+| tests/selftest/run_python_parser_selftest.py | pathlib → pathlib | medium |
+| tests/selftest/run_python_parser_selftest.py | sys → sys | medium |
+| tests/selftest/run_python_parser_selftest.py | wikifier.parsers.python → wikifier.parsers.python | medium |
+| tests/selftest/run_resolution_selftest.py | os → os | medium |
+| tests/selftest/run_resolution_selftest.py | pathlib → pathlib | medium |
+| tests/selftest/run_resolution_selftest.py | sys → sys | medium |
+| tests/selftest/run_resolution_selftest.py | tempfile → tempfile | medium |
+| tests/selftest/run_resolution_selftest.py | wikifier.resolution → wikifier.resolution | medium |
 | tests/test_barrel_invalidation.py | os → os | medium |
 | tests/test_barrel_invalidation.py | tests._base → tests._base | medium |
 | tests/test_barrel_invalidation.py | time → time | medium |
 | tests/test_barrel_invalidation.py | unittest → unittest | medium |
 | tests/test_barrel_invalidation.py | wikifier → wikifier | medium |
 | tests/test_barrel_invalidation.py | wikifier.parsers.javascript → wikifier.parsers.javascript | medium |
+| tests/test_gap_closure.py | "wikifier.health" → wikifier.health | low |
+| tests/test_gap_closure.py | importlib → importlib | medium |
+| tests/test_gap_closure.py | tests._base → tests._base | medium |
+| tests/test_gap_closure.py | unittest → unittest | medium |
+| tests/test_gap_closure.py | wikifier → wikifier | medium |
 | tests/test_health.py | "wikifier.health" → wikifier.health | low |
 | tests/test_health.py | datetime → datetime | medium |
 | tests/test_health.py | importlib → importlib | medium |
@@ -399,15 +518,28 @@ graph TD
 | tests/test_import_cache.py | tests._base → tests._base | medium |
 | tests/test_import_cache.py | unittest → unittest | medium |
 | tests/test_import_cache.py | wikifier → wikifier | medium |
+| tests/test_multi_lang_parsers.py | "wikifier.health" → wikifier.health | low |
+| tests/test_multi_lang_parsers.py | importlib → importlib | medium |
+| tests/test_multi_lang_parsers.py | os → os | medium |
+| tests/test_multi_lang_parsers.py | pathlib → pathlib | medium |
+| tests/test_multi_lang_parsers.py | tests._base → tests._base | medium |
+| tests/test_multi_lang_parsers.py | time → time | medium |
+| tests/test_multi_lang_parsers.py | unittest → unittest | medium |
+| tests/test_multi_lang_parsers.py | wikifier.cli → wikifier.cli | medium |
+| tests/test_multi_lang_parsers.py | wikifier.parsers → wikifier.parsers | medium |
 | tests/test_parsers.py | os → os | medium |
 | tests/test_parsers.py | tests._base → tests._base | medium |
 | tests/test_parsers.py | textwrap → textwrap | medium |
 | tests/test_parsers.py | unittest → unittest | medium |
 | tests/test_parsers.py | wikifier.parsers.javascript → wikifier.parsers.javascript | medium |
 | tests/test_parsers.py | wikifier.parsers.python → wikifier.parsers.python | medium |
+| tests/test_selftest_wrappers.py | pathlib → pathlib | medium |
+| tests/test_selftest_wrappers.py | runpy → runpy | medium |
+| tests/test_selftest_wrappers.py | unittest → unittest | medium |
 | wikifier/__init__.py | . → wikifier | medium |
 | wikifier/__init__.py | .cli → wikifier/cli.py | high |
 | wikifier/__init__.py | .contracts → wikifier/contracts.py | high |
+| wikifier/__init__.py | sys → sys | medium |
 | wikifier/__main__.py | .cli → wikifier/cli.py | high |
 | wikifier/cli.py | . → wikifier | medium |
 | wikifier/cli.py | .contracts → wikifier/contracts.py | high |
@@ -434,7 +566,6 @@ graph TD
 | wikifier/contracts.py | fnmatch → fnmatch | medium |
 | wikifier/contracts.py | json → json | medium |
 | wikifier/contracts.py | pathlib → pathlib | medium |
-| wikifier/contracts.py | sys → sys | medium |
 | wikifier/contracts.py | typing → typing | medium |
 | wikifier/daemon.py | .cli → wikifier/cli.py | high |
 | wikifier/daemon.py | datetime → datetime | medium |
@@ -508,6 +639,8 @@ graph TD
 | wikifier/mcp/server.py | typing → typing | medium |
 | wikifier/mcp/server.py | wikifier.cli → wikifier.cli | medium |
 | wikifier/mcp/server.py | wikifier.import_cache → wikifier.import_cache | medium |
+| wikifier/parsers/__init__.py | . → wikifier.parsers | medium |
+| wikifier/parsers/_edge.py | typing → typing | medium |
 | wikifier/parsers/bree.py | .. → wikifier | medium |
 | wikifier/parsers/bree.py | ..cli → wikifier/cli.py | high |
 | wikifier/parsers/bree.py | ..resolution → wikifier/resolution.py | high |
@@ -521,14 +654,28 @@ graph TD
 | wikifier/parsers/bree.py | typing → typing | medium |
 | wikifier/parsers/bree.py | warnings → warnings | medium |
 | wikifier/parsers/bree.py | wikifier.resolution → wikifier.resolution | medium |
+| wikifier/parsers/c_cpp.py | ._edge → wikifier/parsers/_edge.py | high |
+| wikifier/parsers/c_cpp.py | pathlib → pathlib | medium |
+| wikifier/parsers/c_cpp.py | re → re | medium |
+| wikifier/parsers/c_cpp.py | typing → typing | medium |
 | wikifier/parsers/cdia.py | base64 → base64 | medium |
 | wikifier/parsers/cdia.py | dataclasses → dataclasses | medium |
 | wikifier/parsers/cdia.py | json → json | medium |
 | wikifier/parsers/cdia.py | pathlib → pathlib | medium |
 | wikifier/parsers/cdia.py | re → re | medium |
-| wikifier/parsers/cdia.py | sys → sys | medium |
-| wikifier/parsers/cdia.py | tempfile → tempfile | medium |
 | wikifier/parsers/cdia.py | typing → typing | medium |
+| wikifier/parsers/csharp.py | ._edge → wikifier/parsers/_edge.py | high |
+| wikifier/parsers/csharp.py | pathlib → pathlib | medium |
+| wikifier/parsers/csharp.py | re → re | medium |
+| wikifier/parsers/csharp.py | typing → typing | medium |
+| wikifier/parsers/go_lang.py | ._edge → wikifier/parsers/_edge.py | high |
+| wikifier/parsers/go_lang.py | pathlib → pathlib | medium |
+| wikifier/parsers/go_lang.py | re → re | medium |
+| wikifier/parsers/go_lang.py | typing → typing | medium |
+| wikifier/parsers/java.py | ._edge → wikifier/parsers/_edge.py | high |
+| wikifier/parsers/java.py | pathlib → pathlib | medium |
+| wikifier/parsers/java.py | re → re | medium |
+| wikifier/parsers/java.py | typing → typing | medium |
 | wikifier/parsers/javascript.py | . → wikifier.parsers | medium |
 | wikifier/parsers/javascript.py | .. → wikifier | medium |
 | wikifier/parsers/javascript.py | ..cli → wikifier/cli.py | high |
@@ -539,22 +686,17 @@ graph TD
 | wikifier/parsers/javascript.py | os → os | medium |
 | wikifier/parsers/javascript.py | pathlib → pathlib | medium |
 | wikifier/parsers/javascript.py | re → re | medium |
-| wikifier/parsers/javascript.py | shutil → shutil | medium |
 | wikifier/parsers/javascript.py | sys → sys | medium |
-| wikifier/parsers/javascript.py | tempfile → tempfile | medium |
 | wikifier/parsers/javascript.py | typing → typing | medium |
 | wikifier/parsers/javascript.py | warnings → warnings | medium |
 | wikifier/parsers/javascript.py | wikifier.contracts → wikifier.contracts | medium |
 | wikifier/parsers/javascript.py | wikifier.diagnostics → wikifier.diagnostics | medium |
-| wikifier/parsers/javascript.py | wikifier.import_cache → wikifier.import_cache | medium |
-| wikifier/parsers/javascript.py | wikifier.parsers.bree → wikifier.parsers.bree | medium |
 | wikifier/parsers/javascript.py | wikifier.resolution → wikifier.resolution | medium |
 | wikifier/parsers/python.py | . → wikifier.parsers | medium |
 | wikifier/parsers/python.py | .. → wikifier | medium |
 | wikifier/parsers/python.py | ..cdia → wikifier/parsers/cdia.py | high |
 | wikifier/parsers/python.py | .cdia → wikifier/parsers/cdia.py | high |
 | wikifier/parsers/python.py | .javascript → wikifier/parsers/javascript.py | high |
-| wikifier/parsers/python.py | json → json | medium |
 | wikifier/parsers/python.py | os → os | medium |
 | wikifier/parsers/python.py | pathlib → pathlib | medium |
 | wikifier/parsers/python.py | re → re | medium |
@@ -563,6 +705,10 @@ graph TD
 | wikifier/parsers/python.py | typing → typing | medium |
 | wikifier/parsers/python.py | wikifier.contracts → wikifier.contracts | medium |
 | wikifier/parsers/python.py | wikifier.diagnostics → wikifier.diagnostics | medium |
+| wikifier/parsers/rust.py | ._edge → wikifier/parsers/_edge.py | high |
+| wikifier/parsers/rust.py | pathlib → pathlib | medium |
+| wikifier/parsers/rust.py | re → re | medium |
+| wikifier/parsers/rust.py | typing → typing | medium |
 | wikifier/resolution.py | .contracts → wikifier/contracts.py | high |
 | wikifier/resolution.py | base64 → base64 | medium |
 | wikifier/resolution.py | dataclasses → dataclasses | medium |
@@ -570,7 +716,6 @@ graph TD
 | wikifier/resolution.py | os → os | medium |
 | wikifier/resolution.py | pathlib → pathlib | medium |
 | wikifier/resolution.py | re → re | medium |
-| wikifier/resolution.py | tempfile → tempfile | medium |
 | wikifier/resolution.py | time → time | medium |
 | wikifier/resolution.py | typing → typing | medium |
 | wikifier/serve.py | . → wikifier | medium |
@@ -595,30 +740,33 @@ Top cyclic clusters:
 
 ## ACS Risk Snapshot
 
-**Scored edges**: 74 | **avg_confidence**: 0.72 | **low-confidence**: 30 (threshold 0.65)
-**Top risk reasons**: base:high:44, base:medium:28, no_resolved_path:28, base:low:2
+**Scored edges**: 81 | **avg_confidence**: 0.66 | **low-confidence**: 37 (threshold 0.65)
+**Top risk reasons**: base:high:44, base:medium:28, no_resolved_path:28, base:low:9
 **Sample low-confidence edges**:
   1. Base low (0.05). conditional context; ternary semantics; computed_path semantics; detector:TernaryDetector; trace: TernaryDetector=importlib.import_module("wikifier.health")
 
 #. Recommendation: Runtime conditional, feature-controlled or barrel-mediated — behavior or target may vary by deployment/build; inspect predicate + usage site before relying on the edge for changes.
-  2. Base low (0.05). opaque dynamic expression; high complexity; conditional_dynamic semantics; conditional context; trace: ControlFlowDetector=if; TernaryDetector=importlib.import_module() / __import__ now fu. Recommendation: Opaque or high-complexity dynamic resolution — refactor to static import or introduce explicit runtime guard; current edge is unsuitable for static analysis tooling.
-  3. Base medium (0.48). unresolved target. Recommendation: Low-confidence or fragile edge — review the concrete usage site and consider hardening the import (or pin resolution) before trusting the dependency for automation.
+  2. Base low (0.05). creative registry_map (LDSI/CDIA); conditional context; control_flow semantics; ternary semantics; trace: ControlFlowDetector=try; TernaryDetector=importlib.import_module("wikifier.health")
+
+. Recommendation: Extremely creative dynamic (tagged template / registry map / multi-cond feature / call-produced path) — CDIA detectors fired; supply static mappings or treat as runtime-only for dependency graphs.
+  3. Base low (0.05). creative registry_map (LDSI/CDIA); conditional context; control_flow semantics; ternary semantics; trace: ControlFlowDetector=try; TernaryDetector=importlib.import_module("wikifier.health")
+. Recommendation: Extremely creative dynamic (tagged template / registry map / multi-cond feature / call-produced path) — CDIA detectors fired; supply static mappings or treat as runtime-only for dependency graphs.
 
 ## Reverse Dependencies ("Who depends on me")
 
-**Targets with dependents**: 13 | **Total reverse edges**: 37
+**Targets with dependents**: 14 | **Total reverse edges**: 45
 
 **High-impact modules (most reverse dependents)**:
 - `wikifier` ← 8 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/health.py, wikifier/import_cache.py)
 - `wikifier/cli.py` ← 7 files depend on it (e.g. wikifier/__init__.py, wikifier/__main__.py, wikifier/daemon.py, wikifier/import_cache.py)
+- `wikifier/parsers/_edge.py` ← 5 files depend on it (e.g. wikifier/parsers/c_cpp.py, wikifier/parsers/csharp.py, wikifier/parsers/go_lang.py, wikifier/parsers/java.py)
+- `wikifier.health` ← 4 files depend on it (e.g. tests/test_gap_closure.py, tests/test_health.py, tests/test_multi_lang_parsers.py, wikifier/mcp/server.py)
 - `wikifier/contracts.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/import_cache.py, wikifier/resolution.py)
 - `wikifier/resolution.py` ← 4 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py, wikifier/parsers/bree.py, wikifier/parsers/javascript.py)
-- `wikifier.health` ← 2 files depend on it (e.g. tests/test_health.py, wikifier/mcp/server.py)
-- `wikifier.parsers` ← 2 files depend on it (e.g. wikifier/parsers/javascript.py, wikifier/parsers/python.py)
+- `wikifier.parsers` ← 3 files depend on it (e.g. wikifier/parsers/__init__.py, wikifier/parsers/javascript.py, wikifier/parsers/python.py)
 - `wikifier/parsers/__init__.py` ← 2 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache.py)
 - `wikifier/parsers/bree.py` ← 2 files depend on it (e.g. wikifier/import_cache.py, wikifier/parsers/javascript.py)
 - `wikifier/parsers/cdia.py` ← 2 files depend on it (e.g. wikifier/parsers/javascript.py, wikifier/parsers/python.py)
-- `wikifier/import_cache.py` ← 1 files depend on it (e.g. wikifier/cli.py)
 
 ## Barrel Expansions
 
@@ -630,8 +778,8 @@ Top cyclic clusters:
 
 ## Conditional & Dynamic Intelligence
 
-**Conditional imports detected**: 9
-**Dynamic imports detected**: 9
+**Conditional imports detected**: 13
+**Dynamic imports detected**: 13
 
 Sample conditional imports (fragile / feature-flagged paths):
 - `tests/test_health.py` → `"wikifier.health"`  (ctx: )

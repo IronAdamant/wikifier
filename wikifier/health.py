@@ -4,9 +4,11 @@ Documentation health matrix (agent-first).
 AGENT MAP:
   load_health / save_health / upsert_entry — file_health.json SSOT (+ regenerate .md)
   get_summary / get_files_needing_attention — 🟢🟡🔴 counts and lists
-  find_ghost_entries / validate_health — missing disk paths vs missing wiki rows
+  find_ghost_entries / validate_health — map-first gaps + ghosts (parseable sources only)
+  seed_health_from_map — backfill 🟡 stubs from import_cache (warm-cache safe)
+  prune_pending_to_monitored / prune_health_outside_monitored — lean-monitor hygiene
   mark_green / heal_stubs / apply_barrel_invalidation_reports — status mutations
-  CLI: python -m wikifier.health <summary|validate|heal-stubs|...>
+  CLI: seed-health | prune-pending | prune-health | validate | health --summary
 Agents: prefer MCP health / check_changes / mark_green; only open this for matrix policy.
 
 JSON Schema (v2 - additive from v1):
@@ -156,21 +158,31 @@ def _normalize_to_relative(root: Path, file_key: str) -> str:
 
 def _entry_is_under_root(root: Path, file_key: str) -> bool:
     """Return True only for entries whose path (abs or rel) resolves under the project root.
-    Filters pollution from other trees (e.g. worktrees, main wikifier source during dogfood).
-    Uses relative_to (raises on not-under) for correctness even on prefix-overlap cases like
-    "root/home/..." treating bad relative key.
-    Heuristic: keys that look like fs-absolute (start home/ or many parts) are resolved as absolute.
+
+    Filters pollution from other trees (worktrees, cross-project abs paths).
+    Relative monorepo keys may be deep (e.g. a/b/c/d/e/f.py) — never treat depth alone
+    as absolute (that broke seed_health_from_map on airflow/llvm-style trees).
     """
     try:
         p = Path(file_key)
         r = root.resolve()
         key_str = str(file_key)
-        # M5.1 hardening (gaps 2/3/5 health/cli for external abs paths; ONLY from M5-Dogfood-Assessment-Report.md full + Progress tail last100 + key: "without pollution or "path does not exist"" on alt/Recipe/Consistency/llama/llvm after abs monitored_paths.txt + health auto-prune out-of-root + ./wikifier.sh + CLI guards + python-primary w/ dir/max; ~20+ BRC y on alt from AdversarialScaffoldGenerator/CrossMCPRecipeValidator/MCPOrchestrationDashboard etc w/ chains; stele 6 mismatches; chisel 84 edges/0; llvm 168k u/4min/1363 chains; agent 100t/7e doom; current 60%; 8 gaps 10 DoD; 1-2y lean "Pruned 0" everywhere. Added /coding_projects/ + / for sibling cross (Chisel/Trammel/stele/Coord) + general abs; if not already fixed history. #2 zero-dep, #8 boundary (wikifier/health only), #9 measurable exact #s, #1 spectrum, #7 MA context.
-        if p.is_absolute() or key_str.startswith(("home/", "/home/", "Users/", "/Users/", "/coding_projects/", "coding_projects/", "/")) or len(p.parts) > 5:
-            # treat as absolute fs path (common when str(p) was stored for outside files)
+        # Absolute-looking keys only (not "many path parts" — deep relative is valid).
+        looks_abs = (
+            p.is_absolute()
+            or key_str.startswith((
+                "home/", "/home/", "Users/", "/Users/",
+                "/coding_projects/", "coding_projects/",
+                "/var/", "/tmp/", "/private/",
+            ))
+        )
+        if looks_abs:
             if not p.is_absolute():
                 p = Path("/") / p
-            p = p.resolve()
+            try:
+                p = p.resolve()
+            except Exception:
+                p = Path("/") / key_str.lstrip("/")
         else:
             p = (root / p).resolve()
         _ = p.relative_to(r)
@@ -738,6 +750,50 @@ def _build_simple_exclude_set(root: Path) -> set:
     return exc
 
 
+# Parseable / deep-map source suffixes (align with update-maps collectors).
+# validate map-first only requires health for these — not every README/png under monitored.
+PARSEABLE_SOURCE_SUFFIXES = frozenset({
+    ".py", ".pyi",
+    ".js", ".jsx", ".mjs", ".cjs",
+    ".ts", ".tsx",
+    ".rs",
+    ".go",
+    ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh",
+    ".cs",
+    ".java",
+})
+
+
+def _read_monitored_rel_roots(root: Path) -> List[str]:
+    monitored_file = root / "monitored_paths.txt"
+    if monitored_file.exists():
+        try:
+            roots = [
+                ln.strip()
+                for ln in monitored_file.read_text(encoding="utf-8").splitlines()
+                if ln.strip() and not ln.strip().startswith("#")
+            ]
+            if roots:
+                return roots
+        except Exception:
+            pass
+    return ["."]
+
+
+def _under_monitored(rel: str, monitored_rels: List[str]) -> bool:
+    """True if rel is inside any monitored relative root (or monitor is '.')."""
+    if not monitored_rels or monitored_rels == ["."]:
+        return True
+    rel_n = rel.replace("\\", "/").lstrip("./")
+    for m in monitored_rels:
+        m_n = m.replace("\\", "/").rstrip("/")
+        if m_n in (".", ""):
+            return True
+        if rel_n == m_n or rel_n.startswith(m_n + "/"):
+            return True
+    return False
+
+
 def find_ghost_entries(root: Path) -> List[str]:
     """G7: Health keys that look like project files but no longer exist on disk.
 
@@ -747,9 +803,8 @@ def find_ghost_entries(root: Path) -> List[str]:
     root = Path(root).resolve()
     health = load_health(root)
     ghosts: List[str] = []
-    source_suffixes = (
-        ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".md", ".json",
-        ".sh", ".toml", ".yaml", ".yml",
+    source_suffixes = tuple(PARSEABLE_SOURCE_SUFFIXES) + (
+        ".md", ".json", ".sh", ".toml", ".yaml", ".yml", ".html",
     )
     for key, entry in (health.get("entries") or {}).items():
         if not isinstance(key, str) or not key or key.startswith("/"):
@@ -773,34 +828,262 @@ def find_ghost_entries(root: Path) -> List[str]:
     return sorted(set(ghosts))
 
 
+def _load_map_file_keys(root: Path) -> List[str]:
+    """Non-reserved import_cache keys (mapped source files)."""
+    try:
+        from . import import_cache as ic
+        cache = ic.load_cache(root) or {}
+    except Exception:
+        cache = {}
+        cache_path = root / ".wikifier_staging" / "import_cache.json"
+        if cache_path.exists():
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cache = json.load(f) or {}
+            except Exception:
+                cache = {}
+    keys = []
+    for k in cache:
+        if not isinstance(k, str) or not k or k.startswith("_"):
+            continue
+        if _looks_like_path_key(k):
+            keys.append(k)
+    return keys
+
+
+def seed_health_from_map(
+    root: Path,
+    map_keys: Optional[List[str]] = None,
+    max_new: int = 10000,
+    only_monitored: Optional[bool] = None,
+    reason: str = (
+        "Initial stub — present in dependency map; "
+        "agent should wiki + mark-green when editing"
+    ),
+) -> Dict[str, Any]:
+    """Map-first: ensure mapped files have at least a 🟡 health stub.
+
+    Fixes warm-cache projects where update-maps never re-parses (0 dirty) and
+    therefore never creates file_health.json. Batched single save (no N locks).
+
+    only_monitored: default True when monitored_paths is lean (not bare '.'),
+    so we do not seed the entire monorepo map into health then fight prune.
+    """
+    root = _coerce_root(root)
+    keys = list(map_keys) if map_keys is not None else _load_map_file_keys(root)
+    max_new = max(0, min(int(max_new), 100000))
+    monitored = _read_monitored_rel_roots(root)
+    if only_monitored is None:
+        only_monitored = not (monitored == ["."] or monitored == [])
+    if only_monitored:
+        keys = [k for k in keys if _under_monitored(k, monitored)]
+
+    def _work() -> Dict[str, Any]:
+        health = load_health(root)
+        entries = health.setdefault("entries", {})
+        before = len(entries)
+        seeded = 0
+        now = _timestamp()
+        for rel in keys:
+            if seeded >= max_new:
+                break
+            if not isinstance(rel, str) or not rel or rel.startswith("_"):
+                continue
+            if rel in entries:
+                continue
+            if not _entry_is_under_root(root, rel) or _is_pollution_health_key(rel):
+                continue
+            base = {
+                "status": "🟡 Yellow",
+                "last_updated": now,
+                "reason": reason,
+                "freshness_provenance": "seed_health_from_map",
+            }
+            if contracts and hasattr(contracts, "normalize_health_entry"):
+                base = contracts.normalize_health_entry(base)
+            else:
+                base = _normalize_health_entry_local(base)
+            entries[rel] = base
+            seeded += 1
+        if seeded > 0 or before == 0:
+            # Always persist when empty health so file_health.json exists for agents
+            health["entries"] = entries
+            _do_save_health(root, health)
+        return {
+            "success": True,
+            "seeded": seeded,
+            "mapped_keys_considered": len(keys),
+            "mapped_keys": len(keys),
+            "only_monitored": only_monitored,
+            "monitored": monitored,
+            "health_entries_before": before,
+            "health_entries_after": len(entries),
+            "max_new": max_new,
+            "root": str(root),
+        }
+
+    if locking:
+        with locking.file_lock(root):
+            return _work()
+    return _work()
+
+
+def seed_health_for_monitored_sources(
+    root: Path,
+    max_new: int = 20000,
+    reason: str = (
+        "Initial stub — parseable source under monitored_paths; "
+        "agent should wiki + mark-green when editing"
+    ),
+) -> Dict[str, Any]:
+    """Walk monitored parseable sources and stub any missing health rows.
+
+    Complements seed_health_from_map when the map is scoped/partial but
+    monitored_paths still contains on-disk sources (e.g. rust std tree).
+    """
+    root = _coerce_root(root)
+    monitored_roots = _read_monitored_rel_roots(root)
+    excludes = _build_simple_exclude_set(root)
+    internal_skips = {".git", ".wikifier_staging", "journal", "Logged_issues", "node_modules"}
+    found: List[str] = []
+    for r in monitored_roots:
+        base = (root / r).resolve()
+        if not base.exists():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d not in internal_skips and d not in excludes]
+            for fname in filenames:
+                fpath = Path(dirpath) / fname
+                if fpath.suffix.lower() not in PARSEABLE_SOURCE_SUFFIXES:
+                    continue
+                try:
+                    rel = str(fpath.relative_to(root))
+                except Exception:
+                    continue
+                parts = Path(rel).parts
+                if any(p in excludes or p in internal_skips for p in parts):
+                    continue
+                found.append(rel)
+    return seed_health_from_map(
+        root,
+        map_keys=found,
+        max_new=max_new,
+        only_monitored=False,
+        reason=reason,
+    )
+
+
+def prune_pending_to_monitored(root: Path, drop_auto_detected: bool = True) -> Dict[str, Any]:
+    """Drop pending bullets outside monitored_paths (and optional auto-detected noise).
+
+    drop_auto_detected: remove check-changes thrash lines ("Auto-detected modification").
+    Map-first stubs live as 🟡 health rows; they do not need a huge pending flood.
+    """
+    root = _coerce_root(root)
+    monitored = _read_monitored_rel_roots(root)
+
+    def _work() -> Dict[str, Any]:
+        lines = _read_pending_lines(root)
+        items = _pending_item_lines(lines)
+        kept: List[str] = []
+        removed = 0
+        removed_auto = 0
+        for ln in items:
+            body = ln[2:] if ln.startswith("- ") else ln
+            fpath = body.split(":", 1)[0].strip()
+            msg = body.split(":", 1)[1] if ":" in body else ""
+            if drop_auto_detected and "auto-detected" in msg.lower():
+                removed += 1
+                removed_auto += 1
+                continue
+            if _under_monitored(fpath, monitored):
+                kept.append(ln)
+            else:
+                removed += 1
+        _write_pending_lines(root, kept)
+        return {
+            "success": True,
+            "removed": removed,
+            "removed_auto_detected": removed_auto,
+            "kept": len(kept),
+            "monitored": monitored,
+            "root": str(root),
+        }
+
+    if locking:
+        with locking.file_lock(root):
+            return _work()
+    return _work()
+
+
+def prune_health_outside_monitored(
+    root: Path,
+    keep_deleted_audits: bool = True,
+) -> Dict[str, Any]:
+    """Remove health rows outside lean monitored_paths (cuts yellow floods).
+
+    Keeps 🔴 DELETED audit rows when keep_deleted_audits=True.
+    """
+    root = _coerce_root(root)
+    monitored = _read_monitored_rel_roots(root)
+
+    def _work() -> Dict[str, Any]:
+        health = load_health(root)
+        entries = health.get("entries") or {}
+        kept: Dict[str, Any] = {}
+        removed = 0
+        for k, v in entries.items():
+            ent = v if isinstance(v, dict) else {}
+            status = str(ent.get("status") or "")
+            reason = str(ent.get("reason") or "")
+            if keep_deleted_audits and ("DELETED" in reason or "DELETED" in status):
+                if _looks_like_path_key(k):
+                    kept[k] = v
+                    continue
+            if _under_monitored(str(k), monitored):
+                kept[k] = v
+            else:
+                removed += 1
+        health["entries"] = kept
+        _do_save_health(root, health)
+        return {
+            "success": True,
+            "removed": removed,
+            "kept": len(kept),
+            "monitored": monitored,
+            "root": str(root),
+        }
+
+    if locking:
+        with locking.file_lock(root):
+            return _work()
+    return _work()
+
+
 def validate_health(root: Path) -> Dict[str, Any]:
     """
-    Reliable, subshell-free implementation of 'validate'.
-    Scans monitored paths (respecting excludes + internal skips), reports files
-    missing from the health matrix (JSON or migrated MD).
-    Returns structured result for shell/Python/MCP callers.
-    Always succeeds (exit code driven by caller); never mutates state.
-    G7: also reports ghost_entries (health keys with missing disk paths).
+    Map-first health validation (agent-friendly).
+
+    - Scans **parseable source files** under monitored_paths only (not every
+      README/asset). Non-source files never count as missing.
+    - Also reports mapped files (import_cache) lacking a health row — the true
+      map-first gap when warm cache never re-parsed.
+    - G7: ghost_entries (health keys with missing disk paths).
+
+    Never mutates state. Exit code is caller-driven.
     """
+    root = _coerce_root(root)
     health = load_health(root)
     entries = health.get("entries", {})
     known = set(entries.keys())
 
-    monitored_file = root / "monitored_paths.txt"
-    if monitored_file.exists():
-        try:
-            monitored_roots = [ln.strip() for ln in monitored_file.read_text(encoding="utf-8").splitlines()
-                               if ln.strip() and not ln.strip().startswith("#")]
-        except Exception:
-            monitored_roots = ["."]
-    else:
-        monitored_roots = ["."]
-
+    monitored_roots = _read_monitored_rel_roots(root)
     excludes = _build_simple_exclude_set(root)
-    internal_skips = {".git", ".wikifier_staging", "journal", "Logged_issues"}
+    internal_skips = {".git", ".wikifier_staging", "journal", "Logged_issues", "node_modules"}
 
     missing: List[str] = []
     total_scanned = 0
+    non_source_skipped = 0
 
     for r in monitored_roots:
         if not r:
@@ -809,32 +1092,60 @@ def validate_health(root: Path) -> Dict[str, Any]:
         if not base.exists():
             continue
         for dirpath, dirnames, filenames in os.walk(base):
-            # prune internal dirs
-            dirnames[:] = [d for d in dirnames if d not in internal_skips]
+            dirnames[:] = [d for d in dirnames if d not in internal_skips and d not in excludes]
             for fname in filenames:
                 fpath = Path(dirpath) / fname
+                suf = fpath.suffix.lower()
+                if suf not in PARSEABLE_SOURCE_SUFFIXES:
+                    non_source_skipped += 1
+                    continue
                 total_scanned += 1
                 try:
                     rel = str(fpath.relative_to(root))
                 except Exception:
                     rel = str(fpath)
-                # skip if any exclude component matches
                 parts = Path(rel).parts
                 if any(p in excludes or p in internal_skips for p in parts):
                     continue
                 if rel not in known:
                     missing.append(rel)
 
-    missing = sorted(set(missing))  # dedup + stable
+    missing = sorted(set(missing))
     ghosts = find_ghost_entries(root)
+
+    mapped_keys = _load_map_file_keys(root)
+    mapped_without_health = sorted(k for k in mapped_keys if k not in known)
+    # In-scope map gaps only (respect lean monitored_paths)
+    mapped_in_scope = [k for k in mapped_keys if _under_monitored(k, monitored_roots)]
+    mapped_in_scope_without_health = sorted(k for k in mapped_in_scope if k not in known)
+    # Primary agent signal: monitored parseable missing ∪ in-scope mapped missing
+    primary_missing = sorted(set(missing) | set(mapped_in_scope_without_health))
+
     return {
-        "missing_count": len(missing),
-        "missing": missing,
+        "missing_count": len(primary_missing),
+        "missing": primary_missing[:200],
+        "missing_monitored_source_count": len(missing),
+        "missing_monitored_source": missing[:200],
+        "mapped_without_health_count": len(mapped_without_health),
+        "mapped_without_health": mapped_without_health[:50],
+        "mapped_in_scope_without_health_count": len(mapped_in_scope_without_health),
+        "mapped_in_scope_without_health": mapped_in_scope_without_health[:200],
+        "mapped_in_scope_count": len(mapped_in_scope),
         "ghost_count": len(ghosts),
-        "ghosts": ghosts,
+        "ghosts": ghosts[:200],
         "total_scanned": total_scanned,
+        "non_source_skipped": non_source_skipped,
         "health_entries": len(known),
-        "root": str(root)
+        "mapped_files": len(mapped_keys),
+        "monitored_roots": monitored_roots,
+        "map_first": True,
+        "note": (
+            "Map-first validate: missing_count = parseable sources under monitored_paths "
+            "plus mapped files under those paths lacking health. Full-map gaps outside "
+            "lean monitors are informational (mapped_without_health_count). Non-source "
+            "files are ignored."
+        ),
+        "root": str(root),
     }
 
 

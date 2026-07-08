@@ -1,0 +1,630 @@
+[
+  {
+    "project": "airflow",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/airflow",
+    "plan": {
+      "directory": "airflow-core/src",
+      "max_files": 100,
+      "force_full": false
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:39:00.698298+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 0,
+      "ghosts_marked": 0,
+      "pending_pruned": 0,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/airflow",
+      "seconds": 1.19,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 5.97,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/airflow",
+      "mode": "incremental",
+      "parseable_files": 1444,
+      "files_parsed": 0,
+      "files_to_reparse": 0,
+      "files_skipped": 0,
+      "edges_persisted": 0,
+      "languages_parsed": {},
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.67,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 1445,
+      "green": 0,
+      "yellow": 1445,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:39:08"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 6624,
+      "missing_monitored_source_count": 0,
+      "health_entries": 1445,
+      "mapped_files": 8068,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 1445,
+      "acs_note": " ACS actionable_low=3755 (raw_low=3755, external_noise=0, avg=0.12)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 277277
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 8.9,
+    "finished": "2026-07-08T20:39:09.595636+00:00"
+  },
+  {
+    "project": "Babylon.js",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/Babylon.js",
+    "plan": {
+      "directory": "packages/dev/core/src",
+      "max_files": 100,
+      "force_full": false
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:39:09.595833+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 0,
+      "ghosts_marked": 0,
+      "pending_pruned": 0,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/Babylon.js",
+      "seconds": 1.41,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 10.95,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/Babylon.js",
+      "mode": "incremental",
+      "parseable_files": 1644,
+      "files_parsed": 0,
+      "files_to_reparse": 0,
+      "files_skipped": 0,
+      "edges_persisted": 0,
+      "languages_parsed": {},
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.9,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 1644,
+      "green": 0,
+      "yellow": 1644,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:39:22"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 2261,
+      "missing_monitored_source_count": 0,
+      "health_entries": 1644,
+      "mapped_files": 3905,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 1644,
+      "acs_note": " ACS actionable_low=17987 (raw_low=17987, external_noise=0, avg=0.59)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 290823
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 14.71,
+    "finished": "2026-07-08T20:39:24.305247+00:00"
+  },
+  {
+    "project": "dotnet-dotnet",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/dotnet-dotnet",
+    "plan": {
+      "directory": "src",
+      "max_files": 80,
+      "force_full": true
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:39:24.305397+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 26,
+      "ghosts_marked": 0,
+      "pending_pruned": 26,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/dotnet-dotnet",
+      "seconds": 0.17,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 67.33,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/dotnet-dotnet",
+      "mode": "full",
+      "parseable_files": 104289,
+      "files_parsed": 80,
+      "files_to_reparse": 104289,
+      "files_skipped": 104209,
+      "edges_persisted": 292,
+      "languages_parsed": {
+        ".py": 1,
+        ".cs": 79
+      },
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.03,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 26,
+      "green": 0,
+      "yellow": 26,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:40:31"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 850,
+      "missing_monitored_source_count": 0,
+      "health_entries": 26,
+      "mapped_files": 850,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 26,
+      "acs_note": " ACS actionable_low=828 (raw_low=828, external_noise=0, avg=0.6)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 214463
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 67.6,
+    "finished": "2026-07-08T20:40:31.902386+00:00"
+  },
+  {
+    "project": "linux",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/linux",
+    "plan": {
+      "directory": "init",
+      "max_files": 50,
+      "force_full": true
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:40:31.902472+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 0,
+      "ghosts_marked": 0,
+      "pending_pruned": 0,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/linux",
+      "seconds": 0.04,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 7.0,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/linux",
+      "mode": "full",
+      "parseable_files": 13,
+      "files_parsed": 13,
+      "files_to_reparse": 13,
+      "files_skipped": 0,
+      "edges_persisted": 239,
+      "languages_parsed": {
+        ".c": 11,
+        ".h": 2
+      },
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.01,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 13,
+      "green": 0,
+      "yellow": 13,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:40:38"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 374,
+      "missing_monitored_source_count": 0,
+      "health_entries": 13,
+      "mapped_files": 387,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 13,
+      "acs_note": " ACS actionable_low=17 (raw_low=17, external_noise=0, avg=0.8)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 111711
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 7.07,
+    "finished": "2026-07-08T20:40:38.973838+00:00"
+  },
+  {
+    "project": "llama_index",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llama_index",
+    "plan": {
+      "directory": null,
+      "max_files": 200,
+      "force_full": false
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:40:38.973893+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 0,
+      "ghosts_marked": 0,
+      "pending_pruned": 0,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llama_index",
+      "seconds": 0.41,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 2.26,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llama_index",
+      "mode": "incremental",
+      "parseable_files": 3837,
+      "files_parsed": 0,
+      "files_to_reparse": 0,
+      "files_skipped": 0,
+      "edges_persisted": 0,
+      "languages_parsed": {},
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.24,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 724,
+      "green": 0,
+      "yellow": 724,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:40:41"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 3113,
+      "missing_monitored_source_count": 0,
+      "health_entries": 724,
+      "mapped_files": 3837,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 724,
+      "acs_note": " ACS actionable_low=7 (raw_low=7, external_noise=0, avg=0.86)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 256853
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 3.25,
+    "finished": "2026-07-08T20:40:42.221203+00:00"
+  },
+  {
+    "project": "llvm-project",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llvm-project",
+    "plan": {
+      "directory": "llvm/lib/Support",
+      "max_files": 100,
+      "force_full": true
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:40:42.221315+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 324,
+      "ghosts_marked": 0,
+      "pending_pruned": 324,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llvm-project",
+      "seconds": 12.15,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 11.96,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/llvm-project",
+      "mode": "full",
+      "parseable_files": 192,
+      "files_parsed": 100,
+      "files_to_reparse": 192,
+      "files_skipped": 92,
+      "edges_persisted": 541,
+      "languages_parsed": {
+        ".cpp": 89,
+        ".c": 8,
+        ".h": 3
+      },
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.15,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 424,
+      "green": 0,
+      "yellow": 424,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:41:06"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 2938,
+      "missing_monitored_source_count": 0,
+      "health_entries": 424,
+      "mapped_files": 3038,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 424,
+      "acs_note": " ACS actionable_low=239 (raw_low=239, external_noise=0, avg=0.62)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 146147
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 24.47,
+    "finished": "2026-07-08T20:41:06.689160+00:00"
+  },
+  {
+    "project": "redox",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/redox",
+    "plan": {
+      "directory": null,
+      "max_files": null,
+      "force_full": true
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:41:06.689237+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 0,
+      "ghosts_marked": 0,
+      "pending_pruned": 0,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/redox",
+      "seconds": 0.01,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 0.29,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/redox",
+      "mode": "full",
+      "parseable_files": 31,
+      "files_parsed": 31,
+      "files_to_reparse": 31,
+      "files_skipped": 0,
+      "edges_persisted": 175,
+      "languages_parsed": {
+        ".c": 5,
+        ".cpp": 1,
+        ".go": 1,
+        ".java": 1,
+        ".js": 1,
+        ".py": 1,
+        ".rs": 21
+      },
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.01,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 27,
+      "green": 0,
+      "yellow": 27,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:41:06"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 4,
+      "missing_monitored_source_count": 0,
+      "health_entries": 27,
+      "mapped_files": 31,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 27,
+      "acs_note": " ACS actionable_low=16 (raw_low=80, external_noise=64, avg=0.62)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 37979
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 0.31,
+    "finished": "2026-07-08T20:41:07.000588+00:00"
+  },
+  {
+    "project": "rust",
+    "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/rust",
+    "plan": {
+      "directory": "library/std/src",
+      "max_files": 150,
+      "force_full": true
+    },
+    "version": "4.5.6",
+    "started": "2026-07-08T20:41:07.000643+00:00",
+    "check_changes": {
+      "success": true,
+      "changes_detected": 519,
+      "ghosts_marked": 0,
+      "pending_pruned": 519,
+      "project_root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/rust",
+      "seconds": 33.19,
+      "error": null
+    },
+    "update_maps": {
+      "success": true,
+      "seconds": 4.63,
+      "root": "/Users/aron/Documents/coding_projects/cloned_sample_projects/rust",
+      "mode": "full",
+      "parseable_files": 669,
+      "files_parsed": 150,
+      "files_to_reparse": 669,
+      "files_skipped": 519,
+      "edges_persisted": 805,
+      "languages_parsed": {
+        ".rs": 150
+      },
+      "health_stubs_seeded": 0,
+      "error": null
+    },
+    "hygiene": {
+      "seconds": 0.14,
+      "seed_map": 0,
+      "seed_disk": 0,
+      "prune_health_removed": 0,
+      "prune_pending_removed": 0,
+      "prune_pending_auto": 0
+    },
+    "health": {
+      "total": 669,
+      "green": 0,
+      "yellow": 669,
+      "red": 0,
+      "pending_updates": 0,
+      "directory": ".",
+      "version": 2,
+      "last_updated": "2026-07-09 06:41:44"
+    },
+    "validate": {
+      "missing_count": 0,
+      "mapped_in_scope_without_health_count": 0,
+      "mapped_without_health_count": 220,
+      "missing_monitored_source_count": 0,
+      "health_entries": 669,
+      "mapped_files": 370,
+      "map_first": true,
+      "ghost_count": 0
+    },
+    "suggest": {
+      "red": 0,
+      "yellow": 669,
+      "acs_note": " ACS actionable_low=197 (raw_low=235, external_noise=38, avg=0.75)."
+    },
+    "library": {
+      "exists": true,
+      "bytes": 147552
+    },
+    "has_health_json": true,
+    "success": true,
+    "issues": [],
+    "seconds_total": 38.11,
+    "finished": "2026-07-08T20:41:45.111858+00:00"
+  }
+]
