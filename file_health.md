@@ -3,7 +3,7 @@
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
 | .github/workflows/publish.yml | 🟢 Green | 2026-06-10 14:50:34 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
-| CHANGELOG.md | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
+| CHANGELOG.md | 🟢 Green | 2026-07-09 08:37:36 | 4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop) |
 | CLAUDE.md | 🟢 Green | 2026-07-09 06:14:09 | test count synced to 49 |
 | Findings/2026-06-10-Dogfood-Refactor-Validation.md | 🟢 Green | 2026-06-10 09:54:26 AEST | Self-describing findings doc |
 | Findings/2026-06-10-Fix-Plan.md | 🟢 Green | 2026-06-10 14:20:33 AEST | Results appended, all phases verified |
@@ -11,7 +11,7 @@
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
 | Findings/M5.1-cross-hardening-analysis.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
 | Findings/Milestones-Overview.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
-| Findings/agent-first-ideal-loop-2026-07-09.md | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
+| Findings/agent-first-ideal-loop-2026-07-09.md | 🟢 Green | 2026-07-09 08:37:36 | 4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop) |
 | Findings/dogfood-goal-pass1-2026-07-09.json | 🟢 Green | 2026-07-09 07:07:11 | goal verification complete |
 | Findings/dogfood-goal-pass2-2026-07-09.json | 🟢 Green | 2026-07-09 07:07:11 | goal verification complete |
 | Findings/dogfood-hygiene-fix-2026-07-09.json | 🟢 Green | 2026-07-09 06:34:48 | verified 53 tests; dogfood validate 0/8 |
@@ -40,7 +40,7 @@
 | tests/selftest/run_javascript_selftest.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/selftest/run_python_parser_selftest.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/selftest/run_resolution_selftest.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
-| tests/test_agent_loop.py | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
+| tests/test_agent_loop.py | 🟢 Green | 2026-07-09 08:37:36 | 4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop) |
 | tests/test_barrel_invalidation.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/test_gap_closure.py | 🟢 Green | 2026-07-09 08:07:42 | residual-1-5-closure verified; tests OK (subid=residual-1-5-closure) |
 | tests/test_health.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
@@ -51,14 +51,14 @@
 | wikifier.bat | 🟢 Green | 2026-06-10 14:50:33 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
 | wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:31 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier.sh | 🟢 Green | 2026-07-09 05:32:45 | gap-closure swarm verified 34/34 tests |
-| wikifier/__init__.py | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
+| wikifier/__init__.py | 🟢 Green | 2026-07-09 08:37:36 | 4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop) |
 | wikifier/__main__.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | wikifier/agent_loop.py | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
-| wikifier/cli.py | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
+| wikifier/cli.py | 🟢 Green | 2026-07-09 08:37:36 | 4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop) |
 | wikifier/contracts.py | 🟢 Green | 2026-07-09 06:13:34 | mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first) |
 | wikifier/daemon.py | 🟢 Green | 2026-07-09 07:58:09 | mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows) |
 | wikifier/diagnostics.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
-| wikifier/health.py | 🟢 Green | 2026-07-09 08:30:53 | agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop) |
+| wikifier/health.py | 🟢 Green | 2026-07-09 08:37:36 | 4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop) |
 | wikifier/import_cache.py | 🟢 Green | 2026-07-09 08:07:44 | post residual-1-5 hygiene mtime clear (subid=residual-1-5-closure) |
 | wikifier/index.html | 🟢 Green | 2026-06-11 00:20:18 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
 | wikifier/library.py | 🟢 Green | 2026-06-11 00:20:14 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |

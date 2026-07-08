@@ -1208,48 +1208,34 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                             if stored_hash and live and stored_hash == live:
                                 verdict = {"content_dirty": False, "reason": "content_unchanged", "seed_baseline": False, "hash": live}
                             elif not stored_hash and live:
-                                verdict = {"content_dirty": False, "reason": "no_baseline", "seed_baseline": True, "hash": live}
+                                # no baseline → dirty (do not seed post-edit hash)
+                                verdict = {"content_dirty": True, "reason": "no_baseline", "seed_baseline": False, "hash": live}
                             elif live and stored_hash and stored_hash != live:
                                 verdict = {"content_dirty": True, "reason": "content_changed", "seed_baseline": False, "hash": live}
                         except Exception:
                             pass
 
-                    if verdict.get("seed_baseline") and verdict.get("hash") and isinstance(ent, dict):
-                        ent["source_content_hash"] = verdict["hash"]
-                        entries[rel] = ent
-                        health_dirty = True
-                        seeded_baselines += 1
-                        # Do not Yellow solely for first baseline seed on mtime thrash
-                        continue
                     if not verdict.get("content_dirty") and verdict.get("reason") == "content_unchanged":
                         skipped_mtime_only += 1
                         continue
-                    # Content changed (or unclassifiable): Yellow with content reason
+                    # Content changed, no baseline, or unclassifiable: Yellow.
+                    # Never write source_content_hash here — only mark_green sets the
+                    # trusted baseline (avoids seeding post-edit bytes and staying Green).
                     reason = (
                         "content changed since last trusted baseline (check_changes content-honest)"
                         if verdict.get("reason") == "content_changed"
                         else "content change or no baseline (check_changes content-honest auto-detect)"
                     )
                     _upsert(root, rel, "🟡 Yellow", reason)
-                    # refresh local entries view after upsert
                     try:
                         health_data = _health_mod.load_health(root)
                         entries = health_data.setdefault("entries", {})
-                        if verdict.get("hash") and rel in entries and isinstance(entries[rel], dict):
-                            # keep prior baseline until mark-green; do not update hash on yellow
-                            pass
                         health_dirty = False  # upsert already saved
                     except Exception:
                         pass
                     _add_to_pending(root, rel, "Content change auto-detected — review and run mark-green after wiki update")
                     _ensure_journal_entry(root, "auto-detected", rel, reason)
                     changed_count += 1
-                if health_dirty and health_data is not None:
-                    try:
-                        if hasattr(_health_mod, "save_health"):
-                            _health_mod.save_health(root, health_data)
-                    except Exception:
-                        pass
                 # Keep pending queue aligned with lean monitored_paths (no flood outside scope)
                 if hasattr(_health_mod, "prune_pending_to_monitored"):
                     try:

@@ -78,6 +78,52 @@ class TestContentHonestDirty(TempProjectTestCase):
         self.assertIn("Yellow", data3["entries"]["mod.py"]["status"])
         self.assertIn("content", data3["entries"]["mod.py"]["reason"].lower())
 
+    def test_legacy_green_without_hash_rewrite_yellows(self):
+        """Criterion 2: Green with no source_content_hash + real rewrite must Yellow.
+
+        Must not seed post-edit hash and stay Green (post-upgrade / legacy path).
+        """
+        p = self.write("legacy.py", "print('v1')\n")
+        # Legacy Green: upsert only — no source_content_hash baseline
+        health_mod.upsert_entry(self.root, "legacy.py", "🟢 Green", "legacy green no hash")
+        data = health_mod.load_health(self.root)
+        self.assertNotIn("source_content_hash", data["entries"]["legacy.py"] or {})
+        from wikifier import import_cache as ic
+        cache = {}
+        ic.update_file_data(cache, "legacy.py", mtime=1, imports=[], resolved_pairs=[])
+        ic.save_cache(self.root, cache)
+        # Real content rewrite
+        p.write_text("print('v2-rewritten')\n", encoding="utf-8")
+        cache = ic.load_cache(self.root)
+        cache["legacy.py"]["mtime"] = 1  # force dirty vs disk
+        ic.save_cache(self.root, cache)
+        r = cli.check_changes(project_root=self.root)
+        self.assertTrue(r.get("success"), r)
+        self.assertGreaterEqual(int(r.get("changes_detected") or 0), 1)
+        data2 = health_mod.load_health(self.root)
+        ent = data2["entries"]["legacy.py"]
+        self.assertIn("Yellow", ent["status"])
+        # Must not have silently stored the post-edit hash as trusted baseline
+        self.assertNotEqual(
+            ent.get("source_content_hash"),
+            compute_source_content_hash(p),
+            "must not seed post-edit content hash without mark_green",
+        )
+        # After mark_green, baseline is set and further touch-only stays green
+        cli.mark_green("legacy.py", "re-baselined", project_root=self.root)
+        data3 = health_mod.load_health(self.root)
+        self.assertIn("source_content_hash", data3["entries"]["legacy.py"])
+        baseline = data3["entries"]["legacy.py"]["source_content_hash"]
+        cache = ic.load_cache(self.root)
+        cache["legacy.py"]["mtime"] = 1
+        ic.save_cache(self.root, cache)
+        os.utime(p, None)
+        r2 = cli.check_changes(project_root=self.root)
+        self.assertTrue(r2.get("success"), r2)
+        data4 = health_mod.load_health(self.root)
+        self.assertIn("Green", data4["entries"]["legacy.py"]["status"])
+        self.assertEqual(data4["entries"]["legacy.py"]["source_content_hash"], baseline)
+
 
 class TestSessionBootstrapAndSuggest(TempProjectTestCase):
     def test_session_bootstrap_shape(self):

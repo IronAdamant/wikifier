@@ -272,12 +272,16 @@ def classify_content_dirty(
             "seed_baseline": False,
         }
     if not stored_hash:
+        # No trusted baseline (legacy Green / never mark-green): when this path is
+        # under check_changes dirty observation, treat as needing attention so a
+        # post-edit rewrite cannot silently re-seed the *new* bytes and stay Green.
+        # Callers that only want to migrate baselines should use an explicit seed helper.
         return {
-            "content_dirty": False,
+            "content_dirty": True,
             "missing": False,
             "hash": live,
             "reason": "no_baseline",
-            "seed_baseline": True,
+            "seed_baseline": False,
         }
     if stored_hash == live:
         return {

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.1] - 2026-07-09
+
+### Fixed
+
+- **Content-honest dirty (legacy Green):** files with 🟢 but no `source_content_hash`
+  that appear in the dirty set now Yellow instead of silently seeding the *post-edit*
+  hash and staying Green. Trusted baseline is set only via `mark_green`.
+- Regression: `test_legacy_green_without_hash_rewrite_yellows`.
+
 ## [4.6.0] - 2026-07-09
 
 ### Added

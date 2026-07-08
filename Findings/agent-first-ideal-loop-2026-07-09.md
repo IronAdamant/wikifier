@@ -28,7 +28,7 @@ North star: lookup map → touch only what needs work → record *why* → refre
 - `wikifier/mcp/server.py` — Core tools wire to library
 - `tests/test_agent_loop.py` — deep stretch unit tests
 - Protocol / MCP README Core surface notes
-- Version 4.6.0
+- Version 4.6.0; patch **4.6.1** — no-baseline Green rewrite must Yellow (no post-edit hash seed)
 
 ## Design tests applied
 
