@@ -21,10 +21,120 @@ import importlib
 
 from .project_root import discover_project_root
 
+# Core daily agent surface (4.6+) — prefer these every session.
+CORE_DAILY_TOOLS: List[Dict[str, str]] = [
+    {"name": "session_bootstrap", "role": "one-shot root + health + attention + actions[]"},
+    {"name": "check_changes", "role": "content-honest dirty / ghosts"},
+    {"name": "prepare_edit", "role": "single-file preflight wiki/status/deps/dependents"},
+    {"name": "suggest_next_actions", "role": "selective work + dispatchable actions[]"},
+    {"name": "record_change", "role": "semantic why after edits"},
+    {"name": "mark_green", "role": "trust + source content-hash baseline"},
+]
+CORE_DAILY_NAMES: List[str] = [t["name"] for t in CORE_DAILY_TOOLS]
+ADVANCED_INTEL_TOOLS: List[str] = [
+    "get_dependencies",
+    "get_dependents",
+    "get_cycles",
+    "get_barrel_reports",
+    "get_resolution_diagnostics",
+    "health",
+    "get_project_status",
+    "get_files_needing_attention",
+    "search_journal",
+    "why_file",
+    "update_maps",
+    "validate",
+]
+
+
+def list_core_tools() -> Dict[str, Any]:
+    """Return Core daily vs advanced intel tool metadata (agents prefer Core)."""
+    return {
+        "success": True,
+        "core_daily": list(CORE_DAILY_TOOLS),
+        "core_names": list(CORE_DAILY_NAMES),
+        "advanced_intel": list(ADVANCED_INTEL_TOOLS),
+        "core_count": len(CORE_DAILY_NAMES),
+        "note": "Use Core every session; advanced remains available but non-core.",
+    }
+
 
 def _health_module():
     """Real health submodule (not the shadowed package attribute function)."""
     return importlib.import_module("wikifier.health")
+
+
+def resolve_dependents_from_cache(cache: Dict[str, Any], rel: str) -> List[str]:
+    """Extract reverse dependents for *rel* from multiple reverse-index shapes.
+
+    Supported:
+      - flat: ``_reverse_dependencies[rel] -> [importers]``
+      - nested index: ``_reverse_dependencies["index"][rel]``
+      - dependents key: ``_reverse_dependencies["dependents"][rel]``
+      - map value dict: ``{rel: {"importers": [...]}}`` or ``{"sources": [...]}``
+      - import_cache.get_reverse_dependencies when available
+    Fallback: scan resolved_pairs for edges pointing at rel.
+    """
+    if not rel or not isinstance(cache, dict):
+        return []
+
+    def _as_list(val: Any) -> List[str]:
+        if val is None:
+            return []
+        if isinstance(val, list):
+            return [str(x) for x in val if x]
+        if isinstance(val, dict):
+            for k in ("importers", "sources", "dependents", "files", "from"):
+                if isinstance(val.get(k), list):
+                    return [str(x) for x in val[k] if x]
+            # keys-as-importers
+            return [str(k) for k in val.keys() if k and not str(k).startswith("_")]
+        if isinstance(val, str) and val:
+            return [val]
+        return []
+
+    # Prefer library helper when present (canonical flat map)
+    try:
+        from . import import_cache as ic
+        rev_map = ic.get_reverse_dependencies(cache) or {}
+        if isinstance(rev_map, dict) and rel in rev_map:
+            got = _as_list(rev_map.get(rel))
+            if got:
+                return got[:80]
+    except Exception:
+        pass
+
+    rev = cache.get("_reverse_dependencies") or {}
+    if not isinstance(rev, dict):
+        return []
+
+    # Direct flat
+    if rel in rev:
+        got = _as_list(rev.get(rel))
+        if got:
+            return got[:80]
+
+    # Nested common containers
+    for nest_key in ("index", "dependents", "map", "by_target", "targets"):
+        nested = rev.get(nest_key)
+        if isinstance(nested, dict) and rel in nested:
+            got = _as_list(nested.get(rel))
+            if got:
+                return got[:80]
+
+    # Fallback: O(E) scan of resolved_pairs
+    found: List[str] = []
+    for src, data in cache.items():
+        if not isinstance(src, str) or src.startswith("_") or not isinstance(data, dict):
+            continue
+        for p in data.get("resolved_pairs") or []:
+            if not isinstance(p, dict):
+                continue
+            tgt = p.get("resolved_path") or p.get("resolved") or ""
+            if tgt == rel or str(tgt).endswith("/" + rel) or str(tgt).endswith(rel):
+                if src not in found:
+                    found.append(src)
+    return found[:80]
 
 
 def _root(project_root: Optional[Union[str, Path]] = None) -> Path:
@@ -327,17 +437,7 @@ def prepare_edit(
             })
         out["dependencies"] = deps[:80]
         out["low_conf_edges"] = low
-        # reverse deps
-        rev = cache.get("_reverse_dependencies") or {}
-        if isinstance(rev, dict):
-            # may be {file: [importers]} or nested
-            importers = rev.get(rel)
-            if importers is None and isinstance(rev.get("index"), dict):
-                importers = rev["index"].get(rel)
-            if isinstance(importers, list):
-                out["dependents"] = importers[:80]
-            elif isinstance(importers, dict):
-                out["dependents"] = list(importers.keys())[:80]
+        out["dependents"] = resolve_dependents_from_cache(cache, rel)
         cycles = cache.get("_cycles") or {}
         all_cyc = set(cycles.get("all_cycle_files") or [])
         out["in_cycle"] = rel in all_cyc
@@ -363,20 +463,10 @@ def session_bootstrap(
     out: Dict[str, Any] = {
         "success": True,
         "project_root": str(root),
-        "core_surface": [
-            "session_bootstrap",
-            "check_changes",
-            "prepare_edit",
-            "suggest_next_actions",
-            "record_change",
-            "mark_green",
-        ],
-        "advanced_intel": [
-            "get_cycles",
-            "get_barrel_reports",
-            "get_resolution_diagnostics",
-            "health(format=json)",
-        ],
+        "core_surface": list(CORE_DAILY_NAMES),
+        "core_daily": list(CORE_DAILY_TOOLS),
+        "core_count": len(CORE_DAILY_NAMES),
+        "advanced_intel": list(ADVANCED_INTEL_TOOLS),
     }
     health_sum: Dict[str, Any] = {}
     red_files: List[str] = []

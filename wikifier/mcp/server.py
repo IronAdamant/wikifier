@@ -527,6 +527,32 @@ def why_file(
 
 
 @mcp.tool()
+def seed_source_content_hashes(
+    project_root: Optional[str] = None,
+    only_green: bool = True,
+    force: bool = False,
+    directory: Optional[str] = None,
+) -> dict:
+    """Seed source_content_hash for Green entries without mass Yellow thrash (migration)."""
+    root = _get_effective_root(project_root)
+    try:
+        from wikifier.cli import seed_source_content_hashes as _lib_seed
+        return _lib_seed(project_root=root, only_green=only_green, force=force, directory=directory)
+    except Exception as e:
+        return {"success": False, "project_root": str(root), "error": str(e)}
+
+
+@mcp.tool()
+def list_core_tools() -> dict:
+    """List Core daily agent tools vs advanced intel (prefer Core every session)."""
+    try:
+        from wikifier.cli import list_core_tools as _lib_lct
+        return _lib_lct()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
 def update_maps(
     project_root: Optional[str] = None,
     full: bool = False,

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.2] - 2026-07-09
+
+### Added
+
+- **`seed_source_content_hashes`**: migrate Green entries with current on-disk hash
+  without mass auto-Yellow; CLI `seed-source-hashes`; MCP tool.
+- **`list_core_tools`**: Core daily tool listing (6) vs advanced intel; surfaced on
+  `session_bootstrap` as `core_daily` / `core_count`.
+- **`resolve_dependents_from_cache`**: prepare_edit reverse-deps for flat, nested
+  `index`, and `{importers: [...]}` reverse-index shapes.
+- Dogfood: dual agent-loop passes on all 8 `cloned_sample_projects` roots
+  (Findings/agent-ideal-loop-polish-dogfood-2026-07-09.md).
+
+### Tests
+
+- Seed hash migration (touch stays Green / rewrite Yellows)
+- Core surface count=6
+- prepare_edit reverse shapes (flat + nested)
+
 ## [4.6.1] - 2026-07-09
 
 ### Fixed

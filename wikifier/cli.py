@@ -772,6 +772,22 @@ def main():
                 res = why_file(_args[0], project_root=project_root)
                 print(_json.dumps(res, indent=2, default=str))
                 return 0 if res.get("success") else 1
+            if _cmd0 in (
+                "seed-source-hashes",
+                "seed-source-content-hashes",
+                "seed_source_content_hashes",
+                "seed-hashes",
+            ):
+                import json as _json
+                force = any(a in ("--force", "-f") for a in _args)
+                res = seed_source_content_hashes(project_root=project_root, force=force)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("list-core-tools", "list_core_tools", "core-tools"):
+                import json as _json
+                res = list_core_tools()
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
             if _cmd0 == "validate":
                 import json as _json
                 if _health_mod is not None:
@@ -1631,6 +1647,27 @@ def why_file(
     """Why is this file yellow/red — health reason + journal matches."""
     from .agent_loop import why_file as _wf
     return _wf(file, project_root=project_root, max_results=max_results)
+
+
+def seed_source_content_hashes(
+    project_root: Optional[Union[str, Path]] = None,
+    only_green: bool = True,
+    force: bool = False,
+    directory: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Seed source_content_hash baselines without mass Yellow (migration helper)."""
+    root = _get_effective_root(project_root)
+    if _health_mod is None or not hasattr(_health_mod, "seed_source_content_hashes"):
+        return {"success": False, "project_root": str(root), "error": "health.seed_source_content_hashes unavailable"}
+    return _health_mod.seed_source_content_hashes(
+        root, only_green=only_green, force=force, directory=directory
+    )
+
+
+def list_core_tools() -> Dict[str, Any]:
+    """Core daily agent tool listing (prefer over full MCP catalog)."""
+    from .agent_loop import list_core_tools as _lct
+    return _lct()
 
 
 def update_maps(

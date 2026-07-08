@@ -43,8 +43,10 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 |------|-----|
 | First-run map | `init` → `update-maps` → `health --summary` → `suggest-next` |
 | **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]` |
+| **Core tool list** | `list_core_tools` / bootstrap `core_surface` — prefer Core 6; advanced is non-core |
 | Steady-state | `check-changes` (content-honest) → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
-| **Preflight edit** | `prepare_edit` / CLI `prepare-edit <file>` — wiki + status + deps + dependents |
+| **Hash migration** | `seed_source_content_hashes` / CLI `seed-source-hashes` — baseline Greens without mass Yellow |
+| **Preflight edit** | `prepare_edit` / CLI `prepare-edit <file>` — wiki + status + deps + dependents (multi-shape reverse index) |
 | **Why / journal** | `why_file` / `search_journal` — semantic trail, not mtime theater |
 | Lookup Core | `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green` |
 | Advanced intel | `get_dependencies`, `get_dependents`, `get_cycles`, barrel/diagnostics — not daily Core |

@@ -222,5 +222,107 @@ class TestCliBootstrapEntry(TempProjectTestCase):
         self.assertIn("actions", res)
 
 
+class TestSeedSourceHashes(TempProjectTestCase):
+    def test_seed_then_touch_ok_rewrite_yellows(self):
+        p = self.write("seeded.py", "print(0)\n")
+        health_mod.upsert_entry(self.root, "seeded.py", "🟢 Green", "legacy no hash")
+        data = health_mod.load_health(self.root)
+        self.assertNotIn("source_content_hash", data["entries"]["seeded.py"] or {})
+        res = health_mod.seed_source_content_hashes(self.root, only_green=True)
+        self.assertTrue(res.get("success"), res)
+        self.assertGreaterEqual(int(res.get("seeded") or 0), 1)
+        data2 = health_mod.load_health(self.root)
+        ent = data2["entries"]["seeded.py"]
+        self.assertIn("Green", ent["status"])
+        self.assertTrue(ent.get("source_content_hash"))
+        baseline = ent["source_content_hash"]
+        from wikifier import import_cache as ic
+        cache = {}
+        ic.update_file_data(cache, "seeded.py", mtime=1, imports=[], resolved_pairs=[])
+        ic.save_cache(self.root, cache)
+        os.utime(p, None)
+        cache = ic.load_cache(self.root)
+        cache["seeded.py"]["mtime"] = 1
+        ic.save_cache(self.root, cache)
+        r = cli.check_changes(project_root=self.root)
+        self.assertTrue(r.get("success"), r)
+        data3 = health_mod.load_health(self.root)
+        self.assertIn("Green", data3["entries"]["seeded.py"]["status"])
+        self.assertEqual(data3["entries"]["seeded.py"]["source_content_hash"], baseline)
+        p.write_text("print(99)\n", encoding="utf-8")
+        cache = ic.load_cache(self.root)
+        cache["seeded.py"]["mtime"] = 1
+        ic.save_cache(self.root, cache)
+        r2 = cli.check_changes(project_root=self.root)
+        self.assertTrue(r2.get("success"), r2)
+        self.assertGreaterEqual(int(r2.get("changes_detected") or 0), 1)
+        data4 = health_mod.load_health(self.root)
+        self.assertIn("Yellow", data4["entries"]["seeded.py"]["status"])
+
+
+class TestCoreSurfaceListing(unittest.TestCase):
+    def test_list_core_tools_has_six(self):
+        from wikifier.agent_loop import list_core_tools, CORE_DAILY_NAMES
+        res = list_core_tools()
+        self.assertTrue(res.get("success"))
+        self.assertEqual(res.get("core_count"), 6)
+        names = res.get("core_names") or []
+        for n in (
+            "session_bootstrap", "check_changes", "prepare_edit",
+            "suggest_next_actions", "record_change", "mark_green",
+        ):
+            self.assertIn(n, names)
+        self.assertEqual(names, CORE_DAILY_NAMES)
+        adv = res.get("advanced_intel") or []
+        self.assertTrue(adv)
+        self.assertNotIn("session_bootstrap", adv)  # core not listed as advanced-only
+
+
+class TestPrepareEditReverseShapes(TempProjectTestCase):
+    def test_flat_and_nested_reverse_index(self):
+        self.write("lib/t.py", "x=1\n")
+        health_mod.upsert_entry(self.root, "lib/t.py", "🟢 Green", "ok")
+        from wikifier import import_cache as ic
+        from wikifier.agent_loop import prepare_edit, resolve_dependents_from_cache
+
+        # Flat shape
+        cache_flat = {
+            "lib/t.py": {"mtime": 1, "resolved_pairs": []},
+            "lib/a.py": {"mtime": 1, "resolved_pairs": [{"resolved": "lib/t.py", "resolved_path": "lib/t.py"}]},
+            "_reverse_dependencies": {"lib/t.py": ["lib/a.py", "lib/b.py"]},
+        }
+        deps = resolve_dependents_from_cache(cache_flat, "lib/t.py")
+        self.assertIn("lib/a.py", deps)
+        self.assertIn("lib/b.py", deps)
+        ic.save_cache(self.root, cache_flat)
+        pe = prepare_edit("lib/t.py", project_root=self.root)
+        self.assertTrue(pe.get("success"))
+        self.assertIn("lib/a.py", pe.get("dependents") or [])
+
+        # Nested index shape
+        cache_nest = {
+            "lib/t.py": {"mtime": 1, "resolved_pairs": []},
+            "_reverse_dependencies": {
+                "index": {"lib/t.py": ["lib/nested1.py", "lib/nested2.py"]},
+                "version": 1,
+            },
+        }
+        deps2 = resolve_dependents_from_cache(cache_nest, "lib/t.py")
+        self.assertEqual(set(deps2), {"lib/nested1.py", "lib/nested2.py"})
+        ic.save_cache(self.root, cache_nest)
+        pe2 = prepare_edit("lib/t.py", project_root=self.root)
+        self.assertTrue(pe2.get("success"))
+        self.assertIn("lib/nested1.py", pe2.get("dependents") or [])
+
+        # Dict value shape
+        cache_dict = {
+            "_reverse_dependencies": {
+                "lib/t.py": {"importers": ["lib/from_dict.py"]},
+            }
+        }
+        deps3 = resolve_dependents_from_cache(cache_dict, "lib/t.py")
+        self.assertIn("lib/from_dict.py", deps3)
+
+
 if __name__ == "__main__":
     unittest.main()

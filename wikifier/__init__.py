@@ -46,6 +46,8 @@ from .cli import (
     prepare_edit,
     search_journal,
     why_file,
+    seed_source_content_hashes,
+    list_core_tools,
 )
 from . import agent_loop
 
@@ -76,4 +78,4 @@ from .contracts import (
     compute_acs_confidence,
 )
 
-__version__ = "4.6.1"
+__version__ = "4.6.2"

@@ -1,93 +1,102 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 08:37:36",
+  "last_updated": "2026-07-09 08:51:23",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:30:53",
-      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
-      "wiki_content_hash": "sha256:43860182e20f5722268e50b2f25a12a216215ffccfc31fc325d38a9ac6e3c7ee",
-      "source_content_hash": "sha256:43860182e20f5722268e50b2f25a12a216215ffccfc31fc325d38a9ac6e3c7ee",
-      "last_wiki_refresh": "2026-07-09 08:30:53",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "wiki_content_hash": "sha256:6909638bb0b5ed5f97d3f328671ab49ccf0a6864eeadbb3aa466ec5a3953cd3a",
+      "source_content_hash": "sha256:6909638bb0b5ed5f97d3f328671ab49ccf0a6864eeadbb3aa466ec5a3953cd3a",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
+      "source_content_hash": "sha256:f8b7030ec8980774cf3a2560ad7aee6537263eadf8374e650718f7c6793c6d50",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/M5-Dogfood-Progress.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
+      "source_content_hash": "sha256:d49baaaebd0e901d674651c0f676598e5ccd23d559380aa46947a71c56a4484e",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier.sh": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:32:45",
       "reason": "gap-closure swarm verified 34/34 tests",
+      "source_content_hash": "sha256:137b975181ed4329a78a54256e5f8b0ee0bff91ea5e5514a3086752bcaf959cf",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/M5-Dogfood-Assessment-Report.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
+      "source_content_hash": "sha256:238435188b1699e5bcf4753b62a6fe55cb064413a291259f0b696b5bd3c1692f",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/p6_real_world_validation_report.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
+      "source_content_hash": "sha256:0468224675888f2747674324726c0ea9a5dddded39d9a1a50f22fc3357dafc0f",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/M5.1-cross-hardening-analysis.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
+      "source_content_hash": "sha256:a2c2414e5b6c9b1a802bec8734a7924850d546cd7746a8087216f3685ca36cb4",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "README.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:23",
       "reason": "lang table",
+      "source_content_hash": "sha256:936c47f29cec2c0a2490e5568ae356bea86d9409a1dad371d2e4eee2c337f36c",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:30:53",
-      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
       "wiki_content_hash": "sha256:5a43b25fbc7869ee7a56616a5ae8142878734d666657a6e07e5eb875dd8eed99",
-      "source_content_hash": "sha256:555389922391e4c813c4d39f08742f63bd75a32a07c27467f394d61d28e9981b",
-      "last_wiki_refresh": "2026-07-09 08:30:53",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=server.py.wiki.md"
+      "source_content_hash": "sha256:1a86df644c68dca7997309d78e90079170baa42c463f85ed1df86fc33f50f650",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=server.py.wiki.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=server.py.wiki.md"
     },
     "wikifier/mcp/README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:30:53",
-      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
-      "wiki_content_hash": "sha256:66266b22a8b8c316d0e29c3ab56f12645cd723ba1425286accc19c4dc8a613e1",
-      "source_content_hash": "sha256:66266b22a8b8c316d0e29c3ab56f12645cd723ba1425286accc19c4dc8a613e1",
-      "last_wiki_refresh": "2026-07-09 08:30:53",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "wiki_content_hash": "sha256:64b72cad5e0af9ae9bd02b39ff467eacf8521f4a712d09a649bf9718bc4486dc",
+      "source_content_hash": "sha256:64b72cad5e0af9ae9bd02b39ff467eacf8521f4a712d09a649bf9718bc4486dc",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=README.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=README.md"
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:37:36",
-      "reason": "4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop)",
-      "source_content_hash": "sha256:d55b49b591575f204e2f858613c9607aa6d0b8a37543a5d88e737cc4a455f667",
-      "last_wiki_refresh": "2026-07-09 08:37:36",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured)"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "source_content_hash": "sha256:43db966a1d40e41f6ef0c882d91b59e075ffc01cc685fd89b870eafa5d3a012e",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
     },
     "diagnostics.html": {
       "status": "🟢 Green",
       "last_updated": "2026-06-05 08:33:20 AEST",
-      "reason": "Wiki summary verified accurate after change."
+      "reason": "Wiki summary verified accurate after change.",
+      "source_content_hash": "sha256:ca529877892a0bfbdb1d410f16cbff05938cc9e4fe0ae0b24ca8ffa5ced03aa4"
     },
     "index.html": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:20:17 AEST",
-      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges"
+      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges",
+      "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f"
     },
     "wikifier/import_cache.py": {
       "status": "🟢 Green",
@@ -100,108 +109,123 @@
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:13:34",
       "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "source_content_hash": "sha256:bb85162f69d788e499aac131c59ca6020a520895ebb4b4558aea9473f066aed1",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "file_health.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-07 12:47:31 AEST",
-      "reason": "Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1."
+      "reason": "Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1.",
+      "source_content_hash": "sha256:8a682622d385cea37701f2b238ef2cb6fbaa2094c65c33113c693cead30bede1"
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:37:36",
-      "reason": "4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop)",
-      "wiki_content_hash": "sha256:ac43e0cbf6553634566007e0f56d6157f069ae0882c7bd801546e31fe2cca03c",
-      "source_content_hash": "sha256:ac43e0cbf6553634566007e0f56d6157f069ae0882c7bd801546e31fe2cca03c",
-      "last_wiki_refresh": "2026-07-09 08:37:36",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "wiki_content_hash": "sha256:c48d76004db91363227c05d271645d4c80c68120a36ee914e8da58f20d46cfc6",
+      "source_content_hash": "sha256:c48d76004db91363227c05d271645d4c80c68120a36ee914e8da58f20d46cfc6",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:14:09",
       "reason": "test count synced to 49",
+      "source_content_hash": "sha256:f0c3056aa33c49b5d12b03828e99a69a5e5e8aab45bc0389c07b94c65c1352f2",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:37:36",
-      "reason": "4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop)",
-      "source_content_hash": "sha256:3a45bd191f5287d53e5c8093cc0418d84d602435bbb46c85a3f84bccd7698f7d",
-      "last_wiki_refresh": "2026-07-09 08:37:36",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured)"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "source_content_hash": "sha256:b2cf8f8db6604a443069d27e7541f3a61dfbbc4e952b6a324b3be61beabe05a8",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 09:27:38 AEST",
-      "reason": "Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged."
+      "reason": "Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged.",
+      "source_content_hash": "sha256:3815cbe192ece7bf7af9d11e16ecefdbac5b72b5822e3cf7b261975a0f5786d3"
     },
     "wikifier/health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:37:36",
-      "reason": "4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop)",
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
       "wiki_content_hash": "sha256:e5b0a7ef89c959698d52808877daa6586f2ee47a66889891a5de0057630fdc19",
-      "source_content_hash": "sha256:16f8dcfd2f9e9d8bef61c333531ad58c227f44634d62a60baa68c782d8971b7a",
-      "last_wiki_refresh": "2026-07-09 08:37:36",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=health.py.wiki.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=health.py.wiki.md"
+      "source_content_hash": "sha256:b44c65dba1af8e3e4dd2ca40d1d7be568f6f94720e1546badc162675aead3b8f",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=health.py.wiki.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=health.py.wiki.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=health.py.wiki.md"
     },
     "wikifier/contracts.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:13:34",
       "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "source_content_hash": "sha256:b220e44ff0cd9e0fcc28cae58588231694cfca3136ce02755a83300630dc2b42",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:19:39 AEST",
-      "reason": "v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke."
+      "reason": "v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke.",
+      "source_content_hash": "sha256:d563d4a4f82b1d6486094a34efc264039fee6b52ae5dd2e46e2d90e262654cd6"
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 07:58:09",
       "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
+      "source_content_hash": "sha256:9c992ea21126ffcafd6951121123736f54a9aa2baccdbc82ed978c7232eedd58",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/scripts/wikifier.sh": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:49",
       "reason": "synced with root; portable rel paths (subid=post-assess-hygiene)",
+      "source_content_hash": "sha256:137b975181ed4329a78a54256e5f8b0ee0bff91ea5e5514a3086752bcaf959cf",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier/index.html": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:20:18 AEST",
-      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges"
+      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges",
+      "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f"
     },
     "Logged_issues/2026-06-10-js-barrel-churn-selftest-failure.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:19:50 AEST",
-      "reason": "v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke."
+      "reason": "v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke.",
+      "source_content_hash": "sha256:b1ce7664322757c13c66b1a36110c091fa508f7d6f814c374d2053507e54cceb"
     },
     "Findings/2026-06-10-Dogfood-Refactor-Validation.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 09:54:26 AEST",
-      "reason": "Self-describing findings doc"
+      "reason": "Self-describing findings doc",
+      "source_content_hash": "sha256:cbbc038682650ae53ed396971fa7f27c8ca3be099b56b81f39ed753d218b5e53"
     },
     "Findings/2026-06-10-Fix-Plan.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:20:33 AEST",
-      "reason": "Results appended, all phases verified"
+      "reason": "Results appended, all phases verified",
+      "source_content_hash": "sha256:e3256cf869bb44bec8f9465bb07813647087ef9ace0d745706a37b1bd7b61914"
     },
     "wikifier/library.py": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:20:14 AEST",
-      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges"
+      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges",
+      "source_content_hash": "sha256:157e81814a59afef0683f9a4ab6b39f48b68f1c136180a63279cd79f2875724e"
     },
     "wikifier/parsers/bree.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 08:07:40",
       "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
+      "source_content_hash": "sha256:60ab8ea2759d20505734abb8476b749a2405efc68ef8949516c1e0d4812a7049",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 08:07:40",
       "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
+      "source_content_hash": "sha256:c053e0cb09ea1d8130016198fe67bab12c0429ad26fc7e7c976b95d031fab9e2",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/": {
@@ -212,273 +236,317 @@
     "pyproject.toml": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:41:19 AEST",
-      "reason": "Build + twine check pass; clean-room wheel install verified"
+      "reason": "Build + twine check pass; clean-room wheel install verified",
+      "source_content_hash": "sha256:289387760599062aafb1e36dcccaa1a2e0b2fbaecd961026dbd68e9f51562d2e"
     },
     "wikifier.ps1": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 20:20:31 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests"
+      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
+      "source_content_hash": "sha256:931204f199f22e2c2afa96319e3ed1a413bf431c115132b259e03a2ca39d4ed2"
     },
     "wikifier.bat": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:50:33 AEST",
-      "reason": "Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical"
+      "reason": "Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical",
+      "source_content_hash": "sha256:2e1c5a125ac9ca03d2c06930213e87060fb5ca3388c9086c08c263f17b42885f"
     },
     ".github/workflows/publish.yml": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:50:34 AEST",
-      "reason": "Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical"
+      "reason": "Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical",
+      "source_content_hash": "sha256:7e116320f14c454e23e40a63f814d92231a25ac69bc27f57c872f5f81b204160"
     },
     "Logged_issues/2026-06-10-brc-scoped-rerun-pathology.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 19:09:35 AEST",
-      "reason": "Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested"
+      "reason": "Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested",
+      "source_content_hash": "sha256:9b676860290cb2f490f64f22c250e3ba36ff72ef6a98c365125cb18c35ed2bf2"
     },
     "wikifier/scripts/wikifier.ps1": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 20:20:33 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests"
+      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
+      "source_content_hash": "sha256:931204f199f22e2c2afa96319e3ed1a413bf431c115132b259e03a2ca39d4ed2"
     },
     "wikifier/serve.py": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 20:20:23 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests"
+      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
+      "source_content_hash": "sha256:fa7b3b0f9fb94411d0bd74bc20c9e8b0492bdff5f0f130e2ba8b984c9fcb0845"
     },
     "library.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 20:20:38 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests"
+      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
+      "source_content_hash": "sha256:f3f717512ac8c856b79d46d5d47906fdb3f2311025be1bc65186bc3b751bbe2e"
     },
     "screenshot/front_page_review.png": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:37:47 AEST",
-      "reason": "Asset referenced by README"
+      "reason": "Asset referenced by README",
+      "source_content_hash": "sha256:181213c581170f8c03299834a1b12df43db6955be73d5ea48d0138f13f7ef5ee"
     },
     "Findings/gap-closure-report.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:40:10",
       "reason": "G12 closed; 39/39 tests",
+      "source_content_hash": "sha256:3eaff9dca44108f630435c7b496c97cf6a9a479f49d1452bc3f892e22f45ccdf",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 08:07:42",
       "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
+      "source_content_hash": "sha256:b01abcbd3ca3db74e1d82782892f1c7145c2a2d84712034fd1f0a7f982cbdf5a",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/resolution.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:13:34",
       "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "source_content_hash": "sha256:2d9471465502d41d863da7dcdcdc921f32c3e4e8e5cc89b336e62c2e6131e8bf",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/cdia.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:13:34",
       "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "source_content_hash": "sha256:048b517ff8ab509599dd308bf2aaf3c830f478e4d07f95c265b2c17bcb14a8d5",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_selftest_wrappers.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:40:10",
       "reason": "G12 closed; 39/39 tests",
+      "source_content_hash": "sha256:5b8106d4052911a994d8c0603b67c2d451593c1e76f8ddb098db19444b599471",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/rust.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:21",
       "reason": "dogfood rust/redox",
+      "source_content_hash": "sha256:09c2417e6df5707e17ecb16e803983f0402833f41e81a09f08cead501d24f1eb",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/go_lang.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:22",
       "reason": "dogfood",
+      "source_content_hash": "sha256:172f714e1c81e3b92e43621e0bf4eadaf626f36cfd06b9875371b3a1b505a80f",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/c_cpp.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:22",
       "reason": "dogfood llvm/linux",
+      "source_content_hash": "sha256:8315b20bdf69231cef5b77517a3c84a2c00a6359dcf5bf34803a6a3a6ed01ebb",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/csharp.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:52:22",
       "reason": "dogfood dotnet",
+      "source_content_hash": "sha256:9dd4a7b23c08e298095b22abccd4733d88319d0f3353bd591c7defb7025d0bea",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/__init__.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:13:34",
       "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
+      "source_content_hash": "sha256:7be044c8ab3a8b963bd0de9058fa25fea223a503d5e1aac7c45e89ecec2bf4f5",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/__init__.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:4e02b2a4a4061379d647b3055681a8edbf3f5ea3afd299565faf01b801161a1f",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/_base.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:7c0a312caa6212a51ff7bd055438dad4faeb347c03c82a822de0baea8a25dca0",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/run_all.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:14ae8dd0f73ea25d78b4aab786672d838dfed07f13102b00388ae2eed21323e0",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/__init__.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:429cfcb12c5ba881d7e14635c1b6768265f08770b7e2fb2fde883554c3157147",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_cdia_selftest.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:8b67e660ee0addff51905e6ecd3fc7a4e1fb7d67758cd5fe34b4d4bcacb0320b",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_contracts_selftest.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:999068ee715fed923d2455012f182bbe60595fe964be47f18cd800c08ec7de2c",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_javascript_selftest.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:0e13f4f410c14e42147e3e352ccd4bafb2bdb998335c882e4a047fc7cb68fdaa",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_python_parser_selftest.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:845605809fd1873723b4cbf48f55d72653136636b90dbd3efd38312c2981e795",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_resolution_selftest.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:bc466f4901f5ab9b0ddf3ed05f893137878df32ce1df6c15154cf213d5164d4a",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_barrel_invalidation.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:04770ddcf43d9263d7dc60078db071993bf80a1bfdef296716f661baa6206750",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_health.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:6a2be757df3210f124ec935d44bfb8c6d2e9a99753631e0a7b2f0b16b11c994b",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_import_cache.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:855349fa0a49f395ef2f80c3a354b199ac80f4aa197b38d54ae0ff42a1824b51",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_multi_lang_parsers.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:a86b91f785291fb1ff7ac68af3e71758a5eb7889f7abe0c6965d5bcfaaf56dd3",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_parsers.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:a89575527e0233fdf6c345abd8c9f506961c4e63f682bf6d1b03ebd2d4d21582",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/__main__.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:3129adff95e0f38b87ab34cddfc27082c7892bcaec267ff5d40f160fdf55b44a",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/diagnostics.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:4c7bfe47e9eff2e24ad78a0509046dcf3cdc0101695c8a94ecbbcaae99d60389",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/_edge.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:8022718c57d8b7e132ac83ae1fed4e09bef0533d291e7a6d3be4257da1253163",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/parsers/java.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
+      "source_content_hash": "sha256:148788ca46421df25c99e02b063536bb4f088df00d48c40053871e6c919a6898",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "Findings/dogfood-hygiene-fix-2026-07-09.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:48",
       "reason": "verified 53 tests; dogfood validate 0/8",
+      "source_content_hash": "sha256:c998581594efa74a9055a82c83e2871dada362ba6fbd2832a7e81888777046bb",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "Findings/dogfood-hygiene-fix-2026-07-09.json": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:48",
       "reason": "verified 53 tests; dogfood validate 0/8",
+      "source_content_hash": "sha256:191503aed6a8ed00d325e28c2d1fc6a2c8736e90fa80a913056884999c64a927",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "Findings/long-horizon-autonomous-ops.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 07:07:11",
       "reason": "goal verification complete",
+      "source_content_hash": "sha256:0882f6efaef73d4592dd372fcfa40065af8ebeea5005cf4b7aeb82b5445e79f4",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/dogfood-goal-pass1-2026-07-09.json": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 07:07:11",
       "reason": "goal verification complete",
+      "source_content_hash": "sha256:0d2588429fb45bd50469efdd97d8ef73419969f9b66d7cf05f169aad36adc9c0",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "Findings/dogfood-goal-pass2-2026-07-09.json": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 07:07:11",
       "reason": "goal verification complete",
+      "source_content_hash": "sha256:f3e2bf5a7331fa847fdbf96a43662542dc689f0e767bb74d093c00a78c030090",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/project_root.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 08:07:38",
       "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
+      "source_content_hash": "sha256:16032098c3ce7f6ba4f6e880b3a1ee88b7900446a8b95f2a72743e769761380e",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "Findings/residual-1-5-closure-2026-07-09.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 08:07:43",
       "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
+      "source_content_hash": "sha256:cf194efa91982490f020e5a6f7da873a065b51bdc4a4ce6b7bf642c6c9d115fb",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:30:53",
-      "reason": "agent-ideal-loop 4.6.0 verified 70 tests (subid=agent-ideal-loop)",
-      "source_content_hash": "sha256:d1779041e2a1d7ec279457c28704c405b7ce09fbb9ebdf99bf3ec157819c4bbb",
-      "last_wiki_refresh": "2026-07-09 08:30:53",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured)"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "source_content_hash": "sha256:0385850288fc32d2698e3ddabb9d1e2e1cd649b06a604cedce1d39fd56a28e0b",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:37:36",
-      "reason": "4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop)",
-      "source_content_hash": "sha256:b8c4f35d4e58757e415651767a7853acc5ebac864d40fa385b689ec345e82c26",
-      "last_wiki_refresh": "2026-07-09 08:37:36",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured)"
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "source_content_hash": "sha256:a22851453eecc7976831861bd43fdd7b486e25b8de0e7db5a6f7583a2e36a8b5",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
     },
     "Findings/agent-first-ideal-loop-2026-07-09.md": {
       "status": "🟢 Green",
@@ -488,6 +556,15 @@
       "source_content_hash": "sha256:5f3bcca10ecfebcb5003739c9569f4288685a13663ead6eb73cc301a160dbcf8",
       "last_wiki_refresh": "2026-07-09 08:37:36",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=agent-first-ideal-loop-2026-07-09.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=agent-first-ideal-loop-2026-07-09.md"
+    },
+    "Findings/agent-ideal-loop-polish-dogfood-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-09 08:51:23",
+      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
+      "wiki_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
+      "last_wiki_refresh": "2026-07-09 08:51:23",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=agent-ideal-loop-polish-dogfood-2026-07-09.md",
+      "source_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1"
     }
   }
 }

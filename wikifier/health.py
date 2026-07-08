@@ -300,6 +300,89 @@ def classify_content_dirty(
     }
 
 
+def seed_source_content_hashes(
+    root: "str | Path",
+    *,
+    only_green: bool = True,
+    force: bool = False,
+    directory: Optional[str] = None,
+    max_files: int = 50000,
+) -> Dict[str, Any]:
+    """Seed trusted ``source_content_hash`` for existing health entries without Yellow thrash.
+
+    Migration helper for post-4.6.x content-honest dirty: legacy 🟢 entries without a
+    baseline get the *current on-disk* hash recorded so subsequent mtime-only touches
+    do not Yellow. Status/reason are left unchanged (no mass auto-Yellow).
+
+    Args:
+        only_green: if True, only seed entries whose status is Green.
+        force: if True, re-hash even when a baseline already exists.
+        directory: optional path prefix filter.
+        max_files: safety cap.
+
+    Returns structured stats (seeded, skipped_*, missing_on_disk, errors sample).
+    """
+    root = Path(root).resolve()
+    result: Dict[str, Any] = {
+        "success": True,
+        "project_root": str(root),
+        "seeded": 0,
+        "skipped_has_hash": 0,
+        "skipped_not_green": 0,
+        "skipped_missing": 0,
+        "skipped_filter": 0,
+        "errors": [],
+        "sample_seeded": [],
+    }
+    try:
+        data = load_health(root)
+        entries = data.setdefault("entries", {})
+        dirty = False
+        dir_pref = (directory or "").rstrip("/")
+        for rel, ent in list(entries.items()):
+            if not isinstance(ent, dict):
+                continue
+            if dir_pref and not (str(rel) == dir_pref or str(rel).startswith(dir_pref + "/")):
+                result["skipped_filter"] += 1
+                continue
+            st = str(ent.get("status") or "")
+            if only_green and "Green" not in st and "🟢" not in st:
+                result["skipped_not_green"] += 1
+                continue
+            if ent.get("source_content_hash") and not force:
+                result["skipped_has_hash"] += 1
+                continue
+            src = root / rel
+            if not src.is_file():
+                result["skipped_missing"] += 1
+                continue
+            h = compute_source_content_hash(src)
+            if not h:
+                result["skipped_missing"] += 1
+                continue
+            ent["source_content_hash"] = h
+            # Do not change status/reason — migration only
+            entries[rel] = ent
+            dirty = True
+            result["seeded"] += 1
+            if len(result["sample_seeded"]) < 8:
+                result["sample_seeded"].append(rel)
+            if result["seeded"] >= max_files:
+                break
+        if dirty:
+            save_health(root, data)
+        result["message"] = (
+            f"Seeded {result['seeded']} source_content_hash baseline(s) "
+            f"(skipped has_hash={result['skipped_has_hash']}, "
+            f"not_green={result['skipped_not_green']}, missing={result['skipped_missing']})."
+        )
+    except Exception as e:
+        result["success"] = False
+        result["error"] = str(e)
+        result["errors"].append(str(e))
+    return result
+
+
 def _is_stale_wiki(root: Path, file: str, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Core durable stale wiki detector (B3).
