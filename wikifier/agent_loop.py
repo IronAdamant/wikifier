@@ -548,8 +548,33 @@ def session_bootstrap(
     acs_actionable = 0
     try:
         from . import import_cache as ic
-        cache = ic.load_cache(root) or {}
-        acs = ic.ensure_acs_summary_persisted(cache, root) or {}
+        try:
+            from . import cache_store as cs
+        except Exception:
+            cs = None  # type: ignore
+        # Prefer light meta read (SQLite) over full multi-MB pair deserialize
+        acs: Dict[str, Any] = {}
+        cyc: Dict[str, Any] = {}
+        if cs is not None:
+            meta = cs.load_meta(root, keys=("_acs_summary", "_cycles", "_map_coverage"))
+            acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
+            cyc = meta.get("_cycles") if isinstance(meta.get("_cycles"), dict) else {}
+            cov = meta.get("_map_coverage") if isinstance(meta.get("_map_coverage"), dict) else {}
+            if cov:
+                out["map_coverage"] = cov
+            out["cache_backend"] = cs.backend_name(root)
+        needs_full = (
+            not acs
+            or str(acs.get("acs_version") or "") < "1.3"
+            or "reason_code_counts" not in acs
+            or "actionable_low_conf_edges" not in acs
+        )
+        if needs_full:
+            cache = ic.load_cache(root) or {}
+            acs = ic.ensure_acs_summary_persisted(cache, root) or {}
+            cyc = cache.get("_cycles") or {}
+            if cs is not None and not out.get("cache_backend"):
+                out["cache_backend"] = cs.backend_name(root)
         acs_actionable = int(acs.get("actionable_low_conf_edges") or 0)
         out["acs"] = {
             "acs_version": acs.get("acs_version"),
@@ -557,12 +582,22 @@ def session_bootstrap(
             "low_conf_edges": acs.get("low_conf_edges"),
             "dynamic_literal_noise_edges": acs.get("dynamic_literal_noise_edges"),
             "avg_confidence": acs.get("avg_confidence"),
+            "reason_code_counts": acs.get("reason_code_counts"),
+            "agent_signal_counts": acs.get("agent_signal_counts"),
         }
-        cyc = cache.get("_cycles") or {}
+        # Agents must not thrash on raw low_conf_edges (ACS v1.3 scores more edges)
+        out["acs_guidance"] = (
+            "Prefer actionable_low_conf_edges + reason_code_counts "
+            "(skip external_or_bare/dynamic_literal); do not use low_conf_edges alone as a work queue."
+        )
         out["cycles"] = {
             "cyclic_scc_count": (cyc.get("stats") or {}).get("cyclic_scc_count"),
             "all_cycle_files_sample": (cyc.get("all_cycle_files") or [])[:10],
         }
+        if "map_coverage" not in out and cs is not None:
+            snap = cs.get_map_coverage_from_meta(root)
+            if snap.get("map_coverage"):
+                out["map_coverage"] = snap["map_coverage"]
     except Exception as e:
         out["acs_error"] = str(e)
 

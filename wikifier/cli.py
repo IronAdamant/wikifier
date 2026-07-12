@@ -373,6 +373,17 @@ def run_full_update(
     try:
         from . import import_cache as ic
 
+        # One-time migrate legacy import_cache.json → SQLite so warm paths avoid JSON tax
+        try:
+            from . import cache_store as cs
+            if not cs.has_sqlite(root) and cs.json_path(root).is_file():
+                legacy = cs.load_cache_dict(root)
+                if legacy:
+                    cs.save_cache_dict(root, legacy)
+                    result["cache_migrated_to_sqlite"] = True
+        except Exception as mig_e:
+            result["cache_migrate_note"] = str(mig_e)
+
         # === 1. Candidates (scoped walk when directory set — monorepo agent budget) ===
         cands = _collect_candidate_source_files(root, directory=directory)
         if directory:
@@ -394,6 +405,9 @@ def run_full_update(
 
         # === 2. Dirty detection + barrel-stale merge ===
         # Content-stable mtime thrash: collect (rel, mtime, hash) to refresh without reparse.
+        # CRITICAL (warm path): do NOT load full pair payloads when dirty is empty.
+        # Barrel merge only runs when mtime-index dirty is non-empty; then load barrel
+        # meta keys only (SQLite) — never full cache just to check barrels on 0-dirty.
         content_stable_updates: list = []
         dirty = ic.compute_files_needing_reparse(
             root,
@@ -401,21 +415,40 @@ def run_full_update(
             full_rebuild=force_full,
             content_stable_mtime_updates=content_stable_updates,
         ) or []
-        try:
-            cache_for_barrel = ic.load_cache(root)
-            barrel_stale = ic.invalidate_stale_barrel_entries(
-                cache_for_barrel, root, changed_files=[str(p) for p in dirty]
-            ) or []
-            seen = {str(Path(p).resolve()) for p in dirty}
-            for rel in barrel_stale:
-                if rel:
-                    p = (root / rel).resolve()
-                    if p.exists() and str(p) not in seen:
-                        dirty.append(p)
-                        seen.add(str(p))
-        except Exception:
-            pass  # barrel merge is best-effort; mtime dirty set is authoritative
-        result["files_to_reparse"] = len(dirty)
+        if dirty:
+            try:
+                from . import cache_store as _cs_barrel
+                barrel_cache: Dict[str, Any] = {}
+                if _cs_barrel.has_sqlite(root):
+                    barrel_cache = _cs_barrel.load_meta(
+                        root,
+                        keys=(
+                            "_barrel_resolutions",
+                            "_barrel_file_index",
+                            "_barrel_invalidation_log",
+                        ),
+                    )
+                else:
+                    # Legacy JSON only: unavoidable full read once (no sqlite yet)
+                    barrel_cache = ic.load_cache(root) or {}
+                if barrel_cache.get("_barrel_resolutions") or barrel_cache.get(
+                    "_barrel_file_index"
+                ):
+                    barrel_stale = ic.invalidate_stale_barrel_entries(
+                        barrel_cache, root, changed_files=[str(p) for p in dirty]
+                    ) or []
+                    seen = {str(Path(p).resolve()) for p in dirty}
+                    for rel in barrel_stale:
+                        if rel:
+                            p = (root / rel).resolve()
+                            if p.exists() and str(p) not in seen:
+                                dirty.append(p)
+                                seen.add(str(p))
+            except Exception:
+                pass  # barrel merge is best-effort; mtime dirty set is authoritative
+        dirty_total: int = len(dirty)
+        result["dirty_total"] = dirty_total
+        result["files_to_reparse"] = dirty_total
         result["dirty_sample"] = [str(p) for p in dirty[:3]]
         if content_stable_updates:
             result["content_stable_mtime_refreshes"] = len(content_stable_updates)
@@ -430,28 +463,51 @@ def run_full_update(
                 pass
 
         # === 2b. Zero-dirty fast path (agent warm maps) ===
-        # When nothing needs reparse, skip graph rebuild + full library.md rewrite.
-        # Still refresh content-stable mtimes and ensure ACS is present.
+        # Light path: mtime index + meta only — do NOT load multi-MB pair payloads.
         if not dirty and not force_full:
-            cache = ic.load_cache(root) or {}
+            try:
+                from . import cache_store as cs
+            except Exception:
+                cs = None  # type: ignore
             mtime_refreshed = 0
-            for rel, new_mtime, chash in content_stable_updates:
-                ent = cache.get(rel)
-                if isinstance(ent, dict):
-                    ent["mtime"] = int(new_mtime)
-                    if chash:
-                        ent["content_hash"] = chash
-                    mtime_refreshed += 1
+            if content_stable_updates and cs is not None:
+                try:
+                    mtime_refreshed = cs.update_file_index_rows(
+                        root,
+                        [(r, int(m), h) for r, m, h in content_stable_updates],
+                    )
+                except Exception:
+                    mtime_refreshed = 0
             result["files_parsed"] = 0
             result["edges_persisted"] = 0
             result["languages_parsed"] = {}
             result["zero_dirty_fast_path"] = True
-            result["content_stable_mtime_refreshes"] = mtime_refreshed
-            # ACS: single ensure with root so v1.2→1.3 upgrades actually hit disk.
-            # (root=None then root= again left needs=False and never save_cache.)
+            result["content_stable_mtime_refreshes"] = mtime_refreshed or len(
+                content_stable_updates or []
+            )
+            backend = "json"
+            try:
+                if cs is not None:
+                    backend = cs.backend_name(root)
+            except Exception:
+                pass
+            result["cache_backend"] = backend
+            # ACS from meta only when already v1.3+; else full load + ensure
             acs: Dict[str, Any] = {}
             try:
-                acs = ic.ensure_acs_summary_persisted(cache, root) or {}
+                meta = cs.load_meta(root, keys=("_acs_summary", "_cycles")) if cs else {}
+                acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
+                needs_full = (
+                    not acs
+                    or str(acs.get("acs_version") or "") < "1.3"
+                    or "reason_code_counts" not in acs
+                )
+                if needs_full:
+                    cache = ic.load_cache(root) or {}
+                    acs = ic.ensure_acs_summary_persisted(cache, root) or {}
+                    cy = cache.get("_cycles") if isinstance(cache.get("_cycles"), dict) else {}
+                else:
+                    cy = meta.get("_cycles") if isinstance(meta.get("_cycles"), dict) else {}
                 result["acs"] = {
                     "acs_version": acs.get("acs_version"),
                     "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
@@ -460,21 +516,13 @@ def run_full_update(
                 }
             except Exception as ae:
                 result["acs_error"] = str(ae)
-            # ensure_acs only save_caches when ACS recompute was needed; mtime-only
-            # thrash refresh still requires an explicit save.
-            if mtime_refreshed:
-                try:
-                    ic.save_cache(root, cache)
-                except Exception as se:
-                    result["cache_save_error"] = str(se)
-            cy = cache.get("_cycles") if isinstance(cache.get("_cycles"), dict) else {}
+                cy = {}
             sccs = cy.get("sccs") if isinstance(cy, dict) else []
             result["cycles"] = {
                 "count": len(sccs or []),
                 "reused": True,
                 "fast_path": True,
             }
-            # library.md: reuse existing artifact when present (agent tools use cache)
             lib_path = root / "library.md"
             if lib_path.is_file():
                 result["library"] = {
@@ -486,30 +534,33 @@ def run_full_update(
             else:
                 try:
                     from .library import write_library_md
+                    cache = ic.load_cache(root) or {}
                     result["library"] = write_library_md(root, cache)
                 except Exception as e:
                     result["library"] = {"success": False, "error": str(e)}
-            # Health seed only if matrix missing (first map); skip thrash on warm
-            health_path = root / "file_health.json"
-            health_seeded = 0
-            if not health_path.is_file() and _health_mod is not None and hasattr(
-                _health_mod, "seed_health_from_map"
-            ):
-                try:
-                    max_seed = int(os.environ.get("WIKIFIER_HEALTH_SEED_MAX", "20000") or "20000")
-                    map_keys = [k for k in cache if isinstance(k, str) and k and not k.startswith("_")]
-                    seed_res = _health_mod.seed_health_from_map(
-                        root, map_keys=map_keys, max_new=max_seed,
-                    )
-                    health_seeded = int(seed_res.get("seeded") or 0)
-                except Exception as se:
-                    result["health_seed_error"] = str(se)
-            result["health_stubs_seeded"] = health_seeded
+            result["health_stubs_seeded"] = 0
             result["persist_pipeline_exercised"] = True
+            result["map_coverage"] = ic.build_map_coverage(
+                dirty_total=0,
+                files_parsed=0,
+                files_skipped=0,
+                files_to_reparse=0,
+                max_files=max_files,
+                parseable_files=int(result.get("parseable_files") or 0),
+                zero_dirty_fast_path=True,
+                acs_version=(result.get("acs") or {}).get("acs_version"),
+                cache_backend=backend,
+                directory=directory,
+            )
+            try:
+                if cs is not None:
+                    cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
+            except Exception:
+                pass
             result["success"] = True
             if verbose:
                 print(
-                    f"[run_full_update] zero-dirty fast path: "
+                    f"[run_full_update] zero-dirty fast path: backend={backend} "
                     f"mtime_refreshes={mtime_refreshed}, library_skipped={lib_path.is_file()}"
                 )
             return result
@@ -699,6 +750,41 @@ def run_full_update(
             result["library"] = write_library_md(root, cache)
         except Exception as e:
             result["library"] = {"success": False, "error": str(e)}
+
+        # map_coverage for agents (partial budget ≠ complete)
+        try:
+            from . import cache_store as cs
+            backend = cs.backend_name(root)
+        except Exception:
+            backend = "json"
+        acs_ver = None
+        try:
+            acs_ver = (cache.get("_acs_summary") or {}).get("acs_version")
+        except Exception:
+            pass
+        result["cache_backend"] = backend
+        result["map_coverage"] = ic.build_map_coverage(
+            dirty_total=int(result.get("dirty_total") or result.get("files_to_reparse") or 0),
+            files_parsed=int(result.get("files_parsed") or 0),
+            files_skipped=int(result.get("files_skipped") or 0),
+            files_to_reparse=int(result.get("files_to_reparse") or 0),
+            max_files=max_files,
+            parseable_files=int(result.get("parseable_files") or 0),
+            zero_dirty_fast_path=False,
+            acs_version=acs_ver,
+            cache_backend=backend,
+            directory=directory,
+        )
+        try:
+            cache["_map_coverage"] = result["map_coverage"]
+            # light meta persist when sqlite
+            from . import cache_store as cs
+            if cs.has_sqlite(root):
+                cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
+            else:
+                ic.save_cache(root, cache)
+        except Exception:
+            pass
 
         result["success"] = True
     except Exception as ex:

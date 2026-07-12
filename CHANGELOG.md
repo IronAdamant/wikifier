@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.4] - 2026-07-12
+
+### Added
+
+- **Stdlib SQLite import cache** (`.wikifier_staging/import_cache.sqlite`): primary store with
+  dual-read of legacy `import_cache.json`. Warm dirty detection uses mtime/content_hash index;
+  zero-dirty path loads meta only (not multi‑MB pair JSON). One-time migrate on `update_maps`.
+- **`map_coverage`** on `update_maps` / bootstrap snapshot: `complete`, `files_remaining_dirty`,
+  `files_skipped`, `acs_version`, `cache_backend`, agent note — so budgeted success ≠ map done.
+- **`acs_guidance`** on `session_bootstrap`: prefer `actionable_low_conf_edges` + reason codes.
+- **Go tiered resolve**: same-module imports via `go.mod` + relative `./` `../` when present.
+- Module `wikifier/cache_store.py` (keeps megamodule pressure off import_cache hot path).
+
+### Tests
+
+- `tests/test_cache_store.py` — sqlite round-trip, migrate, warm coverage, max_files incomplete,
+  bootstrap ACS guidance, go.mod resolve.
+
 ## [4.6.3] - 2026-07-12
 
 ### Added

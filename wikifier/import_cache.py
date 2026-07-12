@@ -43,27 +43,56 @@ try:
 except Exception:
     canonical_for_bree = None
 
-CACHE_FILE = ".wikifier_staging/import_cache.json"
+CACHE_FILE = ".wikifier_staging/import_cache.json"  # legacy dual-read path
 
 
 def _get_cache_path(root: Path) -> Path:
+    """Legacy JSON path (still used for dual-read / optional dual-write)."""
     return root / CACHE_FILE
 
 
 def load_cache(root: Path) -> Dict[str, Any]:
-    """Load the import cache. Returns empty dict if not present."""
-    cache_path = _get_cache_path(root)
+    """Load the import cache (SQLite primary, legacy JSON dual-read).
+
+    Prefer ``load_mtime_index`` / ``cache_store.load_meta`` on warm paths so
+    agents avoid deserializing multi‑MB pair payloads when only dirty/ACS meta
+    is needed.
+    """
+    try:
+        from . import cache_store as cs
+        return cs.load_cache_dict(Path(root)) or {}
+    except Exception:
+        pass
+    cache_path = _get_cache_path(Path(root))
     if not cache_path.exists():
         return {}
     try:
         with open(cache_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
 
+def load_mtime_index(root: Path) -> Dict[str, Dict[str, Any]]:
+    """Light dirty index: rel → {mtime, content_hash} (stdlib SQLite when available)."""
+    try:
+        from . import cache_store as cs
+        return cs.load_mtime_index(Path(root))
+    except Exception:
+        cache = load_cache(root) or {}
+        out: Dict[str, Dict[str, Any]] = {}
+        for k, v in cache.items():
+            if isinstance(k, str) and not k.startswith("_") and isinstance(v, dict):
+                out[k] = {
+                    "mtime": int(v.get("mtime", 0) or 0),
+                    "content_hash": v.get("content_hash"),
+                }
+        return out
+
+
 def save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Save the import cache to disk.
+    """Save the import cache to disk (SQLite primary; optional compact JSON dual-write).
 
     Uses file locking (M2-Rem-07) to prevent corruption when multiple
     agents are running update-maps or health operations concurrently.
@@ -84,32 +113,16 @@ def save_cache(root: Path, cache: Dict[str, Any]) -> None:
 
 
 def _do_save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Internal save without locking.
-
-    E1 fix (barrel churn invalidation): the BREE BarrelResolutionCache persists its
-    reserved keys (_barrel_resolutions / _barrel_file_index) out-of-band during parsing
-    (session flush or legacy immediate-persist). A caller then saving an older/stale
-    cache dict that never touched barrel state would silently erase them. Preserve the
-    on-disk values when the keys are ABSENT from the dict being saved; intentional
-    clearing always goes through to_cache_updates()/set_barrel_*() which now write
-    explicit (possibly empty) dicts.
-    """
-    cache_path = _get_cache_path(root)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    _BARREL_KEYS = ("_barrel_resolutions", "_barrel_file_index")
+    """Internal save without locking — SQLite via cache_store (barrel merge included)."""
     try:
-        if cache_path.exists() and any(k not in cache for k in _BARREL_KEYS):
-            with open(cache_path, "r", encoding="utf-8") as f:
-                prev = json.load(f)
-            if isinstance(prev, dict):
-                for k in _BARREL_KEYS:
-                    if k not in cache and prev.get(k):
-                        cache[k] = prev[k]
+        from . import cache_store as cs
+        cs.save_cache_dict(Path(root), cache)
+        return
     except Exception:
-        pass  # never let preservation break the save itself
-    # Compact separators: the cache is machine-consumed only, and indent=2
-    # made barrel-heavy caches ~2-3x larger and proportionally slower to
-    # write (observed: 274MB on Babylon.js).
+        pass
+    # Last-resort JSON-only path if sqlite unavailable
+    cache_path = _get_cache_path(Path(root))
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, separators=(",", ":"))
 
@@ -1312,11 +1325,69 @@ def ensure_acs_summary_persisted(
         set_acs_summary(cache, acs)
         if root is not None:
             try:
-                save_cache(root, cache)
+                # Prefer meta-only write when SQLite is primary (warm ACS upgrade)
+                from . import cache_store as cs
+                if cs.has_sqlite(Path(root)):
+                    cs.save_meta_key(Path(root), "_acs_summary", acs)
+                else:
+                    save_cache(root, cache)
             except Exception:
-                pass  # never let a read/query path fail due to persist side-effect
+                try:
+                    save_cache(root, cache)
+                except Exception:
+                    pass  # never let a read/query path fail due to persist side-effect
         return acs
     return acs
+
+
+def build_map_coverage(
+    *,
+    dirty_total: int = 0,
+    files_parsed: int = 0,
+    files_skipped: int = 0,
+    files_to_reparse: int = 0,
+    max_files: Optional[int] = None,
+    parseable_files: int = 0,
+    zero_dirty_fast_path: bool = False,
+    acs_version: Optional[str] = None,
+    cache_backend: Optional[str] = None,
+    directory: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Structured map completeness for agents (avoid mistaking partial budget for done).
+
+    ``files_remaining_dirty`` is the dirty work not completed in this run
+    (typically ``files_skipped`` under max_files, else 0 when fully processed).
+    """
+    remaining = int(files_skipped or 0)
+    if remaining == 0 and files_to_reparse and files_parsed is not None:
+        # full process of this batch with no budget skip
+        remaining = max(0, int(files_to_reparse) - int(files_parsed or 0))
+    complete = (
+        bool(zero_dirty_fast_path)
+        or (int(dirty_total or 0) == 0 and int(files_skipped or 0) == 0)
+        or (int(files_skipped or 0) == 0 and int(files_to_reparse or 0) == int(files_parsed or 0))
+    )
+    # Budget truncation: not complete
+    if int(files_skipped or 0) > 0:
+        complete = False
+    return {
+        "complete": complete,
+        "dirty_total": int(dirty_total or 0),
+        "files_to_reparse": int(files_to_reparse or 0),
+        "files_parsed": int(files_parsed or 0),
+        "files_skipped": int(files_skipped or 0),
+        "files_remaining_dirty": int(remaining),
+        "budget_max_files": max_files,
+        "parseable_files": int(parseable_files or 0),
+        "scoped_directory": directory,
+        "zero_dirty_fast_path": bool(zero_dirty_fast_path),
+        "acs_version": acs_version,
+        "cache_backend": cache_backend,
+        "agent_note": (
+            "success≠map-complete when files_remaining_dirty>0 or complete=false; "
+            "re-run update_maps (or raise max_files) until complete=true"
+        ),
+    }
 
 
 def _analyze_one_scc(
@@ -1455,8 +1526,8 @@ def compute_files_needing_reparse(
 ) -> List[Path]:
     """R7 Performance: Single-invocation dirty detection for update-maps.
 
-    Eliminates thousands of interpreter + wikifier.* imports on large monorepos.
-    Detection is one in-process pass over candidates.
+    Uses the **light mtime/content_hash index** (SQLite when available) so warm
+    scans do not deserialize multi‑MB resolved_pairs payloads.
 
     Semantics:
       - full_rebuild=True → all candidates dirty (order-preserving, deduped)
@@ -1479,7 +1550,8 @@ def compute_files_needing_reparse(
                 out.append(pr)
         return out
 
-    cache = load_cache(root)
+    # Light index only (not full pair payloads)
+    index = load_mtime_index(root)
     to_reparse: List[Path] = []
     seen: set = set()
     try:
@@ -1529,7 +1601,7 @@ def compute_files_needing_reparse(
             continue
         seen.add(p_res)
         rel = _rel_of(p_res)
-        data = get_file_data(cache, rel) or {}
+        data = index.get(rel) or {}
         cached_mtime = int(data.get("mtime", 0) or 0)
         curr_mtime = 0
         if p_res.exists():
@@ -1545,9 +1617,9 @@ def compute_files_needing_reparse(
                 continue
             to_reparse.append(p_res)
 
-    # 2. Also honor any cache-tracked files that changed on disk (old behavior for completeness)
-    for rel, data in list(cache.items()):
-        if not isinstance(rel, str) or rel.startswith("_") or not isinstance(data, dict):
+    # 2. Cache-tracked files that changed on disk (index keys only — no full payload)
+    for rel, data in list(index.items()):
+        if not isinstance(rel, str) or not isinstance(data, dict):
             continue
         try:
             full = (root / rel).resolve()

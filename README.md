@@ -77,8 +77,9 @@ Advanced intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`, ba
 
 - **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust (`use`/`mod` + best-effort `crate::` paths), Go, C/C++ includes, C# usings; per-edge confidence; barrel expansion for TS/JS
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
-- **Warm agent maps (4.6.3+)** — zero-dirty fast path skips full graph/`library.md` rewrite when nothing reparsed; content-hash dirty so mtime thrash ≠ reparse; `--directory=` scopes the candidate walk (monorepo budgets)
-- **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal` (`skip`|`investigate`); prefer `actionable_low_conf_edges` over raw low-conf noise
+- **Warm agent maps (4.6.3+ / 4.6.4+)** — zero-dirty fast path skips full graph/`library.md` rewrite; **stdlib SQLite** import cache (dual-read legacy JSON) so warm dirty scans use mtime/hash index not multi‑MB pair JSON; content-hash dirty; `--directory=` scopes walks
+- **Partial-map honesty** — `map_coverage` on `update_maps` / bootstrap (`complete`, `files_remaining_dirty`, `acs_version`, `cache_backend`); budgeted runs are not “done”
+- **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal`; prefer `actionable_low_conf_edges` + reason codes — **never** raw `low_conf_edges` alone
 - **Scale** — reverse index + barrel invalidation so one edit doesn’t re-scan the monorepo
 - **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
 - **Zero core dependencies** — stdlib only; forks can add their own stack on top
