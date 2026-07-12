@@ -176,6 +176,7 @@ def build_structured_actions(
     scope_warnings: Optional[List[str]] = None,
     clean: bool = False,
     max_file_actions: int = 12,
+    map_coverage: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Build dispatchable action objects for agents (not prose-only).
 
@@ -183,6 +184,28 @@ def build_structured_actions(
     """
     actions: List[Dict[str, Any]] = []
     prio = 1
+    cov = map_coverage if isinstance(map_coverage, dict) else {}
+    remaining = int(cov.get("files_remaining_dirty") or 0)
+    complete = cov.get("complete")
+    # Incomplete map under budget — higher priority than ACS thrash
+    if complete is False or remaining > 0:
+        actions.append({
+            "action": "update_maps_until_complete",
+            "file": None,
+            "priority": 3,
+            "reason": (
+                f"Map incomplete: files_remaining_dirty={remaining}, complete={complete}. "
+                "Re-run update_maps (same directory/max_files) until map_coverage.complete=true; "
+                "success alone does not mean the map is done."
+            ),
+            "preflight": ["update_maps"],
+            "map_coverage": {
+                "complete": complete,
+                "files_remaining_dirty": remaining,
+                "files_skipped": cov.get("files_skipped"),
+                "budget_max_files": cov.get("budget_max_files"),
+            },
+        })
     for f in (red_files or [])[:max_file_actions]:
         actions.append({
             "action": "investigate_red",
@@ -201,7 +224,7 @@ def build_structured_actions(
             "preflight": ["prepare_edit", "why_file"],
         })
         prio = min(prio + 1, 9)
-    if red == 0 and actionable_yellow == 0 and clean:
+    if red == 0 and actionable_yellow == 0 and clean and remaining == 0:
         actions.append({
             "action": "lookup_only",
             "file": None,
@@ -222,7 +245,10 @@ def build_structured_actions(
             "action": "review_acs",
             "file": None,
             "priority": 4,
-            "reason": f"{acs_actionable} actionable low-confidence project edges (not external noise)",
+            "reason": (
+                f"{acs_actionable} actionable low-confidence project edges "
+                "(prefer actionable_low_conf_edges + reason_code_counts; not raw low_conf_edges)"
+            ),
             "preflight": ["get_dependencies"],
         })
     for w in (scope_warnings or [])[:2]:
@@ -233,7 +259,10 @@ def build_structured_actions(
             "reason": str(w),
             "preflight": [],
         })
-    if not any(a["action"] == "update_maps" for a in actions):
+    if not any(
+        a["action"] in ("update_maps", "update_maps_until_complete", "update_maps_if_structure")
+        for a in actions
+    ):
         actions.append({
             "action": "update_maps_if_structure",
             "file": None,
@@ -609,6 +638,7 @@ def session_bootstrap(
     if isinstance(out.get("scope"), dict):
         scope_warnings = list(out["scope"].get("warnings") or [])
 
+    map_cov = out.get("map_coverage") if isinstance(out.get("map_coverage"), dict) else {}
     out["actions"] = build_structured_actions(
         red_files=red_files,
         actionable_yellow_files=actionable_yellow_files,
@@ -618,12 +648,19 @@ def session_bootstrap(
         acs_actionable=acs_actionable,
         scope_warnings=scope_warnings,
         clean=clean,
+        map_coverage=map_cov,
     )
     out["work_items"] = out["actions"]  # alias
     out["selective_work"] = True
     out["map_first"] = True
+    rem = int(map_cov.get("files_remaining_dirty") or 0) if map_cov else 0
     out["message"] = (
         "session_bootstrap ready — use actions[] / attention; "
         "prepare_edit(file) before large edits; record_change after edits."
+        + (
+            f" MAP INCOMPLETE: files_remaining_dirty={rem} — re-run update_maps until complete."
+            if rem > 0 or map_cov.get("complete") is False
+            else ""
+        )
     )
     return out

@@ -2,6 +2,7 @@
 
 AGENT MAP:
   parse_c_cpp_imports(filepath) → edge list for .c/.h/.cpp/.hpp/.cc/.cxx
+  Tiered local resolve: same-dir, include/, sibling src/, bounded walk under scope
 """
 
 from __future__ import annotations
@@ -19,22 +20,36 @@ _INCLUDE_RE = re.compile(
 _COMMENT_BLOCK = re.compile(r"/\*.*?\*/", re.DOTALL)
 _COMMENT_LINE = re.compile(r"//.*?$", re.MULTILINE)
 
+_LOCAL_SUBDIRS = ("include", "inc", "src", "Source", "Headers", "public", "private")
+
 
 def _strip(src: str) -> str:
     return _COMMENT_LINE.sub(" ", _COMMENT_BLOCK.sub(" ", src))
 
 
 def _resolve_local(current: Path, inc: str) -> Optional[str]:
+    """Resolve quoted #include to an on-disk header (project-local, bounded)."""
     parent = current.parent
-    cand = (parent / inc).resolve()
+    # 1) same directory / relative path as written
+    cand = (parent / inc)
     if cand.is_file():
-        return str(cand)
-    # walk up a few parents for monorepo headers (bounded)
-    for _ in range(4):
-        parent = parent.parent
-        cand = (parent / inc).resolve()
-        if cand.is_file():
-            return str(cand)
+        return str(cand.resolve())
+    # 2) common include/ layout next to file and parents
+    d = parent
+    for _ in range(6):
+        for sub in ("",) + _LOCAL_SUBDIRS:
+            base = d / sub if sub else d
+            c = base / inc
+            if c.is_file():
+                return str(c.resolve())
+            # basename-only fallback in include/
+            c2 = base / Path(inc).name
+            if c2.is_file():
+                return str(c2.resolve())
+        parent_d = d.parent
+        if parent_d == d:
+            break
+        d = parent_d
     return None
 
 
@@ -52,6 +67,14 @@ def parse_c_cpp_imports(filepath: str) -> List[Dict]:
         is_system = quote == "<"
         is_rel = not is_system
         rp = _resolve_local(path, inc) if is_rel else None
+        # Also try angle includes that are actually project headers (optional, scoped)
+        if is_system and not rp:
+            # only same-dir / include/ — never whole monorepo
+            maybe = _resolve_local(path, inc)
+            if maybe:
+                rp = maybe
+                is_rel = True
+                is_system = False
         diag = None
         if is_system or not rp:
             diag = {
@@ -62,7 +85,7 @@ def parse_c_cpp_imports(filepath: str) -> List[Dict]:
                 "suggestion_for_agent": (
                     "System includes are expected external."
                     if is_system
-                    else "Could not resolve local include on disk (include paths not fully modeled)."
+                    else "Could not resolve local include (try include/ next to sources)."
                 ),
                 "details": {},
             }
@@ -77,7 +100,7 @@ def parse_c_cpp_imports(filepath: str) -> List[Dict]:
                 statement_type="include",
                 original_statement=m.group(0).strip(),
                 diagnostic=diag,
-                strategy="c-include" if is_system else "c-include-local",
+                strategy="c-include" if is_system and not rp else "c-include-local",
             )
         )
     return edges

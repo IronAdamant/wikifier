@@ -346,3 +346,40 @@ def get_map_coverage_from_meta(root: Path) -> Dict[str, Any]:
         "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
         "reason_code_counts": acs.get("reason_code_counts"),
     }
+
+
+def cache_status(root: Path) -> Dict[str, Any]:
+    """Machine-readable dual-cache status for agents/ops (zero full pair load)."""
+    root = Path(root)
+    sp = sqlite_path(root)
+    jp = json_path(root)
+    backend = backend_name(root)
+    sqlite_bytes = int(sp.stat().st_size) if sp.is_file() else 0
+    json_bytes = int(jp.stat().st_size) if jp.is_file() else 0
+    snap = get_map_coverage_from_meta(root)
+    meta = load_meta(root, keys=("_acs_summary", "_map_coverage", "_candidate_list"))
+    acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
+    cand = meta.get("_candidate_list") if isinstance(meta.get("_candidate_list"), dict) else {}
+    return {
+        "success": True,
+        "project_root": str(root.resolve()) if root.exists() else str(root),
+        "cache_backend": backend,
+        "sqlite_path": str(sp) if sp.is_file() else None,
+        "json_path": str(jp) if jp.is_file() else None,
+        "sqlite_bytes": sqlite_bytes,
+        "json_bytes": json_bytes,
+        "acs_version": acs.get("acs_version") or snap.get("acs_version"),
+        "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
+        "map_coverage": snap.get("map_coverage") or meta.get("_map_coverage"),
+        "candidate_list_count": cand.get("count"),
+        "candidate_list_directory": cand.get("directory"),
+        "dual_write_policy": (
+            "SQLite is primary. Legacy JSON dual-read remains. "
+            "Dual-write JSON only when file count ≤400 or WIKIFIER_CACHE_JSON=1; "
+            "set WIKIFIER_CACHE_JSON=0 to never dual-write. Prefer sqlite for warm agents."
+        ),
+        "migrate_note": (
+            "update_maps migrates legacy import_cache.json → import_cache.sqlite once "
+            "when sqlite is missing."
+        ),
+    }

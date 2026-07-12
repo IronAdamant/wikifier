@@ -34,160 +34,9 @@ def _collect_candidate_source_files(
     root: Path,
     directory: Optional[str] = None,
 ) -> List[Path]:
-    """
-    Lightweight pruned filesystem walk to collect source candidates
-    for dirty detection in the Python-primary run_full_update path.
-
-    Mirrors the excludes and extensions used in wikifier.sh find + resolution.py
-    EXCLUDES (including pnpm/yarn store dirs for speed on large monorepos).
-
-    When ``directory`` is set (e.g. ``library/std/src``), collection is scoped
-    to that subtree only — critical for agent-scale monorepos (rust/llvm/dotnet)
-    so scoped update-maps do not walk the entire tree first.
-    Zero side-effects, defensive.
-    """
-    candidates: List[Path] = []
-    EXCLUDES = {
-        "node_modules", ".git", "dist", "build", ".next", "coverage",
-        "__pycache__", "tmp", "temp", ".turbo", ".cache", "target", "out",
-        ".pnpm", ".yarn", ".store", "store", "virtual-store", ".pnp",
-        ".pnp.cjs", "node_modules/.pnpm", "node_modules/.yarn"
-    }
-    # Deep-map languages (agent multi-lang dogfood)
-    exts = (
-        ".py", ".js", ".ts", ".jsx", ".tsx",
-        ".rs", ".go",
-        ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh",
-        ".cs", ".java",
-    )
-    try:
-        root = Path(root).resolve()
-    except Exception:
-        root = Path(root)
-
-    # Optional subtree scope (agent --directory=)
-    walk_root = root
-    scope_prefix = ""
-    if directory:
-        try:
-            walk_root = (root / directory).resolve()
-            if walk_root.is_dir():
-                scope_prefix = str(walk_root)
-            else:
-                walk_root = root
-        except Exception:
-            walk_root = root
-
-    # Also respect the project's exclude_patterns.txt (if present) for parity with sh
-    # mapping paths and check-changes. Simple dir-name globs only for pruning speed.
-    # This makes python-primary update-maps benefit from user custom excludes (venvs etc)
-    # without any behavior change.
-    # Look relative to explicit WIKIFIER_PROJECT_ROOT (if set for the target) or the
-    # passed root; excludes live at the logical project root, not arbitrary monitored subdirs.
-    ep_root = Path(os.environ.get("WIKIFIER_PROJECT_ROOT", root))
-    ep = ep_root / "exclude_patterns.txt"
-    EXCLUDE_GLOBS: set = set()
-    if ep.exists():
-        try:
-            for line in ep.read_text(errors="ignore").splitlines():
-                p = line.strip()
-                if p and not p.startswith("#"):
-                    p = p.split()[0]  # first token
-                    if p:
-                        if any(ch in p for ch in "*?["):
-                            # file glob (e.g. *.pyc, generated_*.py) — matched per
-                            # candidate below, not just used as a dirname prune
-                            EXCLUDE_GLOBS.add(p)
-                        EXCLUDES.add(p)
-                        # also common glob forms as exact for dirname match
-                        if p.endswith("/*") or p.endswith("*"):
-                            EXCLUDES.add(p.rstrip("/*"))
-        except Exception:
-            pass
-
-    import fnmatch as _fnmatch
-
-    def _glob_excluded(path: Path) -> bool:
-        if not EXCLUDE_GLOBS:
-            return False
-        name = path.name
-        try:
-            relp = str(Path(path).resolve().relative_to(root))
-        except Exception:
-            relp = name
-        return any(
-            _fnmatch.fnmatch(name, g) or _fnmatch.fnmatch(relp, g)
-            for g in EXCLUDE_GLOBS
-        )
-
-    def _in_scope(p: Path) -> bool:
-        if not scope_prefix:
-            return True
-        try:
-            sp = str(p.resolve())
-            return sp == scope_prefix or sp.startswith(scope_prefix + os.sep)
-        except Exception:
-            return True
-
-    # Fast path: if inside a git repo, use `git ls-files` + untracked (respects .gitignore, dramatically faster
-    # on large checkouts than any walk; falls back to scandir scan). This is a pure speed opt for "updates"
-    # (check-changes, update-maps) with near-identical or better candidate set for real codebases.
-    # When directory is scoped, prefer pathspec under that prefix for smaller lists.
-    git_dir = root / ".git"
-    if git_dir.exists() or (root / ".git" / "HEAD").exists():  # works for worktrees too
-        try:
-            import subprocess
-            git_cmd = ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"]
-            if directory and walk_root != root:
-                # Limit git listing to the scoped path (agent monorepo budget)
-                git_cmd.append("--")
-                git_cmd.append(str(directory).rstrip("/") + "/")
-            out = subprocess.check_output(
-                git_cmd,
-                cwd=root, stderr=subprocess.DEVNULL
-            )
-            for entry in out.split(b"\0"):
-                if not entry:
-                    continue
-                p = (root / entry.decode("utf-8", "ignore")).resolve()
-                if p.suffix.lower() in exts:  # reuse the set from above (adjusted)
-                    # quick filter for excludes we still want even if git surfaces them
-                    parts = p.parts
-                    if (
-                        not any(part in EXCLUDES or part.startswith(".") for part in parts)
-                        and not _glob_excluded(p)
-                        and _in_scope(p)
-                    ):
-                        candidates.append(p)
-            if candidates:
-                return candidates  # success, use git list
-        except Exception:
-            pass  # fall through to scandir
-
-    # Use os.scandir for faster directory traversal (std lib only; avoids full listdir + separate is_dir stats on large trees).
-    # Pruning is applied on the fly. Behavior identical to prior walk. Scoped: start at walk_root.
-    exts_lower = tuple(e.lower() for e in exts)
-    def _scan_dir(d: Path) -> None:
-        try:
-            with os.scandir(d) as it:
-                for entry in it:
-                    try:
-                        name = entry.name
-                        if entry.is_dir(follow_symlinks=False):
-                            if name not in EXCLUDES and not name.startswith('.'):
-                                _scan_dir(Path(entry.path))
-                        elif entry.is_file(follow_symlinks=False):
-                            lname = name.lower()
-                            if lname.endswith(exts_lower):
-                                fp = Path(entry.path)
-                                if not _glob_excluded(fp) and _in_scope(fp):
-                                    candidates.append(fp)
-                    except Exception:
-                        continue
-        except Exception:
-            pass
-    _scan_dir(walk_root)
-    return candidates
+    """Thin wrapper → ``wikifier.candidates`` (scoped walk, no per-file resolve)."""
+    from .candidates import collect_candidate_source_files
+    return collect_candidate_source_files(root, directory=directory)
 
 
 def _exercise_persist_pipeline(
@@ -384,24 +233,36 @@ def run_full_update(
         except Exception as mig_e:
             result["cache_migrate_note"] = str(mig_e)
 
-        # === 1. Candidates (scoped walk when directory set — monorepo agent budget) ===
-        cands = _collect_candidate_source_files(root, directory=directory)
-        if directory:
-            # Defensive re-filter (git path edge cases / symlink roots)
-            try:
-                want = str((root / directory).resolve())
-                cands = [
-                    p for p in cands
-                    if str(Path(p).resolve()) == want
-                    or str(Path(p).resolve()).startswith(want + os.sep)
-                ]
-            except Exception:
-                pass
+        # === 1. Candidates (scoped; reuse list when scope fingerprint unchanged) ===
+        from .candidates import (
+            collect_candidate_source_files,
+            try_cached_candidate_rels,
+            candidate_list_meta,
+            scope_fingerprint,
+        )
+        cands: List[Path] = []
+        cand_reused = False
+        try:
+            from . import cache_store as cs
+            meta_c = cs.load_meta(root, keys=("_candidate_list",))
+            cached = try_cached_candidate_rels(meta_c, root, directory)
+            if cached is not None and not force_full:
+                cands = cached
+                cand_reused = True
+        except Exception:
+            pass
+        if not cands:
+            cands = collect_candidate_source_files(root, directory=directory)
         result["parseable_files"] = len(cands)
+        result["candidates_reused"] = cand_reused
+        result["scope_fingerprint"] = scope_fingerprint(root, directory)
         if directory:
             result["scoped_directory"] = directory
         if verbose:
-            print(f"[run_full_update] {len(cands)} candidate sources")
+            print(
+                f"[run_full_update] {len(cands)} candidate sources "
+                f"(reused={cand_reused})"
+            )
 
         # === 2. Dirty detection + barrel-stale merge ===
         # Content-stable mtime thrash: collect (rel, mtime, hash) to refresh without reparse.
@@ -555,6 +416,13 @@ def run_full_update(
             try:
                 if cs is not None:
                     cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
+                    # Persist candidate list for next warm (fp reuse) when freshly collected
+                    if not cand_reused and cands:
+                        cs.save_meta_key(
+                            root,
+                            "_candidate_list",
+                            candidate_list_meta(root, directory, cands),
+                        )
             except Exception:
                 pass
             result["success"] = True
@@ -777,10 +645,15 @@ def run_full_update(
         )
         try:
             cache["_map_coverage"] = result["map_coverage"]
-            # light meta persist when sqlite
+            if cands:
+                cache["_candidate_list"] = candidate_list_meta(root, directory, cands)
             from . import cache_store as cs
             if cs.has_sqlite(root):
                 cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
+                if cands:
+                    cs.save_meta_key(
+                        root, "_candidate_list", cache["_candidate_list"]
+                    )
             else:
                 ic.save_cache(root, cache)
         except Exception:
@@ -967,6 +840,11 @@ def main():
             if _cmd0 in ("session-bootstrap", "session_bootstrap", "bootstrap", "session-start"):
                 import json as _json
                 res = session_bootstrap(project_root=project_root)
+                print(_json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
+            if _cmd0 in ("cache-status", "cache_status", "cache-info", "cache"):
+                import json as _json
+                res = cache_status(project_root=project_root)
                 print(_json.dumps(res, indent=2, default=str))
                 return 0 if res.get("success") else 1
             if _cmd0 in ("prepare-edit", "prepare_edit", "lookup", "preflight"):
@@ -1758,19 +1636,44 @@ def suggest_next_actions(
 
         acs_note = ""
         actionable = 0
+        map_coverage: Dict[str, Any] = {}
         if _ic_mod is not None:
             try:
-                cache = _ic_mod.load_cache(root) or {}
-                acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
-                actionable = int(acs.get("actionable_low_conf_edges", acs.get("low_conf_edges", 0)) or 0)
+                # Prefer light meta (sqlite) over full pair deserialize
+                try:
+                    from . import cache_store as cs
+                    meta = cs.load_meta(root, keys=("_acs_summary", "_map_coverage"))
+                    acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
+                    map_coverage = (
+                        meta.get("_map_coverage")
+                        if isinstance(meta.get("_map_coverage"), dict)
+                        else {}
+                    )
+                except Exception:
+                    acs = {}
+                if not acs or "actionable_low_conf_edges" not in acs:
+                    cache = _ic_mod.load_cache(root) or {}
+                    acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
+                    if not map_coverage and isinstance(cache.get("_map_coverage"), dict):
+                        map_coverage = cache["_map_coverage"]
+                actionable = int(acs.get("actionable_low_conf_edges", 0) or 0)
                 raw_low = int(acs.get("low_conf_edges", 0) or 0)
                 noise = int(acs.get("external_noise_edges", 0) or 0)
+                rem = int(map_coverage.get("files_remaining_dirty") or 0)
+                if map_coverage.get("complete") is False or rem > 0:
+                    n += 1
+                    suggestions.append(
+                        f"{n}. MAP INCOMPLETE: files_remaining_dirty={rem}, "
+                        f"complete={map_coverage.get('complete')}. "
+                        "Re-run update_maps (same directory/max_files) until "
+                        "map_coverage.complete=true — success alone is not done."
+                    )
                 if actionable > 0:
                     n += 1
                     suggestions.append(
                         f"{n}. Review {actionable} actionable low-confidence *project* edges "
-                        f"(not stdlib/external; full low_conf telemetry={raw_low}, external_noise={noise}). "
-                        "See health json dependency_intel / get_dependencies(low_confidence_only=True)."
+                        f"(prefer actionable_low_conf_edges + reason_code_counts; "
+                        f"raw low_conf={raw_low} includes noise)."
                     )
                     acs_note = (
                         f" ACS actionable_low={actionable} (raw_low={raw_low}, external_noise={noise}, "
@@ -1809,6 +1712,7 @@ def suggest_next_actions(
                 acs_actionable=actionable,
                 scope_warnings=scope_warnings,
                 clean=(red == 0 and yellow == 0),
+                map_coverage=map_coverage,
             )
         except Exception:
             actions = []
@@ -1826,11 +1730,17 @@ def suggest_next_actions(
                 "actions": actions,
                 "health_summary": health_sum,
                 "acs_note": acs_note,
+                "map_coverage": map_coverage,
                 "selective_work": True,
                 "map_first": True,
             }
         # Text: prose + compact action lines
         lines = list(suggestions)
+        if map_coverage:
+            lines.append(
+                f"map_coverage: complete={map_coverage.get('complete')} "
+                f"remaining_dirty={map_coverage.get('files_remaining_dirty')}"
+            )
         if actions:
             lines.append("Actions (dispatchable):")
             for a in actions[:12]:
@@ -1901,6 +1811,24 @@ def list_core_tools() -> Dict[str, Any]:
     """Core daily agent tool listing (prefer over full MCP catalog)."""
     from .agent_loop import list_core_tools as _lct
     return _lct()
+
+
+def cache_status(
+    project_root: Optional[Union[str, Path]] = None,
+) -> Dict[str, Any]:
+    """Dual-cache ops surface: backend, bytes, ACS version, map_coverage (no full pair load)."""
+    root = _get_effective_root(project_root)
+    try:
+        from . import cache_store as cs
+        out = cs.cache_status(root)
+        out["success"] = True
+        return out
+    except Exception as e:
+        return {
+            "success": False,
+            "project_root": str(root),
+            "error": str(e),
+        }
 
 
 def update_maps(

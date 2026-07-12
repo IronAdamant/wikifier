@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.5] - 2026-07-12
+
+### Added
+
+- **`wikifier/candidates.py`**: scoped/monitored-first candidate collection without per-file
+  `Path.resolve()`; git pathspec; **candidate list reuse** when scope fingerprint unchanged.
+- **Core map incompleteness**: `suggest_next_actions` / `session_bootstrap` expose
+  `map_coverage` and dispatch `update_maps_until_complete` when `files_remaining_dirty>0`.
+- **`wikifier cache-status`** / `cache_status()`: backend, bytes, ACS version, coverage,
+  dual-write policy + migrate note (no full pair load).
+- **C#** nearest `.csproj` + RootNamespace path resolve; **C/C++** stronger local
+  `include/` / parent walk for quoted includes.
+
+### Docs
+
+- Dual-cache: SQLite primary; JSON dual-read; dual-write only ≤400 files or
+  `WIKIFIER_CACHE_JSON=1` (set `0` to never dual-write).
+
 ## [4.6.4] - 2026-07-12
 
 ### Added

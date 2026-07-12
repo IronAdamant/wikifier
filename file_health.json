@@ -1,15 +1,15 @@
 {
   "version": 2,
-  "last_updated": "2026-07-12 12:00:51",
+  "last_updated": "2026-07-12 12:55:37",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:22",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "wiki_content_hash": "sha256:789a6a3b21b70fc7ec595dd46f688582d9cd75fe9a96e02605cc92fd10840066",
-      "source_content_hash": "sha256:789a6a3b21b70fc7ec595dd46f688582d9cd75fe9a96e02605cc92fd10840066",
-      "last_wiki_refresh": "2026-07-12 11:56:22",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 11:56:22 (wiki hash captured); wiki=run.md"
+      "last_updated": "2026-07-12 12:47:40",
+      "reason": "4.6.5 verified",
+      "wiki_content_hash": "sha256:a050f7964651798515dd1e62b52e1a390c02b80886b23a7bdca63e55644d476a",
+      "source_content_hash": "sha256:a050f7964651798515dd1e62b52e1a390c02b80886b23a7bdca63e55644d476a",
+      "last_wiki_refresh": "2026-07-12 12:47:40",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 11:56:22 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 12:47:40 (wiki hash captured); wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
@@ -55,12 +55,12 @@
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:23",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "wiki_content_hash": "sha256:5794f54e0aa22f796a26785805ce86ca64e2f5cc23f6c8571ac89cb84c9365ee",
-      "source_content_hash": "sha256:5794f54e0aa22f796a26785805ce86ca64e2f5cc23f6c8571ac89cb84c9365ee",
-      "last_wiki_refresh": "2026-07-12 11:56:23",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-12 11:46:04 (wiki hash captured); wiki=README.md; mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-07-12 12:47:39",
+      "reason": "4.6.5 verified",
+      "wiki_content_hash": "sha256:2ab5ff9bcd3cb2a531ddd2475de72d4765838d44266c83c889beef9bcada952b",
+      "source_content_hash": "sha256:2ab5ff9bcd3cb2a531ddd2475de72d4765838d44266c83c889beef9bcada952b",
+      "last_wiki_refresh": "2026-07-12 12:47:39",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-12 11:46:04 (wiki hash captured); wiki=README.md; mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=README.md; mark-green:2026-07-12 12:47:39 (wiki hash captured); wiki=README.md"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
@@ -82,11 +82,11 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 12:00:50",
-      "reason": "warm no full deserialize",
-      "source_content_hash": "sha256:b98ac9afe7338d6fc63831bcb73671148285681ebb0a3a44f3c97b671f36f308",
-      "last_wiki_refresh": "2026-07-12 12:00:50",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:25 (wiki hash captured); mark-green:2026-07-12 11:06:25 (wiki hash captured); mark-green:2026-07-12 11:56:20 (wiki hash captured); mark-green:2026-07-12 12:00:50 (wiki hash captured)"
+      "last_updated": "2026-07-12 12:47:36",
+      "reason": "4.6.5 verified",
+      "source_content_hash": "sha256:d760575b36f0a500094f22ea53e97fe777f25ae6ed33ce6b7def9e500304095f",
+      "last_wiki_refresh": "2026-07-12 12:47:36",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:25 (wiki hash captured); mark-green:2026-07-12 11:06:25 (wiki hash captured); mark-green:2026-07-12 11:56:20 (wiki hash captured); mark-green:2026-07-12 12:00:50 (wiki hash captured); mark-green:2026-07-12 12:47:36 (wiki hash captured)"
     },
     "diagnostics.html": {
       "status": "🟢 Green",
@@ -123,12 +123,12 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:23",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "wiki_content_hash": "sha256:d04e85c12ca365b1c70876cb564e02d8fbe6f47c609d7ce2e68db619ac1e2f54",
-      "source_content_hash": "sha256:d04e85c12ca365b1c70876cb564e02d8fbe6f47c609d7ce2e68db619ac1e2f54",
-      "last_wiki_refresh": "2026-07-12 11:56:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:01:28 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=CHANGELOG.md"
+      "last_updated": "2026-07-12 12:47:39",
+      "reason": "4.6.5 verified",
+      "wiki_content_hash": "sha256:21f61ac6608b6f1e94e7e550adaf4a7326f60ec71f40fc37483ad13833124dea",
+      "source_content_hash": "sha256:21f61ac6608b6f1e94e7e550adaf4a7326f60ec71f40fc37483ad13833124dea",
+      "last_wiki_refresh": "2026-07-12 12:47:39",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:01:28 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 12:47:39 (wiki hash captured); wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
@@ -139,11 +139,11 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:22",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "source_content_hash": "sha256:7b3ad675d334ddb4f0329a3a55999e5c803c287664ad4937602182bb390e3cde",
-      "last_wiki_refresh": "2026-07-12 11:56:22",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:22 (wiki hash captured)"
+      "last_updated": "2026-07-12 12:47:38",
+      "reason": "4.6.5 verified",
+      "source_content_hash": "sha256:74d12583d9756acd0230aaaecf4227337c55046c5ea86c13707eddeb29418edc",
+      "last_wiki_refresh": "2026-07-12 12:47:38",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:22 (wiki hash captured); mark-green:2026-07-12 12:47:38 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -344,17 +344,19 @@
     },
     "wikifier/parsers/c_cpp.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:52:22",
-      "reason": "dogfood llvm/linux",
-      "source_content_hash": "sha256:8315b20bdf69231cef5b77517a3c84a2c00a6359dcf5bf34803a6a3a6ed01ebb",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-12 12:47:38",
+      "reason": "4.6.5 verified",
+      "source_content_hash": "sha256:c346d1f71f2cb936b657be5160f37c0ed1581faec9cd4072b02cdebbf60f4527",
+      "last_wiki_refresh": "2026-07-12 12:47:38",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:38 (wiki hash captured)"
     },
     "wikifier/parsers/csharp.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:52:22",
-      "reason": "dogfood dotnet",
-      "source_content_hash": "sha256:9dd4a7b23c08e298095b22abccd4733d88319d0f3353bd591c7defb7025d0bea",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-12 12:47:37",
+      "reason": "4.6.5 verified",
+      "source_content_hash": "sha256:3f5b1786a0dec3b7205e94c91ecf89c70192db320ad0f5f5b26726850e3dd639",
+      "last_wiki_refresh": "2026-07-12 12:47:37",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:37 (wiki hash captured)"
     },
     "wikifier/parsers/__init__.py": {
       "status": "🟢 Green",
@@ -540,11 +542,11 @@
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:21",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "source_content_hash": "sha256:1b945e6ef50bfd573eff0943e61eb2192cd31bba77ba1bee174bf2e4d9eb2277",
-      "last_wiki_refresh": "2026-07-12 11:56:21",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:21 (wiki hash captured)"
+      "last_updated": "2026-07-12 12:47:37",
+      "reason": "4.6.5 verified",
+      "source_content_hash": "sha256:5494b57319e978e3aa7d8817f4fb44e618edacefa3c6bc2a5bbb1b2051a4f86b",
+      "last_wiki_refresh": "2026-07-12 12:47:37",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:21 (wiki hash captured); mark-green:2026-07-12 12:47:37 (wiki hash captured)"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
@@ -591,11 +593,11 @@
     },
     "wikifier/cache_store.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:20",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "source_content_hash": "sha256:15f9619c1ffe00da245a497969c06f1d01de49470ab747ef3dea858927c040fc",
-      "last_wiki_refresh": "2026-07-12 11:56:20",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:20 (wiki hash captured)"
+      "last_updated": "2026-07-12 12:47:37",
+      "reason": "4.6.5 verified",
+      "source_content_hash": "sha256:3be51cd0b15ee9c6a976fb7855904c00605a6da515c97cf8acc2fa90b14e7781",
+      "last_wiki_refresh": "2026-07-12 12:47:37",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:20 (wiki hash captured); mark-green:2026-07-12 12:47:37 (wiki hash captured)"
     },
     "tests/test_cache_store.py": {
       "status": "🟢 Green",
@@ -613,6 +615,31 @@
       "source_content_hash": "sha256:283e70c45ea99dc862121e2d0b2d07f82a2c44974576e2c7965564321a99c2fe",
       "last_wiki_refresh": "2026-07-12 11:56:23",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=agent-scale-sqlite-coverage-2026-07-12.md"
+    },
+    "wikifier/candidates.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-12 12:55:37",
+      "reason": "poison reuse blocked",
+      "source_content_hash": "sha256:31247c40fbcfae3666176663192e3458a0b5a1a0c1415860adbdd8ac01929d68",
+      "last_wiki_refresh": "2026-07-12 12:55:37",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:36 (wiki hash captured); mark-green:2026-07-12 12:52:05 (wiki hash captured); mark-green:2026-07-12 12:55:37 (wiki hash captured)"
+    },
+    "tests/test_walk_coverage_resolvers.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-12 12:55:37",
+      "reason": "poison test green",
+      "source_content_hash": "sha256:d8fdf2c35a3837d7b98c33537b3ab3353e8c9c298fc7be137a67a65882495118",
+      "last_wiki_refresh": "2026-07-12 12:55:37",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:38 (wiki hash captured); mark-green:2026-07-12 12:52:05 (wiki hash captured); mark-green:2026-07-12 12:55:37 (wiki hash captured)"
+    },
+    "Findings/agent-walk-coverage-cache-2026-07-12.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-12 12:52:06",
+      "reason": "findings updated",
+      "wiki_content_hash": "sha256:73da61f571f906ea2692b8689ec12c779b4f66d83707b06dc6548755cfc9d75b",
+      "source_content_hash": "sha256:73da61f571f906ea2692b8689ec12c779b4f66d83707b06dc6548755cfc9d75b",
+      "last_wiki_refresh": "2026-07-12 12:52:06",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:40 (wiki hash captured); wiki=agent-walk-coverage-cache-2026-07-12.md; mark-green:2026-07-12 12:52:06 (wiki hash captured); wiki=agent-walk-coverage-cache-2026-07-12.md"
     }
   }
 }
