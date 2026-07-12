@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.7] - 2026-07-12
+
+### Fixed
+
+- **MapScope contract** (`resolve_map_scope` / `MapScope`): collect, live count, mtime-index
+  filter, and prune share one scope object so full-tree→`map_paths` migration cannot thrash
+  (`candidates_relisted` forever when leftover index keys sat outside the new map surface).
+- **`filter_index_to_map_scope`**: honors `map_paths` / multi-root prefixes (not only
+  `directory=`); `directory=None` no longer returns the full leftover index under map_paths.
+- **`evaluate_candidate_reuse`**: pure reuse decision (fingerprint + scoped keys + live count)
+  unit-tested without shell I/O.
+- **`prune_file_index_outside_scope`**: drops files-table rows outside map scope when
+  candidate list is persisted (zero-dirty + full parse paths).
+
+### Tests
+
+- `TestCandidateReuseScopeMatrix`, `test_map_paths_migration_reuses_after_full_tree_map`,
+  prune unit test (125 unittest OK).
+
+## [4.6.6] - 2026-07-12
+
+### Added
+
+- **Index-first candidates** (`resolve_candidates`): re-list only when fingerprint/index
+  disagree; warm path avoids git re-list when sqlite index agrees with cached list.
+- **`map_paths.txt`**: map package roots, independent of `monitored_paths.txt` (wiki/health).
+- Flags on `update_maps`: `index_first_dirty`, `candidates_relisted`.
+
+### Changed
+
+- **JSON dual-write deprecated default-off** — only `WIKIFIER_CACHE_JSON=1` dual-writes;
+  dual-read of legacy JSON remains for migrate. `cache_status` documents policy + map_paths.
+
 ## [4.6.5] - 2026-07-12
 
 ### Added

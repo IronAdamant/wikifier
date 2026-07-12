@@ -233,42 +233,53 @@ def run_full_update(
         except Exception as mig_e:
             result["cache_migrate_note"] = str(mig_e)
 
-        # === 1. Candidates (scoped; reuse list when scope fingerprint unchanged) ===
+        # === 1. Collect stage (index-first; re-list only on fp/count disagreement) ===
         from .candidates import (
             collect_candidate_source_files,
-            try_cached_candidate_rels,
+            resolve_candidates,
             candidate_list_meta,
             scope_fingerprint,
         )
-        cands: List[Path] = []
-        cand_reused = False
+        mtime_index: Optional[Dict[str, Any]] = None
+        meta_c: Dict[str, Any] = {}
         try:
             from . import cache_store as cs
+            loaded_idx = ic.load_mtime_index(root) or {}
+            # Empty index must be None so try_cached uses live-count (not false reuse)
+            mtime_index = loaded_idx if loaded_idx else None
             meta_c = cs.load_meta(root, keys=("_candidate_list",))
-            cached = try_cached_candidate_rels(meta_c, root, directory)
-            if cached is not None and not force_full:
-                cands = cached
-                cand_reused = True
         except Exception:
-            pass
-        if not cands:
-            cands = collect_candidate_source_files(root, directory=directory)
+            mtime_index = None
+            meta_c = {}
+        cres = resolve_candidates(
+            root,
+            directory=directory,
+            force_full=force_full,
+            index=mtime_index,
+            meta=meta_c,
+        )
+        cands: List[Path] = list(cres.get("paths") or [])
+        cand_reused = bool(cres.get("reused"))
+        index_first = bool(cres.get("index_first"))
         result["parseable_files"] = len(cands)
         result["candidates_reused"] = cand_reused
-        result["scope_fingerprint"] = scope_fingerprint(root, directory)
+        result["index_first_dirty"] = index_first
+        result["candidates_relisted"] = bool(cres.get("relisted"))
+        result["scope_fingerprint"] = cres.get("fingerprint") or scope_fingerprint(
+            root, directory
+        )
         if directory:
             result["scoped_directory"] = directory
         if verbose:
             print(
                 f"[run_full_update] {len(cands)} candidate sources "
-                f"(reused={cand_reused})"
+                f"(reused={cand_reused} index_first={index_first} "
+                f"reason={cres.get('reason')})"
             )
 
-        # === 2. Dirty detection + barrel-stale merge ===
-        # Content-stable mtime thrash: collect (rel, mtime, hash) to refresh without reparse.
+        # === 2. Dirty stage (light mtime index; no full pair load) ===
         # CRITICAL (warm path): do NOT load full pair payloads when dirty is empty.
-        # Barrel merge only runs when mtime-index dirty is non-empty; then load barrel
-        # meta keys only (SQLite) — never full cache just to check barrels on 0-dirty.
+        # Barrel merge only when mtime-index dirty is non-empty.
         content_stable_updates: list = []
         dirty = ic.compute_files_needing_reparse(
             root,
@@ -423,6 +434,21 @@ def run_full_update(
                             "_candidate_list",
                             candidate_list_meta(root, directory, cands),
                         )
+                    # Prune leftover full-tree index keys after map_paths narrow
+                    # so migration cannot poison reuse forever.
+                    try:
+                        from .candidates import resolve_map_scope as _rms
+                        _sc = _rms(root, directory)
+                        if not _sc.is_full_tree:
+                            pruned_n = cs.prune_file_index_outside_scope(
+                                root,
+                                list(_sc.rel_prefixes),
+                                is_full_tree=False,
+                            )
+                            if pruned_n:
+                                result["index_pruned_outside_scope"] = pruned_n
+                    except Exception:
+                        pass
             except Exception:
                 pass
             result["success"] = True
@@ -654,6 +680,19 @@ def run_full_update(
                     cs.save_meta_key(
                         root, "_candidate_list", cache["_candidate_list"]
                     )
+                try:
+                    from .candidates import resolve_map_scope as _rms
+                    _sc = _rms(root, directory)
+                    if not _sc.is_full_tree:
+                        pruned_n = cs.prune_file_index_outside_scope(
+                            root,
+                            list(_sc.rel_prefixes),
+                            is_full_tree=False,
+                        )
+                        if pruned_n:
+                            result["index_pruned_outside_scope"] = pruned_n
+                except Exception:
+                    pass
             else:
                 ic.save_cache(root, cache)
         except Exception:

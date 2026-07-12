@@ -5,10 +5,12 @@ AGENT MAP:
   load_mtime_index                   — light {rel: mtime, content_hash} for dirty
   load_meta / save_meta_key          — reserved _keys without loading pairs
   update_file_index_rows             — mtime/hash refresh without full rewrite
-  backend_name / has_sqlite
+  prune_file_index_outside_scope     — drop files rows outside MapScope prefixes
+  backend_name / has_sqlite / cache_status
 
 Dual-read: if ``import_cache.sqlite`` missing but legacy ``import_cache.json``
-exists, load JSON and migrate on next save. Warm dirty detection should use
+exists, load JSON and migrate on next save. Dual-write is opt-in only
+(``WIKIFIER_CACHE_JSON=1``). Warm dirty detection should use
 ``load_mtime_index`` so agents avoid deserializing multi‑MB pair payloads.
 """
 
@@ -19,7 +21,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 STAGING = ".wikifier_staging"
 SQLITE_NAME = "import_cache.sqlite"
@@ -208,10 +210,14 @@ def load_cache_dict(root: Path) -> Dict[str, Any]:
 
 
 def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool] = None) -> str:
-    """Persist cache to SQLite (primary). Optionally dual-write compact JSON.
+    """Persist cache to SQLite (primary). Optional legacy JSON dual-write (deprecated).
 
-    ``write_json``: None → dual-write if env WIKIFIER_CACHE_JSON=1 or file count ≤ 400
-    (keeps small projects greppable; avoids rewriting 20MB+ JSON on large monorepos).
+    Dual-read of legacy ``import_cache.json`` remains for migrate forever.
+
+    ``write_json`` policy (4.6.6+ deprecation):
+      - None → **opt-in only**: dual-write iff ``WIKIFIER_CACHE_JSON=1|true|yes|always``
+        (default is sqlite-only — no silent multi‑MB JSON rewrite)
+      - True / False → force on/off
 
     Returns backend name written: ``sqlite`` or ``sqlite+json``.
     """
@@ -229,19 +235,10 @@ def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool
         except Exception:
             pass
 
-    file_n = sum(
-        1
-        for k, v in cache.items()
-        if isinstance(k, str) and not k.startswith("_") and isinstance(v, dict)
-    )
     if write_json is None:
         env = os.environ.get("WIKIFIER_CACHE_JSON", "").strip().lower()
-        if env in ("1", "true", "yes", "always"):
-            write_json = True
-        elif env in ("0", "false", "no", "never"):
-            write_json = False
-        else:
-            write_json = file_n <= 400
+        # Deprecated default dual-write for small trees removed: opt-in only
+        write_json = env in ("1", "true", "yes", "always")
 
     with _db(root) as conn:
         conn.execute("DELETE FROM files")
@@ -311,6 +308,50 @@ def update_file_index_rows(
     return n
 
 
+def prune_file_index_outside_scope(
+    root: Path,
+    rel_prefixes: Sequence[str],
+    *,
+    is_full_tree: bool = False,
+) -> int:
+    """Delete files-table rows outside map scope prefixes (SQLite).
+
+    Full-tree scope (``is_full_tree`` or empty/'.' prefixes) → no prune.
+    Used after narrowing map_paths so leftover full-tree index keys cannot
+    poison candidate-list reuse forever.
+
+    Returns number of rows deleted.
+    """
+    root = Path(root)
+    if is_full_tree or not has_sqlite(root):
+        return 0
+    prefixes = [
+        str(p).replace("\\", "/").strip().rstrip("/")
+        for p in (rel_prefixes or [])
+        if p is not None and str(p).strip() and str(p).strip() not in (".", "./")
+    ]
+    if not prefixes:
+        return 0
+
+    def _in_scope(rel: str) -> bool:
+        r = rel.replace("\\", "/").lstrip("./")
+        for pref in prefixes:
+            if r == pref or r.startswith(pref + "/"):
+                return True
+        return False
+
+    deleted = 0
+    with _db(root) as conn:
+        rows = [r[0] for r in conn.execute("SELECT rel_path FROM files")]
+        for rel in rows:
+            if not isinstance(rel, str) or not rel:
+                continue
+            if not _in_scope(rel):
+                conn.execute("DELETE FROM files WHERE rel_path = ?", (rel,))
+                deleted += 1
+    return deleted
+
+
 def save_meta_key(root: Path, key: str, value: Any) -> bool:
     """Write a single meta key to SQLite (warm ACS upgrade without full rewrite)."""
     root = Path(root)
@@ -374,12 +415,16 @@ def cache_status(root: Path) -> Dict[str, Any]:
         "candidate_list_count": cand.get("count"),
         "candidate_list_directory": cand.get("directory"),
         "dual_write_policy": (
-            "SQLite is primary. Legacy JSON dual-read remains. "
-            "Dual-write JSON only when file count ≤400 or WIKIFIER_CACHE_JSON=1; "
-            "set WIKIFIER_CACHE_JSON=0 to never dual-write. Prefer sqlite for warm agents."
+            "SQLite is primary. Legacy JSON dual-read remains for migrate. "
+            "JSON dual-write is DEPRECATED default-off; set WIKIFIER_CACHE_JSON=1 to opt in. "
+            "Prefer sqlite for warm agents."
         ),
         "migrate_note": (
             "update_maps migrates legacy import_cache.json → import_cache.sqlite once "
-            "when sqlite is missing."
+            "when sqlite is missing. Dual-read never deletes legacy JSON automatically."
+        ),
+        "map_paths_note": (
+            "map_paths.txt = map package roots; monitored_paths.txt = wiki/health watch list. "
+            "They are independent; wiki-only monitored lists do not define the map."
         ),
     }

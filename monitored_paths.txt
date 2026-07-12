@@ -1,7 +1,6 @@
-# monitored_paths.txt — Paths Wikifier will watch for changes
-# One path per line. Can be relative or absolute.
-# We list *only* the specific files for which we maintain wiki summaries (agent-to-agent use).
-# No bare "." or broad dirs, to avoid "MISSING WIKI ENTRY" for source .py, trammel.db, test files, etc.
+# monitored_paths.txt — Wiki / health *watch* surface (record-change, check-changes thrash bound)
+# NOT the import-map package roots. For map collection use map_paths.txt (or --directory=).
+# One path per line. Prefer specific wiki files; no bare "." for large trees.
 # See M5.1 health pruning for external safety.
 
 # Core documented files for the agent-to-agent wiki (zero-dep, LLM-operated)

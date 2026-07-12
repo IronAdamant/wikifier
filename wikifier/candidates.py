@@ -1,16 +1,19 @@
 """Scoped source candidate collection (agent warm-path walk cliff).
 
 AGENT MAP:
-  collect_candidate_source_files(root, directory=None) → List[Path]
-  try_cached_candidate_rels / candidate_list_meta
+  resolve_map_scope / MapScope       — single map-scope contract (walk roots + prefixes)
+  collect_candidate_source_files     — map candidates under MapScope
+  filter_index_to_map_scope          — mtime index keys under MapScope only
+  evaluate_candidate_reuse           — pure reuse decision (no I/O)
+  try_cached_candidate_rels / resolve_candidates / candidate_list_meta
 
 Map collection rules (critical):
   - ``monitored_paths.txt`` is the *wiki health* surface (often individual .md files).
     It is NOT the sole map walk set. Only **directory** entries that look like package
     roots are used; wiki-only file lists fall back to full/package tree walk.
+  - ``map_paths.txt`` is the *map package roots* surface (independent of wiki).
   - ``--directory=`` always wins for map scope.
-  - Candidate-list reuse requires git porcelain clean under scope (new nested files
-    invalidate). Walk-root mtime alone is insufficient.
+  - Collect, live count, index filter, and prune all honor the same MapScope.
 """
 
 from __future__ import annotations
@@ -18,8 +21,9 @@ from __future__ import annotations
 import fnmatch
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 SOURCE_EXTS = {
     ".py", ".js", ".ts", ".jsx", ".tsx",
@@ -38,7 +42,9 @@ DEFAULT_EXCLUDES = {
     "node_modules", ".git", "dist", "build", ".next", "coverage",
     "__pycache__", "tmp", "temp", ".turbo", ".cache", "target", "out",
     ".pnpm", ".yarn", ".store", "store", "virtual-store", ".pnp",
-    ".pnp.cjs", ".wikifier_staging", "venv", ".venv", "env",
+    ".pnp.cjs", ".wikifier_staging",
+    # Virtualenv dirs only — do NOT exclude bare "env" (drops rust sys/env/*.rs etc.)
+    "venv", ".venv",
 }
 
 
@@ -83,13 +89,14 @@ def scope_fingerprint(root: Path, directory: Optional[str] = None) -> str:
         return f"{walk}:0"
 
 
-def _read_monitored_paths(root: Path) -> List[str]:
-    mp = root / "monitored_paths.txt"
-    if not mp.is_file():
+def _read_path_list_file(root: Path, name: str) -> List[str]:
+    """Read a one-path-per-line config file (skips comments, bare '.')."""
+    fp = root / name
+    if not fp.is_file():
         return []
     out: List[str] = []
     try:
-        for line in mp.read_text(encoding="utf-8", errors="ignore").splitlines():
+        for line in fp.read_text(encoding="utf-8", errors="ignore").splitlines():
             p = line.strip()
             if not p or p.startswith("#"):
                 continue
@@ -102,20 +109,163 @@ def _read_monitored_paths(root: Path) -> List[str]:
     return out
 
 
-def _map_walk_roots_from_monitored(root: Path) -> List[Path]:
-    """Return directory roots suitable for *map* collection from monitored_paths.
+def _read_monitored_paths(root: Path) -> List[str]:
+    """Wiki/health watch list (files or dirs). Not the map walk set by itself."""
+    return _read_path_list_file(root, "monitored_paths.txt")
 
-    Wiki-oriented lists (skills/run.md, README.md, …) must not become the only
-    candidates — that collapses the import graph to a single file.
-    """
+
+def _read_map_paths(root: Path) -> List[str]:
+    """Map package roots (map_paths.txt) — independent of monitored_paths."""
+    return _read_path_list_file(root, "map_paths.txt")
+
+
+def _map_walk_roots_from_map_paths(root: Path) -> List[Path]:
+    """Directory (or file) roots for *map* collection from map_paths.txt."""
+    dirs: List[Path] = []
+    files: List[Path] = []
+    for mp in _read_map_paths(root):
+        p = Path(mp) if os.path.isabs(mp) else (root / mp)
+        if p.is_dir():
+            dirs.append(p)
+        elif p.is_file() and p.suffix.lower() in SOURCE_EXTS:
+            files.append(p)
+    return dirs  # files handled via directory entries; single-file map_paths rare
+
+
+def _map_walk_roots_from_monitored(root: Path) -> List[Path]:
+    """Legacy fallback: directory roots only from monitored_paths (never wiki files)."""
     dirs: List[Path] = []
     for mp in _read_monitored_paths(root):
         p = Path(mp) if os.path.isabs(mp) else (root / mp)
         if p.is_dir():
             dirs.append(p)
-        # Individual source files under a package are OK as extras but not sole roots
-        # (handled separately only when we also have directory roots)
     return dirs
+
+
+@dataclass(frozen=True)
+class MapScope:
+    """Authoritative map scope: walk roots + project-relative prefixes.
+
+    Full-tree scope has ``is_full_tree=True`` and ``rel_prefixes=()``.
+    Narrow scope (``directory=`` or ``map_paths``) has one or more prefixes;
+    index filter / prune keep only keys under those prefixes.
+    """
+
+    root: Path
+    directory: Optional[str]
+    walk_roots: Tuple[Path, ...]
+    rel_prefixes: Tuple[str, ...]  # posix-style; empty tuple means full tree
+    is_full_tree: bool
+
+    def key_in_scope(self, rel: str) -> bool:
+        """True if a project-relative path belongs to this map scope."""
+        if not isinstance(rel, str) or not rel or rel.startswith("_"):
+            return False
+        if self.is_full_tree:
+            return True
+        # Normalize separators
+        r = rel.replace("\\", "/").lstrip("./")
+        for pref in self.rel_prefixes:
+            if not pref:
+                return True
+            if r == pref or r.startswith(pref + "/"):
+                return True
+        return False
+
+
+def resolve_map_scope(
+    root: Path,
+    directory: Optional[str] = None,
+    *,
+    use_monitored: bool = True,
+    use_map_paths: bool = True,
+) -> MapScope:
+    """Build MapScope from directory / map_paths / monitored / full root."""
+    try:
+        root_res = Path(root).resolve()
+    except Exception:
+        root_res = Path(root)
+    walk_roots = _resolve_map_walk_roots(
+        root_res,
+        directory,
+        use_monitored=use_monitored,
+        use_map_paths=use_map_paths,
+    )
+    prefixes: List[str] = []
+    full = False
+    for wr in walk_roots:
+        try:
+            rel = os.path.relpath(str(wr), str(root_res)).replace("\\", "/")
+        except Exception:
+            rel = "."
+        if rel in (".", "", os.curdir):
+            full = True
+            prefixes = []
+            break
+        prefixes.append(rel.rstrip("/"))
+    # De-dupe preserve order
+    seen: Set[str] = set()
+    uniq: List[str] = []
+    for p in prefixes:
+        if p not in seen:
+            seen.add(p)
+            uniq.append(p)
+    return MapScope(
+        root=root_res,
+        directory=directory,
+        walk_roots=tuple(walk_roots),
+        rel_prefixes=tuple(uniq),
+        is_full_tree=full or not uniq,
+    )
+
+
+def filter_index_to_map_scope(
+    index: Dict[str, Any],
+    scope: MapScope,
+) -> Dict[str, Any]:
+    """Keep only mtime-index keys under *map* scope (not full tree when map_paths set).
+
+    Critical for full-tree→map_paths migration: leftover outside keys must not
+    poison reuse (would force permanent candidates_relisted).
+    """
+    if not index:
+        return {}
+    if scope.is_full_tree:
+        return {k: v for k, v in index.items() if isinstance(k, str) and not k.startswith("_")}
+    out: Dict[str, Any] = {}
+    for k, v in index.items():
+        if isinstance(k, str) and scope.key_in_scope(k):
+            out[k] = v
+    return out
+
+
+def filter_index_to_scope(
+    index: Dict[str, Any],
+    directory: Optional[str] = None,
+    *,
+    root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Filter mtime index keys to map scope.
+
+    When ``root`` is provided, honors ``map_paths`` / monitored roots (MapScope).
+    When only ``directory`` is given (legacy callers), filters by that prefix;
+    ``directory=None`` without root returns the full index (legacy behavior).
+    Prefer ``filter_index_to_map_scope`` + ``resolve_map_scope`` for new code.
+    """
+    if root is not None:
+        return filter_index_to_map_scope(index, resolve_map_scope(root, directory))
+    if not directory:
+        return dict(index or {})
+    d = directory.rstrip("/").replace("\\", "/")
+    pref = d + "/"
+    out: Dict[str, Any] = {}
+    for k, v in (index or {}).items():
+        if not isinstance(k, str):
+            continue
+        kk = k.replace("\\", "/")
+        if kk == d or kk.startswith(pref):
+            out[k] = v
+    return out
 
 
 def _load_excludes(root: Path) -> Tuple[Set[str], Set[str]]:
@@ -156,17 +306,53 @@ def _git_scope_dirty(root: Path, directory: Optional[str]) -> Optional[bool]:
         return None
 
 
+def _resolve_map_walk_roots(
+    root: Path,
+    directory: Optional[str] = None,
+    *,
+    use_monitored: bool = True,
+    use_map_paths: bool = True,
+) -> List[Path]:
+    """Same walk-root precedence as collect / live_source_count (must stay aligned).
+
+    1. ``directory=``
+    2. ``map_paths.txt`` dirs
+    3. directory entries from ``monitored_paths.txt``
+    4. full project root
+    """
+    try:
+        root = Path(root).resolve()
+    except Exception:
+        root = Path(root)
+    if directory:
+        d = root / directory
+        return [d if d.is_dir() else root]
+    walk_roots: List[Path] = []
+    if use_map_paths:
+        walk_roots = _map_walk_roots_from_map_paths(root)
+    if not walk_roots and use_monitored:
+        walk_roots = _map_walk_roots_from_monitored(root)
+    if not walk_roots:
+        walk_roots = [root]
+    return walk_roots
+
+
 def collect_candidate_source_files(
     root: Path,
     directory: Optional[str] = None,
     *,
     use_monitored: bool = True,
+    use_map_paths: bool = True,
 ) -> List[Path]:
-    """Collect source files under root, scoped to directory or safe monitored dirs.
+    """Collect source files under root for the *map* pipeline.
 
-    When ``directory`` is None and monitored_paths has only wiki/doc files (not
-    package directories), falls back to a full project source walk — never a
-    one-file graph.
+    Scope precedence:
+      1. ``directory=`` (CLI/API)
+      2. ``map_paths.txt`` package roots (map surface — not wiki)
+      3. directory entries from ``monitored_paths.txt`` (legacy fallback)
+      4. full project source walk
+
+    Wiki-only monitored file lists never become the sole map set.
     """
     try:
         root_res = Path(root).resolve()
@@ -177,17 +363,9 @@ def collect_candidate_source_files(
     excludes, exclude_globs = _load_excludes(root)
     root_norm = os.path.realpath(str(root))
 
-    walk_roots: List[Path] = []
-    if directory:
-        d = root / directory
-        walk_roots = [d if d.is_dir() else root]
-    elif use_monitored:
-        walk_roots = _map_walk_roots_from_monitored(root)
-        if not walk_roots:
-            # Wiki-file monitored_paths only → map the whole package tree
-            walk_roots = [root]
-    else:
-        walk_roots = [root]
+    walk_roots = _resolve_map_walk_roots(
+        root, directory, use_monitored=use_monitored, use_map_paths=use_map_paths
+    )
 
     seen: Set[str] = set()
     candidates: List[Path] = []
@@ -271,19 +449,25 @@ def collect_candidate_source_files(
     return candidates
 
 
-def _live_source_count(root: Path, directory: Optional[str] = None) -> Optional[int]:
-    """Count source files under scope (git pathspec preferred; no Path.resolve per file).
+def _live_source_count(
+    root: Path,
+    directory: Optional[str] = None,
+    scope: Optional[MapScope] = None,
+) -> Optional[int]:
+    """Count source files under the *same* roots as collect (map_paths-aware).
 
-    Used to sanity-check cached candidate lists against reality. Returns None if
-    count cannot be obtained (caller should not reuse).
+    Must match ``collect_candidate_source_files`` scope precedence so a
+    map_paths subset is not compared to a full-tree live count (that caused
+    permanent re-list thrash when outside sources exist).
+
+    Git pathspec preferred; no Path.resolve per file. Returns None if count
+    cannot be obtained (caller should not reuse).
     """
-    root = Path(root)
-    try:
-        root = root.resolve()
-    except Exception:
-        pass
+    if scope is None:
+        scope = resolve_map_scope(root, directory)
+    root = scope.root
     excludes, _globs = _load_excludes(root)
-    n = 0
+    walk_roots = list(scope.walk_roots)
 
     def _count_git(pathspec: Optional[str]) -> Optional[int]:
         if not ((root / ".git").exists() or (root / ".git" / "HEAD").exists()):
@@ -306,23 +490,15 @@ def _live_source_count(root: Path, directory: Optional[str] = None) -> Optional[
             low = rel.lower()
             if not any(low.endswith(ext) for ext in SOURCE_EXTS):
                 continue
-            # skip excluded path segments
             parts = Path(rel).parts
             if any(part in excludes for part in parts):
                 continue
             cnt += 1
         return cnt
 
-    if directory:
-        d = root / directory
-        if not d.is_dir():
-            return 0
-        c = _count_git(directory)
-        if c is not None:
-            return c
-        # scandir count fallback
+    def _count_walk(walk: Path) -> int:
         cnt = 0
-        for dirpath, dirnames, filenames in os.walk(str(d)):
+        for dirpath, dirnames, filenames in os.walk(str(walk)):
             dirnames[:] = [
                 x for x in dirnames
                 if x not in excludes and not x.startswith(".")
@@ -332,35 +508,50 @@ def _live_source_count(root: Path, directory: Optional[str] = None) -> Optional[
                     cnt += 1
         return cnt
 
-    # Unscoped: full tree source count via git
-    c = _count_git(None)
-    if c is not None:
-        return c
-    cnt = 0
-    for dirpath, dirnames, filenames in os.walk(str(root)):
-        dirnames[:] = [
-            x for x in dirnames
-            if x not in excludes and not x.startswith(".")
-        ]
-        for fn in filenames:
-            if Path(fn).suffix.lower() in SOURCE_EXTS:
-                cnt += 1
-    return cnt
+    total = 0
+    used_git = False
+    for walk_root in walk_roots:
+        try:
+            rel_scope = os.path.relpath(str(walk_root), str(root))
+        except Exception:
+            rel_scope = "."
+        if rel_scope in (".", ""):
+            c = _count_git(None)
+        else:
+            c = _count_git(rel_scope)
+        if c is not None:
+            total += c
+            used_git = True
+        else:
+            total += _count_walk(walk_root)
+    # When multiple map_paths roots are counted via git with pathspecs, sums are
+    # correct; full-root git once is used only when walk_roots == [root].
+    if used_git and len(walk_roots) == 1 and walk_roots[0] == root:
+        # single full-tree git already exact
+        return total
+    return total
 
 
-def try_cached_candidate_rels(
-    meta: Dict[str, Any],
-    root: Path,
+def evaluate_candidate_reuse(
+    blob: Dict[str, Any],
+    *,
+    fingerprint: str,
     directory: Optional[str],
-) -> Optional[List[Path]]:
-    """Reuse stored candidate rel list only when safe.
+    scoped_index_keys: Optional[Set[str]],
+    live_count: Optional[int],
+) -> Optional[List[str]]:
+    """Pure reuse decision: return blob rels if safe, else None.
 
-    Invalidates when:
+    No filesystem I/O. Callers supply fingerprint, map-scoped index keys, and
+    live source count. Invalidates when:
       - missing/empty blob or directory mismatch
-      - scope_fingerprint mismatch (max dir mtime under walk — nested creates)
-      - **live source count ≠ stored count** (poisoned 1-file blob vs real tree)
+      - fingerprint mismatch
+      - scoped index larger than blob / not subset / same-count different keys
+      - live_count is None or ≠ stored count
+
+    Empty ``scoped_index_keys`` (empty set) is treated as no index (live count
+    still required). Pass ``None`` when index was not loaded.
     """
-    blob = meta.get("_candidate_list") if isinstance(meta, dict) else None
     if not isinstance(blob, dict):
         return None
     if (blob.get("directory") or None) != (directory or None):
@@ -371,15 +562,117 @@ def try_cached_candidate_rels(
     stored_count = int(blob.get("count") or len(rels))
     if stored_count != len(rels):
         return None
+    if blob.get("fp") != fingerprint:
+        return None
+
+    blob_set = {r for r in rels if isinstance(r, str) and r}
+    if not blob_set:
+        return None
+
+    # Empty set → treat as no index (same as None)
+    keys = scoped_index_keys
+    if keys is not None and len(keys) == 0:
+        keys = None
+
+    if keys is not None:
+        # Index larger than blob or keys not in blob → poison / incomplete blob
+        if len(keys) > stored_count or not keys.issubset(blob_set):
+            return None
+        # Same-count different keys → re-list
+        if len(keys) == stored_count and keys != blob_set:
+            return None
+        # True set agreement or partial subset: still require live count below
+
+    if live_count is None or live_count != stored_count:
+        return None
+    return [r for r in rels if isinstance(r, str) and r]
+
+
+def try_cached_candidate_rels(
+    meta: Dict[str, Any],
+    root: Path,
+    directory: Optional[str],
+    index: Optional[Dict[str, Any]] = None,
+    scope: Optional[MapScope] = None,
+) -> Optional[List[Path]]:
+    """Reuse stored candidate rel list only when safe (index-first preferred).
+
+    Builds MapScope, filters index to map scope (not full tree when map_paths),
+    then delegates to pure ``evaluate_candidate_reuse``.
+    """
+    blob = meta.get("_candidate_list") if isinstance(meta, dict) else None
+    if not isinstance(blob, dict):
+        return None
+    if scope is None:
+        scope = resolve_map_scope(root, directory)
+    root = scope.root
     fp = scope_fingerprint(root, directory)
-    if blob.get("fp") != fp:
+
+    # Empty index → same as None
+    if index is not None and len(index) == 0:
+        index = None
+
+    scoped_keys: Optional[Set[str]] = None
+    if index is not None:
+        scoped = filter_index_to_map_scope(index, scope)
+        scoped_keys = set(scoped.keys()) if scoped else set()
+
+    live = _live_source_count(root, directory, scope=scope)
+    rels = evaluate_candidate_reuse(
+        blob,
+        fingerprint=fp,
+        directory=directory,
+        scoped_index_keys=scoped_keys,
+        live_count=live,
+    )
+    if rels is None:
         return None
-    # Mandatory sanity: poisoned caches can share fp after partial wipes
-    live = _live_source_count(root, directory)
-    if live is None or live != stored_count:
-        return None
+    return [root / r for r in rels]
+
+
+def resolve_candidates(
+    root: Path,
+    directory: Optional[str] = None,
+    *,
+    force_full: bool = False,
+    index: Optional[Dict[str, Any]] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Peelable collect stage: candidates + reuse/index-first flags.
+
+    Re-lists only when fingerprint/count/index disagree with the cached set.
+    """
     root = Path(root)
-    return [root / r for r in rels if isinstance(r, str) and r]
+    scope = resolve_map_scope(root, directory)
+    fp = scope_fingerprint(scope.root, directory)
+    out: Dict[str, Any] = {
+        "paths": [],
+        "reused": False,
+        "index_first": False,
+        "relisted": False,
+        "fingerprint": fp,
+        "reason": "",
+        "map_scope_full_tree": scope.is_full_tree,
+        "map_scope_prefixes": list(scope.rel_prefixes),
+    }
+    if not force_full and meta is not None:
+        # Normalize empty index → None for live-count path
+        idx = index if index else None
+        cached = try_cached_candidate_rels(
+            meta, scope.root, directory, index=idx, scope=scope
+        )
+        if cached is not None:
+            out["paths"] = cached
+            out["reused"] = True
+            # Non-empty index was present (map-scoped filter may still leave keys)
+            out["index_first"] = bool(idx)
+            out["reason"] = "fingerprint_and_live_count_agree"
+            return out
+    paths = collect_candidate_source_files(scope.root, directory=directory)
+    out["paths"] = paths
+    out["relisted"] = True
+    out["reason"] = "force_full_or_disagreement"
+    return out
 
 
 def candidate_list_meta(

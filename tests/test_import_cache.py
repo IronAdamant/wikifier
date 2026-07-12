@@ -32,7 +32,13 @@ class TestCacheRoundTrip(TempProjectTestCase):
         cache["_barrel_resolutions"] = {"deadbeef": {"importers": ["a.py"]}}
 
         ic.save_cache(self.root, cache)
-        self.assertTrue((self.root / ".wikifier_staging" / "import_cache.json").exists())
+        # SQLite is primary (4.6.6+); JSON dual-write is opt-in only
+        staging = self.root / ".wikifier_staging"
+        self.assertTrue(
+            (staging / "import_cache.sqlite").exists()
+            or (staging / "import_cache.json").exists(),
+            "expected sqlite or legacy json cache",
+        )
 
         loaded = ic.load_cache(self.root)
         self.assertEqual(loaded, cache)

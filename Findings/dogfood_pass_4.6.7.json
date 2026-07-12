@@ -1,0 +1,262 @@
+{
+  "pass_a": {
+    "self": {
+      "success": true,
+      "parseable_files": 50,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": null,
+      "files_to_reparse": 4,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 94.9,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": null
+    },
+    "llama_index": {
+      "success": true,
+      "parseable_files": 724,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 76.9,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 0
+    },
+    "airflow": {
+      "success": true,
+      "parseable_files": 1920,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 181.4,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 5861
+    },
+    "redox": {
+      "success": true,
+      "parseable_files": 27,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 148.6,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 36
+    },
+    "rust": {
+      "success": true,
+      "parseable_files": 719,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": null,
+      "files_to_reparse": 43,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 680.4,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": null
+    },
+    "Babylon.js": {
+      "success": true,
+      "parseable_files": 3895,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 403.4,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 21712
+    }
+  },
+  "pass_b": {
+    "self": {
+      "success": true,
+      "parseable_files": 50,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 30.4,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 42
+    },
+    "llama_index": {
+      "success": true,
+      "parseable_files": 724,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 75.5,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 0
+    },
+    "airflow": {
+      "success": true,
+      "parseable_files": 1920,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 178.8,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 5861
+    },
+    "redox": {
+      "success": true,
+      "parseable_files": 27,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 150.3,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 36
+    },
+    "rust": {
+      "success": true,
+      "parseable_files": 719,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 78.6,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 1148
+    },
+    "Babylon.js": {
+      "success": true,
+      "parseable_files": 3895,
+      "candidates_reused": true,
+      "candidates_relisted": false,
+      "index_first_dirty": true,
+      "zero_dirty_fast_path": true,
+      "files_to_reparse": 0,
+      "cache_backend": "sqlite",
+      "index_pruned_outside_scope": null,
+      "ms": 399.4,
+      "error": null,
+      "map_coverage_complete": true,
+      "acs_actionable": 21712
+    }
+  },
+  "perf": {
+    "llama_index": {
+      "full_ms": 1565.7,
+      "warm_a_ms": 76.9,
+      "warm_b_ms": 75.5,
+      "reused_b": true,
+      "parseable": 724
+    },
+    "airflow": {
+      "full_ms": 7150.8,
+      "warm_a_ms": 181.4,
+      "warm_b_ms": 178.8,
+      "reused_b": true,
+      "parseable": 1920
+    },
+    "redox": {
+      "full_ms": 244.9,
+      "warm_a_ms": 148.6,
+      "warm_b_ms": 150.3,
+      "reused_b": true,
+      "parseable": 27
+    },
+    "rust": {
+      "full_ms": 1161.5,
+      "warm_a_ms": 680.4,
+      "warm_b_ms": 78.6,
+      "reused_b": true,
+      "parseable": 719
+    },
+    "Babylon.js": {
+      "full_ms": 39007.9,
+      "warm_a_ms": 403.4,
+      "warm_b_ms": 399.4,
+      "reused_b": true,
+      "parseable": 3895
+    },
+    "self": {
+      "warm_a_ms": 94.9,
+      "warm_b_ms": 30.4,
+      "reused_b": true,
+      "parseable": 50
+    }
+  },
+  "cache_status_self": {
+    "backend": "sqlite",
+    "dual_write_policy": "SQLite is primary. Legacy JSON dual-read remains for migrate. JSON dual-write is DEPRECATED default-off; set WIKIFIER_CACHE_JSON=1 to opt in. Prefer sqlite for warm agents.",
+    "candidate_list_count": 50
+  },
+  "bootstrap_self": {
+    "success": true,
+    "keys": [
+      "success",
+      "project_root",
+      "core_surface",
+      "core_daily",
+      "core_count",
+      "advanced_intel",
+      "health_summary",
+      "health_score",
+      "attention",
+      "readiness",
+      "scope",
+      "blockers",
+      "map_coverage",
+      "cache_backend",
+      "acs"
+    ]
+  },
+  "check_changes_self": {
+    "success": true,
+    "dirty_count": null
+  },
+  "suggest_self": {
+    "success": null,
+    "action_types": []
+  }
+}

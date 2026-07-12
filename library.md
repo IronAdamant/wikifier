@@ -9,7 +9,7 @@
 > the agent wiki (file_health). The dependency graph is further below.
 
 ```text
-Wikifier/  (88 files)
+Wikifier/  (92 files)
 ├── .github/
 │   └── workflows/
 │       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
@@ -30,6 +30,7 @@ Wikifier/  (88 files)
 │   ├── dogfood-hygiene-fix-2026-07-09.json — verified 53 tests; dogfood validate 0/8
 │   ├── dogfood-hygiene-fix-2026-07-09.md — verified 53 tests; dogfood validate 0/8
 │   ├── gap-closure-report.md — G12 closed; 39/39 tests
+│   ├── index-first-map-paths-2026-07-12.md — dogfood floors + MapScope migration fix evidence
 │   ├── long-horizon-autonomous-ops.md — goal verification complete
 │   ├── p6_real_world_validation_report.md — kept; stale yellow cleared
 │   └── residual-1-5-closure-2026-07-09.md — residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)
@@ -39,7 +40,7 @@ Wikifier/  (88 files)
 ├── screenshot/
 │   └── front_page_review.png — Asset referenced by README
 ├── skills/
-│   └── run.md — 4.6.5 verified
+│   └── run.md — 4.6.6 verified
 ├── tests/
 │   ├── selftest/
 │   │   ├── __init__.py — hygiene session complete 4.5.6; 53 tests OK
@@ -57,11 +58,12 @@ Wikifier/  (88 files)
 │   ├── test_cache_store.py — instrumented warm load assertion
 │   ├── test_gap_closure.py — ACS 1.3 assert
 │   ├── test_health.py — hygiene session complete 4.5.6; 53 tests OK
-│   ├── test_import_cache.py — hygiene session complete 4.5.6; 53 tests OK
+│   ├── test_import_cache.py — 4.6.6 verified
+│   ├── test_index_map_paths.py — 125 unittest OK
 │   ├── test_multi_lang_parsers.py — hygiene session complete 4.5.6; 53 tests OK
 │   ├── test_parsers.py — hygiene session complete 4.5.6; 53 tests OK
 │   ├── test_selftest_wrappers.py — G12 closed; 39/39 tests
-│   └── test_walk_coverage_resolvers.py — honest tests
+│   └── test_walk_coverage_resolvers.py — poison test green
 ├── wikifier/
 │   ├── mcp/
 │   │   ├── README.md — 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)
@@ -82,12 +84,12 @@ Wikifier/  (88 files)
 │   ├── scripts/
 │   │   ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
 │   │   └── wikifier.sh — synced with root; portable rel paths (subid=post-assess-hygiene)
-│   ├── __init__.py — 4.6.5 verified
+│   ├── __init__.py — version bump
 │   ├── __main__.py — hygiene session complete 4.5.6; 53 tests OK
 │   ├── agent_loop.py — 4.6.5 verified
-│   ├── cache_store.py — 4.6.5 verified
-│   ├── candidates.py — monitored map roots fixed
-│   ├── cli.py — 4.6.5 verified
+│   ├── cache_store.py — prune tests green
+│   ├── candidates.py — MapScope unit+migration green
+│   ├── cli.py — dogfood warm reuse green
 │   ├── contracts.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   ├── daemon.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
 │   ├── diagnostics.py — hygiene session complete 4.5.6; 53 tests OK
@@ -99,13 +101,15 @@ Wikifier/  (88 files)
 │   ├── project_root.py — residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)
 │   ├── resolution.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   └── serve.py — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-├── CHANGELOG.md — 4.6.5 verified
+├── CHANGELOG.md — 4.6.7 MapScope notes
 ├── CLAUDE.md — test count synced to 49
-├── README.md — 4.6.5 verified
+├── README.md — 4.6.6 verified
 ├── diagnostics.html — Wiki summary verified accurate after change.
 ├── file_health.md — Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survi…
 ├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
 ├── library.md — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
+├── map_paths.txt — 4.6.6 verified
+├── monitored_paths.txt — 4.6.6 verified
 ├── pyproject.toml — Build + twine check pass; clean-room wheel install verified
 ├── wikifier.bat — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
 ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
@@ -134,6 +138,7 @@ graph TD
         tests_test_gap_closure_py["test_gap_closure.py"]
         tests_test_health_py["test_health.py"]
         tests_test_import_cache_py["test_import_cache.py"]
+        tests_test_index_map_paths_py["test_index_map_paths.py"]
         tests_test_multi_lang_parsers_py["test_multi_lang_parsers.py"]
         tests_test_parsers_py["test_parsers.py"]
         tests_test_selftest_wrappers_py["test_selftest_wrappers.py"]
@@ -253,6 +258,7 @@ graph TD
     wikifier_candidates_py -.-> fnmatch
     wikifier_candidates_py -.-> os
     wikifier_candidates_py -.-> subprocess
+    wikifier_candidates_py -.-> dataclasses
     wikifier_candidates_py -.-> pathlib
     wikifier_candidates_py -.-> typing
     tests__base_py -.-> os
@@ -556,6 +562,12 @@ graph TD
     wikifier_serve_py -.-> pathlib
     wikifier_serve_py --> wikifier_cli_py
     wikifier_serve_py -.-> wikifier
+    tests_test_index_map_paths_py -.-> os
+    tests_test_index_map_paths_py -.-> unittest
+    tests_test_index_map_paths_py -.-> pathlib
+    tests_test_index_map_paths_py -.-> tests__base
+    tests_test_index_map_paths_py -.-> wikifier
+    tests_test_index_map_paths_py -.-> wikifier_candidates
     classDef external fill:#eeeeee,stroke:#888888,stroke-dasharray: 3 3
     class argparse,base64,collections,contextlib,dataclasses,datetime,enum,fcntl,fnmatch,functools,hashlib,http_server,importlib,importlib_resources,json,mcp_server_fastmcp,msvcrt,name,os,pathlib,platform,pydantic,re,runpy,shutil,signal,sqlite3,subprocess,sys,tempfile,tests__base,textwrap,threading,time,traceback,typing,unittest,warnings,wikifier,wikifier_agent_loop,wikifier_cache_store,wikifier_candidates,wikifier_cli,wikifier_contracts,wikifier_diagnostics,wikifier_import_cache,wikifier_parsers,wikifier_parsers_bree,wikifier_parsers_cdia,wikifier_parsers_javascript,wikifier_parsers_python,wikifier_project_root,wikifier_resolution external
 ```
@@ -651,6 +663,12 @@ graph TD
 | tests/test_import_cache.py | tests._base → tests._base | medium |
 | tests/test_import_cache.py | unittest → unittest | medium |
 | tests/test_import_cache.py | wikifier → wikifier | medium |
+| tests/test_index_map_paths.py | os → os | medium |
+| tests/test_index_map_paths.py | pathlib → pathlib | medium |
+| tests/test_index_map_paths.py | tests._base → tests._base | medium |
+| tests/test_index_map_paths.py | unittest → unittest | medium |
+| tests/test_index_map_paths.py | wikifier → wikifier | medium |
+| tests/test_index_map_paths.py | wikifier.candidates → wikifier.candidates | medium |
 | tests/test_multi_lang_parsers.py | "wikifier.health" → wikifier.health | low |
 | tests/test_multi_lang_parsers.py | importlib → importlib | medium |
 | tests/test_multi_lang_parsers.py | os → os | medium |
@@ -696,6 +714,7 @@ graph TD
 | wikifier/cache_store.py | pathlib → pathlib | medium |
 | wikifier/cache_store.py | sqlite3 → sqlite3 | medium |
 | wikifier/cache_store.py | typing → typing | medium |
+| wikifier/candidates.py | dataclasses → dataclasses | medium |
 | wikifier/candidates.py | fnmatch → fnmatch | medium |
 | wikifier/candidates.py | os → os | medium |
 | wikifier/candidates.py | pathlib → pathlib | medium |

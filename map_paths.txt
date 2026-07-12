@@ -1,0 +1,7 @@
+# map_paths.txt — package roots for import-map collection (agent map surface)
+# Independent of monitored_paths.txt (wiki/health watch list).
+# One directory (or source file) per line. No bare ".".
+# Used by update-maps when --directory= is not set.
+
+wikifier/
+tests/

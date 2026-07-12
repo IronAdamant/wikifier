@@ -77,9 +77,10 @@ Advanced intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`, ba
 
 - **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust (`use`/`mod` + best-effort `crate::` paths), Go, C/C++ includes, C# usings; per-edge confidence; barrel expansion for TS/JS
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
-- **Warm agent maps (4.6.3–4.6.5)** — zero-dirty fast path; **stdlib SQLite** cache; **candidate list reuse** + scoped/monitored-first walks (no whole-tree thrash); content-hash dirty
-- **Partial-map honesty** — `map_coverage` on `update_maps` / bootstrap / **`suggest_next`**; incomplete maps yield `update_maps_until_complete` actions
-- **Cache ops** — `wikifier cache-status` (backend, bytes, ACS, coverage, dual-write policy)
+- **Warm agent maps (4.6.3–4.6.6)** — zero-dirty + **index-first** candidates (re-list only on fingerprint/index disagreement); **stdlib SQLite**; content-hash dirty
+- **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = wiki/health watch (independent)
+- **Partial-map honesty** — `map_coverage` on `update_maps` / bootstrap / **`suggest_next`**; `update_maps_until_complete` when incomplete
+- **Cache ops** — `wikifier cache-status`; JSON dual-write **opt-in only** (`WIKIFIER_CACHE_JSON=1`); dual-read for migrate
 - **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal`; prefer `actionable_low_conf_edges` + reason codes — **never** raw `low_conf_edges` alone
 - **Scale** — reverse index + barrel invalidation so one edit doesn’t re-scan the monorepo
 - **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
