@@ -30,14 +30,20 @@ from .project_root import discover_project_root  # noqa: F401
 # Python-primary heavy path for update-maps (Wave 3/4/5 External/Packaged Full-Update Robustness)
 # =============================================================================
 
-def _collect_candidate_source_files(root: Path) -> List[Path]:
+def _collect_candidate_source_files(
+    root: Path,
+    directory: Optional[str] = None,
+) -> List[Path]:
     """
-    Lightweight pruned filesystem walk to collect Python/JS/TS source candidates
+    Lightweight pruned filesystem walk to collect source candidates
     for dirty detection in the Python-primary run_full_update path.
 
     Mirrors the excludes and extensions used in wikifier.sh find + resolution.py
     EXCLUDES (including pnpm/yarn store dirs for speed on large monorepos).
-    Only used for the skeleton; production sh uses its own find for parity today.
+
+    When ``directory`` is set (e.g. ``library/std/src``), collection is scoped
+    to that subtree only — critical for agent-scale monorepos (rust/llvm/dotnet)
+    so scoped update-maps do not walk the entire tree first.
     Zero side-effects, defensive.
     """
     candidates: List[Path] = []
@@ -58,6 +64,20 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
         root = Path(root).resolve()
     except Exception:
         root = Path(root)
+
+    # Optional subtree scope (agent --directory=)
+    walk_root = root
+    scope_prefix = ""
+    if directory:
+        try:
+            walk_root = (root / directory).resolve()
+            if walk_root.is_dir():
+                scope_prefix = str(walk_root)
+            else:
+                walk_root = root
+        except Exception:
+            walk_root = root
+
     # Also respect the project's exclude_patterns.txt (if present) for parity with sh
     # mapping paths and check-changes. Simple dir-name globs only for pruning speed.
     # This makes python-primary update-maps benefit from user custom excludes (venvs etc)
@@ -100,16 +120,30 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
             for g in EXCLUDE_GLOBS
         )
 
+    def _in_scope(p: Path) -> bool:
+        if not scope_prefix:
+            return True
+        try:
+            sp = str(p.resolve())
+            return sp == scope_prefix or sp.startswith(scope_prefix + os.sep)
+        except Exception:
+            return True
+
     # Fast path: if inside a git repo, use `git ls-files` + untracked (respects .gitignore, dramatically faster
     # on large checkouts than any walk; falls back to scandir scan). This is a pure speed opt for "updates"
     # (check-changes, update-maps) with near-identical or better candidate set for real codebases.
+    # When directory is scoped, prefer pathspec under that prefix for smaller lists.
     git_dir = root / ".git"
     if git_dir.exists() or (root / ".git" / "HEAD").exists():  # works for worktrees too
         try:
             import subprocess
-            # cached + others (untracked but not ignored), exclude standard ignores
+            git_cmd = ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"]
+            if directory and walk_root != root:
+                # Limit git listing to the scoped path (agent monorepo budget)
+                git_cmd.append("--")
+                git_cmd.append(str(directory).rstrip("/") + "/")
             out = subprocess.check_output(
-                ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+                git_cmd,
                 cwd=root, stderr=subprocess.DEVNULL
             )
             for entry in out.split(b"\0"):
@@ -119,7 +153,11 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
                 if p.suffix.lower() in exts:  # reuse the set from above (adjusted)
                     # quick filter for excludes we still want even if git surfaces them
                     parts = p.parts
-                    if not any(part in EXCLUDES or part.startswith(".") for part in parts) and not _glob_excluded(p):
+                    if (
+                        not any(part in EXCLUDES or part.startswith(".") for part in parts)
+                        and not _glob_excluded(p)
+                        and _in_scope(p)
+                    ):
                         candidates.append(p)
             if candidates:
                 return candidates  # success, use git list
@@ -127,7 +165,7 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
             pass  # fall through to scandir
 
     # Use os.scandir for faster directory traversal (std lib only; avoids full listdir + separate is_dir stats on large trees).
-    # Pruning is applied on the fly. Behavior identical to prior walk.
+    # Pruning is applied on the fly. Behavior identical to prior walk. Scoped: start at walk_root.
     exts_lower = tuple(e.lower() for e in exts)
     def _scan_dir(d: Path) -> None:
         try:
@@ -142,13 +180,13 @@ def _collect_candidate_source_files(root: Path) -> List[Path]:
                             lname = name.lower()
                             if lname.endswith(exts_lower):
                                 fp = Path(entry.path)
-                                if not _glob_excluded(fp):
+                                if not _glob_excluded(fp) and _in_scope(fp):
                                     candidates.append(fp)
                     except Exception:
                         continue
         except Exception:
             pass
-    _scan_dir(root)
+    _scan_dir(walk_root)
     return candidates
 
 
@@ -335,20 +373,34 @@ def run_full_update(
     try:
         from . import import_cache as ic
 
-        # === 1. Candidates ===
-        cands = _collect_candidate_source_files(root)
+        # === 1. Candidates (scoped walk when directory set — monorepo agent budget) ===
+        cands = _collect_candidate_source_files(root, directory=directory)
         if directory:
+            # Defensive re-filter (git path edge cases / symlink roots)
             try:
                 want = str((root / directory).resolve())
-                cands = [p for p in cands if str(Path(p).resolve()).startswith(want)]
+                cands = [
+                    p for p in cands
+                    if str(Path(p).resolve()) == want
+                    or str(Path(p).resolve()).startswith(want + os.sep)
+                ]
             except Exception:
                 pass
         result["parseable_files"] = len(cands)
+        if directory:
+            result["scoped_directory"] = directory
         if verbose:
             print(f"[run_full_update] {len(cands)} candidate sources")
 
         # === 2. Dirty detection + barrel-stale merge ===
-        dirty = ic.compute_files_needing_reparse(root, cands, full_rebuild=force_full) or []
+        # Content-stable mtime thrash: collect (rel, mtime, hash) to refresh without reparse.
+        content_stable_updates: list = []
+        dirty = ic.compute_files_needing_reparse(
+            root,
+            cands,
+            full_rebuild=force_full,
+            content_stable_mtime_updates=content_stable_updates,
+        ) or []
         try:
             cache_for_barrel = ic.load_cache(root)
             barrel_stale = ic.invalidate_stale_barrel_entries(
@@ -365,6 +417,8 @@ def run_full_update(
             pass  # barrel merge is best-effort; mtime dirty set is authoritative
         result["files_to_reparse"] = len(dirty)
         result["dirty_sample"] = [str(p) for p in dirty[:3]]
+        if content_stable_updates:
+            result["content_stable_mtime_refreshes"] = len(content_stable_updates)
 
         if max_files is not None:
             try:
@@ -374,6 +428,91 @@ def run_full_update(
                     dirty = dirty[:cap]
             except (TypeError, ValueError):
                 pass
+
+        # === 2b. Zero-dirty fast path (agent warm maps) ===
+        # When nothing needs reparse, skip graph rebuild + full library.md rewrite.
+        # Still refresh content-stable mtimes and ensure ACS is present.
+        if not dirty and not force_full:
+            cache = ic.load_cache(root) or {}
+            mtime_refreshed = 0
+            for rel, new_mtime, chash in content_stable_updates:
+                ent = cache.get(rel)
+                if isinstance(ent, dict):
+                    ent["mtime"] = int(new_mtime)
+                    if chash:
+                        ent["content_hash"] = chash
+                    mtime_refreshed += 1
+            result["files_parsed"] = 0
+            result["edges_persisted"] = 0
+            result["languages_parsed"] = {}
+            result["zero_dirty_fast_path"] = True
+            result["content_stable_mtime_refreshes"] = mtime_refreshed
+            # ACS: single ensure with root so v1.2→1.3 upgrades actually hit disk.
+            # (root=None then root= again left needs=False and never save_cache.)
+            acs: Dict[str, Any] = {}
+            try:
+                acs = ic.ensure_acs_summary_persisted(cache, root) or {}
+                result["acs"] = {
+                    "acs_version": acs.get("acs_version"),
+                    "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
+                    "low_conf_edges": acs.get("low_conf_edges"),
+                    "reason_code_counts": acs.get("reason_code_counts"),
+                }
+            except Exception as ae:
+                result["acs_error"] = str(ae)
+            # ensure_acs only save_caches when ACS recompute was needed; mtime-only
+            # thrash refresh still requires an explicit save.
+            if mtime_refreshed:
+                try:
+                    ic.save_cache(root, cache)
+                except Exception as se:
+                    result["cache_save_error"] = str(se)
+            cy = cache.get("_cycles") if isinstance(cache.get("_cycles"), dict) else {}
+            sccs = cy.get("sccs") if isinstance(cy, dict) else []
+            result["cycles"] = {
+                "count": len(sccs or []),
+                "reused": True,
+                "fast_path": True,
+            }
+            # library.md: reuse existing artifact when present (agent tools use cache)
+            lib_path = root / "library.md"
+            if lib_path.is_file():
+                result["library"] = {
+                    "success": True,
+                    "path": str(lib_path),
+                    "skipped": True,
+                    "reason": "zero_dirty_reuse",
+                }
+            else:
+                try:
+                    from .library import write_library_md
+                    result["library"] = write_library_md(root, cache)
+                except Exception as e:
+                    result["library"] = {"success": False, "error": str(e)}
+            # Health seed only if matrix missing (first map); skip thrash on warm
+            health_path = root / "file_health.json"
+            health_seeded = 0
+            if not health_path.is_file() and _health_mod is not None and hasattr(
+                _health_mod, "seed_health_from_map"
+            ):
+                try:
+                    max_seed = int(os.environ.get("WIKIFIER_HEALTH_SEED_MAX", "20000") or "20000")
+                    map_keys = [k for k in cache if isinstance(k, str) and k and not k.startswith("_")]
+                    seed_res = _health_mod.seed_health_from_map(
+                        root, map_keys=map_keys, max_new=max_seed,
+                    )
+                    health_seeded = int(seed_res.get("seeded") or 0)
+                except Exception as se:
+                    result["health_seed_error"] = str(se)
+            result["health_stubs_seeded"] = health_seeded
+            result["persist_pipeline_exercised"] = True
+            result["success"] = True
+            if verbose:
+                print(
+                    f"[run_full_update] zero-dirty fast path: "
+                    f"mtime_refreshes={mtime_refreshed}, library_skipped={lib_path.is_file()}"
+                )
+            return result
 
         # === 3. Parse every dirty file (in-process, BREE batched) ===
         from .parsers import javascript as js_parser
@@ -463,12 +602,20 @@ def run_full_update(
                 if not rel:
                     continue
                 pairs = [p for p in (_pair_from_parser_edge(e, root) for e in edges) if p]
+                fpath = Path(fstr)
+                chash = None
+                try:
+                    chash = ic.compute_file_content_hash(fpath)
+                except Exception:
+                    chash = None
                 new_entries[rel] = {
-                    "mtime": ic.get_mtime(Path(fstr)),
+                    "mtime": ic.get_mtime(fpath),
                     "imports": [p.get("raw", "") for p in pairs],
                     "resolved": [p["resolved"] for p in pairs if p.get("resolved")],
                     "resolved_pairs": pairs,
                 }
+                if chash:
+                    new_entries[rel]["content_hash"] = chash
                 parsed_count += 1
                 edges_total += len(pairs)
                 ext = Path(low).suffix.lower() or "unknown"

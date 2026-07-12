@@ -377,6 +377,24 @@ def prepare_edit(
         "low_conf_edges": 0,
         "next_step": "Edit if needed → record_change → refresh wiki → mark_green",
     }
+    # Missing path: structured failure (agents must not treat empty preflight as OK)
+    src_path = root / rel
+    if not src_path.is_file() and not Path(file).is_file():
+        out["success"] = False
+        out["error"] = f"file not found: {rel}"
+        out["next_step"] = "Pass an existing project-relative source path"
+        # Still attach health/cache if present (ghost / deleted) for impact analysis
+        try:
+            health_mod = _health_module()
+            data = health_mod.load_health(root)
+            ent = (data.get("entries") or {}).get(rel) or {}
+            if ent:
+                out["status"] = ent.get("status")
+                out["reason"] = ent.get("reason")
+                out["ghost"] = True
+        except Exception:
+            pass
+        return out
     try:
         health_mod = _health_module()
         data = health_mod.load_health(root)

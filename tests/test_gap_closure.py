@@ -104,7 +104,7 @@ class TestAcsActionableG4(TempProjectTestCase):
         ))
 
     def test_dynamic_literal_noise_demoted_from_actionable(self):
-        """ACS v1.2: importlib.import_module(\"pkg\") static dynamics are not actionable."""
+        """ACS v1.2+: importlib.import_module(\"pkg\") static dynamics are not actionable."""
         dyn_lit = {
             "raw": "\"wikifier.health\"",
             "resolved": "wikifier.health",
@@ -142,10 +142,13 @@ class TestAcsActionableG4(TempProjectTestCase):
         self.assertTrue(ic._edge_is_dynamic_literal_noise(dyn_lit))
         self.assertFalse(ic._edge_is_dynamic_literal_noise(project_fragile))
         summary = ic.compute_acs_summary(cache)
-        self.assertEqual(summary.get("acs_version"), "1.2")
+        # v1.3 additive (reason codes); still demotes dynamic literals from actionable
+        self.assertGreaterEqual(str(summary.get("acs_version") or ""), "1.2")
         self.assertGreaterEqual(summary["low_conf_edges"], 2)
         self.assertEqual(summary["actionable_low_conf_edges"], 1)
         self.assertGreaterEqual(summary.get("dynamic_literal_noise_edges", 0), 1)
+        if "reason_code_counts" in summary:
+            self.assertIn("dynamic_literal", summary["reason_code_counts"] or {})
         action = ic.get_low_confidence_edges(cache, actionable_only=True)
         self.assertEqual(len(action), 1)
         self.assertIn("missing_local", str(action[0].get("raw") or action[0].get("resolved")))

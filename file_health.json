@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-07-09 08:51:23",
+  "last_updated": "2026-07-12 11:46:04",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -55,10 +55,12 @@
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:52:23",
-      "reason": "lang table",
-      "source_content_hash": "sha256:936c47f29cec2c0a2490e5568ae356bea86d9409a1dad371d2e4eee2c337f36c",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-07-12 11:46:04",
+      "reason": "README synced to 4.6.3",
+      "wiki_content_hash": "sha256:bdcfa32cebea6e414375ec1b88b61d22c6e01bf0d2c2c1b16891a6e3c5abced0",
+      "source_content_hash": "sha256:bdcfa32cebea6e414375ec1b88b61d22c6e01bf0d2c2c1b16891a6e3c5abced0",
+      "last_wiki_refresh": "2026-07-12 11:46:04",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-12 11:46:04 (wiki hash captured); wiki=README.md"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
@@ -80,11 +82,11 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "source_content_hash": "sha256:43db966a1d40e41f6ef0c882d91b59e075ffc01cc685fd89b870eafa5d3a012e",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
+      "last_updated": "2026-07-12 11:06:25",
+      "reason": "ACS disk persist fix + 86 tests",
+      "source_content_hash": "sha256:792c184b6eed7a3adbe3f1ab0ffafbe6b1fdece391e04ec38f19d4044fcaeb44",
+      "last_wiki_refresh": "2026-07-12 11:06:25",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:25 (wiki hash captured); mark-green:2026-07-12 11:06:25 (wiki hash captured)"
     },
     "diagnostics.html": {
       "status": "🟢 Green",
@@ -100,10 +102,11 @@
     },
     "wikifier/import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:44",
-      "reason": "post residual-1-5 hygiene mtime clear (subid=residual-1-5-closure)",
-      "source_content_hash": "sha256:4f69a37ec2ddfaee52e9a8b4c906ff4e6cdcbb522da03c0b5db7554886933c01",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-12 11:01:25",
+      "reason": "content-hash + ACS v1.3 verified 85 tests",
+      "source_content_hash": "sha256:ee96ac5a77cf97ae5410d31dae9df473a91c8667fdf38b278d6e71ceb72da82d",
+      "last_wiki_refresh": "2026-07-12 11:01:25",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:25 (wiki hash captured)"
     },
     "wikifier/parsers/python.py": {
       "status": "🟢 Green",
@@ -120,12 +123,12 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "wiki_content_hash": "sha256:c48d76004db91363227c05d271645d4c80c68120a36ee914e8da58f20d46cfc6",
-      "source_content_hash": "sha256:c48d76004db91363227c05d271645d4c80c68120a36ee914e8da58f20d46cfc6",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=CHANGELOG.md"
+      "last_updated": "2026-07-12 11:01:28",
+      "reason": "4.6.3",
+      "wiki_content_hash": "sha256:b4710747b754c1374ff72fb1841cc9c7b9190141fd8c53fc261923e8d9a2bf4b",
+      "source_content_hash": "sha256:b4710747b754c1374ff72fb1841cc9c7b9190141fd8c53fc261923e8d9a2bf4b",
+      "last_wiki_refresh": "2026-07-12 11:01:28",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:01:28 (wiki hash captured); wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
@@ -136,11 +139,11 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "source_content_hash": "sha256:b2cf8f8db6604a443069d27e7541f3a61dfbbc4e952b6a324b3be61beabe05a8",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
+      "last_updated": "2026-07-12 11:01:26",
+      "reason": "4.6.3",
+      "source_content_hash": "sha256:62dd74db819890ab95dc5854515989b495e52a72dc37e75a4ddf95d68187412b",
+      "last_wiki_refresh": "2026-07-12 11:01:26",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -296,10 +299,11 @@
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:42",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "source_content_hash": "sha256:b01abcbd3ca3db74e1d82782892f1c7145c2a2d84712034fd1f0a7f982cbdf5a",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-12 11:01:27",
+      "reason": "ACS 1.3 assert",
+      "source_content_hash": "sha256:0542cc16186a5a1ea062be5cbab5e09b3944d20326179ed2cc89df8fcd34f97a",
+      "last_wiki_refresh": "2026-07-12 11:01:27",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:27 (wiki hash captured)"
     },
     "wikifier/resolution.py": {
       "status": "🟢 Green",
@@ -324,10 +328,11 @@
     },
     "wikifier/parsers/rust.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:52:21",
-      "reason": "dogfood rust/redox",
-      "source_content_hash": "sha256:09c2417e6df5707e17ecb16e803983f0402833f41e81a09f08cead501d24f1eb",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-07-12 11:01:26",
+      "reason": "crate resolve unit tested",
+      "source_content_hash": "sha256:3215c0c01e91bcb401c34ae4006b10f6b1b35297d5fd034a64fd1d85e859436c",
+      "last_wiki_refresh": "2026-07-12 11:01:26",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:26 (wiki hash captured)"
     },
     "wikifier/parsers/go_lang.py": {
       "status": "🟢 Green",
@@ -534,11 +539,11 @@
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "source_content_hash": "sha256:0385850288fc32d2698e3ddabb9d1e2e1cd649b06a604cedce1d39fd56a28e0b",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
+      "last_updated": "2026-07-12 11:01:26",
+      "reason": "prepare_edit missing-file structured",
+      "source_content_hash": "sha256:20056a651ef41649d0e80860deb5292721d112cda474fb6218344ad4a1a270e3",
+      "last_wiki_refresh": "2026-07-12 11:01:26",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured)"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
@@ -562,9 +567,26 @@
       "last_updated": "2026-07-09 08:51:23",
       "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
       "wiki_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
+      "source_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
       "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=agent-ideal-loop-polish-dogfood-2026-07-09.md",
-      "source_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1"
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=agent-ideal-loop-polish-dogfood-2026-07-09.md"
+    },
+    "tests/test_agent_scale.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-12 11:06:26",
+      "reason": "ACS persist regression green",
+      "source_content_hash": "sha256:90fadf1ef1ee58f561dc44dae5803a8d6f387468d65ad28adaed032fed598e6c",
+      "last_wiki_refresh": "2026-07-12 11:06:26",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:27 (wiki hash captured); mark-green:2026-07-12 11:06:26 (wiki hash captured)"
+    },
+    "Findings/agent-scale-perf-accuracy-2026-07-12.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-07-12 11:01:28",
+      "reason": "findings recorded",
+      "wiki_content_hash": "sha256:af8612d319551b599f3001d1002f98446cc4baebd3be97a673e511343fc2c395",
+      "source_content_hash": "sha256:af8612d319551b599f3001d1002f98446cc4baebd3be97a673e511343fc2c395",
+      "last_wiki_refresh": "2026-07-12 11:01:28",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:28 (wiki hash captured); wiki=agent-scale-perf-accuracy-2026-07-12.md"
     }
   }
 }

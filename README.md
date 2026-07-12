@@ -52,27 +52,33 @@ Always set an explicit root for external trees: `WIKIFIER_PROJECT_ROOT=/abs/path
 
 ## Steady state (only touch what needs it)
 
-Full protocol: [`skills/run.md`](skills/run.md).
+Full protocol: [`skills/run.md`](skills/run.md) (Agent Protocol v0.6 — package **4.6.x**).
 
 ```bash
-wikifier check-changes          # yellow dirty files; red ghosts (missing paths)
-# prioritize 🔴 then 🟡 — do NOT re-wiki 🟢 Green files
+wikifier session-bootstrap      # one-shot: root, health, attention, actions[]
+wikifier check-changes          # content-honest dirty; red ghosts (missing paths)
+# prioritize 🔴 then *actionable* 🟡 — do NOT re-wiki 🟢 Green files
+wikifier prepare-edit path/file.py   # wiki + status + deps/dependents preflight
 # ... edit only those sources ...
 wikifier record-change "path/file.py" "why this changed"   # required
 # ... refresh that file’s wiki summary only ...
 wikifier mark-green "path/file.py"
-wikifier update-maps            # only if imports/structure changed
+wikifier update-maps            # only if imports/structure changed (warm 0-dirty is cheap)
 # removals:
 wikifier record-deletion "path/gone.py" "why removed"
 ```
 
-MCP **Core 6** (start every session): `get_project_status`, `check_changes`, `get_files_needing_attention`, `get_file_wiki`, `suggest_next_actions`, `record_change` / `mark_green`. Intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`. Always pass `project_root=` for external trees.
+**Core 6** (prefer every session — MCP or library/CLI):  
+`session_bootstrap` → `check_changes` → `prepare_edit` → `suggest_next_actions` (json `actions[]`) → `record_change` → `mark_green`.
+
+Advanced intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`, barrels/diagnostics. Always pass `project_root=` / `WIKIFIER_PROJECT_ROOT` for external trees. **Never** point `project_root` at a multi-repo parent folder (e.g. a directory of clones).
 
 ## What you get
 
-- **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust, Go, C/C++ includes, C# usings; per-edge confidence; name-routed barrel expansion for TS/JS
+- **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust (`use`/`mod` + best-effort `crate::` paths), Go, C/C++ includes, C# usings; per-edge confidence; barrel expansion for TS/JS
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
-- **Selective agent work** — health + suggest bias to 🔴/🟡 only; ACS *actionable* low-conf excludes stdlib/external noise
+- **Warm agent maps (4.6.3+)** — zero-dirty fast path skips full graph/`library.md` rewrite when nothing reparsed; content-hash dirty so mtime thrash ≠ reparse; `--directory=` scopes the candidate walk (monorepo budgets)
+- **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal` (`skip`|`investigate`); prefer `actionable_low_conf_edges` over raw low-conf noise
 - **Scale** — reverse index + barrel invalidation so one edit doesn’t re-scan the monorepo
 - **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
 - **Zero core dependencies** — stdlib only; forks can add their own stack on top
@@ -80,32 +86,45 @@ MCP **Core 6** (start every session): `get_project_status`, `check_changes`, `ge
 
 ## Performance (measured)
 
-| Project | Scale | Full `update-maps` |
-|---------|-------|--------------------|
-| llama_index | ~3.8k Python files | ~8.5s |
-| Babylon.js | ~3.9k TS files, barrel-heavy | ~4.5 min (scoped re-runs ~80s) |
-| Large trees (e.g. LLVM-scale) | tens of thousands of files | candidate scan in seconds |
+Full / heavy runs (historical order-of-magnitude):
 
-Tests: `python -m unittest discover tests` (stdlib only).
+| Project | Scale | Full / heavy `update-maps` |
+|---------|-------|----------------------------|
+| llama_index | ~3.8k Python files | ~8.5s class full |
+| Babylon.js | ~3.9k TS files, barrel-heavy | minutes full; scoped re-runs tens of seconds |
+| Large trees (e.g. LLVM-scale) | tens of thousands of files | use lean monitor + `--directory` / `--max-files` |
+
+Warm **0-dirty** re-runs after 4.6.3 (same machine; scoped where noted) — agent session path:
+
+| Project | Scope | Warm2 `update-maps` |
+|---------|-------|---------------------|
+| Wikifier (self) | incremental full | ~43 ms |
+| redox | `src` | ~17 ms |
+| llama_index | `llama-index-core` | ~0.6 s |
+| rust | `library/std/src` (budgeted) | ~0.7 s (vs multi-second full-tree walk before scoped collect) |
+
+Tests: `python -m unittest discover tests` (stdlib only; 86+ cases including agent-scale edges).
 
 ## Commands
 
 | Command | Purpose |
 |---------|---------|
 | `wikifier init [--target DIR]` | Bootstrap project + human `index.html` |
-| `wikifier check-changes` | Incremental scan → health / pending |
+| `wikifier session-bootstrap` | Session start: health, attention, dispatchable `actions[]` |
+| `wikifier check-changes` | Content-honest scan → health / pending |
+| `wikifier prepare-edit <file>` | Preflight: status, wiki snippet, deps, dependents |
 | `wikifier record-change <file> "reason"` | Log *why* (required after edits) |
-| `wikifier mark-green <file>` | Mark wiki current |
+| `wikifier mark-green <file>` | Mark wiki current + source content-hash baseline |
 | `wikifier record-deletion <file> "reason"` | Mark removed paths 🔴 + prune barrel refs |
-| `wikifier suggest-next` | Next actions (🔴/🟡 only) |
-| `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + `library.md` |
+| `wikifier suggest-next` | Next actions (🔴/actionable 🟡 only; `--json` for `actions[]`) |
+| `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + `library.md` (warm 0-dirty is fast) |
 | `wikifier health [--summary\|--json]` | Health matrix (machine-friendly flags) |
 | `wikifier validate` | Missing wiki rows + ghost paths |
 | `wikifier cycles` | Circular deps + break hints |
 | `wikifier monitor` / `daemon` | Background maintenance (`WIKIFIER_DAEMON_MAPS=0` for check-only) |
 | `wikifier serve` | Localhost dashboard with Run/Stop |
 
-Library: `from wikifier import check_changes, record_change, mark_green, suggest_next_actions, update_maps, health`.
+Library: `from wikifier import session_bootstrap, prepare_edit, check_changes, record_change, mark_green, suggest_next_actions, update_maps, health, list_core_tools`.
 
 ## MCP
 

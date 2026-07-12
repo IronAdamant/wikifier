@@ -292,6 +292,8 @@ def update_file_data(
 
     if dependents is not None:
         entry["dependents"] = dependents
+    # Optional content_hash may be set by callers after update_file_data, or
+    # passed via resolved_pairs payload path in run_full_update (direct dict write).
 
     cache[rel_path] = entry
 
@@ -302,6 +304,22 @@ def get_mtime(file_path: Path) -> int:
         return int(file_path.stat().st_mtime)
     except Exception:
         return 0
+
+
+def compute_file_content_hash(file_path: Path) -> Optional[str]:
+    """Sha256 of source bytes for map dirty honesty (mtime thrash ≠ reparse).
+
+    Returns ``sha256:<hex>`` or None if unreadable. Stored on cache entries so
+    ``compute_files_needing_reparse`` can skip content-stable files.
+    """
+    try:
+        import hashlib
+        p = Path(file_path)
+        if not p.is_file():
+            return None
+        return "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
+    except Exception:
+        return None
 
 
 # =============================================================================
@@ -1041,6 +1059,74 @@ def _edge_is_non_actionable_noise(pair: Dict[str, Any]) -> bool:
     return _edge_is_external_noise(pair) or _edge_is_dynamic_literal_noise(pair)
 
 
+def classify_edge_agent_signal(
+    pair: Dict[str, Any],
+    low_threshold: float = 0.65,
+) -> Dict[str, Any]:
+    """Stable agent signal for one edge: skip vs investigate + reason_code.
+
+    ACS v1.3 — agents should trust reason_code rather than free-text alone:
+      skip: external_or_bare | dynamic_literal | high_confidence_ok
+      investigate: unresolved_project | low_confidence_internal | low_confidence_resolved
+
+    Pure helper; does not mutate *pair*.
+    """
+    if not isinstance(pair, dict):
+        return {
+            "agent_signal": "skip",
+            "reason_code": "invalid_edge",
+            "actionable": False,
+        }
+    is_ext = _edge_is_external_noise(pair)
+    is_dyn = _edge_is_dynamic_literal_noise(pair)
+    resolved = str(pair.get("resolved") or "").strip()
+    sc = pair.get("confidence_score")
+    conf = pair.get("confidence")
+    scf: Optional[float] = float(sc) if isinstance(sc, (int, float)) else None
+    if scf is None and conf == "low":
+        scf = 0.5
+    elif scf is None and conf == "high":
+        scf = 0.9
+    elif scf is None and conf == "medium":
+        scf = 0.7
+
+    if is_ext:
+        return {
+            "agent_signal": "skip",
+            "reason_code": "external_or_bare",
+            "actionable": False,
+            "confidence_score": scf,
+        }
+    if is_dyn:
+        return {
+            "agent_signal": "skip",
+            "reason_code": "dynamic_literal",
+            "actionable": False,
+            "confidence_score": scf,
+        }
+    if not resolved:
+        # Project-local unresolved (not classified external) — agent may investigate
+        return {
+            "agent_signal": "investigate",
+            "reason_code": "unresolved_project",
+            "actionable": True,
+            "confidence_score": scf if scf is not None else 0.4,
+        }
+    if scf is not None and scf < low_threshold:
+        return {
+            "agent_signal": "investigate",
+            "reason_code": "low_confidence_internal",
+            "actionable": True,
+            "confidence_score": scf,
+        }
+    return {
+        "agent_signal": "skip",
+        "reason_code": "high_confidence_ok",
+        "actionable": False,
+        "confidence_score": scf,
+    }
+
+
 def compute_acs_summary(
     cache: Dict[str, Any],
     max_samples: int = 5,
@@ -1064,50 +1150,79 @@ def compute_acs_summary(
 
     ACS v1.2: also demotes dynamic string-literal noise (importlib.import_module(\"…\"),
     is_dynamic+dynamic_type=static) from actionable counts. Full low_conf telemetry unchanged.
+
+    ACS v1.3: scores unresolved pairs too; adds reason_code histogram + agent_signal
+    counts so agents can skip vs investigate without re-parsing free text. Prefer
+    ``actionable_low_conf_edges`` + ``reason_code_counts`` for work selection.
     """
     # Phase 5e (66): compute_acs_summary + get_acs_summary promoted first-class default (O(k) bounded samples via ACS/CIABRE, deque-style in practice) for 20k+ creative; format=summary paths in MCP/CLI/health default to this + barrel summary (per 48/58/50/57, crit2/5 long-term WS A).
     t0 = time.time()
     total = 0
     sum_score = 0.0
+    scored_with_numeric = 0
     low_count = 0
     actionable_low = 0
     external_noise = 0
     dynamic_literal_noise = 0
+    unresolved_project = 0
     reason_counts: Dict[str, int] = {}
+    reason_code_counts: Dict[str, int] = {}
+    agent_signal_counts: Dict[str, int] = {"skip": 0, "investigate": 0}
     samples: List[str] = []  # full expls for lowest-risk (prioritized)
 
     low_items: List[tuple] = []  # (score, expl) all low
-    actionable_items: List[tuple] = []  # (score, expl) project-internal low only
+    actionable_items: List[tuple] = []  # (score, expl, reason_code) project-internal only
 
     for rel, data in cache.items():
         if not isinstance(rel, str) or rel.startswith("_") or not isinstance(data, dict):
             continue
         for p in (data.get("resolved_pairs") or []):
-            if not isinstance(p, dict) or not p.get("resolved"):
+            if not isinstance(p, dict):
                 continue
-            total += 1
-            sc = p.get("confidence_score")
-            expl = p.get("confidence_explanation") or ""
-            reasons = p.get("confidence_reasons") or []
-            is_ext = _edge_is_external_noise(p)
-            is_dyn_lit = _edge_is_dynamic_literal_noise(p)
-            is_noise = is_ext or is_dyn_lit
+            # v1.3: include unresolved edges (still demote external/dynamic noise)
+            sig = classify_edge_agent_signal(p, low_threshold=low_threshold)
+            reason_code = str(sig.get("reason_code") or "unknown")
+            reason_code_counts[reason_code] = reason_code_counts.get(reason_code, 0) + 1
+            asig = str(sig.get("agent_signal") or "skip")
+            agent_signal_counts[asig] = agent_signal_counts.get(asig, 0) + 1
+
+            is_ext = reason_code == "external_or_bare"
+            is_dyn_lit = reason_code == "dynamic_literal"
             if is_ext:
                 external_noise += 1
             if is_dyn_lit:
                 dynamic_literal_noise += 1
+            if reason_code == "unresolved_project":
+                unresolved_project += 1
+
+            total += 1
+            sc = p.get("confidence_score")
+            expl = p.get("confidence_explanation") or ""
+            reasons = p.get("confidence_reasons") or []
+            # Prefer numeric score; fall back to classifier estimate
+            scf = sig.get("confidence_score")
             if isinstance(sc, (int, float)):
                 scf = float(sc)
-                sum_score += scf
-                if scf < low_threshold:
+            if isinstance(scf, (int, float)):
+                sum_score += float(scf)
+                scored_with_numeric += 1
+                is_low = float(scf) < low_threshold or reason_code == "unresolved_project"
+                if is_low:
                     low_count += 1
-                    if expl:
-                        low_items.append((scf, expl))
-                    if not is_noise:
+                    # Prefer non-noise samples for agent-readable low_conf explanations
+                    if expl and not is_ext and not is_dyn_lit:
+                        low_items.append((float(scf), expl))
+                    if sig.get("actionable"):
                         actionable_low += 1
-                        if expl:
-                            actionable_items.append((scf, expl))
-            # aggregate reasons (filterable by agents)
+                        label = expl or f"[{reason_code}] {p.get('raw') or p.get('raw_module') or '?'}"
+                        actionable_items.append((float(scf), label, reason_code))
+            elif sig.get("actionable"):
+                # unresolved without score still counts as low/actionable
+                low_count += 1
+                actionable_low += 1
+                label = expl or f"[{reason_code}] {p.get('raw') or p.get('raw_module') or '?'}"
+                actionable_items.append((0.4, label, reason_code))
+            # aggregate free-text reasons (filterable by agents)
             for r in reasons:
                 if isinstance(r, str) and r:
                     reason_counts[r] = reason_counts.get(r, 0) + 1
@@ -1121,15 +1236,22 @@ def compute_acs_summary(
 
     actionable_items.sort(key=lambda x: x[0])
     actionable_samples: List[str] = []
-    for scf, expl in actionable_items[:max_samples]:
+    actionable_sample_codes: List[str] = []
+    for item in actionable_items[:max_samples]:
+        scf, expl = item[0], item[1]
+        code = item[2] if len(item) > 2 else ""
         safe_expl = expl if len(expl) <= 450 else expl[:447] + "..."
         actionable_samples.append(safe_expl)
+        if code:
+            actionable_sample_codes.append(code)
 
-    avg = round(sum_score / total, 2) if total > 0 else 0.0
+    avg = round(sum_score / scored_with_numeric, 2) if scored_with_numeric > 0 else 0.0
     top_reasons = sorted(reason_counts.items(), key=lambda x: -x[1])[:6]
+    # Prefer reason_code histogram for agents (stable tokens)
+    top_reason_codes = sorted(reason_code_counts.items(), key=lambda x: -x[1])[:8]
 
     return {
-        "acs_version": "1.2",
+        "acs_version": "1.3",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_scored_edges": total,
         "avg_confidence": avg,
@@ -1137,10 +1259,14 @@ def compute_acs_summary(
         "actionable_low_conf_edges": actionable_low,
         "external_noise_edges": external_noise,
         "dynamic_literal_noise_edges": dynamic_literal_noise,
+        "unresolved_project_edges": unresolved_project,
         "low_conf_threshold": low_threshold,
         "top_risk_reasons": dict(top_reasons),
+        "reason_code_counts": dict(top_reason_codes),
+        "agent_signal_counts": agent_signal_counts,
         "sample_low_conf_explanations": samples,  # full Recommendation text for agents
         "sample_actionable_low_conf_explanations": actionable_samples,
+        "sample_actionable_reason_codes": actionable_sample_codes,
         "compute_time_ms": int((time.time() - t0) * 1000),
     }
 
@@ -1173,12 +1299,13 @@ def ensure_acs_summary_persisted(
       always-available oracle in primary surfaces without requiring explicit update first.
     """
     acs = get_acs_summary(cache)
-    # G4/v1.2: recompute when missing OR pre-1.2 summaries (dynamic-literal demotion)
+    # G4/v1.2/v1.3: recompute when missing OR pre-1.3 (reason codes + unresolved)
     needs = (
         not acs
         or acs.get("total_scored_edges", 0) == 0
         or "actionable_low_conf_edges" not in acs
-        or str(acs.get("acs_version") or "") < "1.2"
+        or str(acs.get("acs_version") or "") < "1.3"
+        or "reason_code_counts" not in acs
     )
     if needs:
         acs = compute_acs_summary(cache)
@@ -1324,15 +1451,22 @@ def compute_files_needing_reparse(
     root: Path,
     candidate_full_paths: List[Path],
     full_rebuild: bool = False,
+    content_stable_mtime_updates: Optional[List[Tuple[str, int, str]]] = None,
 ) -> List[Path]:
-    """R7 Performance: Single-invocation replacement for the O(N) python -c mtime / has_cache / cache-key loops
-    inside determine_files_to_reparse() in wikifier.sh first-pass.
+    """R7 Performance: Single-invocation dirty detection for update-maps.
 
-    Eliminates thousands of interpreter + wikifier.* imports on large monorepos (previously ~800ms each).
-    Detection cost now O(1) spawns regardless of project size (1k-20k+ files), while preserving exact
-    mtime-dirty + new-file semantics for incremental correctness + barrel invalidation.
+    Eliminates thousands of interpreter + wikifier.* imports on large monorepos.
+    Detection is one in-process pass over candidates.
 
-    Called from first-pass; returns deduped full Paths in encounter order.
+    Semantics:
+      - full_rebuild=True → all candidates dirty (order-preserving, deduped)
+      - new file / missing cache entry → dirty
+      - mtime newer than cache → dirty **unless** stored ``content_hash`` matches
+        live file bytes (content-stable mtime thrash does not reparse)
+      - optional ``content_stable_mtime_updates`` collects
+        ``(rel, new_mtime, content_hash)`` for callers to refresh cache without reparse
+
+    Returns deduped full Paths in encounter order.
     """
     if full_rebuild:
         # preserve order, dedup
@@ -1353,18 +1487,7 @@ def compute_files_needing_reparse(
     except Exception:
         root_res = root
 
-    # 1. Check all current sources: changed or absent from cache => dirty/new
-    for p in candidate_full_paths:
-        if not p:
-            continue
-        try:
-            p_res = Path(p).resolve()
-        except Exception:
-            p_res = Path(p)
-        if p_res in seen:
-            continue
-        seen.add(p_res)
-        # Robust rel for cache key (handles Path objects, symlinks, win/linux)
+    def _rel_of(p_res: Path) -> str:
         rel = None
         try:
             rel = str(p_res.relative_to(root_res))
@@ -1380,6 +1503,32 @@ def compute_files_needing_reparse(
                 pass
         if not rel:
             rel = p_res.name or str(p_res)
+        return rel
+
+    def _content_stable(p_res: Path, data: Dict[str, Any], rel: str, curr_mtime: int) -> bool:
+        """True when mtime says dirty but content_hash matches (skip reparse)."""
+        stored = data.get("content_hash")
+        if not stored or not isinstance(stored, str):
+            return False
+        live = compute_file_content_hash(p_res)
+        if not live or live != stored:
+            return False
+        if content_stable_mtime_updates is not None:
+            content_stable_mtime_updates.append((rel, curr_mtime, live))
+        return True
+
+    # 1. Check all current sources: changed or absent from cache => dirty/new
+    for p in candidate_full_paths:
+        if not p:
+            continue
+        try:
+            p_res = Path(p).resolve()
+        except Exception:
+            p_res = Path(p)
+        if p_res in seen:
+            continue
+        seen.add(p_res)
+        rel = _rel_of(p_res)
         data = get_file_data(cache, rel) or {}
         cached_mtime = int(data.get("mtime", 0) or 0)
         curr_mtime = 0
@@ -1388,8 +1537,12 @@ def compute_files_needing_reparse(
                 curr_mtime = int(p_res.stat().st_mtime)
             except Exception:
                 curr_mtime = 0
-        needs = (curr_mtime > cached_mtime) or (not data)
-        if needs:
+        if not data:
+            to_reparse.append(p_res)
+            continue
+        if curr_mtime > cached_mtime:
+            if _content_stable(p_res, data, rel, curr_mtime):
+                continue
             to_reparse.append(p_res)
 
     # 2. Also honor any cache-tracked files that changed on disk (old behavior for completeness)
@@ -1404,6 +1557,9 @@ def compute_files_needing_reparse(
                 curr = int(full.stat().st_mtime)
                 cached = int(data.get("mtime", 0) or 0)
                 if curr > cached:
+                    if _content_stable(full, data, rel, curr):
+                        seen.add(full)
+                        continue
                     to_reparse.append(full)
                     seen.add(full)
         except Exception:

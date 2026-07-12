@@ -41,6 +41,70 @@ def _resolve_mod(current: Path, name: str) -> Optional[str]:
     return None
 
 
+def _find_crate_root(current: Path) -> Optional[Path]:
+    """Walk up for lib.rs / main.rs / mod.rs package root (bounded)."""
+    d = current.parent if current.is_file() else current
+    for _ in range(12):
+        for name in ("lib.rs", "main.rs"):
+            cand = d / name
+            if cand.is_file():
+                return d
+        parent = d.parent
+        if parent == d:
+            break
+        d = parent
+    return current.parent if current.is_file() else current
+
+
+def _resolve_crate_path(current: Path, raw: str) -> Optional[str]:
+    """Best-effort resolve ``crate::foo::bar`` / ``super::foo`` to a .rs file."""
+    parts = [p for p in raw.replace(" ", "").split("::") if p and p not in ("{}",)]
+    if not parts:
+        return None
+    if parts[0] == "crate":
+        base = _find_crate_root(current)
+        segs = parts[1:]
+    elif parts[0] == "super":
+        base = current.parent.parent if current.is_file() else current.parent
+        segs = parts[1:]
+    elif parts[0] == "self":
+        base = current.parent if current.is_file() else current
+        segs = parts[1:]
+    else:
+        return None
+    if not segs:
+        # `use crate` / bare super — point at crate root lib/main if present
+        if base:
+            for name in ("lib.rs", "main.rs", "mod.rs"):
+                cand = base / name
+                if cand.is_file():
+                    return str(cand.resolve())
+        return None
+    # Walk segments: foo/bar.rs or foo/bar/mod.rs.
+    # Item paths after a file module (crate::foo::bar_fn) resolve to the module file.
+    cur = base
+    for i, seg in enumerate(segs):
+        seg = seg.split("{")[0].strip().strip(",")
+        if not seg or seg == "*":
+            break
+        is_last = i == len(segs) - 1
+        file_mod = cur / f"{seg}.rs"
+        dir_mod = cur / seg
+        if is_last:
+            for cand in (file_mod, dir_mod / "mod.rs", dir_mod / "lib.rs"):
+                if cand.is_file():
+                    return str(cand.resolve())
+            return None
+        if (dir_mod / "mod.rs").is_file() or dir_mod.is_dir():
+            cur = dir_mod
+            continue
+        if file_mod.is_file():
+            # File module: remaining segments are items (fn/type), not nested files
+            return str(file_mod.resolve())
+        return None
+    return None
+
+
 def parse_rust_imports(filepath: str) -> List[Dict]:
     path = Path(filepath)
     try:
@@ -57,6 +121,11 @@ def parse_rust_imports(filepath: str) -> List[Dict]:
         is_rel = base in ("crate", "super", "self") or raw.startswith("crate::") or raw.startswith("super::")
         conf = "medium" if is_rel else "medium"
         diag = None
+        resolved_path = None
+        if is_rel:
+            resolved_path = _resolve_crate_path(path, raw)
+            if resolved_path:
+                conf = "high"
         if not is_rel and base not in ("std", "core", "alloc"):
             # external crate name
             diag = {
@@ -83,6 +152,7 @@ def parse_rust_imports(filepath: str) -> List[Dict]:
                 raw_module=raw,
                 is_relative=is_rel,
                 level=1 if is_rel else 0,
+                resolved_path=resolved_path,
                 resolution_confidence=conf,
                 statement_type="use",
                 original_statement=m.group(0).strip(),

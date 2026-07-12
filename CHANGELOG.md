@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.3] - 2026-07-12
+
+### Added
+
+- **Zero-dirty fast path** for `update_maps` / `run_full_update`: skip graph rebuild and
+  `library.md` rewrite when nothing needs reparse (agent warm maps).
+- **Map content-hash dirty honesty**: cache entries store `content_hash`; mtime thrash
+  without byte change does not reparse (`compute_files_needing_reparse` + stable mtime refresh).
+- **ACS v1.3**: `reason_code` / `agent_signal` (`skip`|`investigate`), `reason_code_counts`,
+  unresolved project edges; prefer `actionable_low_conf_edges` for agent work.
+- **Scoped candidate collection**: `--directory=` limits walk/git listing to that subtree
+  (monorepo agent budgets).
+- **Rust** best-effort `crate::` / `super::` / `self::` path resolve to on-disk modules.
+
+### Fixed
+
+- **`prepare_edit`**: missing files return `success: false` + `error` (no silent empty OK).
+
+### Tests
+
+- `tests/test_agent_scale.py` (content-hash, zero-dirty, max_files, ACS v1.3, rust, edges).
+- Dogfood: self + redox, llama_index, rust, airflow, Babylon.js scoped maps
+  (Findings/agent-scale-perf-accuracy-2026-07-12.md).
+
 ## [4.6.2] - 2026-07-09
 
 ### Added
