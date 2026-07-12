@@ -20,7 +20,14 @@ Works from small scripts to large monorepos. **Deep import/include maps** (zero-
 | C# | `.cs` | `using` namespaces |
 | Java | `.java` | `import` / `import static` |
 
-Health/journal still work for any monitored path. Parsers are **pragmatic regex** (not full cargo/`go.mod`/classpath/`-I` resolution). Prefer **lean `monitored_paths.txt`** on huge monorepos; raise dirty cap with `WIKIFIER_CHECK_CHANGES_MAX` (default 2000) only when needed.
+Health/journal still work for any monitored path. Parsers are **pragmatic regex** (not full cargo/`go.mod`/classpath/`-I` resolution). On huge monorepos, split scope deliberately:
+
+| File | Surface |
+|------|---------|
+| **`map_paths.txt`** | Package roots for **import maps** (`update-maps` walk). Prefer package dirs (`src/`, `packages/foo/`) — not a wiki-only file list. |
+| **`monitored_paths.txt`** | **Wiki / health** watch list (can be individual `.md` files). Does **not** define the map. |
+
+Or pass `--directory=pkg/` / `--max-files=N` per run. Raise dirty cap with `WIKIFIER_CHECK_CHANGES_MAX` (default 2000) only when needed. Never set `project_root` to a multi-repo parent of clones.
 
 ## Why
 
@@ -77,11 +84,11 @@ Advanced intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`, ba
 
 - **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust (`use`/`mod` + best-effort `crate::` paths), Go, C/C++ includes, C# usings; per-edge confidence; barrel expansion for TS/JS
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
-- **Warm agent maps (4.6.3–4.6.6)** — zero-dirty + **index-first** candidates (re-list only on fingerprint/index disagreement); **stdlib SQLite**; content-hash dirty
-- **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = wiki/health watch (independent)
+- **Warm agent maps (4.6.3–4.6.7)** — zero-dirty + **index-first** candidates (re-list only when fingerprint / map-scoped index / live count disagree); **MapScope** keeps collect, live count, index filter, and prune aligned; **stdlib SQLite**; content-hash dirty
+- **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = wiki/health watch (**independent** — wiki file lists never collapse the map)
 - **Partial-map honesty** — `map_coverage` on `update_maps` / bootstrap / **`suggest_next`**; `update_maps_until_complete` when incomplete
-- **Cache ops** — `wikifier cache-status`; JSON dual-write **opt-in only** (`WIKIFIER_CACHE_JSON=1`); dual-read for migrate
-- **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal`; prefer `actionable_low_conf_edges` + reason codes — **never** raw `low_conf_edges` alone
+- **Cache ops** — `wikifier cache-status`; JSON dual-write **deprecated default-off** (`WIKIFIER_CACHE_JSON=1` opt-in); dual-read for migrate
+- **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal`; prefer `actionable_low_conf_edges` + reason codes — **never** raw `low_conf_edges` averages alone
 - **Scale** — reverse index + barrel invalidation so one edit doesn’t re-scan the monorepo
 - **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
 - **Zero core dependencies** — stdlib only; forks can add their own stack on top
@@ -95,18 +102,21 @@ Full / heavy runs (historical order-of-magnitude):
 |---------|-------|----------------------------|
 | llama_index | ~3.8k Python files | ~8.5s class full |
 | Babylon.js | ~3.9k TS files, barrel-heavy | minutes full; scoped re-runs tens of seconds |
-| Large trees (e.g. LLVM-scale) | tens of thousands of files | use lean monitor + `--directory` / `--max-files` |
+| Large trees (e.g. LLVM-scale) | tens of thousands of files | `map_paths` / `--directory` / `--max-files` — never unscoped one-shot |
 
-Warm **0-dirty** re-runs after 4.6.3 (same machine; scoped where noted) — agent session path:
+Warm **0-dirty** re-runs after **4.6.7** (same machine class; scoped; candidates **reused** — agent session path):
 
-| Project | Scope | Warm2 `update-maps` |
-|---------|-------|---------------------|
-| Wikifier (self) | incremental full | ~43 ms |
-| redox | `src` | ~17 ms |
-| llama_index | `llama-index-core` | ~0.6 s |
-| rust | `library/std/src` (budgeted) | ~0.7 s (vs multi-second full-tree walk before scoped collect) |
+| Project | Scope | Warm `update-maps` | n |
+|---------|-------|--------------------|---|
+| Wikifier (self) | `map_paths`: `wikifier/` + `tests/` | **~30 ms** | 50 |
+| llama_index | `llama-index-core` | **~76 ms** | 724 |
+| rust | `library/std` | **~79 ms** | 719 |
+| airflow | `airflow-core` | **~180 ms** | 1920 |
+| Babylon.js | `packages` | **~400 ms** | 3895 |
 
-Tests: `python -m unittest discover tests` (stdlib only; 86+ cases including agent-scale edges).
+Residual floor on large scopes is mtime/stat + live count under MapScope (not full JSON re-walk). Sub-100ms is not a hard SLA on every 1k+ tree.
+
+Tests: `python -m unittest discover tests` (stdlib only; **125** cases including MapScope / index-first / dual-write).
 
 ## Commands
 
@@ -120,7 +130,8 @@ Tests: `python -m unittest discover tests` (stdlib only; 86+ cases including age
 | `wikifier mark-green <file>` | Mark wiki current + source content-hash baseline |
 | `wikifier record-deletion <file> "reason"` | Mark removed paths 🔴 + prune barrel refs |
 | `wikifier suggest-next` | Next actions (🔴/actionable 🟡 only; `--json` for `actions[]`) |
-| `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + `library.md` (warm 0-dirty is fast) |
+| `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + `library.md` (warm 0-dirty is fast; honors `map_paths.txt`) |
+| `wikifier cache-status` | SQLite/JSON backend, dual-write policy, coverage snapshot (no full pair load) |
 | `wikifier health [--summary\|--json]` | Health matrix (machine-friendly flags) |
 | `wikifier validate` | Missing wiki rows + ghost paths |
 | `wikifier cycles` | Circular deps + break hints |
