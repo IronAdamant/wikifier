@@ -303,7 +303,8 @@ Workflow (for LLMs / new sessions):
   6. wikifier update-maps (when imports change)
 
 Configuration files (edit these):
-  monitored_paths.txt        Paths to scan (one per line). Default: "."
+  monitored_paths.txt        Wiki/health watch list (lean roots; init seeds guided template)
+  map_paths.txt              Import-map package roots (independent of monitored_paths)
   exclude_patterns.txt       Glob patterns to ignore (node_modules, .git, dist, etc.)
 
 The system is fully usable from the shell or exposed as MCP tools via skills/run.md.
@@ -674,7 +675,45 @@ cmd_init() {
     LIBRARY_MD="$PROJECT_ROOT/library.md"
     mkdir -p "$STAGING_DIR" "$JOURNAL_ROOT/$(date +%Y/%m)" "$LOGGED_ISSUES_ROOT"
 
-    [[ ! -f "$MONITORED_PATHS_FILE" ]] && echo "." > "$MONITORED_PATHS_FILE"
+    # Lean path templates (4.6.8+): not a silent bare "." — agents must replace on real trees.
+    # Comments are ignored by get_monitored_paths / Python path readers.
+    if [[ ! -f "$MONITORED_PATHS_FILE" ]]; then
+        cat > "$MONITORED_PATHS_FILE" << 'EOT'
+# monitored_paths.txt — wiki / health watch list (check-changes thrash bound)
+# Prefer lean package roots so check-changes does not thrash on target/,
+# node_modules, build/, dist/, caches, etc.
+# This is NOT the import map — see map_paths.txt for package roots used by update-maps.
+#
+# Examples (uncomment or add paths that match THIS project):
+# src/
+# lib/
+# crates/my_crate/src/
+# packages/core/src/
+# README.md
+# docs/
+#
+# Tiny single-package toys only may keep bare "." below.
+# Multi-crate / monorepo / anything with build output: REPLACE with lean roots first
+# (session_bootstrap readiness "blocked" / fix_scope until you do).
+.
+EOT
+    fi
+    MAP_PATHS_FILE="$PROJECT_ROOT/map_paths.txt"
+    if [[ ! -f "$MAP_PATHS_FILE" ]]; then
+        cat > "$MAP_PATHS_FILE" << 'EOT'
+# map_paths.txt — import-map package roots for update-maps (independent of monitored_paths)
+# List directories that contain parseable source for the dependency map.
+# Do not use bare "." on large trees; do not list only wiki/docs files here.
+#
+# Examples (uncomment or add paths that match THIS project):
+# src/
+# crates/my_crate/src/
+# packages/core/src/
+#
+# Leave empty (comments only) to fall back to monitored directory roots / full collect.
+# After editing: wikifier update-maps  (then session_bootstrap until ready_for_daemon)
+EOT
+    fi
     [[ ! -f "$EXCLUDE_PATTERNS_FILE" ]] && cat > "$EXCLUDE_PATTERNS_FILE" << 'EOT'
 node_modules
 .git
@@ -682,6 +721,7 @@ build
 dist
 __pycache__
 *.pyc
+target
 EOT
 
     [[ ! -f "$FILE_HEALTH" ]] && cat > "$FILE_HEALTH" << 'EOT'
@@ -748,12 +788,13 @@ EOT
 
     PROJECT_ROOT="$old_project"
 
-    log "✅ Wikifier initialised in $target_dir . Edit monitored_paths.txt (change detection scope; map uses excludes + optional --directory)."
+    log "✅ Wikifier initialised in $target_dir . Edit lean monitored_paths.txt + map_paths.txt (templates seeded; not silent bare-only)."
     log "   Recommended: export WIKIFIER_PROJECT_ROOT=$target_dir  (or cd there and use ./wikifier.sh)"
     log "   Agent first-run (map first, wiki prose later):"
-    log "     1) wikifier update-maps"
-    log "     2) wikifier health --summary"
-    log "     3) wikifier suggest-next   # or MCP suggest_next_actions — 🔴/🟡 only"
+    log "     1) edit monitored_paths.txt + map_paths.txt to package roots on real trees"
+    log "     2) wikifier update-maps"
+    log "     3) wikifier health --summary / session-bootstrap until ready_for_daemon"
+    log "     4) wikifier suggest-next   # or MCP suggest_next_actions — 🔴/🟡 only"
     log "   Steady-state: check-changes → edit red/yellow only → record-change → wiki → mark-green → update-maps if imports changed."
     log "   Deep import maps: Python + JS/TS. journal/pending = audit queue (not an issue tracker)."
     log "   Human layer (secondary): wikifier serve → http://localhost:8787/index.html (not file://)."

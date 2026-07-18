@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.8] - 2026-07-18
+
+### Added
+
+- **Agent contract:** `skills/run.md` § *Readiness blocked* — documents that
+  `session_bootstrap` readiness `blocked` is expected on unscoped/unmapped
+  external projects (not install/MCP failure). Unblock: lean scope →
+  `update-maps` → re-bootstrap until `ready_for_daemon`.
+- **Dogfood Finding:** `Findings/readiness-blocked-bare-monitor-2026-07.md`
+  (Grok-Bevy bare-`.` monitor + missing map/health case).
+- **`wikifier init` lean path templates:** seeds comment-guided
+  `monitored_paths.txt` and independent `map_paths.txt` (examples for `src/`,
+  `crates/*/src/`, etc.) instead of a silent single-dot monitor file.
+  `exclude_patterns` also seeds `target` (Rust build dirs).
+
+### Docs
+
+- README First-run pointer to readiness-blocked skill section + Finding.
+
+### Tests
+
+- `tests/test_init_seed.py` — real `./wikifier.sh init --target` asserts guided
+  templates (not silent bare-only) and `map_paths.txt` presence.
+
 ## [4.6.7] - 2026-07-12
 
 ### Fixed

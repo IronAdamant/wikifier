@@ -9,7 +9,8 @@
 
 **Package 4.5.x + gap-closure notes (additive; protocol still v0.6):**
 - File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
-- **First-run:** `init` → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
+- **First-run:** `init` → lean `monitored_paths.txt` + `map_paths.txt` (not bare `.`) → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
+- **`session_bootstrap` readiness `blocked`:** not a crash — see **§ Readiness blocked** below. Typical causes: bare `.` monitor and/or no map/health yet. Fix scope → `update-maps` before treating the project as map-ready.
 - **Map-first ≠ wiki-done:** `health_score` **Map Ready** + many 🟡 *Initial stubs* means structural coverage only. Do **not** bulk-wiki stubs. Wiki a file when you edit it, then `mark-green`. Prefer `actionable_yellow` / 🔴 over raw yellow counts.
 - **Steady-state selective work:** only 🔴 and *actionable* 🟡 (never re-wiki 🟢; never re-wiki the whole stub set). **ACS v1.3:** use `actionable_low_conf_edges` + `reason_code_counts` / `agent_signal` (`skip`|`investigate`). Do **not** thrash on raw `low_conf_edges` (includes external/bare scores ~0.48). Prefer `map_coverage.complete` / `files_remaining_dirty` after budgeted `update-maps` — `success: true` ≠ map complete.
 - **Warm maps:** SQLite primary; zero-dirty uses mtime index + meta. **Index-first:** re-list candidates only when fingerprint / map-scoped index / live count disagree (`index_first_dirty` / `candidates_reused` on `update_maps`). Prefer `--directory=` or `map_paths.txt` package roots (not bare `.`). Collect, live count, index filter, and prune share **MapScope** so full-tree→`map_paths` narrow does not thrash.
@@ -45,8 +46,9 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 
 | Need | Use |
 |------|-----|
-| First-run map | `init` → `update-maps` → `health --summary` → `suggest-next` |
-| **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]` |
+| First-run map | `init` → lean paths (not bare `.`) → `update-maps` → `health --summary` → `suggest-next` |
+| **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]`. If `readiness` is `blocked`, fix `actions[]` / `blockers[]` first (usually scope + maps). |
+| **Unblock readiness** | Write lean `monitored_paths.txt` + `map_paths.txt` → `update_maps` (full once) → re-`session_bootstrap` until `ready_for_daemon` / Map Ready |
 | **Core tool list** | `list_core_tools` / bootstrap `core_surface` — prefer Core 6; advanced is non-core |
 | Steady-state | `check-changes` (content-honest) → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
 | **Hash migration** | `seed_source_content_hashes` / CLI `seed-source-hashes` — baseline Greens without mass Yellow |
@@ -64,6 +66,62 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 **CLI pure-Python vs shell:** mutators and maps prefer `python -m wikifier …`. Shell still owns `init`, `monitor`, `daemon`, `serve`, `journal`.  
 **Scope:** `monitored_paths` = change detection; `exclude_patterns` + optional `--directory` = map walk.  
 **Human HTML** is secondary observation only.
+
+## Readiness blocked (`session_bootstrap` / external projects)
+
+When MCP `session_bootstrap` (or CLI `session-bootstrap`) returns:
+
+```text
+readiness: "blocked"
+scope.ok: false
+blockers: [ ... ]
+actions: [ { "action": "fix_scope", ... }, ... ]
+```
+
+**this is expected on a project that has never been scoped/mapped**, not a Wikifier install failure.
+
+### Why it happens (Grok-Bevy 2026-07 dogfood)
+
+On **Grok-Bevy** (Rust workspace), first bootstrap reported:
+
+| Blocker | Meaning |
+|---------|---------|
+| `monitored_paths is bare '.'` | Default/missing lean list → `check-changes` would walk the whole tree (`target/`, caches, etc.) and thrash. Action: **`fix_scope`**. |
+| `No import map (run update-maps first)` | No dependency/import map yet → map-first tools have nothing to trust. |
+| `No file_health` | Health matrix not seeded (comes with map/health pipeline). |
+
+Also: `bare_dot_monitor: true` and `scope.ok: false` until `monitored_paths.txt` lists **lean package roots**, not bare `.`.
+
+### Fix once per project (agents must do this, not ignore blockers)
+
+1. **Scope (wiki/health thrash bound)** — create/edit **`monitored_paths.txt`** at project root with *specific* dirs/files, e.g.:
+   ```text
+   crates/foo/src/
+   crates/bar/src/
+   README.md
+   docs/
+   ```
+   Never leave only `.` on non-tiny trees.
+2. **Map roots** — create/edit **`map_paths.txt`** (import-map package roots; independent of monitored):
+   ```text
+   crates/foo/src/
+   crates/bar/src/
+   ```
+3. **Build map + health** — from the target project (or with `project_root=` / `WIKIFIER_PROJECT_ROOT=`):
+   ```bash
+   wikifier update-maps --full    # or MCP update_maps full=true
+   # re-run session_bootstrap until readiness is ready_for_daemon / Map Ready
+   ```
+4. **Do not** bulk-re-wiki 🟡 *Initial stubs* after maps land — stubs = map coverage only.
+
+After a successful fix, bootstrap looks like: `scope.ok: true`, `blockers: []`, `health_score: Map Ready` (stubs OK), `readiness: ready_for_daemon`.
+
+### Product note for Wikifier maintainers
+
+- Default bare `.` is convenient for tiny toys and a footgun for real repos; agents must treat **`fix_scope` as P0** when `session_bootstrap` says blocked.
+- **`wikifier init` (4.6.8+)** seeds comment-guided lean templates for `monitored_paths.txt` and `map_paths.txt` (examples for `src/`, `crates/*/src/`, etc.) instead of a silent single-dot file. Tiny toys may keep `.`; multi-crate / monorepo agents must replace with package roots before map-ready work.
+
+See also: Findings note `Findings/readiness-blocked-bare-monitor-2026-07.md`.
 
 ## Mandatory New-Session Rule
 

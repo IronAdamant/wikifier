@@ -49,13 +49,16 @@ pip install wikifier            # pure Python stdlib core — no runtime deps
 pip install wikifier[mcp]       # optional Model Context Protocol (MCP) server
 
 cd /path/to/your/project
-wikifier init                   # seeds + human index.html
+wikifier init                   # seeds index.html + lean path-list templates
+# Edit monitored_paths.txt + map_paths.txt to package roots (not bare ".") on real trees
 wikifier update-maps            # full structural map → library.md + import cache
 wikifier health --summary       # matrix counts
 wikifier suggest-next           # or MCP suggest_next_actions — 🔴/🟡 only
 ```
 
 Always set an explicit root for external trees: `WIKIFIER_PROJECT_ROOT=/abs/path wikifier …`
+
+**MCP `session_bootstrap` → `readiness: blocked`?** That means lean scope and/or the map are missing (often bare `.` monitor + never ran `update-maps`) — not a broken install. Fix: write lean `monitored_paths.txt` / `map_paths.txt`, then `update-maps`. Agent contract: **`skills/run.md`** § *Readiness blocked*; dogfood: `Findings/readiness-blocked-bare-monitor-2026-07.md`.
 
 ## Steady state (only touch what needs it)
 
