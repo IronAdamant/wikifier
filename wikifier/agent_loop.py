@@ -174,6 +174,7 @@ def build_structured_actions(
     red: int = 0,
     acs_actionable: int = 0,
     scope_warnings: Optional[List[str]] = None,
+    blockers: Optional[List[str]] = None,
     clean: bool = False,
     max_file_actions: int = 12,
     map_coverage: Optional[Dict[str, Any]] = None,
@@ -181,18 +182,56 @@ def build_structured_actions(
     """Build dispatchable action objects for agents (not prose-only).
 
     Each item: action, file?, priority (1=highest), reason, optional preflight.
+    Priority ≤2 is reserved for readiness blockers (scope + missing map/health).
     """
     actions: List[Dict[str, Any]] = []
-    prio = 1
+    prio = 3  # file work starts after readiness fix actions (priority 1–2)
     cov = map_coverage if isinstance(map_coverage, dict) else {}
     remaining = int(cov.get("files_remaining_dirty") or 0)
     complete = cov.get("complete")
-    # Incomplete map under budget — higher priority than ACS thrash
+    blocker_list = [str(b) for b in (blockers or []) if b]
+    # G6: missing map / file_health always get priority ≤2
+    for b in blocker_list:
+        bl = b.lower()
+        # Prefer seed_health before generic update-maps (blocker text often mentions both)
+        if "file_health" in bl or "seed-health" in bl or "seed_health" in bl:
+            actions.append({
+                "action": "seed_health",
+                "file": None,
+                "priority": 1,
+                "reason": b,
+                "preflight": ["seed_health", "update_maps"],
+            })
+        elif "import map" in bl or "update-maps" in bl or "update_maps" in bl:
+            actions.append({
+                "action": "update_maps",
+                "file": None,
+                "priority": 1,
+                "reason": b,
+                "preflight": ["update_maps"],
+            })
+        else:
+            actions.append({
+                "action": "fix_blocker",
+                "file": None,
+                "priority": 2,
+                "reason": b,
+                "preflight": [],
+            })
+    for w in (scope_warnings or [])[:3]:
+        actions.append({
+            "action": "fix_scope",
+            "file": None,
+            "priority": 2,
+            "reason": str(w),
+            "preflight": [],
+        })
+    # Incomplete map under budget — agents must not treat success alone as done (G5)
     if complete is False or remaining > 0:
         actions.append({
             "action": "update_maps_until_complete",
             "file": None,
-            "priority": 3,
+            "priority": 2,
             "reason": (
                 f"Map incomplete: files_remaining_dirty={remaining}, complete={complete}. "
                 "Re-run update_maps (same directory/max_files) until map_coverage.complete=true; "
@@ -224,7 +263,7 @@ def build_structured_actions(
             "preflight": ["prepare_edit", "why_file"],
         })
         prio = min(prio + 1, 9)
-    if red == 0 and actionable_yellow == 0 and clean and remaining == 0:
+    if red == 0 and actionable_yellow == 0 and clean and remaining == 0 and not blocker_list:
         actions.append({
             "action": "lookup_only",
             "file": None,
@@ -232,12 +271,16 @@ def build_structured_actions(
             "reason": "Health clean — do not re-summarize tree; use prepare_edit/get_file_wiki for lookup",
             "preflight": [],
         })
+    # G10: stub-only yellows are map coverage — never bulk wiki_refresh
     if stub_yellow > 0 and actionable_yellow == 0 and red == 0:
         actions.append({
             "action": "map_first_ok",
             "file": None,
             "priority": 6,
-            "reason": f"{stub_yellow} Initial stubs are map coverage only — not bulk wiki work",
+            "reason": (
+                f"{stub_yellow} Initial stubs are map coverage only — not bulk wiki work. "
+                "Wiki a file only when you edit it, then mark-green."
+            ),
             "preflight": [],
         })
     if acs_actionable > 0:
@@ -251,16 +294,12 @@ def build_structured_actions(
             ),
             "preflight": ["get_dependencies"],
         })
-    for w in (scope_warnings or [])[:2]:
-        actions.append({
-            "action": "fix_scope",
-            "file": None,
-            "priority": 2,
-            "reason": str(w),
-            "preflight": [],
-        })
     if not any(
-        a["action"] in ("update_maps", "update_maps_until_complete", "update_maps_if_structure")
+        a["action"] in (
+            "update_maps",
+            "update_maps_until_complete",
+            "update_maps_if_structure",
+        )
         for a in actions
     ):
         actions.append({
@@ -639,6 +678,7 @@ def session_bootstrap(
         scope_warnings = list(out["scope"].get("warnings") or [])
 
     map_cov = out.get("map_coverage") if isinstance(out.get("map_coverage"), dict) else {}
+    blockers = list(out.get("blockers") or [])
     out["actions"] = build_structured_actions(
         red_files=red_files,
         actionable_yellow_files=actionable_yellow_files,
@@ -647,6 +687,7 @@ def session_bootstrap(
         red=red_n,
         acs_actionable=acs_actionable,
         scope_warnings=scope_warnings,
+        blockers=blockers,
         clean=clean,
         map_coverage=map_cov,
     )
@@ -654,13 +695,51 @@ def session_bootstrap(
     out["selective_work"] = True
     out["map_first"] = True
     rem = int(map_cov.get("files_remaining_dirty") or 0) if map_cov else 0
-    out["message"] = (
-        "session_bootstrap ready — use actions[] / attention; "
-        "prepare_edit(file) before large edits; record_change after edits."
-        + (
-            f" MAP INCOMPLETE: files_remaining_dirty={rem} — re-run update_maps until complete."
-            if rem > 0 or map_cov.get("complete") is False
-            else ""
+    readiness = out.get("readiness") or "unknown"
+    map_incomplete = rem > 0 or map_cov.get("complete") is False
+    # G2: never claim "ready" when readiness is blocked
+    if readiness == "blocked":
+        out["message"] = (
+            f"session_bootstrap readiness=blocked — fix actions[] / blockers[] first "
+            f"(typically fix_scope + update_maps / seed_health); do not treat project as map-ready."
+            + (
+                f" MAP INCOMPLETE: files_remaining_dirty={rem}."
+                if map_incomplete
+                else ""
+            )
         )
-    )
+    elif readiness == "map_ok_scope_risk":
+        out["message"] = (
+            f"session_bootstrap readiness=map_ok_scope_risk — map/health present but scope risk "
+            f"(often bare '.' monitor); fix_scope before unattended daemon. "
+            f"Use actions[] / attention; prepare_edit(file) before large edits; record_change after."
+            + (
+                f" MAP INCOMPLETE: files_remaining_dirty={rem} — re-run update_maps until "
+                f"map_coverage.complete=true."
+                if map_incomplete
+                else ""
+            )
+        )
+    elif readiness == "ready_for_daemon":
+        out["message"] = (
+            "session_bootstrap readiness=ready_for_daemon — use actions[] / attention; "
+            "prepare_edit(file) before large edits; record_change after edits."
+            + (
+                f" MAP INCOMPLETE: files_remaining_dirty={rem} — re-run update_maps until "
+                f"map_coverage.complete=true (success alone is not map-ready)."
+                if map_incomplete
+                else ""
+            )
+        )
+    else:
+        out["message"] = (
+            f"session_bootstrap readiness={readiness} — use actions[] / attention; "
+            "prepare_edit(file) before large edits; record_change after edits. "
+            "Unattended ops require readiness=ready_for_daemon (not Map Ready alone)."
+            + (
+                f" MAP INCOMPLETE: files_remaining_dirty={rem} — re-run update_maps until complete."
+                if map_incomplete
+                else ""
+            )
+        )
     return out

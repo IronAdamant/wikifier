@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.9] - 2026-08-01
+
+### Fixed / Improved (gap amendment G1–G10, G13, G15, G17)
+
+- **Bootstrap message (G2):** `session_bootstrap` embeds `readiness=` and never
+  claims "ready" when `readiness=blocked`.
+- **Structured actions (G5/G6/G10):** missing map/health → priority-1
+  `update_maps` / `seed_health`; incomplete map → priority-2
+  `update_maps_until_complete`; Initial stubs → `map_first_ok` only (no bulk
+  `wiki_refresh`).
+- **Map honesty (G5):** `run_full_update` returns top-level `map_complete` /
+  `map_ready` alongside `map_coverage`.
+- **Init templates (G7):** active default lean root `src/`; bare `.` is
+  comment-only opt-in (both shell launchers kept in sync).
+- **ACS library.md (G9):** Risk Snapshot prefers `actionable_low_conf_edges` +
+  `reason_code_counts` (not raw thrash queues).
+- **Lock timeout (G13):** `file_lock(root, timeout=seconds)` raises
+  `LockTimeoutError` when the project lock is not free in time.
+- **Protocol (G1/G3/G4/G8/G15):** package pointers **4.6.x**; SELECTIVE WORK
+  excludes Initial stubs; readiness tiers match code; unattended requires
+  `ready_for_daemon`; **CLI-at-scale** policy for large/BRC targets.
+
+### Reclassified / residual
+
+- G11/G12/G14/G16/G19 deferred product depth → permanent non-goal this wave.
+- G20–G23 multi-day/M5.3 evidence → residual-evidence only (short dogfood done).
+
+### Tests
+
+- `tests/test_gap_amendment_2026_08.py` — real shipped paths for bootstrap,
+  actions, map flags, lock timeout, ACS section, protocol strings.
+
 ## [4.6.8] - 2026-07-18
 
 ### Added

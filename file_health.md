@@ -3,8 +3,9 @@
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
 | .github/workflows/publish.yml | 🟢 Green | 2026-06-10 14:50:34 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
-| CHANGELOG.md | 🟢 Green | 2026-07-12 13:41:19 | 4.6.7 shipped notes |
+| CHANGELOG.md | 🟢 Green | 2026-08-01 11:25:17 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | CLAUDE.md | 🟢 Green | 2026-07-09 06:14:09 | test count synced to 49 |
+| Claude.md | 🟢 Green | 2026-08-01 11:25:18 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | Findings/2026-06-10-Dogfood-Refactor-Validation.md | 🟢 Green | 2026-06-10 09:54:26 AEST | Self-describing findings doc |
 | Findings/2026-06-10-Fix-Plan.md | 🟢 Green | 2026-06-10 14:20:33 AEST | Results appended, all phases verified |
 | Findings/M5-Dogfood-Assessment-Report.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
@@ -20,6 +21,8 @@
 | Findings/dogfood-goal-pass2-2026-07-09.json | 🟢 Green | 2026-07-09 07:07:11 | goal verification complete |
 | Findings/dogfood-hygiene-fix-2026-07-09.json | 🟢 Green | 2026-07-09 06:34:48 | verified 53 tests; dogfood validate 0/8 |
 | Findings/dogfood-hygiene-fix-2026-07-09.md | 🟢 Green | 2026-07-09 06:34:48 | verified 53 tests; dogfood validate 0/8 |
+| Findings/gap-amendment-closure-2026-08-01.md | 🟢 Green | 2026-08-01 11:25:18 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
+| Findings/gap-amendment-plan-2026-08-01.md | 🟢 Green | 2026-08-01 11:25:16 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | Findings/gap-closure-report.md | 🟢 Green | 2026-07-09 05:40:10 | G12 closed; 39/39 tests |
 | Findings/index-first-map-paths-2026-07-12.md | 🟢 Green | 2026-07-12 13:41:19 | evidence updated |
 | Findings/long-horizon-autonomous-ops.md | 🟢 Green | 2026-07-09 07:07:11 | goal verification complete |
@@ -36,7 +39,7 @@
 | monitored_paths.txt | 🟢 Green | 2026-07-12 13:26:29 | 4.6.6 verified |
 | pyproject.toml | 🟢 Green | 2026-06-10 14:41:19 AEST | Build + twine check pass; clean-room wheel install verified |
 | screenshot/front_page_review.png | 🟢 Green | 2026-06-11 00:37:47 AEST | Asset referenced by README |
-| skills/run.md | 🟢 Green | 2026-07-12 13:41:19 | protocol note MapScope |
+| skills/run.md | 🟢 Green | 2026-08-01 11:25:16 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | tests/ | 🟢 Green | 2026-06-10 16:59:05 AEST | Verified: 30/30 unittest, exports 8/8, churn 4/4; Babylon full run 25m52s->5m52s and 417k->44k edges; worst file 990->55; RecipeLab identical 671 edges; e2e cache carries imported_names + barrel_leaf_selection |
 | tests/__init__.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/_base.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
@@ -51,6 +54,7 @@
 | tests/test_agent_scale.py | 🟢 Green | 2026-07-12 11:06:26 | ACS persist regression green |
 | tests/test_barrel_invalidation.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/test_cache_store.py | 🟢 Green | 2026-07-12 12:00:51 | instrumented warm load assertion |
+| tests/test_gap_amendment_2026_08.py | 🟢 Green | 2026-08-01 11:25:16 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | tests/test_gap_closure.py | 🟢 Green | 2026-07-12 11:01:27 | ACS 1.3 assert |
 | tests/test_health.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/test_import_cache.py | 🟢 Green | 2026-07-12 13:26:30 | 4.6.6 verified |
@@ -61,21 +65,21 @@
 | tests/test_walk_coverage_resolvers.py | 🟢 Green | 2026-07-12 12:55:37 | poison test green |
 | wikifier.bat | 🟢 Green | 2026-06-10 14:50:33 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
 | wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:31 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
-| wikifier.sh | 🟢 Green | 2026-07-09 05:32:45 | gap-closure swarm verified 34/34 tests |
-| wikifier/__init__.py | 🟢 Green | 2026-07-12 13:41:02 | version bump |
+| wikifier.sh | 🟢 Green | 2026-08-01 11:25:19 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
+| wikifier/__init__.py | 🟢 Green | 2026-08-01 11:25:17 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | wikifier/__main__.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
-| wikifier/agent_loop.py | 🟢 Green | 2026-07-12 12:47:37 | 4.6.5 verified |
+| wikifier/agent_loop.py | 🟢 Green | 2026-08-01 11:25:14 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | wikifier/cache_store.py | 🟢 Green | 2026-07-12 13:41:01 | prune tests green |
 | wikifier/candidates.py | 🟢 Green | 2026-07-12 13:41:01 | MapScope unit+migration green |
-| wikifier/cli.py | 🟢 Green | 2026-07-12 13:41:02 | dogfood warm reuse green |
+| wikifier/cli.py | 🟢 Green | 2026-08-01 11:25:15 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | wikifier/contracts.py | 🟢 Green | 2026-07-09 06:13:34 | mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first) |
 | wikifier/daemon.py | 🟢 Green | 2026-07-09 07:58:09 | mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows) |
 | wikifier/diagnostics.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | wikifier/health.py | 🟢 Green | 2026-07-09 08:51:23 | 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish) |
 | wikifier/import_cache.py | 🟢 Green | 2026-07-12 11:56:20 | 4.6.4 sqlite coverage verified 93 tests |
 | wikifier/index.html | 🟢 Green | 2026-06-11 00:20:18 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
-| wikifier/library.py | 🟢 Green | 2026-06-11 00:20:14 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
-| wikifier/locking.py | 🟢 Green | 2026-06-10 14:19:39 AEST | v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke. |
+| wikifier/library.py | 🟢 Green | 2026-08-01 11:25:15 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
+| wikifier/locking.py | 🟢 Green | 2026-08-01 11:25:14 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | wikifier/mcp/README.md | 🟢 Green | 2026-07-09 08:51:23 | 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish) |
 | wikifier/mcp/__init__.py | 🟢 Green | 2026-06-10 09:27:38 AEST | Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged. |
 | wikifier/mcp/server.py | 🟢 Green | 2026-07-09 08:51:23 | 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish) |

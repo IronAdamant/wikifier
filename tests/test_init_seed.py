@@ -64,13 +64,22 @@ class TestInitSeedTemplates(TempProjectTestCase):
             r"(?i)(lean|package root|thrash|map_paths)",
             "monitored_paths.txt should mention lean roots / thrash / map_paths",
         )
-        # Active path may still be bare "." for tiny toys, but only with comments above.
+        # G7: active default is lean src/ — bare "." is opt-in comment only.
         active_mon = [
             ln.strip()
             for ln in mon_text.splitlines()
             if ln.strip() and not ln.strip().startswith("#")
         ]
         self.assertTrue(active_mon, "expected at least one non-comment monitored path")
+        self.assertNotIn(
+            ".",
+            active_mon,
+            "monitored_paths must not activate bare '.' by default (opt-in comment only)",
+        )
+        self.assertTrue(
+            any(p == "src/" or p == "src" for p in active_mon),
+            f"expected lean src/ active default, got {active_mon}",
+        )
 
         self.assertIn("#", map_text, "map_paths.txt must include guidance comments")
         self.assertRegex(

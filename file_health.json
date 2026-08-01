@@ -1,15 +1,15 @@
 {
   "version": 2,
-  "last_updated": "2026-07-12 13:41:19",
+  "last_updated": "2026-08-01 11:25:19",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 13:41:19",
-      "reason": "protocol note MapScope",
-      "wiki_content_hash": "sha256:eaf4d2132db7652c48c18c3d2b8cad44d302d586af087e199522b3194db84913",
-      "source_content_hash": "sha256:eaf4d2132db7652c48c18c3d2b8cad44d302d586af087e199522b3194db84913",
-      "last_wiki_refresh": "2026-07-12 13:41:19",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 11:56:22 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 12:47:40 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 13:26:31 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 13:41:19 (wiki hash captured); wiki=run.md"
+      "last_updated": "2026-08-01 11:25:16",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "wiki_content_hash": "sha256:9483a94eb542c90de49711e5aa204ba2144bdf03f6594fdbe336e2ec686d032f",
+      "source_content_hash": "sha256:9483a94eb542c90de49711e5aa204ba2144bdf03f6594fdbe336e2ec686d032f",
+      "last_wiki_refresh": "2026-08-01 11:25:16",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=run.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 11:56:22 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 12:47:40 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 13:26:31 (wiki hash captured); wiki=run.md; mark-green:2026-07-12 13:41:19 (wiki hash captured); wiki=run.md; mark-green:2026-08-01 11:25:16 (wiki hash captured); wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
@@ -27,10 +27,11 @@
     },
     "wikifier.sh": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:32:45",
-      "reason": "gap-closure swarm verified 34/34 tests",
-      "source_content_hash": "sha256:137b975181ed4329a78a54256e5f8b0ee0bff91ea5e5514a3086752bcaf959cf",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-08-01 11:25:19",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:f0f4b2a6b1ab9bc0fba475da82154e0a35b7dcf2ea4269275d2e898d712e324a",
+      "last_wiki_refresh": "2026-08-01 11:25:19",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-08-01 11:25:19 (wiki hash captured)"
     },
     "Findings/M5-Dogfood-Assessment-Report.md": {
       "status": "🟢 Green",
@@ -82,10 +83,10 @@
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 13:41:02",
-      "reason": "dogfood warm reuse green",
-      "source_content_hash": "sha256:3d2ac1183cdf4fa570774245de68a93469e588c6c5ddd59650e4e791d0e8b159",
-      "last_wiki_refresh": "2026-07-12 13:41:02",
+      "last_updated": "2026-08-01 11:25:15",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:1efb51dc5b4f683b52162f76997ac28055c502ed48990a2b0ae1c5fa8392967a",
+      "last_wiki_refresh": "2026-08-01 11:25:15",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:25 (wiki hash captured); mark-green:2026-07-12 11:06:25 (wiki hash captured); mark-green:2026-07-12 11:56:20 (wiki hash captured); mark-green:2026-07-12 12:00:50 (wiki hash captured); mark-green:2026-07-12 12:47:36 (wiki hash captured); mark-green:2026-07-12 13:26:28 (wiki h"
     },
     "diagnostics.html": {
@@ -123,11 +124,11 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 13:41:19",
-      "reason": "4.6.7 shipped notes",
-      "wiki_content_hash": "sha256:0007450a11c4d50932b0774ab626c3f33f508def6ecc4e7f8ebab4e322ec1795",
-      "source_content_hash": "sha256:0007450a11c4d50932b0774ab626c3f33f508def6ecc4e7f8ebab4e322ec1795",
-      "last_wiki_refresh": "2026-07-12 13:41:19",
+      "last_updated": "2026-08-01 11:25:17",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "wiki_content_hash": "sha256:fe2295b4f59ae0775b493fc6d7809cee3a0270a14dd742488b521bbfedf4e5e6",
+      "source_content_hash": "sha256:fe2295b4f59ae0775b493fc6d7809cee3a0270a14dd742488b521bbfedf4e5e6",
+      "last_wiki_refresh": "2026-08-01 11:25:17",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:01:28 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 12:47:39 (wiki hash captured); wiki=CHANGELOG.md; mark-green:2026-07-12 13:26:31"
     },
     "CLAUDE.md": {
@@ -139,11 +140,11 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 13:41:02",
-      "reason": "version bump",
-      "source_content_hash": "sha256:2e81d76fce35fd77357bf298b49bdce4bd33c958a60989a48730509ebd8627be",
-      "last_wiki_refresh": "2026-07-12 13:41:02",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:22 (wiki hash captured); mark-green:2026-07-12 12:47:38 (wiki hash captured); mark-green:2026-07-12 13:26:28 (wiki hash captured); mark-green:2026-07-12 13:41:02 (wiki hash captured)"
+      "last_updated": "2026-08-01 11:25:17",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:e3c27537d48cf6194ea71b3bd7ae6d41c05a31ed9bb6345b42ff6febc289ff65",
+      "last_wiki_refresh": "2026-08-01 11:25:17",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:22 (wiki hash captured); mark-green:2026-07-12 12:47:38 (wiki hash captured); mark-green:2026-07-12 13:26:28 (wiki hash captured); mark-green:2026-07-12 13:41:02 (wiki hash captured); mark-green:2026-08-01 11:25:17 (wiki h"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -169,9 +170,11 @@
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 14:19:39 AEST",
-      "reason": "v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke.",
-      "source_content_hash": "sha256:d563d4a4f82b1d6486094a34efc264039fee6b52ae5dd2e46e2d90e262654cd6"
+      "last_updated": "2026-08-01 11:25:14",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:cc8b9fa422699474f8119ba88264e21562b2a6d0ea4ea42ef10873afb4bb1a66",
+      "last_wiki_refresh": "2026-08-01 11:25:14",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:14 (wiki hash captured)"
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
@@ -213,9 +216,11 @@
     },
     "wikifier/library.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-11 00:20:14 AEST",
-      "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges",
-      "source_content_hash": "sha256:157e81814a59afef0683f9a4ab6b39f48b68f1c136180a63279cd79f2875724e"
+      "last_updated": "2026-08-01 11:25:15",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:6312ddc20cd7cd1adef0ec2e5e9818c5030d57ddf1dc49e0384952cf03681ad4",
+      "last_wiki_refresh": "2026-08-01 11:25:15",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:15 (wiki hash captured)"
     },
     "wikifier/parsers/bree.py": {
       "status": "🟢 Green",
@@ -543,11 +548,11 @@
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 12:47:37",
-      "reason": "4.6.5 verified",
-      "source_content_hash": "sha256:5494b57319e978e3aa7d8817f4fb44e618edacefa3c6bc2a5bbb1b2051a4f86b",
-      "last_wiki_refresh": "2026-07-12 12:47:37",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:21 (wiki hash captured); mark-green:2026-07-12 12:47:37 (wiki hash captured)"
+      "last_updated": "2026-08-01 11:25:14",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:355af0bf1fe2260ffff70d30a368aee9017b0fb1afb79db9e30cbe50d6ecc302",
+      "last_wiki_refresh": "2026-08-01 11:25:14",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:52 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured); mark-green:2026-07-12 11:01:26 (wiki hash captured); mark-green:2026-07-12 11:56:21 (wiki hash captured); mark-green:2026-07-12 12:47:37 (wiki hash captured); mark-green:2026-08-01 11:25:14 (wiki hash captured)"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
@@ -674,6 +679,41 @@
       "source_content_hash": "sha256:4bf1ed144348247bbb94f0aa31abc05f46a5bcd96ed0bd4bfce91855a709e0e1",
       "last_wiki_refresh": "2026-07-12 13:41:19",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 13:26:31 (wiki hash captured); wiki=index-first-map-paths-2026-07-12.md; mark-green:2026-07-12 13:41:19 (wiki hash captured); wiki=index-first-map-paths-2026-07-12.md"
+    },
+    "Findings/gap-amendment-plan-2026-08-01.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-08-01 11:25:16",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "wiki_content_hash": "sha256:d89e585a7b68ed8cb5ed58d0630fbda8038e7bc3b6e84887eb8f090d614bec23",
+      "source_content_hash": "sha256:d89e585a7b68ed8cb5ed58d0630fbda8038e7bc3b6e84887eb8f090d614bec23",
+      "last_wiki_refresh": "2026-08-01 11:25:16",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:16 (wiki hash captured); wiki=gap-amendment-plan-2026-08-01.md"
+    },
+    "tests/test_gap_amendment_2026_08.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-08-01 11:25:16",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "source_content_hash": "sha256:c4dc10fd4cc07b12637f31a07cc1f51121b4b63c44a50c8200d24ffcaa7143e8",
+      "last_wiki_refresh": "2026-08-01 11:25:16",
+      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:16 (wiki hash captured)"
+    },
+    "Findings/gap-amendment-closure-2026-08-01.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-08-01 11:25:18",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "wiki_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
+      "source_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
+      "last_wiki_refresh": "2026-08-01 11:25:18",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-08-01 11:25:18 (wiki hash captured); wiki=gap-amendment-closure-2026-08-01.md"
+    },
+    "Claude.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-08-01 11:25:18",
+      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
+      "wiki_content_hash": "sha256:2ebd93ad3b7112c36a6133d5e4dfd7193525d903873cd4b2ad11432d9de82d2e",
+      "source_content_hash": "sha256:2ebd93ad3b7112c36a6133d5e4dfd7193525d903873cd4b2ad11432d9de82d2e",
+      "last_wiki_refresh": "2026-08-01 11:25:18",
+      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-08-01 11:25:18 (wiki hash captured); wiki=Claude.md"
     }
   }
 }

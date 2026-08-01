@@ -312,6 +312,7 @@ def _generate_cycles_section(cache: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 def _generate_acs_section(cache: Dict[str, Any]) -> List[str]:
+    """ACS section for library.md — prefer actionable + reason codes (G9)."""
     lines = ["## ACS Risk Snapshot", ""]
     acs = cache.get("_acs_summary") or {}
     if not isinstance(acs, dict) or not acs.get("total_scored_edges"):
@@ -319,17 +320,48 @@ def _generate_acs_section(cache: Dict[str, Any]) -> List[str]:
                      "to score edge confidence.)")
         lines.append("")
         return lines
-    lines.append("**Scored edges**: {0} | **avg_confidence**: {1} | **low-confidence**: {2}"
-                 " (threshold {3})".format(
-                     acs.get("total_scored_edges"), acs.get("avg_confidence"),
-                     acs.get("low_conf_edges", 0), acs.get("low_conf_threshold", 0.65)))
+    actionable = acs.get("actionable_low_conf_edges")
+    if actionable is None:
+        actionable = acs.get("low_conf_edges", 0)
+    lines.append(
+        "**Scored edges**: {0} | **avg_confidence**: {1} | "
+        "**actionable_low_conf**: {2} | raw low-conf (telemetry): {3} "
+        "(threshold {4})".format(
+            acs.get("total_scored_edges"),
+            acs.get("avg_confidence"),
+            actionable,
+            acs.get("low_conf_edges", 0),
+            acs.get("low_conf_threshold", 0.65),
+        )
+    )
+    lines.append(
+        "**Agent work queue**: use `actionable_low_conf_edges` + "
+        "`reason_code_counts` / `agent_signal=investigate` only — "
+        "do **not** thrash on raw `low_conf_edges` (includes external/bare)."
+    )
+    rcc = acs.get("reason_code_counts") or {}
+    if isinstance(rcc, dict) and rcc:
+        lines.append(
+            "**reason_code_counts**: "
+            + ", ".join("{0}:{1}".format(k, v) for k, v in list(rcc.items())[:8])
+        )
     top_reasons = acs.get("top_risk_reasons") or {}
     if top_reasons:
         lines.append("**Top risk reasons**: " + ", ".join(
             "{0}:{1}".format(k, v) for k, v in list(top_reasons.items())[:4]))
-    samples = acs.get("sample_low_conf_explanations") or []
+    # Prefer actionable samples when present
+    samples = (
+        acs.get("sample_actionable_explanations")
+        or acs.get("sample_low_conf_explanations")
+        or []
+    )
     if samples:
-        lines.append("**Sample low-confidence edges**:")
+        label = (
+            "Sample actionable edges"
+            if acs.get("sample_actionable_explanations")
+            else "Sample low-confidence edges (telemetry; prefer actionable)"
+        )
+        lines.append("**{0}**:".format(label))
         for i, sample in enumerate(samples[:3], 1):
             lines.append("  {0}. {1}".format(i, sample))
     lines.append("")

@@ -424,6 +424,11 @@ def run_full_update(
                 cache_backend=backend,
                 directory=directory,
             )
+            _mc0 = result["map_coverage"] if isinstance(result["map_coverage"], dict) else {}
+            result["map_complete"] = bool(_mc0.get("complete"))
+            result["map_ready"] = bool(_mc0.get("complete")) and int(
+                _mc0.get("files_remaining_dirty") or 0
+            ) == 0
             try:
                 if cs is not None:
                     cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
@@ -669,6 +674,10 @@ def run_full_update(
             cache_backend=backend,
             directory=directory,
         )
+        # G5: success alone is not map-ready — surface complete flag at top level
+        _mc = result["map_coverage"] if isinstance(result["map_coverage"], dict) else {}
+        result["map_complete"] = bool(_mc.get("complete"))
+        result["map_ready"] = bool(_mc.get("complete")) and int(_mc.get("files_remaining_dirty") or 0) == 0
         try:
             cache["_map_coverage"] = result["map_coverage"]
             if cands:

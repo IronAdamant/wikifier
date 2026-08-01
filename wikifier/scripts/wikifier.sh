@@ -684,18 +684,15 @@ cmd_init() {
 # node_modules, build/, dist/, caches, etc.
 # This is NOT the import map — see map_paths.txt for package roots used by update-maps.
 #
-# Examples (uncomment or add paths that match THIS project):
-# src/
+# Active default: src/ (lean). Multi-crate / monorepo: replace with package roots first.
+# Tiny single-file toys only: uncomment bare "." below (explicit opt-in — not default).
+src/
+# .
 # lib/
 # crates/my_crate/src/
 # packages/core/src/
 # README.md
 # docs/
-#
-# Tiny single-package toys only may keep bare "." below.
-# Multi-crate / monorepo / anything with build output: REPLACE with lean roots first
-# (session_bootstrap readiness "blocked" / fix_scope until you do).
-.
 EOT
     fi
     MAP_PATHS_FILE="$PROJECT_ROOT/map_paths.txt"
@@ -705,13 +702,13 @@ EOT
 # List directories that contain parseable source for the dependency map.
 # Do not use bare "." on large trees; do not list only wiki/docs files here.
 #
-# Examples (uncomment or add paths that match THIS project):
-# src/
+# Active default: src/ (replace with this project's package roots).
+src/
 # crates/my_crate/src/
 # packages/core/src/
 #
 # Leave empty (comments only) to fall back to monitored directory roots / full collect.
-# After editing: wikifier update-maps  (then session_bootstrap until ready_for_daemon)
+# After editing: wikifier update-maps  (then session_bootstrap until readiness=ready_for_daemon)
 EOT
     fi
     [[ ! -f "$EXCLUDE_PATTERNS_FILE" ]] && cat > "$EXCLUDE_PATTERNS_FILE" << 'EOT'

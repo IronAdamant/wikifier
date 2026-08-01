@@ -47,14 +47,18 @@ Limitations (Honest Assessment)
 -------------------------------
 - Advisory only.
 - Project-level (not per-file or per-agent yet).
-- Non-blocking check / timeout is not yet implemented (current behavior = blocking acquire).
-- Fine-grained (per-file) or sharded locking is a planned future extension for extreme concurrency on very large codebases.
+- Finite ``timeout`` (seconds) is honored on Unix (non-blocking poll loop);
+  ``timeout=None`` still blocks until free. Per-file / sharded locks remain
+  out of scope for M2 scale.
+- Fine-grained (per-file) locking is a permanent non-goal unless extreme
+  concurrency pressure appears on very large multi-agent setups.
 
 For the current scale (including heavy multi-agent dogfooding), project-level
 advisory locking is sufficient, safe, and has been battle-tested.
 """
 
 import os
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
@@ -79,6 +83,57 @@ LOCK_FILE_NAME = ".wikifier_staging/.lock"
 _HELD_LOCKS: dict = {}  # {resolved_root_str: {"fd": int, "depth": int}}
 
 
+class LockTimeoutError(TimeoutError):
+    """Raised when file_lock cannot acquire within the given timeout."""
+
+
+def _acquire_exclusive(lock_fd: int, timeout: Optional[float]) -> None:
+    """Acquire exclusive lock; honor finite timeout on Unix (G13)."""
+    if fcntl is not None:
+        if timeout is None:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            return
+        if timeout < 0:
+            raise ValueError("timeout must be None or >= 0")
+        deadline = time.monotonic() + float(timeout)
+        while True:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except (BlockingIOError, OSError):
+                if time.monotonic() >= deadline:
+                    raise LockTimeoutError(
+                        "project lock not acquired within {0}s".format(timeout)
+                    )
+                # Short sleep to avoid busy-spin; remaining time may be < sleep.
+                remaining = deadline - time.monotonic()
+                time.sleep(min(0.05, max(0.001, remaining)))
+    elif msvcrt is not None:
+        # Windows: LK_LOCK retries ~10s then OSError; loop for blocking.
+        if timeout is None:
+            while True:
+                try:
+                    os.lseek(lock_fd, 0, os.SEEK_SET)
+                    msvcrt.locking(lock_fd, msvcrt.LK_LOCK, 1)
+                    return
+                except OSError:
+                    continue
+        deadline = time.monotonic() + float(timeout)
+        while True:
+            try:
+                os.lseek(lock_fd, 0, os.SEEK_SET)
+                msvcrt.locking(lock_fd, msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise LockTimeoutError(
+                        "project lock not acquired within {0}s".format(timeout)
+                    )
+                remaining = deadline - time.monotonic()
+                time.sleep(min(0.05, max(0.001, remaining)))
+    # If neither primitive exists, proceed unlocked (advisory best-effort).
+
+
 @contextmanager
 def file_lock(root: Path, timeout: Optional[float] = None):
     """
@@ -86,13 +141,15 @@ def file_lock(root: Path, timeout: Optional[float] = None):
 
     This is the primary locking primitive used by health.py and import_cache.py.
 
-    Behavior: blocking acquire (waits until the lock is free), re-entrant
-    within the same process (nested acquires on the same root are refcounted).
-    Timeout support is planned for a future iteration.
+    Behavior: blocking acquire when ``timeout is None``; with a finite
+    ``timeout`` (seconds) raises ``LockTimeoutError`` if the lock is not free
+    in time. Re-entrant within the same process (nested acquires refcounted).
 
     Usage (agents rarely need this directly):
         with file_lock(Path(project_root)):
             ... critical section ...
+        with file_lock(Path(project_root), timeout=5.0):
+            ... fail fast on contention ...
     """
     lock_path = root / LOCK_FILE_NAME
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,19 +171,7 @@ def file_lock(root: Path, timeout: Optional[float] = None):
     lock_fd = None
     try:
         lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
-        if fcntl is not None:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        elif msvcrt is not None:
-            # Windows: lock the first byte of the lock file. msvcrt LK_LOCK
-            # retries for ~10s then raises OSError, so loop until acquired
-            # to match the blocking semantics of flock.
-            while True:
-                try:
-                    os.lseek(lock_fd, 0, os.SEEK_SET)
-                    msvcrt.locking(lock_fd, msvcrt.LK_LOCK, 1)
-                    break
-                except OSError:
-                    continue
+        _acquire_exclusive(lock_fd, timeout)
         # If neither primitive exists, proceed unlocked (advisory best-effort).
         _HELD_LOCKS[key] = {"fd": lock_fd, "depth": 1}
         yield

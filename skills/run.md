@@ -2,17 +2,17 @@
 
 **Formerly "Wikifier Skills & Commands". This is the authoritative, versioned specification for agent behavior when using Wikifier.**
 
-**Version**: v0.6 (v4.2.0 real-pipeline + reliability update; package current **4.5.x**)  
-**Date**: 2026-06-10 (package notes refreshed 2026-07-09; gap-closure contract 2026-07-09)  
+**Version**: v0.6 (v4.2.0 real-pipeline + reliability update; package current **4.6.x**, live `__version__` in `wikifier/__init__.py`)  
+**Date**: 2026-06-10 (package notes refreshed 2026-08-01; gap-closure contract 2026-07-09)  
 **Status**: Active. Supersedes v0.5.  
-**See also**: `README.md`, `Findings/gap-closure-report.md`, and the library in wikifier/.
+**See also**: `README.md`, `Findings/gap-closure-report.md`, `Findings/gap-amendment-plan-2026-08-01.md`, and the library in wikifier/.
 
-**Package 4.5.x + gap-closure notes (additive; protocol still v0.6):**
+**Package 4.6.x + gap-closure notes (additive; protocol still v0.6):**
 - File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
-- **First-run:** `init` → lean `monitored_paths.txt` + `map_paths.txt` (not bare `.`) → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
-- **`session_bootstrap` readiness `blocked`:** not a crash — see **§ Readiness blocked** below. Typical causes: bare `.` monitor and/or no map/health yet. Fix scope → `update-maps` before treating the project as map-ready.
+- **First-run:** `init` → lean `monitored_paths.txt` + `map_paths.txt` (default active root `src/`, not bare `.`) → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
+- **`session_bootstrap` readiness:** message embeds the readiness tier. `blocked` is not a crash — see **§ Readiness blocked**. Hard blockers = missing map/health (or severe ghosts). Bare `.` monitor alone → `map_ok_scope_risk` when map+health exist (scope warnings / fix_scope), not the same tier as missing map. Unattended ops require **`readiness=ready_for_daemon`**, not `health_score=Map Ready` alone.
 - **Map-first ≠ wiki-done:** `health_score` **Map Ready** + many 🟡 *Initial stubs* means structural coverage only. Do **not** bulk-wiki stubs. Wiki a file when you edit it, then `mark-green`. Prefer `actionable_yellow` / 🔴 over raw yellow counts.
-- **Steady-state selective work:** only 🔴 and *actionable* 🟡 (never re-wiki 🟢; never re-wiki the whole stub set). **ACS v1.3:** use `actionable_low_conf_edges` + `reason_code_counts` / `agent_signal` (`skip`|`investigate`). Do **not** thrash on raw `low_conf_edges` (includes external/bare scores ~0.48). Prefer `map_coverage.complete` / `files_remaining_dirty` after budgeted `update-maps` — `success: true` ≠ map complete.
+- **Steady-state selective work:** only 🔴 and *actionable* 🟡 (never re-wiki 🟢; never bulk-wiki Initial/map stubs). **ACS v1.3:** use `actionable_low_conf_edges` + `reason_code_counts` / `agent_signal` (`skip`|`investigate`). Do **not** thrash on raw `low_conf_edges` (includes external/bare scores ~0.48). Prefer `map_coverage.complete` / `map_ready` / `files_remaining_dirty` after budgeted `update-maps` — `success: true` ≠ map complete.
 - **Warm maps:** SQLite primary; zero-dirty uses mtime index + meta. **Index-first:** re-list candidates only when fingerprint / map-scoped index / live count disagree (`index_first_dirty` / `candidates_reused` on `update_maps`). Prefer `--directory=` or `map_paths.txt` package roots (not bare `.`). Collect, live count, index filter, and prune share **MapScope** so full-tree→`map_paths` narrow does not thrash.
 - **map_paths vs monitored_paths:** `map_paths.txt` = import-map package roots; `monitored_paths.txt` = wiki/health thrash bound. Independent. Wiki-only monitored lists do **not** define the map.
 - **Cache ops:** `wikifier cache-status`. Dual-write JSON **deprecated default-off** (`WIKIFIER_CACHE_JSON=1` to opt in). Dual-read legacy JSON for migrate remains.
@@ -48,7 +48,7 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 |------|-----|
 | First-run map | `init` → lean paths (not bare `.`) → `update-maps` → `health --summary` → `suggest-next` |
 | **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]`. If `readiness` is `blocked`, fix `actions[]` / `blockers[]` first (usually scope + maps). |
-| **Unblock readiness** | Write lean `monitored_paths.txt` + `map_paths.txt` → `update_maps` (full once) → re-`session_bootstrap` until `ready_for_daemon` / Map Ready |
+| **Unblock readiness** | Write lean `monitored_paths.txt` + `map_paths.txt` → `update_maps` (full once) → re-`session_bootstrap` until **`readiness=ready_for_daemon`** (not Map Ready alone) |
 | **Core tool list** | `list_core_tools` / bootstrap `core_surface` — prefer Core 6; advanced is non-core |
 | Steady-state | `check-changes` (content-honest) → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
 | **Hash migration** | `seed_source_content_hashes` / CLI `seed-source-hashes` — baseline Greens without mass Yellow |
@@ -80,15 +80,27 @@ actions: [ { "action": "fix_scope", ... }, ... ]
 
 **this is expected on a project that has never been scoped/mapped**, not a Wikifier install failure.
 
+### Readiness tiers (code truth — `assess_autonomous_readiness`)
+
+| Tier | When |
+|------|------|
+| `blocked` | Hard **blockers[]**: no import map and/or no file_health (or severe ghost flood). |
+| `map_ok_scope_risk` | Map+health present but **scope warnings** (often bare `.` monitor or multi-repo parent) and clean red/actionable yellow. |
+| `ready_for_daemon` | Map Ready/Good **and** not bare_dot_monitor — only safe unattended tier. |
+| `ready_with_agent_wiki_work` | Needs Attention, red=0 — daemon OK but agents still have wiki work. |
+| `not_ready` | Other (e.g. reds). |
+
+Bare `.` is a **scope warning** (`scope.warnings` / `fix_scope`), not always a hard blocker. Missing map/health **are** hard blockers and emit priority-1 `update_maps` / `seed_health` in `actions[]`.
+
 ### Why it happens (Grok-Bevy 2026-07 dogfood)
 
 On **Grok-Bevy** (Rust workspace), first bootstrap reported:
 
-| Blocker | Meaning |
-|---------|---------|
-| `monitored_paths is bare '.'` | Default/missing lean list → `check-changes` would walk the whole tree (`target/`, caches, etc.) and thrash. Action: **`fix_scope`**. |
-| `No import map (run update-maps first)` | No dependency/import map yet → map-first tools have nothing to trust. |
-| `No file_health` | Health matrix not seeded (comes with map/health pipeline). |
+| Signal | Field / tier | Meaning |
+|--------|--------------|---------|
+| `No import map (run update-maps first)` | `blockers[]` → `blocked` | No dependency/import map yet. Action: **`update_maps`**. |
+| `No file_health` | `blockers[]` → `blocked` | Health matrix not seeded. Action: **`seed_health` / update-maps**. |
+| `monitored_paths is bare '.'` | `scope.warnings` (often `map_ok_scope_risk` once map exists) | check-changes thrash risk. Action: **`fix_scope`**. |
 
 Also: `bare_dot_monitor: true` and `scope.ok: false` until `monitored_paths.txt` lists **lean package roots**, not bare `.`.
 
@@ -110,16 +122,16 @@ Also: `bare_dot_monitor: true` and `scope.ok: false` until `monitored_paths.txt`
 3. **Build map + health** — from the target project (or with `project_root=` / `WIKIFIER_PROJECT_ROOT=`):
    ```bash
    wikifier update-maps --full    # or MCP update_maps full=true
-   # re-run session_bootstrap until readiness is ready_for_daemon / Map Ready
+   # re-run session_bootstrap until readiness == ready_for_daemon
    ```
 4. **Do not** bulk-re-wiki 🟡 *Initial stubs* after maps land — stubs = map coverage only.
 
-After a successful fix, bootstrap looks like: `scope.ok: true`, `blockers: []`, `health_score: Map Ready` (stubs OK), `readiness: ready_for_daemon`.
+After a successful fix, bootstrap looks like: `scope.ok: true`, `blockers: []`, `health_score: Map Ready` (stubs OK), **`readiness: ready_for_daemon`**. Map Ready without `ready_for_daemon` is **not** unattended-ready.
 
 ### Product note for Wikifier maintainers
 
-- Default bare `.` is convenient for tiny toys and a footgun for real repos; agents must treat **`fix_scope` as P0** when `session_bootstrap` says blocked.
-- **`wikifier init` (4.6.8+)** seeds comment-guided lean templates for `monitored_paths.txt` and `map_paths.txt` (examples for `src/`, `crates/*/src/`, etc.) instead of a silent single-dot file. Tiny toys may keep `.`; multi-crate / monorepo agents must replace with package roots before map-ready work.
+- Default bare `.` is a footgun for real repos; agents must treat **`fix_scope` as P0** when scope warns bare-dot, and **update_maps/seed_health as P0** when readiness is `blocked`.
+- **`wikifier init` (4.6.8+ / 4.6.9 templates)** seeds comment-guided lean templates with active default **`src/`** (bare `.` is commented opt-in for tiny toys only). Multi-crate / monorepo agents must replace with package roots before map-ready work.
 
 See also: Findings note `Findings/readiness-blocked-bare-monitor-2026-07.md`.
 
@@ -132,7 +144,7 @@ You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 �
 
 This is strictly an agent-to-agent wiki for token saving: map lookup (health + file wikis + deps) instead of full sources; selective wiki updates; not a human docs product or Jira.
 
-SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and 🟡 Yellow files. Do not re-summarize 🟢 Green files or the whole tree. First-run builds the structural map; wiki depth is filled as you touch files. check-changes is content-honest (mtime-only thrash does not re-Yellow when source hash matches mark-green baseline).
+SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and *actionable* 🟡 Yellow files. Do **not** re-summarize 🟢 Green files, and do **not** bulk-wiki 🟡 Initial/map stubs (map coverage only — wiki a stub only when you edit that file). First-run builds the structural map; wiki depth is filled as you touch files. check-changes is content-honest (mtime-only thrash does not re-Yellow when source hash matches mark-green baseline).
 
 FIRST ACTIONS:
 1. Prefer MCP Core: session_bootstrap, check_changes, prepare_edit, suggest_next_actions (use actions[]), record_change, mark_green. Always pass project_root= for external projects.
@@ -189,10 +201,11 @@ However, if you are doing low-level direct writes to Wikifier state files (e.g. 
 ### Limitations (Final M2-Rem-07 Assessment)
 - Locks are **advisory** — a broken or malicious process can ignore them.
 - Currently **project-level** (one lock for the entire project). This is the right tradeoff for current needs (including heavy multi-agent + monitor dogfooding) and keeps the implementation simple and fast.
-- Non-blocking / timeout queries and per-file locking are not implemented yet (advanced agents can use `wikifier.locking.is_project_locked()` for diagnostics).
+- **Finite timeout** is supported: `file_lock(root, timeout=seconds)` raises `LockTimeoutError` if the lock is not free in time (`timeout=None` still blocks). `is_project_locked()` remains a diagnostic non-blocking probe.
+- Per-file / sharded locking is a permanent non-goal unless extreme concurrency pressure appears.
 - Best-effort portability on non-Unix systems.
 
-The locking system (Python `file_lock` + shell `with_project_lock`) has received final polish. It is now considered production-ready for the M2 scope. Future extensions (fine-grained locking) can be added when real usage pressure appears on extremely large concurrent setups.
+The locking system (Python `file_lock` + shell `with_project_lock`) is production-ready for the M2 scope.
 
 ## Protocol v0.4 Additions: I/O Contracts, Error Handling, Structured Output, Versioning
 
@@ -226,7 +239,7 @@ Pending/journal/health side effects are observable via the returned messages + d
 ### Error Handling Expectations
 - **Operational failures** (e.g., partial scan on huge tree, lock edge): return `{"success": False, "error": "...", "project_root": "...", ...partial_data }`. Agent must handle gracefully and log; continue where safe.
 - **Programming / contract errors** (bad types, missing required): raise (standard Python exceptions) — these indicate agent bug.
-- **Locking**: Mutators block on project lock (production default). Future non-blocking/timeout will be additive.
+- **Locking**: Mutators block on project lock by default; optional finite `timeout=` raises on contention.
 - Never assume text output parsability. Always use structured returns + explicit format="json".
 - On external/packaged installs: discovery is robust; pass explicit project_root if cwd is ambiguous.
 
@@ -277,7 +290,7 @@ This project exposes a first-class MCP server (wikifier-mcp or python -m wikifie
 
 **M5.1+ reality (from dogfood on external 5k-79k+ projects)**: MCP tools are preferred when available (get_project_status, get_file_wiki, get_barrel_reports for deep BRC, check_changes, record_change, mark_green, suggest_next_actions, health equivalents, etc.). **Always pass project_root= (or use WIKIFIER_PROJECT_ROOT env)** for external/user projects (RecipeLab_alt BRC stress, ConsistencyHub, llvm subs, etc.). 
 
-MCP timeouts are rare since v4.2.0 (the library workflow-call deadlock is fixed and barrel persistence is batched), but on very large/BRC-heavy targets they can still happen. In that case, **immediately fall back to CLI/library** (python -m wikifier health --summary or the library health(..., format="summary")) — these are reliable and were the workhorse in M5 sustained/monitor work.
+**CLI-at-scale policy (G15):** On barrel-heavy or large monorepos (BRC stress, multi-k source trees), treat **CLI/library as the primary reliability path** for `update_maps`, barrel reports, and long health/suggest loops. MCP subprocess tools use a ~60s cap and may still time out; that is **not** a product failure — **immediately fall back** to `python -m wikifier …` / library calls. Do not claim DoD2 (&lt;30s MCP on alt/Consistency/llama) closed without a fresh measured pack; default operator policy is CLI for scale.
 
 The server implements hardened external discovery (delegates to cli.py discover_project_root / _get_effective_root), 60s timeouts, actionable errors, and parity with library.
 
