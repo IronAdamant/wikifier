@@ -556,7 +556,7 @@ def list_core_tools() -> dict:
 def update_maps(
     project_root: Optional[str] = None,
     full: bool = False,
-    use_python_primary: bool = False,
+    use_python_primary: bool = True,
     # A2 early Partial Results & UX Scaffolding: subtree scoping + budget passthrough to python-primary
     directory: Optional[str] = None,
     max_files: Optional[int] = None,
@@ -2005,7 +2005,7 @@ def get_barrel_reports(
 def suggest_next_actions(
     project_root: Optional[str] = None,
     directory: Optional[str] = None,
-    format: Literal["text", "json"] = "text"
+    format: Literal["text", "json"] = "json"
 ) -> str | dict:
     """Suggest high-value next actions based on current state (G3/G4 selective work).
 
@@ -2112,7 +2112,7 @@ Steps:
 3. Review recent journal activity
 4. Suggest priority areas and next actions
 
-Use `get_red_files()`, `get_yellow_files()`, `journal()`, and `suggest_next_actions()`."""
+Use `check_changes()`, `get_files_needing_attention()`, `search_journal()`, and `suggest_next_actions()`."""
 
 
 @mcp.prompt()
