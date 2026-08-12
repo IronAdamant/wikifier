@@ -20,6 +20,8 @@ All functions maintain backward compatibility with the original wikifier.health 
 
 # Re-export everything from the monolithic implementation
 from ..health_impl import *
+# Explicitly import private functions needed by tests
+from ..health_impl import _entry_is_under_root
 
 __all__ = [
     # Constants
@@ -46,4 +48,6 @@ __all__ = [
     'get_healing_statistics',
     # Barrel integration
     'apply_barrel_invalidation_reports',
+    # Private functions needed by tests
+    '_entry_is_under_root',
 ]
