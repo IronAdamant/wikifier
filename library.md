@@ -9,7 +9,7 @@
 > the agent wiki (file_health). The dependency graph is further below.
 
 ```text
-workspace/  (101 files)
+workspace/  (102 files)
 ├── .github/
 │   └── workflows/
 │       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
@@ -97,6 +97,7 @@ workspace/  (101 files)
 │   ├── __init__.py — gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)
 │   ├── __main__.py — hygiene session complete 4.5.6; 53 tests OK
 │   ├── agent_loop.py — gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)
+│   ├── api.py
 │   ├── cache_store.py — prune tests green
 │   ├── candidates.py — MapScope unit+migration green
 │   ├── cli.py — gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)
@@ -164,6 +165,7 @@ graph TD
         wikifier___init___py["__init__.py"]
         wikifier___main___py["__main__.py"]
         wikifier_agent_loop_py["agent_loop.py"]
+        wikifier_api_py["api.py"]
         wikifier_cache___init___py["__init__.py"]
         wikifier_cache_files_py["files.py"]
         wikifier_cache_io_py["io.py"]
@@ -287,26 +289,11 @@ graph TD
     wikifier_candidates_py -.-> dataclasses
     wikifier_candidates_py -.-> pathlib
     wikifier_candidates_py -.-> typing
-    wikifier_cli_py -.-> os
-    wikifier_cli_py -.-> sys
-    wikifier_cli_py -.-> platform
-    wikifier_cli_py -.-> subprocess
+    wikifier_cli_py -.-> argparse
     wikifier_cli_py -.-> json
-    wikifier_cli_py -.-> shutil
+    wikifier_cli_py -.-> sys
     wikifier_cli_py -.-> pathlib
-    wikifier_cli_py -.-> typing
-    wikifier_cli_py -.-> contextlib
-    wikifier_cli_py --> wikifier_project_root_py
-    wikifier_cli_py --> wikifier_candidates_py
-    wikifier_cli_py --> wikifier_contracts_py
-    wikifier_cli_py -.-> datetime
-    wikifier_cli_py -.-> wikifier
-    wikifier_cli_py --> wikifier_library_py
-    wikifier_cli_py --> wikifier_parsers___init___py
-    wikifier_cli_py --> wikifier_resolution_py
-    wikifier_cli_py --> wikifier_import_cache_py
-    wikifier_cli_py --> wikifier_agent_loop_py
-    wikifier_cli_py -.-> importlib_resources
+    wikifier_cli_py --> wikifier_api_py
     wikifier_contracts_py -.-> base64
     wikifier_contracts_py -.-> json
     wikifier_contracts_py -.-> fnmatch
@@ -617,6 +604,24 @@ graph TD
     tests_test_walk_coverage_resolvers_py -.-> wikifier_candidates
     tests_test_walk_coverage_resolvers_py -.-> wikifier_agent_loop
     tests_test_walk_coverage_resolvers_py -.-> wikifier_parsers
+    wikifier_api_py -.-> os
+    wikifier_api_py -.-> sys
+    wikifier_api_py -.-> platform
+    wikifier_api_py -.-> subprocess
+    wikifier_api_py -.-> shutil
+    wikifier_api_py -.-> pathlib
+    wikifier_api_py -.-> typing
+    wikifier_api_py -.-> contextlib
+    wikifier_api_py --> wikifier_project_root_py
+    wikifier_api_py --> wikifier_candidates_py
+    wikifier_api_py --> wikifier_contracts_py
+    wikifier_api_py -.-> datetime
+    wikifier_api_py -.-> wikifier
+    wikifier_api_py --> wikifier_library_py
+    wikifier_api_py --> wikifier_parsers___init___py
+    wikifier_api_py --> wikifier_resolution_py
+    wikifier_api_py --> wikifier_agent_loop_py
+    wikifier_api_py -.-> importlib_resources
     classDef external fill:#eeeeee,stroke:#888888,stroke-dasharray: 3 3
     class argparse,base64,collections,contextlib,dataclasses,datetime,enum,fcntl,fnmatch,functools,hashlib,http_server,importlib,importlib_resources,json,mcp_server_fastmcp,msvcrt,name,os,pathlib,platform,pydantic,re,runpy,shutil,signal,sqlite3,subprocess,sys,tempfile,tests__base,textwrap,threading,time,traceback,typing,unittest,warnings,wikifier_agent_loop,wikifier_cache_store,wikifier_candidates,wikifier_cli,wikifier_contracts,wikifier_diagnostics,wikifier_import_cache,wikifier_library,wikifier_parsers_bree,wikifier_parsers_cdia,wikifier_parsers_javascript,wikifier_parsers_python,wikifier_project_root,wikifier_resolution external
 ```
@@ -770,6 +775,24 @@ graph TD
 | wikifier/agent_loop.py | pathlib → pathlib | medium |
 | wikifier/agent_loop.py | re → re | medium |
 | wikifier/agent_loop.py | typing → typing | medium |
+| wikifier/api.py | . → wikifier | medium |
+| wikifier/api.py | .agent_loop → wikifier/agent_loop.py | high |
+| wikifier/api.py | .candidates → wikifier/candidates.py | high |
+| wikifier/api.py | .contracts → wikifier/contracts.py | high |
+| wikifier/api.py | .library → wikifier/library.py | high |
+| wikifier/api.py | .parsers → wikifier/parsers/__init__.py | high |
+| wikifier/api.py | .project_root → wikifier/project_root.py | high |
+| wikifier/api.py | .resolution → wikifier/resolution.py | high |
+| wikifier/api.py | contextlib → contextlib | medium |
+| wikifier/api.py | datetime → datetime | medium |
+| wikifier/api.py | importlib.resources → importlib.resources | medium |
+| wikifier/api.py | os → os | medium |
+| wikifier/api.py | pathlib → pathlib | medium |
+| wikifier/api.py | platform → platform | medium |
+| wikifier/api.py | shutil → shutil | medium |
+| wikifier/api.py | subprocess → subprocess | medium |
+| wikifier/api.py | sys → sys | medium |
+| wikifier/api.py | typing → typing | medium |
 | wikifier/cache/__init__.py | ..import_cache_impl → wikifier/import_cache_impl.py | high |
 | wikifier/cache/files.py | .barrel → wikifier.cache.barrel | medium |
 | wikifier/cache/files.py | hashlib → hashlib | medium |
@@ -795,26 +818,11 @@ graph TD
 | wikifier/candidates.py | pathlib → pathlib | medium |
 | wikifier/candidates.py | subprocess → subprocess | medium |
 | wikifier/candidates.py | typing → typing | medium |
-| wikifier/cli.py | . → wikifier | medium |
-| wikifier/cli.py | .agent_loop → wikifier/agent_loop.py | high |
-| wikifier/cli.py | .candidates → wikifier/candidates.py | high |
-| wikifier/cli.py | .contracts → wikifier/contracts.py | high |
-| wikifier/cli.py | .import_cache → wikifier/import_cache.py | high |
-| wikifier/cli.py | .library → wikifier/library.py | high |
-| wikifier/cli.py | .parsers → wikifier/parsers/__init__.py | high |
-| wikifier/cli.py | .project_root → wikifier/project_root.py | high |
-| wikifier/cli.py | .resolution → wikifier/resolution.py | high |
-| wikifier/cli.py | contextlib → contextlib | medium |
-| wikifier/cli.py | datetime → datetime | medium |
-| wikifier/cli.py | importlib.resources → importlib.resources | medium |
+| wikifier/cli.py | .api → wikifier/api.py | high |
+| wikifier/cli.py | argparse → argparse | medium |
 | wikifier/cli.py | json → json | medium |
-| wikifier/cli.py | os → os | medium |
 | wikifier/cli.py | pathlib → pathlib | medium |
-| wikifier/cli.py | platform → platform | medium |
-| wikifier/cli.py | shutil → shutil | medium |
-| wikifier/cli.py | subprocess → subprocess | medium |
 | wikifier/cli.py | sys → sys | medium |
-| wikifier/cli.py | typing → typing | medium |
 | wikifier/contracts.py | base64 → base64 | medium |
 | wikifier/contracts.py | collections → collections | medium |
 | wikifier/contracts.py | dataclasses → dataclasses | medium |
@@ -1015,15 +1023,15 @@ graph TD
 **Targets with dependents**: 22 | **Total reverse edges**: 60
 
 **High-impact modules (most reverse dependents)**:
-- `wikifier` ← 11 files depend on it (e.g. wikifier/__init__.py, wikifier/agent_loop.py, wikifier/cache/io.py, wikifier/cli.py)
+- `wikifier` ← 11 files depend on it (e.g. wikifier/__init__.py, wikifier/agent_loop.py, wikifier/api.py, wikifier/cache/io.py)
 - `wikifier.health` ← 7 files depend on it (e.g. tests/test_agent_loop.py, tests/test_gap_amendment_2026_08.py, tests/test_gap_closure.py, tests/test_health.py)
 - `wikifier/parsers/_edge.py` ← 5 files depend on it (e.g. wikifier/parsers/c_cpp.py, wikifier/parsers/csharp.py, wikifier/parsers/go_lang.py, wikifier/parsers/java.py)
-- `wikifier/project_root.py` ← 5 files depend on it (e.g. wikifier/agent_loop.py, wikifier/cli.py, wikifier/import_cache_impl.py, wikifier/parsers/bree.py)
+- `wikifier/project_root.py` ← 5 files depend on it (e.g. wikifier/agent_loop.py, wikifier/api.py, wikifier/import_cache_impl.py, wikifier/parsers/bree.py)
 - `wikifier/cli.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/__main__.py, wikifier/daemon.py, wikifier/serve.py)
-- `wikifier/contracts.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/cli.py, wikifier/import_cache_impl.py, wikifier/resolution.py)
-- `wikifier/resolution.py` ← 4 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache_impl.py, wikifier/parsers/bree.py, wikifier/parsers/javascript.py)
+- `wikifier/contracts.py` ← 4 files depend on it (e.g. wikifier/__init__.py, wikifier/api.py, wikifier/import_cache_impl.py, wikifier/resolution.py)
+- `wikifier/resolution.py` ← 4 files depend on it (e.g. wikifier/api.py, wikifier/import_cache_impl.py, wikifier/parsers/bree.py, wikifier/parsers/javascript.py)
 - `wikifier.parsers` ← 3 files depend on it (e.g. wikifier/parsers/__init__.py, wikifier/parsers/javascript.py, wikifier/parsers/python.py)
-- `wikifier/parsers/__init__.py` ← 2 files depend on it (e.g. wikifier/cli.py, wikifier/import_cache_impl.py)
+- `wikifier/parsers/__init__.py` ← 2 files depend on it (e.g. wikifier/api.py, wikifier/import_cache_impl.py)
 - `wikifier/parsers/bree.py` ← 2 files depend on it (e.g. wikifier/import_cache_impl.py, wikifier/parsers/javascript.py)
 
 ## Barrel Expansions
