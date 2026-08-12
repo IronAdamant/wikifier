@@ -57,10 +57,11 @@ package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["wikifier*"]
+include = ["wikifier*", "skills"]
 
 [tool.setuptools.package-data]
 wikifier = ["scripts/*", "index.html"]
+skills = ["*.md"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["*.pyc", "__pycache__"]

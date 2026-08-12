@@ -24,7 +24,7 @@ binds the function under CPython because the package attribute is shadowed.
 
 from . import parsers
 from . import mcp  # exposes wikifier.mcp.mcp (None when the optional extra is absent)
-from . import health as health_module  # submodule — keep this name for agents/tools
+from . import health_pkg as health_module  # submodule — keep this name for agents/tools
 from . import locking
 from . import import_cache
 from . import resolution
@@ -52,11 +52,12 @@ from .cli import (
 )
 from . import agent_loop
 
-# Re-export module under a non-shadowed name (G5). sys.modules['wikifier.health']
-# remains the real module; package attribute `health` is intentionally the function.
+# Re-export module under a non-shadowed name (G5). Explicitly register health_pkg
+# as wikifier.health in sys.modules so importlib.import_module("wikifier.health")
+# gets the module, not the function.
 import sys as _sys
-if "wikifier.health" not in _sys.modules:
-    _sys.modules["wikifier.health"] = health_module
+_sys.modules["wikifier.health"] = health_module
+_sys.modules["wikifier.health_pkg"] = health_module
 
 # Shared frozen data contracts (single source of truth for shapes used by
 # parsers, cache, MCP, and diagnostics).

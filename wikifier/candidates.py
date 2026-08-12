@@ -381,9 +381,15 @@ def collect_candidate_source_files(
             return False
         if not (key == root_norm or key.startswith(root_norm + os.sep)):
             return False
-        for part in Path(key).parts:
-            if part in excludes:
-                return False
+        # Only check relative path parts within project, not absolute path
+        try:
+            relp = os.path.relpath(key, root_norm)
+            for part in Path(relp).parts:
+                if part in excludes:
+                    return False
+        except Exception:
+            # Fallback: check file's parent directory names only
+            pass
         if exclude_globs:
             name = p.name
             try:
