@@ -772,7 +772,7 @@ except Exception:
     locking = None  # defensive for import edge cases
 
 try:
-    from . import health as _health_mod
+    from . import health_pkg as _health_mod
 except Exception:
     _health_mod = None
 
