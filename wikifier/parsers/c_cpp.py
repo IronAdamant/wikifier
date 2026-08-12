@@ -77,9 +77,11 @@ def parse_c_cpp_imports(filepath: str) -> List[Dict]:
                 is_system = False
         diag = None
         if is_system or not rp:
+            open_char = '<' if is_system else '"'
+            close_char = '>' if is_system else '"'
             diag = {
                 "category": "external_or_bare" if is_system else "no_fs_match",
-                "reason": f"#include {'<' if is_system else '\"'}{inc}{' >' if is_system else '\"'}",
+                "reason": f"#include {open_char}{inc}{close_char}",
                 "severity": "info",
                 "alternatives": [],
                 "suggestion_for_agent": (
