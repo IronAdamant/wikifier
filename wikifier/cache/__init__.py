@@ -21,6 +21,13 @@ All functions maintain backward compatibility with the original wikifier.import_
 # This maintains 100% backward compatibility while allowing gradual migration
 from ..import_cache_impl import *
 
+# Explicitly import private functions used by tests for backward compatibility
+from ..import_cache_impl import (
+    _edge_is_dynamic_literal_noise,
+    _edge_is_external_noise,
+    _edge_is_non_actionable_noise,
+)
+
 __all__ = [
     # I/O operations
     'load_cache',
@@ -85,4 +92,8 @@ __all__ = [
     'NODE_IDENTITY_VERSION_V0',
     'NODE_IDENTITY_VERSION_V1',
     'CACHE_FILE',
+    # Private functions used by tests (for backward compatibility)
+    '_edge_is_dynamic_literal_noise',
+    '_edge_is_external_noise',
+    '_edge_is_non_actionable_noise',
 ]
