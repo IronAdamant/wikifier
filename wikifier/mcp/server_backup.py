@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Wikifier MCP server — agent-to-agent wiki (optional `pip install wikifier[mcp]`).
 

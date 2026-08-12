@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Wikifier Python Import Parser (M2-02)
 
