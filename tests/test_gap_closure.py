@@ -179,7 +179,7 @@ class TestLoadSafetyNoImportCycle(unittest.TestCase):
     def test_bree_does_not_import_cli_at_module_level(self):
         """Static check: bree source must not load-time import wikifier.cli."""
         from pathlib import Path
-        bree_src = Path(__file__).resolve().parents[1] / "wikifier" / "parsers" / "bree.py"
+        bree_src = Path(__file__).resolve().parents[1] / "wikifier" / "parsers" / "bree" / "_bree.py"
         text = bree_src.read_text(encoding="utf-8")
         self.assertNotIn("from ..cli import", text)
         self.assertNotIn("from wikifier.cli import", text)

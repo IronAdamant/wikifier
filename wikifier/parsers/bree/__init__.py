@@ -12,5 +12,5 @@ __all__ = [
     'reset_bree_engine',
     'get_barrel_cache_stats',
     'get_bree_engine',
-    'save_bree_barrel_cache',
+    'flush_barrel_cache',
 ]

@@ -10,6 +10,11 @@ from ._parser import (
     _clear_parse_cache,
     _clear_reexport_cache,
     _clear_package_marker_cache,
+    # Also export internal functions used by python.py for dynamic import detection
+    _extract_balanced_argument,
+    _extract_candidate_literals,
+    _apply_dynamic_registry,
+    _analyze_dynamic_specifier,
 )
 
 __all__ = [
@@ -17,4 +22,8 @@ __all__ = [
     '_clear_parse_cache',
     '_clear_reexport_cache',
     '_clear_package_marker_cache',
+    '_extract_balanced_argument',
+    '_extract_candidate_literals',
+    '_apply_dynamic_registry',
+    '_analyze_dynamic_specifier',
 ]
