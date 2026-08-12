@@ -8,7 +8,9 @@ This allows AI coding agents to treat Wikifier as a native, transparent, and con
 
 ## Core daily surface (4.6+)
 
-Use these every session; ignore advanced intel unless needed:
+**Start every session with `session_bootstrap`** — it provides one-shot project status, health, attention items, and actionable steps in a structured format.
+
+Use these core tools every session; use advanced intel only when needed:
 
 | Tool | Role |
 |------|------|
@@ -121,8 +123,12 @@ M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon 
 
 ## High-Value Tools
 
-### Core
-- `check_changes`, `record_change`, `mark_green`, `update_maps`, `health`, `validate`, etc.
+### Core-6 (Use Every Session)
+- `session_bootstrap` — **Start here**: One-shot root + health + attention + structured actions
+- `check_changes`, `record_change`, `mark_green` — Core workflow for maintaining health
+- `prepare_edit` — Pre-flight check before editing a file
+- `suggest_next_actions` — Actionable guidance (JSON format by default)
+- `update_maps` — Rebuild dependency map (uses Python pipeline by default)
 
 ### Dependency Intelligence (Very Powerful)
 - `get_dependencies(file)`
@@ -130,10 +136,10 @@ M5.1 fixed pollution, absolute paths, root discovery. M5.3 added monitor/daemon 
 - `get_file_wiki(file)` — Smart lookup of per-file documentation
 
 ### Agent Productivity Tools
-- `get_project_status()` — Excellent first tool call
-- `suggest_next_actions()` — Extremely useful for autonomous agents
 - `get_files_needing_attention()`
 - `search_files(pattern, health_status)`
+- `why_file(file)` — Journal history for a file
+- `search_journal(pattern)` — Search semantic change history
 
 ### Resources
 - `wikifier://library`
