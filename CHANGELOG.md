@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.11] - 2026-08-13
+
+### Fixed
+
+- **Incremental reverse index:** `run_full_update` now passes `old_targets` /
+  `new_targets` into `maintain_reverse_dependencies_for_source` (snapshot taken
+  before `cache.update`). 4.6.10 swallowed a TypeError as `reverse_index_error`
+  on incremental persist (this repo + scoped `update-maps`).
+- Test: `test_incremental_run_full_update_updates_reverse_without_error` drives
+  the shipped persist path and asserts reverse matches a full rebuild.
+
 ## [4.6.10] - 2026-08-13
 
 ### Fixed (agent-facing contracts after incomplete 4.6.9 modularization)

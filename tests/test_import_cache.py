@@ -100,6 +100,40 @@ class TestReverseDependencies(TempProjectTestCase):
         self.assertEqual(ic.get_reverse_dependencies(cache),
                          ic.rebuild_reverse_dependencies(cache))
 
+    def test_incremental_run_full_update_updates_reverse_without_error(self):
+        """Shipped persist path: incremental run_full_update must pass old/new
+        targets into maintain_reverse_dependencies_for_source (no TypeError
+        swallowed as reverse_index_error) and the reverse index must match a
+        full rebuild after the import change.
+        """
+        from wikifier.api import run_full_update
+
+        self.write("pkg/__init__.py", "")
+        self.write("pkg/b.py", "x = 1\n")
+        self.write("pkg/c.py", "y = 1\n")
+        self.write("pkg/a.py", "from .b import x\n")
+
+        first = run_full_update(root=self.root, force_full=True, verbose=False)
+        self.assertTrue(first.get("success"), first)
+        self.assertNotIn("reverse_index_error", first)
+        cache = ic.load_cache(self.root)
+        rev1 = ic.get_reverse_dependencies(cache)
+        self.assertIn("pkg/a.py", rev1.get("pkg/b.py") or [])
+
+        self.write("pkg/a.py", "from .c import y\n")
+        second = run_full_update(root=self.root, force_full=False, verbose=False)
+        self.assertTrue(second.get("success"), second)
+        self.assertGreaterEqual(int(second.get("files_parsed") or 0), 1, second)
+        self.assertNotIn("reverse_index_error", second)
+        self.assertTrue(second.get("reverse_incremental"), second)
+
+        cache2 = ic.load_cache(self.root)
+        rev2 = ic.get_reverse_dependencies(cache2)
+        rebuilt = ic.rebuild_reverse_dependencies(cache2)
+        self.assertEqual(rev2, rebuilt)
+        self.assertIn("pkg/a.py", rev2.get("pkg/c.py") or [])
+        self.assertNotIn("pkg/a.py", rev2.get("pkg/b.py") or [])
+
 
 class TestCycles(TempProjectTestCase):
     def test_compute_cycles_finds_seeded_three_node_scc(self):

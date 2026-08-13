@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-08-13 16:51:21",
+  "last_updated": "2026-08-13 17:08:28",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -143,12 +143,12 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:49",
-      "reason": "4.6.10; lazy MCP",
-      "source_content_hash": "sha256:02d2c3a724b2a1c07b873f73c260c4b7508be371ba3c96bc4e534c09f2b1afa0",
+      "last_updated": "2026-08-13 17:08:28",
+      "reason": "4.6.11",
+      "source_content_hash": "sha256:ecdae7abb2f361611155086b027cd01c09782ded4cdd63a50bab883f0ac6020d",
       "last_meaningful_edit": "2026-08-13 16:49:57",
-      "last_wiki_refresh": "2026-08-13 16:50:49",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:57 | 4.6.10; do not eager-boot FastMCP.; mark-green:2026-08-13 16:50:49 (wiki hash captured)"
+      "last_wiki_refresh": "2026-08-13 17:08:28",
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:57 | 4.6.10; do not eager-boot FastMCP.; mark-green:2026-08-13 16:50:49 (wiki hash captured); mark-green:2026-08-13 17:08:28 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -456,11 +456,12 @@
     },
     "tests/test_import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-12 13:26:30",
-      "reason": "4.6.6 verified",
-      "source_content_hash": "sha256:a32765162804d2d6d9e96040b0dcc95100858547b2f49394f5dac107978abe42",
-      "last_wiki_refresh": "2026-07-12 13:26:30",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 13:26:30 (wiki hash captured)"
+      "last_updated": "2026-08-13 17:08:27",
+      "reason": "Persist-path reverse increment test green.",
+      "source_content_hash": "sha256:236142319f7f91f8a0b2b32e95cc1ec7e42e119ee50c079a516ce97ba3497c74",
+      "last_meaningful_edit": "2026-08-13 17:08:27",
+      "last_wiki_refresh": "2026-08-13 17:08:27",
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 17:08:27 | Shipped-path test that incremental run_full_update updates reverse deps with no reverse_index_error.; mark-green:2026-08-13 17:08:27 (wiki hash captured)"
     },
     "tests/test_multi_lang_parsers.py": {
       "status": "🟢 Green",
@@ -725,12 +726,12 @@
     },
     "wikifier/api.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:47",
-      "reason": "Batch check_changes + warm cache skip + transplanted monitor + last_meaningful_edit",
-      "source_content_hash": "sha256:7933a51d8fa666da0e3b58458d6723e7a42deefc844d81712edc19fd7342763d",
-      "last_meaningful_edit": "2026-08-13 16:49:54",
-      "last_wiki_refresh": "2026-08-13 16:50:47",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:54 | Batch check_changes, skip full cache on warm dirty, transplanted monitor guard, record_change last_meaningful_edit, incr; mark-green:2026-08-13 16:50:47 (wiki hash captured)"
+      "last_updated": "2026-08-13 17:08:27",
+      "reason": "Incremental reverse uses old/new resolved lists; persist dogfood no reverse_index_error.",
+      "source_content_hash": "sha256:0841e6bd038bd2fdac069681f1d1c6bd6715148ae24b12597a057c9f38a42bc3",
+      "last_meaningful_edit": "2026-08-13 17:08:26",
+      "last_wiki_refresh": "2026-08-13 17:08:27",
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 17:08:26 | Fix incremental reverse persist: pass old_targets/new_targets into maintain_reverse_dependencies_for_source (4.6.11).; mark-green:2026-08-13 17:08:27 (wiki hash captured)"
     },
     "wikifier/cache/__init__.py": {
       "status": "🟢 Green",
@@ -908,10 +909,10 @@
       "last_updated": "2026-08-13 16:51:21",
       "reason": "Research findings saved.",
       "wiki_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78",
+      "source_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78",
       "last_meaningful_edit": "2026-08-13 16:51:21",
       "last_wiki_refresh": "2026-08-13 16:51:21",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:21 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:21 (wiki hash captured); wiki=2026-08-13-research-05-packaging-tests.md",
-      "source_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78"
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:21 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:21 (wiki hash captured); wiki=2026-08-13-research-05-packaging-tests.md"
     }
   }
 }

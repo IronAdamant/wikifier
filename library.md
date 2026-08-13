@@ -9,14 +9,19 @@
 > the agent wiki (file_health). The dependency graph is further below.
 
 ```text
-Wikifier/  (123 files)
+Wikifier/  (128 files)
 ├── .github/
 │   └── workflows/
 │       └── publish.yml — Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, pac…
 ├── Findings/
 │   ├── 2026-06-10-Dogfood-Refactor-Validation.md — Self-describing findings doc
 │   ├── 2026-06-10-Fix-Plan.md — Results appended, all phases verified
-│   ├── 2026-08-13-implementation-plan.md — Agent-first implementation plan from 5 research slices.
+│   ├── 2026-08-13-implementation-plan.md — implementation plan
+│   ├── 2026-08-13-research-01-parsers.md — Research findings saved.
+│   ├── 2026-08-13-research-02-cache-graph.md — Research findings saved.
+│   ├── 2026-08-13-research-03-health-protocol.md — Research findings saved.
+│   ├── 2026-08-13-research-04-mcp-cli.md — Research findings saved.
+│   ├── 2026-08-13-research-05-packaging-tests.md — Research findings saved.
 │   ├── M5-Dogfood-Assessment-Report.md — kept; stale yellow cleared
 │   ├── M5-Dogfood-Progress.md — kept; stale yellow cleared
 │   ├── M5.1-cross-hardening-analysis.md — kept; stale yellow cleared
@@ -57,8 +62,8 @@ Wikifier/  (123 files)
 │   ├── run_all.py — hygiene session complete 4.5.6; 53 tests OK
 │   ├── test_agent_loop.py — 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)
 │   ├── test_agent_scale.py — ACS persist regression green
-│   ├── test_agent_surface_contracts.py — Contract tests for CLI/MCP/cache split/graph signature.
-│   ├── test_barrel_invalidation.py — content changed since last trusted baseline (check_changes content-honest)
+│   ├── test_agent_surface_contracts.py — agent surface contract tests
+│   ├── test_barrel_invalidation.py — unskipped content-honest barrel tests
 │   ├── test_cache_store.py — instrumented warm load assertion
 │   ├── test_gap_amendment_2026_08.py — gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)
 │   ├── test_gap_closure.py — content changed since last trusted baseline (check_changes content-honest)
@@ -71,28 +76,28 @@ Wikifier/  (123 files)
 │   └── test_walk_coverage_resolvers.py — poison test green
 ├── wikifier/  (58 files)
 │   ├── cache/
-│   │   ├── __init__.py — content change or no baseline (check_changes content-honest auto-detect)
-│   │   ├── _core.py — Graph/cycles/ACS/barrel bodies; pair-scan barrel fallback; graph signature persist.
+│   │   ├── __init__.py — Named cache package exports real io/files/graph/cycles/acs/barrel.
+│   │   ├── _core.py — Graph/cycles/ACS/barrel; pair-scan fallback
 │   │   ├── acs.py
 │   │   ├── barrel.py
 │   │   ├── cycles.py
 │   │   ├── diagnostics.py
-│   │   ├── files.py — content change or no baseline (check_changes content-honest auto-detect)
+│   │   ├── files.py — Real file ops + same-second dirty
 │   │   ├── graph.py
-│   │   ├── io.py — content change or no baseline (check_changes content-honest auto-detect)
+│   │   ├── io.py — Real cache I/O
 │   │   └── streaming.py
 │   ├── health_pkg/
-│   │   └── __init__.py — content change or no baseline (check_changes content-honest auto-detect)
+│   │   └── __init__.py — export upsert_entries_batch
 │   ├── mcp/
 │   │   ├── tools/
-│   │   │   ├── __init__.py — content change or no baseline (check_changes content-honest auto-detect)
-│   │   │   ├── _common.py — content change or no baseline (check_changes content-honest auto-detect)
-│   │   │   ├── intel.py — content change or no baseline (check_changes content-honest auto-detect)
-│   │   │   ├── status.py — content change or no baseline (check_changes content-honest auto-detect)
-│   │   │   └── workflow.py — content change or no baseline (check_changes content-honest auto-detect)
+│   │   │   ├── __init__.py — Export register_*_tools names.
+│   │   │   ├── _common.py — Slim helpers; no second FastMCP.
+│   │   │   ├── intel.py — 3.8-safe annotations; live server is server_impl.
+│   │   │   ├── status.py — 3.8-safe annotations; live server is server_impl.
+│   │   │   └── workflow.py — API-matching workflow kwargs (no invented format=).
 │   │   ├── README.md — 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)
 │   │   ├── __init__.py — Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-ch…
-│   │   ├── server.py — content changed since last trusted baseline (check_changes content-honest)
+│   │   ├── server.py — wikifier-mcp main restored via server_impl
 │   │   ├── server_backup.py — DELETED — Identical unused twin of server_impl; deleted.
 │   │   └── server_impl.py
 │   ├── parsers/
@@ -102,7 +107,7 @@ Wikifier/  (123 files)
 │   │   ├── javascript/
 │   │   │   ├── __init__.py
 │   │   │   └── _parser.py — DELETED — Deleted decoy JS package; live parser is javascript.py.
-│   │   ├── __init__.py — content changed since last trusted baseline (check_changes content-honest)
+│   │   ├── __init__.py — lazy language imports
 │   │   ├── _edge.py — hygiene session complete 4.5.6; 53 tests OK
 │   │   ├── bree.py — DELETED — Leftover 1-line shim beside bree/ package.
 │   │   ├── c_cpp.py — content changed since last trusted baseline (check_changes content-honest)
@@ -116,18 +121,18 @@ Wikifier/  (123 files)
 │   ├── scripts/
 │   │   ├── wikifier.ps1 — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
 │   │   └── wikifier.sh — synced with root; portable rel paths (subid=post-assess-hygiene)
-│   ├── __init__.py — 4.6.10; do not eager-boot FastMCP.
+│   ├── __init__.py — 4.6.10; lazy MCP
 │   ├── __main__.py — hygiene session complete 4.5.6; 53 tests OK
-│   ├── agent_loop.py — content changed since last trusted baseline (check_changes content-honest)
-│   ├── api.py — content change or no baseline (check_changes content-honest auto-detect)
-│   ├── cache_store.py — Incremental SQLite upsert; barrel merge via load_meta.
+│   ├── agent_loop.py — bootstrap write_metrics=False
+│   ├── api.py — Batch check_changes + warm cache skip + transplanted monitor + last_meaningful_edit
+│   ├── cache_store.py — Incremental sqlite upsert
 │   ├── candidates.py — content changed since last trusted baseline (check_changes content-honest)
-│   ├── cli.py — content changed since last trusted baseline (check_changes content-honest)
-│   ├── contracts.py — content changed since last trusted baseline (check_changes content-honest)
+│   ├── cli.py — Hybrid CLI restored
+│   ├── contracts.py — reserved keys _candidate_list/_map_coverage/_reverse_signature
 │   ├── daemon.py — mtime-only auto-yellow cleared (session tour check-changes); no content edit this session;…
 │   ├── diagnostics.py — hygiene session complete 4.5.6; 53 tests OK
 │   ├── health.py — DELETED — Already gone; ghost 🔴 from rename to health_impl/health_pkg.
-│   ├── health_impl.py — content change or no baseline (check_changes content-honest auto-detect)
+│   ├── health_impl.py — Batch upsert + heal predicate
 │   ├── import_cache.py — content changed since last trusted baseline (check_changes content-honest)
 │   ├── import_cache_impl.py — DELETED — Moved into wikifier/cache/_core.py + named cache modules (4.6.10 split).
 │   ├── index.html — Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean…
@@ -136,7 +141,7 @@ Wikifier/  (123 files)
 │   ├── project_root.py — residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)
 │   ├── resolution.py — mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene sess…
 │   └── serve.py — Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on…
-├── CHANGELOG.md — gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)
+├── CHANGELOG.md — 4.6.10 notes
 ├── CLAUDE.md — test count synced to 49
 ├── Claude.md — gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)
 ├── README.md — 4.6.6 verified

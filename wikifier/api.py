@@ -164,6 +164,31 @@ def _pair_from_parser_edge(edge: Dict[str, Any], root: Path) -> Optional[Dict[st
     return pair
 
 
+def _resolved_targets_from_entry(entry: Any) -> List[str]:
+    """Project-relative resolved targets from a per-file cache entry."""
+    if not isinstance(entry, dict):
+        return []
+    out: List[str] = []
+    seen = set()
+    pairs = entry.get("resolved_pairs") or []
+    for p in pairs:
+        tgt = ""
+        if isinstance(p, dict):
+            tgt = str(p.get("resolved") or "")
+        elif p:
+            tgt = str(p)
+        if tgt and tgt not in seen:
+            seen.add(tgt)
+            out.append(tgt)
+    if not out:
+        for t in entry.get("resolved") or []:
+            tgt = str(t) if t else ""
+            if tgt and tgt not in seen:
+                seen.add(tgt)
+                out.append(tgt)
+    return out
+
+
 def run_full_update(
     root: Optional[Path] = None,
     force_full: bool = True,
@@ -590,6 +615,14 @@ def run_full_update(
 
         # === 4. Persist (single save; reload first to pick up the barrel flush) ===
         cache = ic.load_cache(root) or {}
+        # Snapshot old resolved targets *before* overlay so incremental reverse
+        # can subtract the previous edges (maintain_reverse_dependencies_for_source
+        # requires old_targets + new_targets).
+        old_targets_by_src: Dict[str, List[str]] = {}
+        if not force_full and new_entries:
+            for src in new_entries:
+                if isinstance(src, str) and src and not src.startswith("_"):
+                    old_targets_by_src[src] = _resolved_targets_from_entry(cache.get(src))
         cache.update(new_entries)
         if force_full:
             # Drop ghosts: per-file entries whose source no longer exists in scope.
@@ -604,16 +637,24 @@ def run_full_update(
             if force_full or not new_entries:
                 rev = ic.rebuild_reverse_dependencies(cache)
                 ic.set_reverse_dependencies(cache, rev)
+                result["reverse_incremental"] = False
             else:
                 existing_rev = ic.get_reverse_dependencies(cache) or {}
                 if not existing_rev:
                     rev = ic.rebuild_reverse_dependencies(cache)
                     ic.set_reverse_dependencies(cache, rev)
+                    result["reverse_incremental"] = False
                 else:
-                    for src in new_entries:
-                        if isinstance(src, str) and src and not src.startswith("_"):
-                            ic.maintain_reverse_dependencies_for_source(cache, src)
-            result["reverse_incremental"] = bool(new_entries) and not force_full
+                    for src, entry in new_entries.items():
+                        if not isinstance(src, str) or not src or src.startswith("_"):
+                            continue
+                        ic.maintain_reverse_dependencies_for_source(
+                            cache,
+                            src,
+                            old_targets_by_src.get(src) or [],
+                            _resolved_targets_from_entry(entry),
+                        )
+                    result["reverse_incremental"] = True
         except Exception as e:
             result["reverse_index_error"] = str(e)
         try:

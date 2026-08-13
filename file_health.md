@@ -64,7 +64,7 @@
 | tests/test_gap_amendment_2026_08.py | 🟢 Green | 2026-08-01 11:25:16 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | tests/test_gap_closure.py | 🟡 Yellow | 2026-08-13 16:31:56 | content changed since last trusted baseline (check_changes content-honest) |
 | tests/test_health.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
-| tests/test_import_cache.py | 🟢 Green | 2026-07-12 13:26:30 | 4.6.6 verified |
+| tests/test_import_cache.py | 🟢 Green | 2026-08-13 17:08:27 | Persist-path reverse increment test green. |
 | tests/test_index_map_paths.py | 🟢 Green | 2026-07-12 13:41:02 | 125 unittest OK |
 | tests/test_multi_lang_parsers.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/test_parsers.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
@@ -73,10 +73,10 @@
 | wikifier.bat | 🟢 Green | 2026-06-10 14:50:33 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
 | wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:31 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier.sh | 🟢 Green | 2026-08-01 11:25:19 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
-| wikifier/__init__.py | 🟢 Green | 2026-08-13 16:50:49 | 4.6.10; lazy MCP |
+| wikifier/__init__.py | 🟢 Green | 2026-08-13 17:08:28 | 4.6.11 |
 | wikifier/__main__.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | wikifier/agent_loop.py | 🟢 Green | 2026-08-13 16:50:50 | bootstrap write_metrics=False |
-| wikifier/api.py | 🟢 Green | 2026-08-13 16:50:47 | Batch check_changes + warm cache skip + transplanted monitor + last_meaningful_edit |
+| wikifier/api.py | 🟢 Green | 2026-08-13 17:08:27 | Incremental reverse uses old/new resolved lists; persist dogfood no reverse_index_error. |
 | wikifier/cache/__init__.py | 🟢 Green | 2026-08-13 16:51:15 | Named cache package exports real io/files/graph/cycles/acs/barrel. |
 | wikifier/cache/_core.py | 🟢 Green | 2026-08-13 16:50:48 | Graph/cycles/ACS/barrel; pair-scan fallback |
 | wikifier/cache/files.py | 🟢 Green | 2026-08-13 16:50:48 | Real file ops + same-second dirty |
