@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-08-13 17:08:28",
+  "last_updated": "2026-08-13 18:39:39",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -143,12 +143,12 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 17:08:28",
-      "reason": "4.6.11",
-      "source_content_hash": "sha256:ecdae7abb2f361611155086b027cd01c09782ded4cdd63a50bab883f0ac6020d",
+      "last_updated": "2026-08-13 18:39:39",
+      "reason": "4.6.12",
+      "source_content_hash": "sha256:759716866de86b632e2b2dcc84b491417212a36e55acde154ca8bf05513a3cfa",
       "last_meaningful_edit": "2026-08-13 16:49:57",
-      "last_wiki_refresh": "2026-08-13 17:08:28",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:57 | 4.6.10; do not eager-boot FastMCP.; mark-green:2026-08-13 16:50:49 (wiki hash captured); mark-green:2026-08-13 17:08:28 (wiki hash captured)"
+      "last_wiki_refresh": "2026-08-13 18:39:39",
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:57 | 4.6.10; do not eager-boot FastMCP.; mark-green:2026-08-13 16:50:49 (wiki hash captured); mark-green:2026-08-13 17:08:28 (wiki hash captured); mark-green:2026-08-13 18:39:39 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -236,10 +236,13 @@
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:40",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "source_content_hash": "sha256:c053e0cb09ea1d8130016198fe67bab12c0429ad26fc7e7c976b95d031fab9e2",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-08-13 18:39:38",
+      "reason": "3.8-safe annotations via future import.",
+      "wiki_content_hash": "sha256:8a7c75b1db80b3af6447c4c069d02e47c7ca560d850698b1f4c85980b3f8ee83",
+      "source_content_hash": "sha256:c1a0e29102f65581330e2d878438f64890bab3386458ccaa2a24353921c24b15",
+      "last_meaningful_edit": "2026-08-13 18:39:37",
+      "last_wiki_refresh": "2026-08-13 18:39:38",
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 18:39:37 | Add from __future__ import annotations so PEP 585 hints work on Python 3.8/3.9 (CI).; mark-green:2026-08-13 18:39:38 (wiki hash captured); wiki=javascript.py.wiki.md"
     },
     "tests/": {
       "status": "🟢 Green",
@@ -847,12 +850,12 @@
     },
     "tests/test_agent_surface_contracts.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:51",
-      "reason": "agent surface contract tests",
-      "source_content_hash": "sha256:f32f4e4c5c202e2d96662788c91975aedd242212c6b947d92c8f362bc860116b",
-      "last_meaningful_edit": "2026-08-13 16:49:57",
-      "last_wiki_refresh": "2026-08-13 16:50:51",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:57 | Contract tests for CLI/MCP/cache split/graph signature.; mark-green:2026-08-13 16:50:51 (wiki hash captured)"
+      "last_updated": "2026-08-13 18:39:38",
+      "reason": "PEP585 future-import scan covers javascript.py.",
+      "source_content_hash": "sha256:650fa3d97752ab96120c2263042644954476f3c943b8bbfeb0b5a4dad39f7011",
+      "last_meaningful_edit": "2026-08-13 18:39:38",
+      "last_wiki_refresh": "2026-08-13 18:39:38",
+      "freshness_provenance": "record-meaningful-edit:2026-08-13 18:39:38 | Regression: shipped modules with list[]/dict[] must postpone annotation evaluation.; mark-green:2026-08-13 18:39:38 (wiki hash captured)"
     },
     "Findings/2026-08-13-implementation-plan.md": {
       "status": "🟢 Green",

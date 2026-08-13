@@ -44,6 +44,8 @@ are OR-combined during expansion so conditional barrels downgrade confidence (st
 are marked appropriately (addresses Limitation #6).
 """
 
+from __future__ import annotations
+
 import json
 import os
 import re

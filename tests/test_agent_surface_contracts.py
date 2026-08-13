@@ -32,6 +32,40 @@ class TestLibraryImport(unittest.TestCase):
         self.assertTrue(js.__file__.endswith("javascript.py"), js.__file__)
         self.assertTrue(hasattr(js, "parse_javascript_imports"))
 
+    def test_shipped_modules_with_pep585_hints_postpone_evaluation(self):
+        """3.8/3.9: list[str]/dict[str,…] at runtime needs from __future__ import annotations.
+
+        CI failed on 4.6.10/4.6.11 because javascript.py (live after the package
+        decoy was deleted) had PEP 585 hints and no future import.
+        """
+        import ast
+        import re
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1] / "wikifier"
+        hint = re.compile(r"\b(list|dict|tuple|set)\[")
+        missing = []
+        for path in root.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            if not hint.search(text):
+                continue
+            tree = ast.parse(text, filename=str(path))
+            body = tree.body
+            i = 0
+            if body and isinstance(body[0], ast.Expr) and isinstance(
+                getattr(body[0], "value", None), ast.Constant
+            ):
+                i = 1
+            futures = []
+            while i < len(body) and isinstance(body[i], ast.ImportFrom) and body[i].module == "__future__":
+                futures.extend(n.name for n in body[i].names)
+                i += 1
+            if "annotations" not in futures:
+                missing.append(str(path.relative_to(root.parent)))
+        self.assertEqual(missing, [], f"PEP585 hints without postponed evaluation: {missing}")
+
     def test_bree_is_package(self):
         import wikifier.parsers.bree as bree
         self.assertTrue(bree.__file__.endswith("__init__.py"), bree.__file__)

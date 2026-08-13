@@ -58,7 +58,7 @@
 | tests/selftest/run_resolution_selftest.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | tests/test_agent_loop.py | 🟢 Green | 2026-07-09 08:51:23 | 4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish) |
 | tests/test_agent_scale.py | 🟢 Green | 2026-07-12 11:06:26 | ACS persist regression green |
-| tests/test_agent_surface_contracts.py | 🟢 Green | 2026-08-13 16:50:51 | agent surface contract tests |
+| tests/test_agent_surface_contracts.py | 🟢 Green | 2026-08-13 18:39:38 | PEP585 future-import scan covers javascript.py. |
 | tests/test_barrel_invalidation.py | 🟢 Green | 2026-08-13 16:50:52 | unskipped content-honest barrel tests |
 | tests/test_cache_store.py | 🟢 Green | 2026-07-12 12:00:51 | instrumented warm load assertion |
 | tests/test_gap_amendment_2026_08.py | 🟢 Green | 2026-08-01 11:25:16 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
@@ -73,7 +73,7 @@
 | wikifier.bat | 🟢 Green | 2026-06-10 14:50:33 AEST | Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical |
 | wikifier.ps1 | 🟢 Green | 2026-06-10 20:20:31 AEST | Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests |
 | wikifier.sh | 🟢 Green | 2026-08-01 11:25:19 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
-| wikifier/__init__.py | 🟢 Green | 2026-08-13 17:08:28 | 4.6.11 |
+| wikifier/__init__.py | 🟢 Green | 2026-08-13 18:39:39 | 4.6.12 |
 | wikifier/__main__.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | wikifier/agent_loop.py | 🟢 Green | 2026-08-13 16:50:50 | bootstrap write_metrics=False |
 | wikifier/api.py | 🟢 Green | 2026-08-13 17:08:27 | Incremental reverse uses old/new resolved lists; persist dogfood no reverse_index_error. |
@@ -112,7 +112,7 @@
 | wikifier/parsers/csharp.py | 🟢 Green | 2026-07-12 12:47:37 | 4.6.5 verified |
 | wikifier/parsers/go_lang.py | 🟢 Green | 2026-07-12 11:56:21 | 4.6.4 sqlite coverage verified 93 tests |
 | wikifier/parsers/java.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
-| wikifier/parsers/javascript.py | 🟢 Green | 2026-07-09 08:07:40 | residual-1-5-closure verified; tests OK (subid=residual-1-5-closure) |
+| wikifier/parsers/javascript.py | 🟢 Green | 2026-08-13 18:39:38 | 3.8-safe annotations via future import. |
 | wikifier/parsers/javascript/_parser.py | 🔴 Red | 2026-08-13 16:49:52 | DELETED — Deleted decoy JS package; live parser is javascript.py. |
 | wikifier/parsers/python.py | 🟡 Yellow | 2026-08-13 16:31:56 | content changed since last trusted baseline (check_changes content-honest) |
 | wikifier/parsers/rust.py | 🟢 Green | 2026-07-12 11:01:26 | crate resolve unit tested |

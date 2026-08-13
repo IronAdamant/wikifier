@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.12] - 2026-08-13
+
+### Fixed
+
+- **Python 3.8/3.9 CI:** `wikifier/parsers/javascript.py` (now the live JS parser
+  after the package decoy was deleted) used PEP 585 `list[str]` / `dict[str, …]`
+  without `from __future__ import annotations`. That raised
+  `TypeError: 'type' object is not subscriptable` on 3.8/3.9.
+- Test: `test_shipped_modules_with_pep585_hints_postpone_evaluation` scans the
+  shipped `wikifier/` tree so this cannot regress.
+
 ## [4.6.11] - 2026-08-13
 
 ### Fixed
