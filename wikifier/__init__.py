@@ -23,7 +23,12 @@ binds the function under CPython because the package attribute is shadowed.
 """
 
 from . import parsers
-from . import mcp  # exposes wikifier.mcp.mcp (None when the optional extra is absent)
+# MCP extra is optional — do not boot FastMCP on `import wikifier`.
+# `import wikifier.mcp` / `wikifier-mcp` still load the server.
+try:
+    from . import mcp as mcp  # exposes wikifier.mcp.mcp (None when extra absent)
+except Exception:
+    mcp = None  # type: ignore
 from . import health_pkg as health_module  # submodule — keep this name for agents/tools
 from . import locking
 from . import import_cache
@@ -80,4 +85,4 @@ from .contracts import (
     compute_acs_confidence,
 )
 
-__version__ = "4.6.9"
+__version__ = "4.6.10"

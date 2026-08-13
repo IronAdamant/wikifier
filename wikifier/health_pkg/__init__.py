@@ -29,7 +29,7 @@ __all__ = [
     # I/O operations
     'load_health', 'save_health',
     # Status operations
-    'upsert_entry', 'mark_green', 'record_meaningful_edit', 'mark_wiki_refresh',
+    'upsert_entry', 'upsert_entries_batch', 'mark_green', 'record_meaningful_edit', 'mark_wiki_refresh',
     # Analysis
     'get_summary', 'assess_autonomous_readiness', 'detect_scope_risks',
     'get_files_needing_attention', 'write_metrics_snapshot', 'read_metrics_history',

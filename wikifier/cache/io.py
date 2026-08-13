@@ -1,32 +1,27 @@
-"""
-Cache I/O operations - load and save operations for import cache.
-"""
+"""Cache I/O — SQLite-primary load/save (legacy JSON dual-read)."""
+
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
-# Import locking (M2-Rem-07)
 try:
     from .. import locking
 except ImportError:
     locking = None
 
-CACHE_FILE = ".wikifier_staging/import_cache.json"  # legacy dual-read path
+CACHE_FILE = ".wikifier_staging/import_cache.json"
 
 
 def _get_cache_path(root: Path) -> Path:
     """Legacy JSON path (still used for dual-read / optional dual-write)."""
-    return root / CACHE_FILE
+    return Path(root) / CACHE_FILE
 
 
 def load_cache(root: Path) -> Dict[str, Any]:
-    """Load the import cache (SQLite primary, legacy JSON dual-read).
-
-    Prefer ``load_mtime_index`` / ``cache_store.load_meta`` on warm paths so
-    agents avoid deserializing multi‑MB pair payloads when only dirty/ACS meta
-    is needed.
-    """
+    """Load the import cache (SQLite primary, legacy JSON dual-read)."""
     try:
         from .. import cache_store as cs
         return cs.load_cache_dict(Path(root)) or {}
@@ -44,7 +39,7 @@ def load_cache(root: Path) -> Dict[str, Any]:
 
 
 def load_mtime_index(root: Path) -> Dict[str, Dict[str, Any]]:
-    """Light dirty index: rel → {mtime, content_hash} (stdlib SQLite when available)."""
+    """Light dirty index: rel → {mtime, content_hash}."""
     try:
         from .. import cache_store as cs
         return cs.load_mtime_index(Path(root))
@@ -61,14 +56,7 @@ def load_mtime_index(root: Path) -> Dict[str, Dict[str, Any]]:
 
 
 def save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Save the import cache to disk (SQLite primary; optional compact JSON dual-write).
-
-    Uses file locking (M2-Rem-07) to prevent corruption when multiple
-    agents are running update-maps or health operations concurrently.
-
-    Set WIKIFIER_DEBUG_SAVES=1 to print each save's call site to stderr —
-    the diagnostic for "who keeps rewriting the cache mid-run".
-    """
+    """Save the import cache (SQLite primary; optional JSON dual-write)."""
     if os.environ.get("WIKIFIER_DEBUG_SAVES"):
         import sys as _sys
         import traceback
@@ -82,14 +70,13 @@ def save_cache(root: Path, cache: Dict[str, Any]) -> None:
 
 
 def _do_save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Internal save without locking — SQLite via cache_store (barrel merge included)."""
+    """Internal save without locking — SQLite via cache_store."""
     try:
         from .. import cache_store as cs
         cs.save_cache_dict(Path(root), cache)
         return
     except Exception:
         pass
-    # Last-resort JSON-only path if sqlite unavailable
     cache_path = _get_cache_path(Path(root))
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, "w", encoding="utf-8") as f:

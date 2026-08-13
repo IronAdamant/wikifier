@@ -1,10 +1,11 @@
-"""
-File-level cache operations - get/update file data, mtime, content hashing.
-"""
-import hashlib
-import os
+"""File-level cache operations — entry shape, mtime, content hash, dirty set."""
+
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from .io import load_mtime_index
 
 
 def get_file_data(cache: Dict[str, Any], rel_path: str) -> Optional[Dict[str, Any]]:
@@ -16,100 +17,168 @@ def update_file_data(
     cache: Dict[str, Any],
     rel_path: str,
     mtime: int,
-    resolved_pairs: Optional[List[Dict[str, Any]]] = None,
-    content_hash: Optional[str] = None
+    imports: List[str],
+    resolved: Optional[List[str]] = None,
+    resolved_pairs: Optional[List[Dict[str, str]]] = None,
+    dependents: Optional[List[str]] = None,
 ) -> None:
-    """
-    Update or create an entry for a file in the cache.
-    
-    Preserves existing barrel resolution metadata and rich pair fields when updating.
-    Only overwrites mtime, resolved_pairs if provided, and optionally content_hash.
-    """
-    existing = cache.get(rel_path, {})
-    if not isinstance(existing, dict):
-        existing = {}
-    
-    updated = {
+    """Update or insert data for a file in the cache. Preserves rich pair fields."""
+    normalized_pairs = []
+    for p in (resolved_pairs or []):
+        if isinstance(p, dict):
+            np = {
+                "raw": p.get("raw", ""),
+                "resolved": p.get("resolved", ""),
+                "confidence": p.get("confidence", "medium"),
+            }
+            for k, v in p.items():
+                if k not in np:
+                    np[k] = v
+            normalized_pairs.append(np)
+
+    entry = {
         "mtime": mtime,
+        "imports": imports,
+        "resolved": resolved or [],
+        "resolved_pairs": normalized_pairs,
     }
-    
-    if resolved_pairs is not None:
-        updated["resolved_pairs"] = resolved_pairs
-    elif "resolved_pairs" in existing:
-        updated["resolved_pairs"] = existing["resolved_pairs"]
-    
-    if content_hash is not None:
-        updated["content_hash"] = content_hash
-    elif "content_hash" in existing:
-        updated["content_hash"] = existing["content_hash"]
-    
-    # Preserve barrel metadata if present
-    for key in ["barrel_chains", "barrel_metadata"]:
-        if key in existing:
-            updated[key] = existing[key]
-    
-    cache[rel_path] = updated
+    if dependents is not None:
+        entry["dependents"] = dependents
+    cache[rel_path] = entry
 
 
 def get_mtime(file_path: Path) -> int:
-    """Return file modification time as integer timestamp, or 0 if file doesn't exist."""
+    """Get the mtime of a file (cross-platform)."""
     try:
         return int(file_path.stat().st_mtime)
-    except (OSError, ValueError):
+    except Exception:
         return 0
 
 
 def compute_file_content_hash(file_path: Path) -> Optional[str]:
-    """
-    Compute SHA256 hash of file content for content-based dirty detection.
-    
-    Returns hex digest string or None if file is unreadable.
-    Used to distinguish real content changes from mtime-only updates.
-    """
+    """Sha256 of source bytes. Returns ``sha256:<hex>`` or None if unreadable."""
     try:
-        if not file_path.is_file():
+        import hashlib
+        p = Path(file_path)
+        if not p.is_file():
             return None
-        data = file_path.read_bytes()
-        return hashlib.sha256(data).hexdigest()
+        return "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
     except Exception:
         return None
 
 
 def compute_files_needing_reparse(
     root: Path,
-    cache: Dict[str, Any],
-    changed_files: Set[str],
-    include_stale_importers: bool = True
-) -> Tuple[Set[str], Dict[str, Any]]:
-    """
-    Determine which files need reparsing based on changes and barrel invalidation.
-    
-    Args:
-        root: Project root path
-        cache: The import cache dict
-        changed_files: Set of files known to have changed (mtime/content)
-        include_stale_importers: If True, include files that import changed barrel files
-    
-    Returns:
-        Tuple of (files_to_reparse, diagnostics)
-    """
-    from .barrel import invalidate_stale_barrel_entries
-    
-    files_to_reparse = set(changed_files)
-    diagnostics: Dict[str, Any] = {
-        "direct_changes": len(changed_files),
-        "stale_barrel_importers": 0,
-        "total_reparse": 0
-    }
-    
-    if include_stale_importers and changed_files:
-        # Check if any changed files are barrel files that would invalidate importers
-        stale_importers = invalidate_stale_barrel_entries(
-            root, cache, list(changed_files)
-        )
-        if stale_importers:
-            files_to_reparse.update(stale_importers)
-            diagnostics["stale_barrel_importers"] = len(stale_importers)
-    
-    diagnostics["total_reparse"] = len(files_to_reparse)
-    return files_to_reparse, diagnostics
+    candidate_full_paths: List[Path],
+    full_rebuild: bool = False,
+    content_stable_mtime_updates: Optional[List[Tuple[str, int, str]]] = None,
+) -> List[Path]:
+    """Light-index dirty detection (no pair-payload deserialize)."""
+    if full_rebuild:
+        seen: set = set()
+        out: List[Path] = []
+        for p in candidate_full_paths:
+            pr = Path(p).resolve() if p else None
+            if pr and pr not in seen:
+                seen.add(pr)
+                out.append(pr)
+        return out
+
+    index = load_mtime_index(root)
+    to_reparse: List[Path] = []
+    seen: set = set()
+    try:
+        root_res = root.resolve()
+    except Exception:
+        root_res = root
+
+    def _rel_of(p_res: Path) -> str:
+        rel = None
+        try:
+            rel = str(p_res.relative_to(root_res))
+        except Exception:
+            pass
+        if rel is None:
+            try:
+                rp = str(p_res)
+                rr = str(root_res)
+                if rp.startswith(rr):
+                    rel = rp[len(rr):].lstrip("/\\")
+            except Exception:
+                pass
+        if not rel:
+            rel = p_res.name or str(p_res)
+        return rel
+
+    def _content_stable(p_res: Path, data: Dict[str, Any], rel: str, curr_mtime: int) -> bool:
+        stored = data.get("content_hash")
+        if not stored or not isinstance(stored, str):
+            return False
+        live = compute_file_content_hash(p_res)
+        if not live or live != stored:
+            return False
+        if content_stable_mtime_updates is not None:
+            content_stable_mtime_updates.append((rel, curr_mtime, live))
+        return True
+
+    for p in candidate_full_paths:
+        if not p:
+            continue
+        try:
+            p_res = Path(p).resolve()
+        except Exception:
+            p_res = Path(p)
+        if p_res in seen:
+            continue
+        seen.add(p_res)
+        rel = _rel_of(p_res)
+        data = index.get(rel) or {}
+        cached_mtime = int(data.get("mtime", 0) or 0)
+        curr_mtime = 0
+        if p_res.exists():
+            try:
+                curr_mtime = int(p_res.stat().st_mtime)
+            except Exception:
+                curr_mtime = 0
+        if not data:
+            to_reparse.append(p_res)
+            continue
+        if curr_mtime > cached_mtime:
+            if _content_stable(p_res, data, rel, curr_mtime):
+                continue
+            to_reparse.append(p_res)
+        elif curr_mtime == cached_mtime:
+            # Same-second writes (tests + fast agent loops) do not bump int mtime.
+            stored = data.get("content_hash")
+            if stored:
+                live = compute_file_content_hash(p_res)
+                if live and live != stored:
+                    to_reparse.append(p_res)
+
+    for rel, data in list(index.items()):
+        if not isinstance(rel, str) or not isinstance(data, dict):
+            continue
+        try:
+            full = (root / rel).resolve()
+            if full in seen:
+                continue
+            if full.exists():
+                curr = int(full.stat().st_mtime)
+                cached = int(data.get("mtime", 0) or 0)
+                if curr > cached:
+                    if _content_stable(full, data, rel, curr):
+                        seen.add(full)
+                        continue
+                    to_reparse.append(full)
+                    seen.add(full)
+                elif curr == cached:
+                    stored = data.get("content_hash")
+                    if stored:
+                        live = compute_file_content_hash(full)
+                        if live and live != stored:
+                            to_reparse.append(full)
+                            seen.add(full)
+        except Exception:
+            pass
+
+    return to_reparse

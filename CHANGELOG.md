@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.10] - 2026-08-13
+
+### Fixed (agent-facing contracts after incomplete 4.6.9 modularization)
+
+- **CLI:** restore hybrid `python -m wikifier` dispatcher (prepare-edit, record-deletion,
+  why-file, search-journal, validate, seed-health, prune-*, autonomous-status, update-maps)
+  plus shell fallback for init/monitor/daemon/serve/journal.
+- **MCP:** `wikifier-mcp` / `wikifier.mcp.server:main` works again (re-exports complete
+  `server_impl`). Delete `server_backup.py`. Workflow tool kwargs match `api`.
+- **Parsers:** delete dead `javascript/` package clone and leftover `bree.py`. Live JS is
+  `javascript.py`. Add `.mjs/.cjs/.mts/.cts` to the update-maps dispatcher.
+- **check_changes:** do not hydrate the full import cache on an empty dirty set; batch
+  health yellows (one save). Transplanted `monitored_paths.txt` with missing entries
+  no longer falls back to scanning the whole root (COBOL sample farm timeout).
+- **record_change:** writes `last_meaningful_edit` (stale-wiki detector is no longer theater).
+- **Barrel invalidation:** pair-scan fallback when BRC reverse index was not flushed;
+  same-second content edits are dirty (int mtime).
+- **Cycles:** `compute_cycles` persists `_graph_signature` so incremental maps can reuse Tarjan.
+
+### Improved / modularised
+
+- Real `wikifier/cache/{io,files}.py` (impl APIs, `sha256:` hash). Named
+  `graph`/`cycles`/`acs`/`barrel`/`diagnostics`/`streaming` modules. Deleted
+  `import_cache_impl.py`.
+- Incremental SQLite save (upsert + prune orphans; barrel merge via `load_meta`).
+- Incremental reverse-deps on non-`--full` persist.
+- Lazy parser language imports; do not boot FastMCP on `import wikifier`.
+- `session_bootstrap` no longer writes metrics on every call.
+
+### Tests
+
+- `tests/test_agent_surface_contracts.py` — CLI argv, MCP `main`, cache split identity,
+  graph-signature reuse without manual set, record_change freshness, transplanted monitor.
+- Unskipped `tests/test_barrel_invalidation.py` (content-honest + pair-scan).
+
+### Research
+
+- `Findings/2026-08-13-research-01` … `05` + `Findings/2026-08-13-implementation-plan.md`.
+
 ## [4.6.9] - 2026-08-01
 
 ### Fixed / Improved (gap amendment G1–G10, G13, G15, G17)

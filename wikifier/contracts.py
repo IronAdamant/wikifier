@@ -477,6 +477,9 @@ RESERVED_TOP_LEVEL_KEYS: Dict[str, str] = {
     "_resolution_diagnostics": "Diagnostics layer aggregate (counts + samples by category). Wave 3: get_resolution_diagnostics + ensure_diagnostics_aggregate implemented in import_cache (delegates summarize + injects cycles_reuse/graph_signature stats for unified observability). Wave 4: optional guaranteed persist now wired into update-maps 3d (both sh) via ensure_ after ACS (so library/MCP always see fresh without extra on-demand compute).",
     "_acs_summary": "Lightweight ACS aggregates (R2 canonical): total_scored_edges, avg_confidence, low_conf_edges<0.65, top_risk_reasons counts, bounded sample_low_conf_explanations (full Recommendation text). Persisted every update-maps via import_cache.compute_acs_summary + set. Enables health/MCP/library surfacing uniformity for agents (biggest trust gap fix).",
     "_acs_summary_version": "Companion for _acs_summary (future).",
+    "_candidate_list": "Persisted scoped candidate list + fingerprint for index-first reuse.",
+    "_map_coverage": "Last map_coverage snapshot (complete, dirty_total, files_remaining_dirty).",
+    "_reverse_signature": "Signature of reverse-dependency map for integrity / reuse checks.",
 }
 
 # Invalidation protocol (high-level, implemented once in import_cache + called by phases)

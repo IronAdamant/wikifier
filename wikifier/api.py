@@ -512,7 +512,7 @@ def run_full_update(
                 return None
 
         def _parse_file(fstr: str, low: str):
-            if low.endswith((".js", ".ts", ".jsx", ".tsx")):
+            if low.endswith((".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts")):
                 return js_parser.parse_javascript_imports(fstr) or []
             if low.endswith(".py"):
                 return py_parser.parse_python_imports(fstr) or []
@@ -601,15 +601,29 @@ def run_full_update(
 
         # === 5. Graph intelligence (reverse deps, cycles, ACS) ===
         try:
-            rev = ic.rebuild_reverse_dependencies(cache)
-            ic.set_reverse_dependencies(cache, rev)
+            if force_full or not new_entries:
+                rev = ic.rebuild_reverse_dependencies(cache)
+                ic.set_reverse_dependencies(cache, rev)
+            else:
+                existing_rev = ic.get_reverse_dependencies(cache) or {}
+                if not existing_rev:
+                    rev = ic.rebuild_reverse_dependencies(cache)
+                    ic.set_reverse_dependencies(cache, rev)
+                else:
+                    for src in new_entries:
+                        if isinstance(src, str) and src and not src.startswith("_"):
+                            ic.maintain_reverse_dependencies_for_source(cache, src)
+            result["reverse_incremental"] = bool(new_entries) and not force_full
         except Exception as e:
             result["reverse_index_error"] = str(e)
         try:
             cycles_payload = ic.compute_cycles(cache, root=root, use_canonical=use_canonical)
             cache["_cycles"] = cycles_payload
+            if cycles_payload.get("graph_signature") and hasattr(ic, "set_graph_signature"):
+                ic.set_graph_signature(cache, cycles_payload["graph_signature"])
             result["cycles"] = {
                 "count": len(cycles_payload.get("sccs", []) or []),
+                "reused": bool(cycles_payload.get("reused")),
             }
             try:
                 cache["_cycle_analyses"] = ic.compute_cycle_analyses(cache, root=root, use_canonical=use_canonical)
@@ -737,11 +751,6 @@ def get_script_path() -> Path:
     else:
         # Linux, macOS, etc.
         return scripts_dir / "wikifier.sh"
-
-
-
-
-    main()
 
 
 # =============================================================================
@@ -873,6 +882,10 @@ def _get_monitored_roots(root: Path) -> List[Path]:
                         roots.append(cand)
             if roots:
                 return roots
+            # monitored_paths.txt exists but every entry is missing (transplanted
+            # trees, Linux paths on macOS). Never fall back to scanning the whole
+            # root — that hangs on multi-repo parents (e.g. COBOL sample farm).
+            return []
         except Exception:
             pass
     return [root]
@@ -919,18 +932,40 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                     # into dirty or health. This + health.py prune prevents pollution in alt/consistency/cloned targets.
                     root_res = root.resolve()
                     dirty = [p for p in (dirty or []) if str(Path(p).resolve()).startswith(str(root_res))]
-                    cache = _ic_mod.load_cache(root) or {}
-                    barrel_stale = _ic_mod.invalidate_stale_barrel_entries(
-                        cache, root, changed_files=[str(p) for p in dirty]
-                    ) or []
-                    seen = {str(p.resolve()) for p in dirty}
-                    for rel in barrel_stale:
-                        if rel:
-                            pp = (root / rel).resolve()
-                            if pp.exists() and str(pp) not in seen and str(pp).startswith(str(root_res)):
-                                dirty.append(pp)
-                                seen.add(str(pp))
-                    result["barrel_invalidation_summary"] = _ic_mod.get_barrel_cache_summary(cache) or {}
+                    # Warm path: do not hydrate multi-MB pair payloads when nothing is dirty.
+                    barrel_cache: Dict[str, Any] = {}
+                    if dirty:
+                        try:
+                            from . import cache_store as _cs_cc
+                            barrel_cache = _cs_cc.load_meta(
+                                root,
+                                keys=(
+                                    "_barrel_resolutions",
+                                    "_barrel_file_index",
+                                    "_barrel_invalidation_log",
+                                ),
+                            ) or {}
+                        except Exception:
+                            barrel_cache = {}
+                        if not (barrel_cache.get("_barrel_resolutions") or barrel_cache.get("_barrel_file_index")):
+                            try:
+                                barrel_cache = _ic_mod.load_cache(root) or {}
+                            except Exception:
+                                barrel_cache = {}
+                        barrel_stale = _ic_mod.invalidate_stale_barrel_entries(
+                            barrel_cache, root, changed_files=[str(p) for p in dirty]
+                        ) or []
+                        seen = {str(p.resolve()) for p in dirty}
+                        for rel in barrel_stale:
+                            if rel:
+                                pp = (root / rel).resolve()
+                                if pp.exists() and str(pp) not in seen and str(pp).startswith(str(root_res)):
+                                    dirty.append(pp)
+                                    seen.add(str(pp))
+                    try:
+                        result["barrel_invalidation_summary"] = _ic_mod.get_barrel_cache_summary(barrel_cache) or {}
+                    except Exception:
+                        result["barrel_invalidation_summary"] = {}
                 except Exception:
                     pass
 
@@ -970,6 +1005,9 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                     health_data = {"entries": {}}
                 entries = health_data.setdefault("entries", {}) if isinstance(health_data, dict) else {}
                 health_dirty = False
+                yellow_batch = []
+                pending_batch = []
+                journal_batch = []
                 for p in dirty_batch:
                     try:
                         pr = Path(p).resolve()
@@ -1013,16 +1051,27 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                         if verdict.get("reason") == "content_changed"
                         else "content change or no baseline (check_changes content-honest auto-detect)"
                     )
-                    _upsert(root, rel, "🟡 Yellow", reason)
+                    yellow_batch.append((rel, "🟡 Yellow", reason))
+                    pending_batch.append((rel, "Content change auto-detected — review and run mark-green after wiki update"))
+                    journal_batch.append((rel, reason))
+                    changed_count += 1
+                if yellow_batch:
+                    batch_fn = getattr(_health_mod, "upsert_entries_batch", None)
+                    if batch_fn is not None:
+                        batch_fn(root, yellow_batch, health_data=health_data)
+                        health_dirty = False
+                    else:
+                        for rel, st, reason in yellow_batch:
+                            _upsert(root, rel, st, reason)
+                    for rel, msg in pending_batch:
+                        _add_to_pending(root, rel, msg)
+                    for rel, reason in journal_batch:
+                        _ensure_journal_entry(root, "auto-detected", rel, reason)
                     try:
                         health_data = _health_mod.load_health(root)
                         entries = health_data.setdefault("entries", {})
-                        health_dirty = False  # upsert already saved
                     except Exception:
                         pass
-                    _add_to_pending(root, rel, "Content change auto-detected — review and run mark-green after wiki update")
-                    _ensure_journal_entry(root, "auto-detected", rel, reason)
-                    changed_count += 1
                 # Keep pending queue aligned with lean monitored_paths (no flood outside scope)
                 if hasattr(_health_mod, "prune_pending_to_monitored"):
                     try:
@@ -1108,6 +1157,14 @@ def record_change(file: str, reason: str, project_root: Optional[Union[str, Path
                 pass
             if _health_mod is not None:
                 _health_mod.upsert_entry(root, rel, "🟡 Yellow", reason or "Agent/LLM edit recorded")
+                _rme = getattr(_health_mod, "_do_record_meaningful_edit", None) or getattr(
+                    _health_mod, "record_meaningful_edit", None
+                )
+                if _rme is not None:
+                    try:
+                        _rme(root, rel, reason or "Agent/LLM edit recorded")
+                    except Exception:
+                        pass
             _add_to_pending(root, rel, f"LLM/agent edit — {reason}")
             _ensure_journal_entry(root, "record-change", rel, reason or "No reason provided.")
             result.update({

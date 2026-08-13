@@ -224,11 +224,11 @@ def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool
     root = Path(root)
     if not isinstance(cache, dict):
         return "none"
-    # Barrel preservation: merge missing barrel keys from existing store
+    # Barrel preservation: merge missing barrel keys from meta only (no pair hydrate)
     _BARREL = ("_barrel_resolutions", "_barrel_file_index")
     if any(k not in cache for k in _BARREL):
         try:
-            prev = load_cache_dict(root)
+            prev = load_meta(root, keys=_BARREL)
             for k in _BARREL:
                 if k not in cache and prev.get(k):
                     cache[k] = prev[k]
@@ -241,8 +241,8 @@ def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool
         write_json = env in ("1", "true", "yes", "always")
 
     with _db(root) as conn:
-        conn.execute("DELETE FROM files")
-        conn.execute("DELETE FROM meta")
+        keep_files = set()
+        keep_meta = set()
         for k, v in cache.items():
             if not isinstance(k, str):
                 continue
@@ -255,6 +255,7 @@ def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool
                     "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
                     (k, raw),
                 )
+                keep_meta.add(k)
             elif isinstance(v, dict):
                 mtime = int(v.get("mtime", 0) or 0)
                 chash = v.get("content_hash")
@@ -267,6 +268,18 @@ def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool
                     "VALUES (?, ?, ?, ?)",
                     (k, mtime, chash, payload),
                 )
+                keep_files.add(k)
+        # Drop rows the in-memory cache no longer owns (ghosts / scoped full rebuild)
+        if keep_files:
+            existing = [r[0] for r in conn.execute("SELECT rel_path FROM files")]
+            for rel in existing:
+                if rel not in keep_files:
+                    conn.execute("DELETE FROM files WHERE rel_path = ?", (rel,))
+        if keep_meta:
+            existing_m = [r[0] for r in conn.execute("SELECT key FROM meta")]
+            for key in existing_m:
+                if key not in keep_meta:
+                    conn.execute("DELETE FROM meta WHERE key = ?", (key,))
 
     if write_json:
         jp = json_path(root)

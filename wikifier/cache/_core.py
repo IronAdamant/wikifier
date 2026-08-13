@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 # Import locking (M2-Rem-07)
 try:
-    from . import locking
+    from .. import locking
 except ImportError:
     locking = None
 
@@ -30,7 +30,7 @@ except ImportError:
 # use_canonical support + proper v0/v1 stamping per contracts (ready for Phase 4 flip in sh/harness).
 # Zero-dep, defensive imports, backward compatible.
 try:
-    from .contracts import (
+    from ..contracts import (
         NODE_IDENTITY_VERSION_V0,
         NODE_IDENTITY_VERSION_V1,
     )
@@ -39,97 +39,45 @@ except Exception:
     NODE_IDENTITY_VERSION_V1 = "v1"
 
 try:
-    from .resolution import canonical_for_bree
+    from ..resolution import canonical_for_bree
 except Exception:
     canonical_for_bree = None
 
 CACHE_FILE = ".wikifier_staging/import_cache.json"  # legacy dual-read path
 
-
-def _get_cache_path(root: Path) -> Path:
-    """Legacy JSON path (still used for dual-read / optional dual-write)."""
-    return root / CACHE_FILE
-
-
-def load_cache(root: Path) -> Dict[str, Any]:
-    """Load the import cache (SQLite primary, legacy JSON dual-read).
-
-    Prefer ``load_mtime_index`` / ``cache_store.load_meta`` on warm paths so
-    agents avoid deserializing multi‑MB pair payloads when only dirty/ACS meta
-    is needed.
-    """
-    try:
-        from . import cache_store as cs
-        return cs.load_cache_dict(Path(root)) or {}
-    except Exception:
-        pass
-    cache_path = _get_cache_path(Path(root))
-    if not cache_path.exists():
-        return {}
-    try:
-        with open(cache_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+from .io import (  # noqa: E402
+    CACHE_FILE as CACHE_FILE,
+    _get_cache_path,
+    load_cache,
+    load_mtime_index,
+    save_cache,
+    _do_save_cache,
+)
+from .files import (  # noqa: E402
+    get_file_data,
+    update_file_data,
+    get_mtime,
+    compute_file_content_hash,
+    compute_files_needing_reparse,
+)
 
 
-def load_mtime_index(root: Path) -> Dict[str, Dict[str, Any]]:
-    """Light dirty index: rel → {mtime, content_hash} (stdlib SQLite when available)."""
-    try:
-        from . import cache_store as cs
-        return cs.load_mtime_index(Path(root))
-    except Exception:
-        cache = load_cache(root) or {}
-        out: Dict[str, Dict[str, Any]] = {}
-        for k, v in cache.items():
-            if isinstance(k, str) and not k.startswith("_") and isinstance(v, dict):
-                out[k] = {
-                    "mtime": int(v.get("mtime", 0) or 0),
-                    "content_hash": v.get("content_hash"),
-                }
-        return out
+# _get_cache_path lives in cache.io / cache.files
 
 
-def save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Save the import cache to disk (SQLite primary; optional compact JSON dual-write).
-
-    Uses file locking (M2-Rem-07) to prevent corruption when multiple
-    agents are running update-maps or health operations concurrently.
-
-    Set WIKIFIER_DEBUG_SAVES=1 to print each save's call site to stderr —
-    the diagnostic for "who keeps rewriting the cache mid-run".
-    """
-    if os.environ.get("WIKIFIER_DEBUG_SAVES"):
-        import sys as _sys
-        import traceback
-        frames = "".join(traceback.format_stack()[-4:-1])
-        print(f"[save_cache] root={root}\n{frames}", file=_sys.stderr)
-    if locking:
-        with locking.file_lock(root):
-            _do_save_cache(root, cache)
-    else:
-        _do_save_cache(root, cache)
+# load_cache lives in cache.io / cache.files
 
 
-def _do_save_cache(root: Path, cache: Dict[str, Any]) -> None:
-    """Internal save without locking — SQLite via cache_store (barrel merge included)."""
-    try:
-        from . import cache_store as cs
-        cs.save_cache_dict(Path(root), cache)
-        return
-    except Exception:
-        pass
-    # Last-resort JSON-only path if sqlite unavailable
-    cache_path = _get_cache_path(Path(root))
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, separators=(",", ":"))
+# load_mtime_index lives in cache.io / cache.files
 
 
-def get_file_data(cache: Dict[str, Any], rel_path: str) -> Optional[Dict[str, Any]]:
-    """Return cached data for a relative path, or None if not present."""
-    return cache.get(rel_path)
+# save_cache lives in cache.io / cache.files
+
+
+# _do_save_cache lives in cache.io / cache.files
+
+
+# get_file_data lives in cache.io / cache.files
 
 
 def get_reverse_dependencies(cache: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -262,77 +210,13 @@ def get_reverse_dependency_stats(cache: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def update_file_data(
-    cache: Dict[str, Any],
-    rel_path: str,
-    mtime: int,
-    imports: List[str],
-    resolved: Optional[List[str]] = None,
-    resolved_pairs: Optional[List[Dict[str, str]]] = None,
-    dependents: Optional[List[str]] = None
-) -> None:
-    """
-    Update or insert data for a file in the cache.
-
-    resolved_pairs (preferred for table + Mermaid generation):
-        List of {"raw": "...", "resolved": "...", "confidence": "high|medium|low"}
-
-    dependents: List of files that import this file (reverse dependencies).
-    This enables fast per-file "who depends on me" queries and richer Mermaid graphs.
-    """
-    # Normalize resolved_pairs to always include confidence (for backward compat)
-    # Preserve ALL rich fields (via_barrel, barrel_*, cdia_v1, conditional_analysis, dynamic_analysis,
-    # res_meta, barrel_v2, resolution_metadata, etc.) so P1 pipeline richness actually reaches cache/MCP.
-    normalized_pairs = []
-    for p in (resolved_pairs or []):
-        if isinstance(p, dict):
-            np = {
-                "raw": p.get("raw", ""),
-                "resolved": p.get("resolved", ""),
-                "confidence": p.get("confidence", "medium")
-            }
-            for k, v in p.items():
-                if k not in np:
-                    np[k] = v
-            normalized_pairs.append(np)
-
-    entry = {
-        "mtime": mtime,
-        "imports": imports,
-        "resolved": resolved or [],
-        "resolved_pairs": normalized_pairs
-    }
-
-    if dependents is not None:
-        entry["dependents"] = dependents
-    # Optional content_hash may be set by callers after update_file_data, or
-    # passed via resolved_pairs payload path in run_full_update (direct dict write).
-
-    cache[rel_path] = entry
+# update_file_data lives in cache.io / cache.files
 
 
-def get_mtime(file_path: Path) -> int:
-    """Get the mtime of a file (cross-platform)."""
-    try:
-        return int(file_path.stat().st_mtime)
-    except Exception:
-        return 0
+# get_mtime lives in cache.io / cache.files
 
 
-def compute_file_content_hash(file_path: Path) -> Optional[str]:
-    """Sha256 of source bytes for map dirty honesty (mtime thrash ≠ reparse).
-
-    Returns ``sha256:<hex>`` or None if unreadable. Stored on cache entries so
-    ``compute_files_needing_reparse`` can skip content-stable files.
-    """
-    try:
-        import hashlib
-        p = Path(file_path)
-        if not p.is_file():
-            return None
-        return "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
-    except Exception:
-        return None
+# compute_file_content_hash lives in cache.io / cache.files
 
 
 # =============================================================================
@@ -568,6 +452,7 @@ def compute_cycles(
             reused_cdata.setdefault("node_identity_version", NODE_IDENTITY_VERSION_V0)
             # Guaranteed persistence: update stored so get_cycles / get_cycles_reuse_stats / MCP / health / library reflect the reuse (not just return val)
             set_cycles(cache, reused_cdata)
+            set_graph_signature(cache, gsig)
             return reused_cdata
 
     # Full path (structure changed or first time)
@@ -647,7 +532,7 @@ def compute_cycles(
         "barrel_edges_in_cycles": barrel_c,
         "max_barrel_depth_in_cycles": max_bd,
     }
-    return {
+    payload = {
         "sccs": enriched,
         "stats": stats,
         "all_cycle_files": sorted(all_cycle_files),
@@ -656,6 +541,9 @@ def compute_cycles(
         "reused": False,
         "reuse_reason": "computed_fresh",
     }
+    set_cycles(cache, payload)
+    set_graph_signature(cache, gsig)
+    return payload
 
 
 def get_cycles(cache: Dict[str, Any]) -> Dict[str, Any]:
@@ -1326,7 +1214,7 @@ def ensure_acs_summary_persisted(
         if root is not None:
             try:
                 # Prefer meta-only write when SQLite is primary (warm ACS upgrade)
-                from . import cache_store as cs
+                from .. import cache_store as cs
                 if cs.has_sqlite(Path(root)):
                     cs.save_meta_key(Path(root), "_acs_summary", acs)
                 else:
@@ -1518,126 +1406,7 @@ def set_cycle_analyses(cache: Dict[str, Any], analyses: Dict[str, Any]) -> None:
         cache.pop("_cycle_analyses", None)
 
 
-def compute_files_needing_reparse(
-    root: Path,
-    candidate_full_paths: List[Path],
-    full_rebuild: bool = False,
-    content_stable_mtime_updates: Optional[List[Tuple[str, int, str]]] = None,
-) -> List[Path]:
-    """R7 Performance: Single-invocation dirty detection for update-maps.
-
-    Uses the **light mtime/content_hash index** (SQLite when available) so warm
-    scans do not deserialize multi‑MB resolved_pairs payloads.
-
-    Semantics:
-      - full_rebuild=True → all candidates dirty (order-preserving, deduped)
-      - new file / missing cache entry → dirty
-      - mtime newer than cache → dirty **unless** stored ``content_hash`` matches
-        live file bytes (content-stable mtime thrash does not reparse)
-      - optional ``content_stable_mtime_updates`` collects
-        ``(rel, new_mtime, content_hash)`` for callers to refresh cache without reparse
-
-    Returns deduped full Paths in encounter order.
-    """
-    if full_rebuild:
-        # preserve order, dedup
-        seen: set = set()
-        out: List[Path] = []
-        for p in candidate_full_paths:
-            pr = Path(p).resolve() if p else None
-            if pr and pr not in seen:
-                seen.add(pr)
-                out.append(pr)
-        return out
-
-    # Light index only (not full pair payloads)
-    index = load_mtime_index(root)
-    to_reparse: List[Path] = []
-    seen: set = set()
-    try:
-        root_res = root.resolve()
-    except Exception:
-        root_res = root
-
-    def _rel_of(p_res: Path) -> str:
-        rel = None
-        try:
-            rel = str(p_res.relative_to(root_res))
-        except Exception:
-            pass
-        if rel is None:
-            try:
-                rp = str(p_res)
-                rr = str(root_res)
-                if rp.startswith(rr):
-                    rel = rp[len(rr):].lstrip("/\\")
-            except Exception:
-                pass
-        if not rel:
-            rel = p_res.name or str(p_res)
-        return rel
-
-    def _content_stable(p_res: Path, data: Dict[str, Any], rel: str, curr_mtime: int) -> bool:
-        """True when mtime says dirty but content_hash matches (skip reparse)."""
-        stored = data.get("content_hash")
-        if not stored or not isinstance(stored, str):
-            return False
-        live = compute_file_content_hash(p_res)
-        if not live or live != stored:
-            return False
-        if content_stable_mtime_updates is not None:
-            content_stable_mtime_updates.append((rel, curr_mtime, live))
-        return True
-
-    # 1. Check all current sources: changed or absent from cache => dirty/new
-    for p in candidate_full_paths:
-        if not p:
-            continue
-        try:
-            p_res = Path(p).resolve()
-        except Exception:
-            p_res = Path(p)
-        if p_res in seen:
-            continue
-        seen.add(p_res)
-        rel = _rel_of(p_res)
-        data = index.get(rel) or {}
-        cached_mtime = int(data.get("mtime", 0) or 0)
-        curr_mtime = 0
-        if p_res.exists():
-            try:
-                curr_mtime = int(p_res.stat().st_mtime)
-            except Exception:
-                curr_mtime = 0
-        if not data:
-            to_reparse.append(p_res)
-            continue
-        if curr_mtime > cached_mtime:
-            if _content_stable(p_res, data, rel, curr_mtime):
-                continue
-            to_reparse.append(p_res)
-
-    # 2. Cache-tracked files that changed on disk (index keys only — no full payload)
-    for rel, data in list(index.items()):
-        if not isinstance(rel, str) or not isinstance(data, dict):
-            continue
-        try:
-            full = (root / rel).resolve()
-            if full in seen:
-                continue
-            if full.exists():
-                curr = int(full.stat().st_mtime)
-                cached = int(data.get("mtime", 0) or 0)
-                if curr > cached:
-                    if _content_stable(full, data, rel, curr):
-                        seen.add(full)
-                        continue
-                    to_reparse.append(full)
-                    seen.add(full)
-        except Exception:
-            pass
-
-    return to_reparse
+# compute_files_needing_reparse lives in cache.io / cache.files
 
 
 # =============================================================================
@@ -1689,7 +1458,7 @@ def invalidate_stale_barrel_entries(
     Non-destructive (does not mutate cache here; caller decides).
     All paths are handled defensively for rel/abs forms (pre-canonical-hardening).
     """
-    from .parsers.bree import BarrelResolutionCache  # local import to avoid cycles at module load
+    from ..parsers.bree import BarrelResolutionCache  # local import to avoid cycles at module load
 
     brc = BarrelResolutionCache.from_cache(cache)
 
@@ -1697,10 +1466,10 @@ def invalidate_stale_barrel_entries(
     # Ensures importer_rel, changed_file lookups, etc. always match the stamped v1 keys in file_index/resolutions.
     _canon = None
     try:
-        from .parsers.bree import _brc_canonical as _canon
+        from ..parsers.bree import _brc_canonical as _canon
     except Exception:
         try:
-            from .resolution import canonical_for_bree as _canon_for_bree
+            from ..resolution import canonical_for_bree as _canon_for_bree
             def _make_canon(tc):
                 def _c(p, r):
                     try:
@@ -1711,7 +1480,7 @@ def invalidate_stale_barrel_entries(
             _canon = _make_canon(_canon_for_bree)
         except Exception:
             try:
-                from .resolution import to_canonical_rel as _to_canon
+                from ..resolution import to_canonical_rel as _to_canon
                 def _make_canon(tc):
                     def _c(p, r):
                         try:
@@ -1772,12 +1541,75 @@ def invalidate_stale_barrel_entries(
                         pass
             except Exception:
                 pass
-        return sorted(affected)
+        if affected:
+            return sorted(affected)
+        # Fallback when BRC reverse index was not flushed this run: scan via_barrel pairs.
+        return _importers_via_barrel_pairs(cache, changed_files, root)
 
     # Legacy / full-rebuild / no-dirty-list path: scan all chains (still safe, #chains << #files)
     stale_importers = brc.collect_stale_importers(root)
     affected = set(stale_importers)
+    if not affected:
+        affected.update(_importers_via_barrel_pairs(cache, None, root))
     return sorted(affected)
+
+
+def _importers_via_barrel_pairs(
+    cache: Dict[str, Any],
+    changed_files: Optional[Iterable[Union[str, Path]]],
+    root: Path,
+) -> List[str]:
+    """Find importers whose persisted via_barrel pairs mention a changed file.
+
+    Used when `_barrel_file_index` is empty but parsers already expanded barrels
+    into resolved_pairs (via_barrel + barrel_v2.barrel_chain).
+    """
+    changed: set = set()
+    if changed_files:
+        for f in changed_files:
+            if not f:
+                continue
+            s = str(f).replace("\\", "/")
+            changed.add(s)
+            try:
+                p = Path(s)
+                if p.is_absolute():
+                    changed.add(str(p.resolve().relative_to(Path(root).resolve())).replace("\\", "/"))
+                else:
+                    changed.add(p.as_posix().lstrip("./"))
+            except Exception:
+                changed.add(Path(s).name)
+    out: set = set()
+    for src, data in (cache or {}).items():
+        if not isinstance(src, str) or src.startswith("_") or not isinstance(data, dict):
+            continue
+        for pair in data.get("resolved_pairs") or []:
+            if not isinstance(pair, dict):
+                continue
+            if not pair.get("via_barrel"):
+                continue
+            needles = [str(pair.get("resolved") or "").replace("\\", "/")]
+            bv = pair.get("barrel_v2") if isinstance(pair.get("barrel_v2"), dict) else {}
+            for hop in bv.get("barrel_chain") or []:
+                needles.append(str(hop).replace("\\", "/").lstrip("./"))
+            if not changed_files:
+                out.add(src)
+                break
+            for n in needles:
+                if not n:
+                    continue
+                n_norm = n.lstrip("./")
+                if n_norm in changed or n in changed or Path(n_norm).name in {Path(c).name for c in changed}:
+                    # Prefer path suffix match (leaf.js vs barrel/leaf.js)
+                    if any(
+                        n_norm == c or n_norm.endswith("/" + c) or c.endswith("/" + n_norm) or c == n_norm
+                        for c in changed
+                    ):
+                        out.add(src)
+                        break
+            if src in out:
+                break
+    return sorted(out)
 
 
 # =============================================================================
@@ -1797,7 +1629,7 @@ def get_barrel_invalidation_reports(
     Delegates to BRC.build_invalidation_reports for the logic (O(changed) or scan).
     """
     try:
-        from .parsers.bree import BarrelResolutionCache
+        from ..parsers.bree import BarrelResolutionCache
         from dataclasses import asdict
         brc = BarrelResolutionCache.from_cache(cache)
         reports = brc.build_invalidation_reports(changed_files=changed_files, root=root)
@@ -1813,7 +1645,7 @@ def get_barrel_cache_summary(cache: Dict[str, Any]) -> Dict[str, Any]:
     """
     # Phase 5e (66): get_barrel_cache_summary (import_cache ACS/barrel) as first-class O(k) default for 20k+ creative surfaces (MCP health/get_*/suggest, harness, daemon/journal paths); complements format=summary + CIABRE (per 48/58 richer A3 + 50/54 dogfood).
     try:
-        from .parsers.bree import BarrelResolutionCache
+        from ..parsers.bree import BarrelResolutionCache
         brc = BarrelResolutionCache.from_cache(cache)
         resolutions = brc.resolutions or {}
         n_chains = len(resolutions)
@@ -1893,7 +1725,7 @@ def get_resolution_diagnostics(cache: Dict[str, Any]) -> Dict[str, Any]:
     Called by get_resolution_diagnostics tool; falls back gracefully.
     """
     try:
-        from . import diagnostics as _d
+        from .. import diagnostics as _d
     except Exception:
         _d = None
     if _d is None:
@@ -2036,7 +1868,7 @@ def prune_barrel_resolutions(
     Zero-dep, additive to prior age-only behavior (deleted_files=None keeps old contract).
     """
     try:
-        from .parsers.bree import BarrelResolutionCache
+        from ..parsers.bree import BarrelResolutionCache
         cache = load_cache(root)
         brc = BarrelResolutionCache.from_cache(cache)
         before_chains = len(brc.resolutions)
@@ -2141,7 +1973,7 @@ def generate_update_events(
     if root is None:
         try:
             # Load-safe: project_root (not cli) — avoids import_cache→cli→import_cache cycle
-            from .project_root import discover_project_root
+            from ..project_root import discover_project_root
             root = discover_project_root()
         except Exception:
             root = Path(".").resolve()
@@ -2153,7 +1985,7 @@ def generate_update_events(
 
     # Normalize scope (supports raw dict or dataclass)
     try:
-        from .contracts import (
+        from ..contracts import (
             ScopeSpec_v1,
             create_progress_event,
             M2_CONTRACTS_VERSION,
@@ -2237,7 +2069,7 @@ def generate_update_events(
         except Exception:
             candidates_rel.append(str(p))
     try:
-        from .contracts import project_scope
+        from ..contracts import project_scope
         cache_snap = load_cache(root)
         rev_idx = get_reverse_dependencies(cache_snap)
         proj = project_scope(sc, candidates_rel, root=root, reverse_index=rev_idx, include_focus_closure=True)
@@ -2349,15 +2181,15 @@ def generate_update_events(
     js_parser = None
     py_parser = None
     try:
-        from .parsers import javascript as js_parser_mod
-        from .parsers import python as py_parser_mod
+        from ..parsers import javascript as js_parser_mod
+        from ..parsers import python as py_parser_mod
         js_parser = js_parser_mod
         py_parser = py_parser_mod
     except Exception:
         pass
 
     try:
-        from .contracts import compute_acs_confidence
+        from ..contracts import compute_acs_confidence
     except Exception:
         compute_acs_confidence = None  # type: ignore
 

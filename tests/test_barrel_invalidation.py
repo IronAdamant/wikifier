@@ -10,6 +10,7 @@ file in the chain forward must mark consumer.js stale so it gets re-parsed.
 import os
 import time
 import unittest
+from pathlib import Path
 
 from tests._base import TempProjectTestCase
 
@@ -35,22 +36,20 @@ class TestBarrelInvalidation(TempProjectTestCase):
         self.all_files = [self.consumer, self.barrel, self.leaf]
 
     def _touch_forward(self, path, seconds=3600):
-        ts = time.time() + seconds
-        os.utime(path, (ts, ts))
+        """Change bytes (content-honest dirty). mtime-only thrash must not reparse."""
+        p = Path(path)
+        p.write_text(p.read_text(encoding="utf-8") + f"// touched {seconds}\n", encoding="utf-8")
 
-    @unittest.skip("Barrel invalidation not yet implemented - see Findings/2026-06-10-Fix-Plan.md Phase 4")
     def test_baseline_nothing_dirty(self):
         need = ic.compute_files_needing_reparse(self.root, self.all_files)
         self.assertEqual(need, [], "freshly persisted project must report no dirty files")
 
-    @unittest.skip("Barrel invalidation not yet implemented - see Findings/2026-06-10-Fix-Plan.md Phase 4")
     def test_touched_leaf_is_itself_in_reparse_set(self):
         self._touch_forward(self.leaf)
         need = ic.compute_files_needing_reparse(self.root, self.all_files)
         rels = {str(p.relative_to(self.root)) for p in need}
         self.assertIn("barrel/leaf.js", rels)
 
-    @unittest.skip("Barrel invalidation not yet implemented - see Findings/2026-06-10-Fix-Plan.md Phase 4")
     def test_entry_barrel_change_invalidates_consumer(self):
         # The entry barrel (barrel/index.js) is in the BRC reverse index, so
         # the fast delta path must return its registered importer.
@@ -61,7 +60,6 @@ class TestBarrelInvalidation(TempProjectTestCase):
         )
         self.assertIn("consumer.js", stale)
 
-    @unittest.skip("Barrel invalidation not yet implemented - see Findings/2026-06-10-Fix-Plan.md Phase 4")
     def test_leaf_change_invalidates_consumer(self):
         # Currently failing — fixed by Phase 4 of Findings/2026-06-10-Fix-Plan.md
         # (E1: the BRC reverse index / mtimes_snapshot never records the

@@ -604,7 +604,7 @@ def session_bootstrap(
             "actionable_yellow_count": int(health_sum.get("actionable_yellow") or len(actionable_yellow_files)),
         }
         if hasattr(health_mod, "assess_autonomous_readiness"):
-            ready = health_mod.assess_autonomous_readiness(root)
+            ready = health_mod.assess_autonomous_readiness(root, write_metrics=False)
             out["readiness"] = ready.get("readiness")
             out["scope"] = ready.get("scope")
             out["blockers"] = ready.get("blockers") or []

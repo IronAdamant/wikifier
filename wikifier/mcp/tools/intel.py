@@ -1,4 +1,8 @@
-"""MCP Intel Tools - Dependency intelligence and analysis."""
+"""MCP Intel Tools — unused by live server (server_impl is registered)."""
+
+from __future__ import annotations
+
+from typing import Literal, Optional
 
 from ._common import *
 

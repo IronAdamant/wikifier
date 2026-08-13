@@ -1,14 +1,11 @@
-"""MCP tool modules - modularized server implementation."""
+"""MCP tool modules. Live server uses server_impl; these are optional registrars."""
 
-from .workflow import *
-from .intel import *
-from .status import *
+from .workflow import register_tools as register_workflow_tools
+from .intel import register_tools as register_intel_tools
+from .status import register_tools as register_status_tools
 
 __all__ = [
-    # Workflow tools
-    'register_workflow_tools',
-    # Intel tools  
-    'register_intel_tools',
-    # Status tools
-    'register_status_tools',
+    "register_workflow_tools",
+    "register_intel_tools",
+    "register_status_tools",
 ]

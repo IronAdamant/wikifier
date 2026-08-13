@@ -620,6 +620,35 @@ def upsert_entry(root: "str | Path", file: str, status: str, reason: str = "") -
         _do_upsert_entry(root, file, status, reason)
 
 
+def _apply_upsert_to_health_dict(
+    health: Dict[str, Any],
+    root: "str | Path",
+    file: str,
+    status: str,
+    reason: str = "",
+) -> bool:
+    """Mutate an in-memory health dict. Return True if an entry was written."""
+    file = _normalize_to_relative(root, file)
+    if not _entry_is_under_root(root, file):
+        return False
+    if _is_pollution_health_key(file, {"status": status, "reason": reason}):
+        return False
+    existing = health.setdefault("entries", {}).get(file, {})
+    if contracts and hasattr(contracts, "normalize_health_entry"):
+        base = contracts.normalize_health_entry(existing)
+    else:
+        base = _normalize_health_entry_local(existing)
+    base.update({
+        "status": status,
+        "last_updated": _timestamp(),
+        "reason": reason,
+    })
+    if not base.get("freshness_provenance"):
+        base["freshness_provenance"] = f"upsert:{status} (non-freshness path)"
+    health["entries"][file] = base
+    return True
+
+
 def _do_upsert_entry(root: "str | Path", file: str, status: str, reason: str = "") -> None:
     """Internal upsert without locking.
 
@@ -628,31 +657,32 @@ def _do_upsert_entry(root: "str | Path", file: str, status: str, reason: str = "
     Only freshness-aware paths (mark-green, record via new helpers) mutate those.
     Always normalize to guarantee schema.
     """
-    # M5 dogfood: normalize key to relative-under-root; drop outside pollution writes immediately.
-    file = _normalize_to_relative(root, file)
-    if not _entry_is_under_root(root, file):
-        return
-    # Never re-introduce free-form superseded notes or flag-key pollution.
-    if _is_pollution_health_key(file, {"status": status, "reason": reason}):
-        return
     health = load_health(root)
-    existing = health.get("entries", {}).get(file, {})
-    # Start from normalized existing to keep B fields
-    if contracts and hasattr(contracts, "normalize_health_entry"):
-        base = contracts.normalize_health_entry(existing)
-    else:
-        base = _normalize_health_entry_local(existing)
+    if _apply_upsert_to_health_dict(health, root, file, status, reason):
+        _do_save_health(root, health)
 
-    base.update({
-        "status": status,
-        "last_updated": _timestamp(),
-        "reason": reason
-    })
-    # Ensure provenance note if a non-freshness update (observability)
-    if not base.get("freshness_provenance"):
-        base["freshness_provenance"] = f"upsert:{status} (non-freshness path)"
-    health["entries"][file] = base
-    _do_save_health(root, health)
+
+def upsert_entries_batch(root: "str | Path", items, health_data: Optional[Dict[str, Any]] = None) -> int:
+    """Apply many (file, status, reason) upserts with one load + one save.
+
+    Caller should already hold the project lock (check_changes / daemon).
+    """
+    root = _coerce_root(root)
+    health = health_data if isinstance(health_data, dict) else load_health(root)
+    n = 0
+    for item in items or []:
+        if not item:
+            continue
+        if len(item) == 2:
+            file, status = item
+            reason = ""
+        else:
+            file, status, reason = item[0], item[1], item[2]
+        if _apply_upsert_to_health_dict(health, root, file, status, reason):
+            n += 1
+    if n:
+        _do_save_health(root, health)
+    return n
 
 
 # ----------------------------- Pending Updates Helpers (locked, idempotent) -----------------------------
@@ -2065,7 +2095,9 @@ def heal_with_policy(
 
         # Stubs target (existing behavior generalized)
         if "stubs" in targets:
-            is_stub = "Initial stub" in status or ("🔴" in status and "stub" in reason.lower())
+            is_stub = _is_map_first_stub_entry(entry) or (
+                "Initial stub" in status or ("🔴" in status and "stub" in reason.lower())
+            )
             if is_stub:
                 wiki_file = _find_existing_wiki_file(root, rel_path)
                 if wiki_file:
@@ -2172,7 +2204,9 @@ def get_healable_stubs(root: Path, min_wiki_length: int = 350, directory: Option
                 continue
 
         status = entry.get("status", "")
-        is_stub = "Initial stub" in status or ("🔴" in status and "stub" in entry.get("reason", "").lower())
+        is_stub = _is_map_first_stub_entry(entry) or (
+            "Initial stub" in status or ("🔴" in status and "stub" in entry.get("reason", "").lower())
+        )
         if not is_stub:
             continue
 
