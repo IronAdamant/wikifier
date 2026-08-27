@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Protocol v0.6 close-the-loop: never skip `mark_green` after wiki refresh on the recorded file.
 - Project-relative `monitored_paths` are canonical; foreign-FS absolute paths are not required.
 - CI installs `wikifier[mcp]` for contract tests and smokes the built wheel via `wikifier --help`.
+- Optional extra pins `mcp>=1.0.0,<2` (mcp 2.x renamed FastMCP; `test_server_has_main` must import v1).
 - Agent docs retargeted off deleted `health.py` / `bree.py` megamodule names.
 
 ### Operator follow-up

@@ -303,6 +303,7 @@ class TestVersionAndDeps(unittest.TestCase):
     def test_pyproject_core_deps_empty(self):
         text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn("dependencies = []", text)
+        self.assertIn("mcp>=1.0.0,<2", text)
 
 
 if __name__ == "__main__":

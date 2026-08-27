@@ -46,7 +46,7 @@ Documentation = "https://github.com/IronAdamant/wikifier#readme"
 "Bug Tracker" = "https://github.com/IronAdamant/wikifier/issues"
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.0.0"]
+mcp = ["mcp>=1.0.0,<2"]
 
 [project.scripts]
 wikifier = "wikifier.cli:main"

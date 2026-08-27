@@ -22,10 +22,10 @@ Run: WIKIFIER_PROJECT_ROOT=/path wikifier-mcp  |  python -m wikifier.mcp.server
 try:
     from mcp.server.fastmcp import FastMCP
     from pydantic import BaseModel, Field
-except ImportError as _e:
+except (ImportError, ModuleNotFoundError) as _e:
     raise ImportError(
-        "The Wikifier MCP server requires the optional 'mcp' dependency. "
-        "Install it with: pip install wikifier[mcp]. "
+        "The Wikifier MCP server requires the optional 'mcp' extra "
+        "(v1 FastMCP: pip install 'wikifier[mcp]' with mcp>=1,<2). "
         "The core wikifier CLI and library work without it."
     ) from _e
 import subprocess
