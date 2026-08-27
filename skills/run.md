@@ -42,7 +42,7 @@ This protocol + the Python package + MCP server form the bridge for consistent, 
 
 ## Agent architecture (navigability — G12)
 
-Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to decide workflow. Use this map:
+Do **not** open megamodules (`javascript.py`, `import_cache.py` / `cache/_core.py`, `parsers/bree/_bree.py`) to decide workflow. Use this map:
 
 | Need | Use |
 |------|-----|
@@ -58,10 +58,10 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py`, `bree.py`) to d
 | Advanced intel | `get_dependencies`, `get_dependents`, `get_cycles`, barrel/diagnostics — not daily Core |
 | Deletion | `record-deletion` |
 | Long-horizon prep | `autonomous-status` / `readiness`; then `daemon start` with lean monitor |
-| Hygiene | `seed-health`, `prune-pending`, `prune-health`, `validate` |
-| Code entry | `cli.py` + `agent_loop.py` + `health.py` + parsers — tests in `tests/` |
+| Hygiene | `seed-health`, `prune-pending`, `prune-health` (`--deleted-missing` to retire gone DELETED audits), `validate` |
+| Code entry | `cli.py` + `agent_loop.py` + `health_impl.py` / `health_pkg` + parsers — tests in `tests/` |
 
-**Do not open megamodules** (`javascript.py` ~2.6k, `import_cache.py` ~2.3k, `bree.py` ~2k) for workflow decisions — use tools + this table.
+**Do not open megamodules** (`javascript.py` ~2.6k, `cache/_core.py`, `parsers/bree/_bree.py`) for workflow decisions — use tools + this table.
 
 **CLI pure-Python vs shell:** mutators and maps prefer `python -m wikifier …`. Shell still owns `init`, `monitor`, `daemon`, `serve`, `journal`.  
 **Scope:** `monitored_paths` = change detection; `exclude_patterns` + optional `--directory` = map walk.  
@@ -167,16 +167,17 @@ FIRST ACTIONS:
 7. End turn: health + suggest_next_actions (json).
 
 Never skip record-change — semantic audit trail (journal + health + pending).
+Never skip mark-green after you wiki-refresh the file you just recorded (close the loop; record_change stays Yellow until mark_green).
 
 **M5+ notes (2026-06)**: 
-- External projects: always explicit root. CLI is battle-tested fallback (M5.1 MCP reliability: 60s timeout + better errors; M5 dogfood on alt BRC exact named services, 79k llvm, etc.).
+- External projects: always explicit root. CLI is battle-tested fallback (M5.1 MCP reliability: 60s in-process deadline + better errors; M5 dogfood on alt BRC exact named services, 79k llvm, etc.).
 - Scope: token-efficient agent-to-agent wiki only (see README "Intended Use").
 - Sustained: monitors + subagents for 72h+ gate (M5.3).
 - See health matrix for current Green/Yellow state of M5 agent records (Progress, Assessment, etc.).
-- Post-4.0.1 health hygiene (in wikifier/health.py): `_coerce_root` makes direct library calls robust with plain str roots (e.g. `health(".")` or `load_health(".")` now work without TypeError; used by agents/MCP consumers). `SUPERSEDED_PATTERNS` + prune keeps the matrix lean by dropping old superseded historical notes (e.g. early M5.3 "Cycle1" entries) while preserving explicit 🔴 Red "DELETED" audit records (intentional, observable for agents). Main health example: one such Red + unrelated mtime Yellows are normal.
+- Post-4.0.1 health hygiene (in `health_impl.py`): `_coerce_root` makes direct library calls robust with plain str roots (e.g. `health(".")` or `load_health(".")` now work without TypeError; used by agents/MCP consumers). `SUPERSEDED_PATTERNS` + prune keeps the matrix lean. Explicit 🔴 DELETED audits are retired with `prune-health --deleted-missing` when the files are gone.
 ```
 
-**Packaging / External (M5 strengthened)**: After pip install, use global `wikifier` / `wikifier-mcp` or `from wikifier import ...`. For user projects: `WIKIFIER_PROJECT_ROOT=/abs/path/to/target wikifier ...` or pass project_root to every call/MCP tool. Bootstrap with `wikifier init`. Absolute paths in monitored_paths.txt required for externals. Python library + CLI preferred for reliability on large/BRC scale.
+**Packaging / External (M5 strengthened)**: After pip install, use global `wikifier` / `wikifier-mcp` or `from wikifier import ...`. For user projects: `WIKIFIER_PROJECT_ROOT=/abs/path/to/target wikifier ...` or pass project_root to every call/MCP tool. Bootstrap with `wikifier init`. **Project-relative** paths in that target's `monitored_paths.txt` are canonical; foreign-FS absolute prefixes (`/home` vs `/Users`) are ignored when missing. Python library + CLI preferred for reliability on large/BRC scale.
 
 ## Concurrency & Locking (M2-Rem-07)
 
@@ -225,7 +226,7 @@ All high-level functions accept:
 
 Key returns (structured dict primary; "success": bool always present on library paths):
 - `check_changes(project_root=None) -> dict`: { "success", "project_root", "changes_detected": int, "message", "recommendation", "barrel_invalidation_summary", "rich_auto_yellow_via", "error"? }
-- `record_change(file: str, reason: str, project_root=None) -> dict`: { "success", "file", "project_root", "reason", "message", "error"? }
+- `record_change(file: str, reason: str, project_root=None, timeout=None) -> dict`: { "success", "file", "project_root", "reason", "message", "needs_mark_green", "error"? } — stays Yellow; never skip mark_green after wiki refresh.
 - `health(project_root=None, directory=None, format="text"|"json"|"summary") -> str | dict`: json includes full entries + "dependency_intel" (acs_summary, etc.) for agent reasoning.
 - `mark_green(file, reason="", project_root=None) -> dict`
 - `suggest_next_actions(..., format="json") -> dict`: { "success", "red", "yellow", "suggestions": list[str], "health_summary", "acs_note" }
@@ -270,11 +271,11 @@ See the full design, mandatory workflow example, and M2 exit criteria in the pla
 
 | Command | Arguments | Description |
 |---------|-----------|-------------|
-| `wikifier check-changes` | — | Incremental mtime scan. Updates health matrix + pending queue. |
+| `wikifier check-changes` | — | Content-hash dirty scan. Updates health matrix + pending queue. |
 | `wikifier health` | — | Show current Documentation Health Matrix (🟢🟡🔴). |
 | `wikifier record-change` | `<file> "<reason>"` | Semantic log of *why* you changed something. Required after edits. |
 | `wikifier record-deletion` | `<file> "<reason>"` | Log a deletion with reasoning. |
-| `wikifier prepare-edit` | `<file>` | Stage current mtime before you start editing (for future diffing). |
+| `wikifier prepare-edit` | `<file>` | Preflight: wiki snippet, status, deps, dependents. |
 | `wikifier mark-green` | `<file> [reason]` | Flip file status to Green after you have written/updated its wiki summary. |
 | `wikifier monitor` | — | Start background 30s heartbeat (run with `&` or in separate terminal). |
 | `wikifier update-maps` | `[--full] [--directory=...] [--max-files=N]` | Rebuild `library.md` + import cache (single pure-Python pipeline; the shell launcher delegates here). |
@@ -318,7 +319,7 @@ The MCP tools are the primary structured interface for agents. Use them with exp
 
 ## Best Practices for Agents
 
-1. **Always** use `record-change` for your own work. This is what makes the system self-reviewable later.
+1. **Always** use `record-change` for your own work, then wiki that file, then **mark-green**. Never skip mark-green on the file you recorded.
 2. Keep reasons concise (1–2 sentences) but specific.
 3. After large refactors, run `update-maps` and then `validate`.
 4. When you see many 🔴 Red items, tackle them before writing new features.

@@ -138,9 +138,9 @@ def _pair_from_parser_edge(edge: Dict[str, Any], root: Path) -> Optional[Dict[st
         except Exception:
             resolved = str(rp)
     else:
-        mod = edge.get("module")
-        if mod and mod != raw:
-            resolved = str(mod)
+        # Do not fill `resolved` from display `module` — that turns unresolved
+        # multi-lang edges into fake internal low-confidence pairs.
+        resolved = ""
     pair: Dict[str, Any] = {
         "raw": str(raw),
         "resolved": resolved,
@@ -834,6 +834,20 @@ except Exception:
     _ic_mod = None
 
 
+def _project_lock(root: Path, timeout: Optional[float] = None):
+    """Project flock; MCP passes a finite timeout, CLI default blocks."""
+    if locking is None:
+        return _nullcontext()
+    return locking.file_lock(root, timeout=timeout)
+
+
+def _lock_timeout_result(result: Dict[str, Any], exc: BaseException) -> Dict[str, Any]:
+    result["success"] = False
+    result["error"] = str(exc)
+    result["timed_out"] = True
+    return result
+
+
 def _get_effective_root(project_root: Optional[Union[str, Path]] = None) -> Path:
     """Internal helper (mirrors MCP pattern; single source in future)."""
     if project_root:
@@ -932,7 +946,10 @@ def _get_monitored_roots(root: Path) -> List[Path]:
     return [root]
 
 
-def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+def check_changes(
+    project_root: Optional[Union[str, Path]] = None,
+    timeout: Optional[float] = None,
+) -> Dict[str, Any]:
     """
     Python-primary `check-changes` (mandatory workflow entrypoint).
 
@@ -953,7 +970,7 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
         "rich_auto_yellow_via": "Python check_changes + BRC (import_cache)",
     }
     try:
-        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        lock_ctx = _project_lock(root, timeout=timeout)
         with lock_ctx:
             # Leverage existing rich Python dirty + barrel logic (already extracted in prior waves)
             cands: List[Path] = []
@@ -1126,7 +1143,7 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                     if hasattr(_health_mod, "find_ghost_entries"):
                         ghosts_all = _health_mod.find_ghost_entries(root) or []
                         for g in ghosts_all[:max_ghosts]:
-                            _health_mod.upsert_entry(
+                            _upsert(
                                 root, g, "🔴 Red",
                                 "DELETED — path missing on disk (check_changes ghost detection)"
                             )
@@ -1163,12 +1180,19 @@ def check_changes(project_root: Optional[Union[str, Path]] = None) -> Dict[str, 
                 "message": msg,
             })
     except Exception as e:
+        if locking is not None and isinstance(e, getattr(locking, "LockTimeoutError", ())):
+            return _lock_timeout_result(result, e)
         result["error"] = str(e)
         result["message"] = f"check_changes partial failure: {e}"
     return result
 
 
-def record_change(file: str, reason: str, project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+def record_change(
+    file: str,
+    reason: str,
+    project_root: Optional[Union[str, Path]] = None,
+    timeout: Optional[float] = None,
+) -> Dict[str, Any]:
     """
     Python-primary `record-change` (MANDATORY after every agent edit).
 
@@ -1187,7 +1211,7 @@ def record_change(file: str, reason: str, project_root: Optional[Union[str, Path
         result["error"] = "file (str) is required"
         return result
     try:
-        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        lock_ctx = _project_lock(root, timeout=timeout)
         with lock_ctx:
             rel = file
             try:
@@ -1197,7 +1221,8 @@ def record_change(file: str, reason: str, project_root: Optional[Union[str, Path
             except Exception:
                 pass
             if _health_mod is not None:
-                _health_mod.upsert_entry(root, rel, "🟡 Yellow", reason or "Agent/LLM edit recorded")
+                _upsert = getattr(_health_mod, "_do_upsert_entry", None) or _health_mod.upsert_entry
+                _upsert(root, rel, "🟡 Yellow", reason or "Agent/LLM edit recorded")
                 _rme = getattr(_health_mod, "_do_record_meaningful_edit", None) or getattr(
                     _health_mod, "record_meaningful_edit", None
                 )
@@ -1210,9 +1235,12 @@ def record_change(file: str, reason: str, project_root: Optional[Union[str, Path
             _ensure_journal_entry(root, "record-change", rel, reason or "No reason provided.")
             result.update({
                 "success": True,
+                "needs_mark_green": True,
                 "message": "✅ Recorded semantic change (Python primary). Health=🟡, pending + journal updated. Run mark_green after wiki refresh.",
             })
     except Exception as e:
+        if locking is not None and isinstance(e, getattr(locking, "LockTimeoutError", ())):
+            return _lock_timeout_result(result, e)
         result["error"] = str(e)
     return result
 
@@ -1266,7 +1294,12 @@ def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Pa
     return result
 
 
-def mark_green(file: str, reason: str = "", project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+def mark_green(
+    file: str,
+    reason: str = "",
+    project_root: Optional[Union[str, Path]] = None,
+    timeout: Optional[float] = None,
+) -> Dict[str, Any]:
     """Python-primary mark_green (completes the edit→record→wiki→green ritual).
 
     Captures source_content_hash baseline (via health.mark_green when available)
@@ -1276,7 +1309,7 @@ def mark_green(file: str, reason: str = "", project_root: Optional[Union[str, Pa
     result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root)}
     rsn = reason or "Summary updated and verified accurate."
     try:
-        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
+        lock_ctx = _project_lock(root, timeout=timeout)
         with lock_ctx:
             if _health_mod is not None and hasattr(_health_mod, "mark_green"):
                 # Prefer health.mark_green (wiki hash + source_content_hash)
@@ -1306,6 +1339,8 @@ def mark_green(file: str, reason: str = "", project_root: Optional[Union[str, Pa
             _remove_from_pending(root, file)
             result.update({"success": True, "message": f"Marked 🟢 Green (Python primary). {rsn}"})
     except Exception as e:
+        if locking is not None and isinstance(e, getattr(locking, "LockTimeoutError", ())):
+            return _lock_timeout_result(result, e)
         result["error"] = str(e)
     return result
 

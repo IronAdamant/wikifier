@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: 📖 Documentation & Spec
-    url: https://github.com/IronAdamant/wikifier/blob/main/spec.md
+    url: https://github.com/IronAdamant/wikifier/blob/main/docs/spec.md
     about: Read the immutable project requirements
   - name: 🛠️ Skills & Agent Contract
     url: https://github.com/IronAdamant/wikifier/blob/main/skills/run.md

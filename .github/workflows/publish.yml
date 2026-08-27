@@ -30,6 +30,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install build wheel setuptools
           pip install -e .
+          pip install -e '.[mcp]'
 
       - name: Run test suite
         run: python -m unittest discover tests -v

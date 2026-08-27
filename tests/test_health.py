@@ -8,19 +8,8 @@ Desired contract:
 All operations run against an isolated temp project root passed explicitly as
 project_root= — the Wikifier repo's own health state is never touched.
 
-# Currently failing — NOT in Findings/2026-06-10-Fix-Plan.md (newly discovered
-# by this suite, candidate for Phase 4): every Python-primary workflow function
-# (cli.record_change, cli.mark_green, cli.check_changes with >=1 dirty file)
-# SELF-DEADLOCKS on POSIX. They acquire locking.file_lock(root) and then call
-# health.upsert_entry(), which re-acquires the same non-reentrant fcntl.flock
-# from a second fd in the same process -> blocks forever. Verified pre-existing
-# at HEAD (locking semantics unchanged by the working-tree diff). The MCP
-# record_change/mark_green tools delegate to these functions, so they hit the
-# same hang (likely the real cause of the "MCP can time out" symptom).
-#
-# Every test below therefore fails today via a guarded timeout (the suite never
-# hangs). Once the deadlock is fixed, the W8 exclude-glob test remains an
-# expected fail until Phase 4; the rest should pass.
+Nested project flock is re-entrant (locking._HELD_LOCKS). call_with_timeout is
+a hang-guard only — workflow tests must complete, not be named DEADLOCK.
 """
 
 import unittest
@@ -41,9 +30,8 @@ health_mod = importlib.import_module("wikifier.health")
 _DEADLOCK = {"seen": False}
 
 _DEADLOCK_MSG = (
-    "DEADLOCK (known, documented in tests/test_health.py header): cli workflow "
-    "function never returned — nested non-reentrant project flock "
-    "(cli.* holds locking.file_lock(root), health.upsert_entry re-acquires it)."
+    "Workflow function exceeded 8s hang-guard (unexpected; nested flock should "
+    "be re-entrant via locking._HELD_LOCKS)."
 )
 
 
@@ -163,12 +151,6 @@ class TestCheckChangesExcludes(WorkflowTestCase):
                          "files under an excluded directory must not be auto-yellowed")
 
     def test_excluded_file_glob_not_auto_yellowed(self):
-        # Currently failing — fixed by Phase 4 of Findings/2026-06-10-Fix-Plan.md
-        # (W8: check-changes does not honor file-glob entries in
-        # exclude_patterns.txt — only directory-name pruning is applied — so
-        # generated files like *.gen.py / __pycache__ artifacts still get
-        # auto-yellowed into the health matrix). Note: until the deadlock
-        # described in the module header is fixed, this fails earlier (timeout).
         self.write("exclude_patterns.txt", "*.gen.py\n")
         self.write("app.py", "print('hi')\n")
         self.write("foo.gen.py", "print('generated')\n")

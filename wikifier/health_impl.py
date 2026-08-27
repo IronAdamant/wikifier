@@ -962,7 +962,7 @@ def _build_simple_exclude_set(root: Path) -> set:
 PARSEABLE_SOURCE_SUFFIXES = frozenset({
     ".py", ".pyi",
     ".js", ".jsx", ".mjs", ".cjs",
-    ".ts", ".tsx",
+    ".ts", ".tsx", ".mts", ".cts",
     ".rs",
     ".go",
     ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".hh",
@@ -1258,6 +1258,64 @@ def prune_health_outside_monitored(
             "removed": removed,
             "kept": len(kept),
             "monitored": monitored,
+            "root": str(root),
+        }
+
+    if locking:
+        with locking.file_lock(root):
+            return _work()
+    return _work()
+
+
+def find_deleted_missing(root: Path) -> List[str]:
+    """DELETED-audit health keys whose paths are not on disk.
+
+    Unlike find_ghost_entries, this *includes* explicit DELETED rows so they
+    can be retired by prune_deleted_missing (ghost-finder skips them on purpose).
+    """
+    root = Path(root).resolve()
+    health = load_health(root)
+    missing: List[str] = []
+    for key, entry in (health.get("entries") or {}).items():
+        if not isinstance(key, str) or not key:
+            continue
+        ent = entry if isinstance(entry, dict) else {}
+        reason = str(ent.get("reason") or "")
+        status = str(ent.get("status") or "")
+        if "DELETED" not in reason and "DELETED" not in status:
+            continue
+        if key.startswith("/"):
+            missing.append(key)
+            continue
+        p = root / key
+        try:
+            if not p.exists():
+                missing.append(key)
+        except Exception:
+            missing.append(key)
+    return sorted(set(missing))
+
+
+def prune_deleted_missing(root: Path) -> Dict[str, Any]:
+    """Drop DELETED health rows whose files are gone. Explicit CLI/agent prune."""
+    root = _coerce_root(root)
+
+    def _work() -> Dict[str, Any]:
+        health = load_health(root)
+        entries = health.get("entries") or {}
+        to_drop = find_deleted_missing(root)
+        removed = 0
+        for k in to_drop:
+            if k in entries:
+                del entries[k]
+                removed += 1
+        health["entries"] = entries
+        _do_save_health(root, health)
+        return {
+            "success": True,
+            "removed": removed,
+            "removed_paths": to_drop,
+            "kept": len(entries),
             "root": str(root),
         }
 
@@ -1589,7 +1647,8 @@ def assess_autonomous_readiness(
 
     has_health = (root / "file_health.json").exists() or (root / "file_health.md").exists()
     has_library = (root / "library.md").exists()
-    has_cache = cache_path.exists()
+    sqlite_cache = staging / "import_cache.sqlite"
+    has_cache = cache_path.exists() or sqlite_cache.exists()
 
     metrics_snap = None
     if write_metrics:

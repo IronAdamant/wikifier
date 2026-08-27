@@ -2220,7 +2220,9 @@ def generate_update_events(
         # Real parse + ACS edges
         parsed: List[Dict[str, Any]] = []
         try:
-            if js_parser and str(p).lower().endswith((".js", ".ts", ".jsx", ".tsx")):
+            if js_parser and str(p).lower().endswith(
+                (".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
+            ):
                 parsed = js_parser.parse_javascript_imports(str(p)) or []
             elif py_parser and str(p).lower().endswith(".py"):
                 parsed = py_parser.parse_python_imports(str(p)) or []

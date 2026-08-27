@@ -25,8 +25,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
+JS_SOURCE_EXTS = (
+    ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts",
+)
 SOURCE_EXTS = {
-    ".py", ".js", ".ts", ".jsx", ".tsx",
+    ".py",
+    *JS_SOURCE_EXTS,
     ".rs", ".go",
     ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh",
     ".cs", ".java",
@@ -326,15 +330,39 @@ def _resolve_map_walk_roots(
         root = Path(root)
     if directory:
         d = root / directory
-        return [d if d.is_dir() else root]
+        return [d] if d.is_dir() else []
     walk_roots: List[Path] = []
     if use_map_paths:
         walk_roots = _map_walk_roots_from_map_paths(root)
     if not walk_roots and use_monitored:
         walk_roots = _map_walk_roots_from_monitored(root)
-    if not walk_roots:
-        walk_roots = [root]
-    return walk_roots
+    if walk_roots:
+        return walk_roots
+    cfg_map = _read_map_paths(root) if use_map_paths else []
+    cfg_mon = _read_monitored_paths(root) if use_monitored else []
+    # Missing *directory* configs (init `src/` on a crates tree) must not
+    # walk the whole project. Wiki-only file lists still fall back to root.
+    if _missing_directory_scope(root, cfg_map) or (
+        not cfg_map and _missing_directory_scope(root, cfg_mon)
+    ):
+        return []
+    return [root]
+
+
+def _missing_directory_scope(root: Path, paths: List[str]) -> bool:
+    """True when paths include an intended directory that does not exist."""
+    saw_missing_dir = False
+    for mp in paths or []:
+        p = Path(mp) if os.path.isabs(mp) else (root / mp)
+        if p.is_dir():
+            return False
+        if p.is_file():
+            continue
+        suf = Path(str(mp).rstrip("/")).suffix.lower()
+        if suf in NON_MAP_FILE_EXTS or suf in SOURCE_EXTS:
+            continue
+        saw_missing_dir = True
+    return saw_missing_dir
 
 
 def collect_candidate_source_files(

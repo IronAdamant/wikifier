@@ -14,6 +14,7 @@ Provide a lightweight, zero-dependency, agent-friendly parser that extracts impo
 - **Best-effort resolution**: Relative imports are resolved against the actual package structure on disk.
 - **Pragmatic accuracy**: Good enough for real-world use while staying simple and fast.
 - **Extensible**: Same return contract used by the JavaScript/TypeScript parser.
+- **4.6.13**: `import a, b` emits two edges; LDSI helpers come from `_ldsi.py` (not `javascript.py`).
 
 ## Main Public Function
 

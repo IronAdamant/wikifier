@@ -119,7 +119,7 @@ Warm **0-dirty** re-runs after **4.6.7** (same machine class; scoped; candidates
 
 Residual floor on large scopes is mtime/stat + live count under MapScope (not full JSON re-walk). Sub-100ms is not a hard SLA on every 1k+ tree.
 
-Tests: `python -m unittest discover tests` (stdlib only; **125** cases including MapScope / index-first / dual-write).
+Tests: `python -m unittest discover tests` (stdlib only; **158+** `test_` methods including MapScope / index-first / 4.6.13 contracts).
 
 ## Commands
 

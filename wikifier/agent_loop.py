@@ -262,6 +262,13 @@ def build_structured_actions(
             "reason": "Actionable yellow — record-change already done or content dirty; refresh wiki then mark-green",
             "preflight": ["prepare_edit", "why_file"],
         })
+        actions.append({
+            "action": "mark_green",
+            "file": f,
+            "priority": prio,
+            "reason": "Close the loop after wiki refresh — never skip mark_green on a recorded file",
+            "preflight": ["prepare_edit"],
+        })
         prio = min(prio + 1, 9)
     if red == 0 and actionable_yellow == 0 and clean and remaining == 0 and not blocker_list:
         actions.append({

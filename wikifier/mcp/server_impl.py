@@ -32,9 +32,16 @@ import subprocess
 import re
 import os
 import sys
+import json
 from pathlib import Path
 from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime
+
+from .deadline import (
+    MCP_INPROCESS_DEADLINE_S,
+    call_with_deadline as _call_with_deadline,
+)
+from .status_ops import run_files_needing_attention, run_project_status
 
 # R6: reuse the canonical script locator (avoids hard ./wikifier.sh assumption in external installs)
 # Gap #1 External: reuse the unified discover_project_root (CLI + shell mirrored) so MCP benefits from
@@ -370,7 +377,10 @@ def _get_resolved_from_cache(file: str, root: Path) -> list[dict]:
 # =============================================================================
 
 @mcp.tool()
-def check_changes(project_root: Optional[str] = None) -> dict:
+def check_changes(
+    project_root: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+) -> dict:
     """
     Scan for file changes and update the health matrix (Workstream E: thin library consumer).
 
@@ -381,7 +391,13 @@ def check_changes(project_root: Optional[str] = None) -> dict:
     root = _get_effective_root(project_root)
     try:
         from wikifier.cli import check_changes as _lib_check
-        res = _lib_check(project_root=str(root))
+        t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
+        res = _call_with_deadline(
+            _lib_check, project_root=str(root), timeout=t, timeout_s=t
+        )
+        if isinstance(res, dict) and res.get("timed_out"):
+            res.setdefault("project_root", str(root))
+            return res
         # Enrich with MCP-specific barrel view if not present (best effort, non breaking)
         if "barrel_invalidation_summary" not in res or not res.get("barrel_invalidation_summary"):
             try:
@@ -409,14 +425,25 @@ def check_changes(project_root: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-def record_change(file: str, reason: str, project_root: Optional[str] = None) -> dict:
+def record_change(
+    file: str,
+    reason: str,
+    project_root: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+) -> dict:
     """Record a semantic change. Required after edits. Returns structured result.
     (Workstream E: thin direct call to library; no shell for core mandatory workflow.)
     """
     root = _get_effective_root(project_root)
     try:
         from wikifier.cli import record_change as _lib_record
-        return _lib_record(file=file, reason=reason, project_root=str(root))
+        t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
+        res = _call_with_deadline(
+            _lib_record, file=file, reason=reason, project_root=str(root), timeout=t, timeout_s=t
+        )
+        if isinstance(res, dict):
+            return res
+        return _lib_record(file=file, reason=reason, project_root=str(root), timeout=t)
     except Exception as e:
         # Fallback for resilience
         try:
@@ -444,14 +471,25 @@ def record_deletion(file: str, reason: str, project_root: Optional[str] = None) 
 
 
 @mcp.tool()
-def mark_green(file: str, reason: str = "", project_root: Optional[str] = None) -> dict:
+def mark_green(
+    file: str,
+    reason: str = "",
+    project_root: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+) -> dict:
     """Mark a file as Green after updating its wiki summary. Returns structured result.
     (Workstream E: thin library consumer.)
     """
     root = _get_effective_root(project_root)
     try:
         from wikifier.cli import mark_green as _lib_mark
-        return _lib_mark(file=file, reason=reason, project_root=str(root))
+        t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
+        res = _call_with_deadline(
+            _lib_mark, file=file, reason=reason, project_root=str(root), timeout=t, timeout_s=t
+        )
+        if isinstance(res, dict):
+            return res
+        return _lib_mark(file=file, reason=reason, project_root=str(root), timeout=t)
     except Exception as e:
         try:
             args = [file, reason] if reason else [file]
@@ -892,15 +930,25 @@ def validate(project_root: Optional[str] = None, format: Literal["text", "json"]
     """
     root = _get_effective_root(project_root)
     try:
-        output = _run_wikifier_command("validate", root=root)
+        import importlib
+        health_module = importlib.import_module("wikifier.health")
+        res = health_module.validate_health(root)
         if format == "json":
+            if isinstance(res, dict):
+                res.setdefault("success", True)
+                res.setdefault("project_root", str(root))
+                res.setdefault(
+                    "action",
+                    "Run check-changes + mark-green on any newly discovered files.",
+                )
+                return res
             return {
                 "success": True,
                 "project_root": str(root),
-                "message": output,
-                "action": "Run check-changes + mark-green on any newly discovered files."
+                "message": res,
+                "action": "Run check-changes + mark-green on any newly discovered files.",
             }
-        return output
+        return json.dumps(res, indent=2, default=str) if isinstance(res, dict) else str(res)
     except Exception as e:
         if format == "json":
             return {"success": False, "project_root": str(root), "error": str(e)}
@@ -1630,305 +1678,36 @@ def get_files_needing_attention(
     status: Literal["red", "yellow", "all"] = "all",
     directory: Optional[str] = None,
     project_root: Optional[str] = None,
-    format: Literal["text", "json"] = "text"
+    format: Literal["text", "json"] = "text",
+    timeout_s: Optional[float] = None,
 ) -> str | dict:
     """
     Return files that need attention (Red or Yellow).
 
     Uses the fast scalable Python backend (wikifier.health).
     Supports directory filtering — very useful on large monorepos.
+    Health/cache work runs inside call_with_deadline (default 60s).
     """
     root = _get_effective_root(project_root)
-
-    try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-
-        # Health matrix stores emoji statuses (🟢/🟡/🔴), not [RED]/[YELLOW] tags.
-        status_filter = None
-        if status == "red":
-            status_filter = "🔴"
-        elif status == "yellow":
-            status_filter = "🟡"
-
-        files = health_module.get_files_needing_attention(root, status_filter, directory)
-
-        if format == "json":
-            # Light ACS context (Gap #1 uniformity): include low-conf edge count for agents to correlate file attention with dep-risk filtering
-            acs_ctx = {}
-            try:
-                import wikifier.import_cache as ic
-                c = ic.load_cache(root)
-                a = ic.ensure_acs_summary_persisted(c, root)
-                if a.get("low_conf_edges", 0):
-                    acs_ctx = {"low_conf_edges": a.get("low_conf_edges"), "avg_confidence": a.get("avg_confidence"), "acs_version": a.get("acs_version")}
-            except Exception:
-                pass
-            return {
-                "project_root": str(root),
-                "directory": directory or ".",
-                "status_filter": status,
-                "files": files,
-                "count": len(files),
-                "acs_low_conf_context": acs_ctx or None
-            }
-
-        if not files:
-            return "No files currently need attention."
-
-        return "Files needing attention:\n" + "\n".join(f"- {f}" for f in files)
-
-    except Exception:
-        # Library fallback — avoid shell text parsing ([RED] tags vs emoji).
-        root = _get_effective_root(project_root)
-        try:
-            import importlib
-            health_module = importlib.import_module("wikifier.health")
-            status_filter = "🔴" if status == "red" else ("🟡" if status == "yellow" else None)
-            files = health_module.get_files_needing_attention(root, status_filter, directory)
-            if format == "json":
-                return {
-                    "project_root": str(root),
-                    "directory": directory or ".",
-                    "status_filter": status,
-                    "files": files,
-                    "count": len(files),
-                    "acs_low_conf_context": None,
-                }
-            if not files:
-                return "No files currently need attention."
-            return "Files needing attention:\n" + "\n".join(f"- {f}" for f in files)
-        except Exception:
-            return "No files currently need attention."
-
+    return run_files_needing_attention(
+        root, status=status, directory=directory, format=format, timeout_s=timeout_s
+    )
 
 @mcp.tool()
 def get_project_status(
     format: Literal["text", "json"] = "text",
     project_root: Optional[str] = None,
-    directory: Optional[str] = None
+    directory: Optional[str] = None,
+    timeout_s: Optional[float] = None,
 ) -> str | ProjectHealthSummary:
     """Return a high-level overview of project documentation health.
 
-    Uses the fast scalable Python backend when possible.
+    Health/cache work runs inside call_with_deadline (default 60s).
     """
     root = _get_effective_root(project_root)
-
-    try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-        summary = health_module.get_summary(root, directory)
-        pending = _read_file_safe("pending_updates.md", root=root)
-
-        if hasattr(health_module, "count_pending"):
-            pending_count = int(health_module.count_pending(root))
-        else:
-            pending_count = len([
-                l for l in pending.splitlines()
-                if l.strip().startswith("- ") and not l.strip().startswith("- (")
-            ])
-
-        # ACS + CIABRE + Wave 2 Barrel/BRC surfacing uniformity: lightweight stats + invalidation reports foundation in project status (MCP primary for agents)
-        dep_intel = {}
-        try:
-            import wikifier.import_cache as ic
-            cache = ic.load_cache(root)
-            # On-demand persistence guarantee for _acs_summary (Gap #1 ACS surfacing wave; mirrors cycles guaranteed persist)
-            acs = ic.ensure_acs_summary_persisted(cache, root)
-            cyc = ic.get_cycle_analyses(cache) or {}
-            barrel = ic.get_barrel_cache_summary(cache) or {}
-            sample_barrel_reports = []
-            if barrel.get("has_brc"):
-                try:
-                    # Richer MCP observability (continuation wave): up to 5 samples + richer text (5 lines now, det/partial/chains) in get_project_status + health.
-                    # Full structured (incl. chains, partial, detector) + _barrel_invalidation_log audit awareness for "why reparse" traceability at scale.
-                    reps = ic.get_barrel_invalidation_reports(cache, root, changed_files=None) or []
-                    sample_barrel_reports = reps[:5]
-                except Exception:
-                    sample_barrel_reports = []
-            if acs.get("total_scored_edges", 0) or cyc or barrel.get("has_brc"):
-                dep_intel = {
-                    "acs_summary": acs,
-                    "ciabre_summary": cyc.get("summary") or {},
-                    "ciabre_version": cyc.get("analysis_version"),
-                    "acs_version": acs.get("acs_version"),
-                    "barrel_invalidation_summary": barrel,  # Wave 2: num_chains, v1 coverage, partials, indexed barrels (for "why" via get_barrel_invalidation_reports when dirty)
-                    "sample_barrel_reports": sample_barrel_reports,  # basic observability added (get_project_status + health)
-                    # A1: first-class reverse dependency index now uniformly surfaced on project_status/health (MCP primary surfaces)
-                    "reverse_dependency_index": ic.get_reverse_dependency_stats(cache),
-                }
-            # M2 Workstream D Resolution Transparency (parser parity + new import_cache helpers):
-            # first-class unresolved/low-conf surfaces now in primary status (visible failure modes + provenance).
-            # Agents can now ask "what in my dep map is untrustworthy?" directly. Ties to ACS (low conf) + CIABRE (weak links) + diagnostics aggregates.
-            try:
-                unresolved_samples = ic.get_unresolved_imports(cache, max_results=5) or []
-                lowc_samples = ic.get_low_confidence_edges(cache, max_results=5) or []
-                # reuse existing diagnostics aggregate (has low_or_unresolved_count + by_cat + samples)
-                diag_sum = ic.ensure_diagnostics_aggregate(cache) or {}
-                if unresolved_samples or lowc_samples or diag_sum.get("low_or_unresolved_count"):
-                    dep_intel["resolution_transparency"] = {
-                        "low_or_unresolved_count": diag_sum.get("low_or_unresolved_count", 0),
-                        "by_category": diag_sum.get("by_category", {}),
-                        "sample_unresolved_or_low_conf": unresolved_samples or lowc_samples or diag_sum.get("samples", [])[:5],
-                        "helpers": "import_cache.get_unresolved_imports / get_low_confidence_edges; MCP get_dependencies(..., unresolved_only=True); get_resolution_diagnostics()",
-                        "parser_parity_note": "python.py now emits resolved_path + diagnostic + (parser, strategy, resolution_metadata) for relatives (matches JS fidelity)",
-                    }
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-        if format == "json":
-            base = ProjectHealthSummary(
-                total_files=summary["total"],
-                green=summary["green"],
-                yellow=summary["yellow"],
-                red=summary["red"],
-                pending_updates=pending_count,
-                health_score=str(
-                    summary.get("health_score")
-                    or (
-                        "Good"
-                        if summary["red"] == 0 and summary["yellow"] < 5
-                        else "Needs Attention"
-                        if summary["red"] < 3
-                        else "Critical"
-                    )
-                ),
-            )
-            # attach dep intel + map-first taxonomy (additive)
-            if isinstance(base, dict):
-                base["dependency_intel"] = dep_intel
-                for k in (
-                    "stub_yellow",
-                    "actionable_yellow",
-                    "map_first_note",
-                    "health_score",
-                ):
-                    if k in summary:
-                        base[k] = summary[k]
-            else:
-                try:
-                    base.dependency_intel = dep_intel  # type: ignore[attr-defined]
-                    for k in ("stub_yellow", "actionable_yellow", "map_first_note"):
-                        if k in summary:
-                            setattr(base, k, summary[k])
-                except Exception:
-                    pass
-            return base
-
-        dir_str = f" (in {directory})" if directory else ""
-        dep_lines = ""
-        if dep_intel.get("acs_summary") or dep_intel.get("barrel_invalidation_summary"):
-            a = dep_intel.get("acs_summary") or {}
-            c = dep_intel.get("ciabre_summary", {})
-            b = dep_intel.get("barrel_invalidation_summary", {}) or {}
-            barrel_line = ""
-            if b.get("has_brc"):
-                barrel_line = f"\n  Barrel/BRC (v{b.get('version','bree-v2')}): {b.get('num_chains',0)} chains (v1:{b.get('v1_canonical_chains',0)}, partials:{b.get('partial_chains',0)}) | indexed barrels:{b.get('num_indexed_barrels',0)}"
-            dep_lines = f"""
-Dependency Intelligence (ACS v{a.get('acs_version','1.0') or '1.0'} + CIABRE v{dep_intel.get('ciabre_version','1.3') or '1.3'}):{barrel_line}
-  ACS: {a.get('total_scored_edges',0)} edges | avg={a.get('avg_confidence',0)} | low<0.65: {a.get('low_conf_edges',0)}
-  CIABRE: {c.get('high_severity_count',0)} high-sev cycles | max_blast={c.get('max_blast_radius',0)}
-  (see library.md "ACS Risk Snapshot", get_cycles(analysis=True), or full JSON for sample Recommendations + barrel_invalidation_summary)"""
-            if barrel_line:
-                dep_lines += "\n  (BRC pruning/GC + reports available via health prune-barrels + check-changes auto-Yellow)"
-            # Richer samples (continuation wave): up to 5 detailed lines (was 3) with importer + barrels + reason + detector/partial/chains for richer "why" in get_project_status text (matches JSON 5 + _log)
-            sbr = dep_intel.get("sample_barrel_reports") or []
-            if sbr:
-                dep_lines += "\n  Recent barrel invalidation samples (rich reports; see JSON for full 5 + _barrel_invalidation_log audit):"
-                for i, r in enumerate(sbr[:5]):
-                    imp = r.get("importer", "?") if isinstance(r, dict) else getattr(r, "importer", "?")
-                    trigs = ",".join((r.get("triggering_barrels", []) or [])[:2]) if isinstance(r, dict) else ",".join(getattr(r, "triggering_barrels", [])[:2])
-                    rsn = (r.get("reason", "") or "")[:50] if isinstance(r, dict) else ""
-                    det = (r.get("detector", "") or "")[:20] if isinstance(r, dict) else ""
-                    part = r.get("partial", False) if isinstance(r, dict) else False
-                    nch = len(r.get("chain_ids", []) or []) if isinstance(r, dict) else 0
-                    nv = r.get("node_identity_version", "v1") if isinstance(r, dict) else "v1"
-                    dep_lines += f"\n    - {imp} via [{trigs}] (det={det}, partial={part}, chains={nch}, v{nv}): {rsn}"
-                    # richer 5-sample detail for continuation (importer+full reason+audit context now in MCP text/JSON)
-                # surface log presence for audit visibility in text too
-                try:
-                    cache = ic.load_cache(root)
-                    logn = len(cache.get("_barrel_invalidation_log") or [])
-                    if logn:
-                        dep_lines += f"\n  (BRC audit log: {logn} historical invalidation events persisted)"
-                except Exception:
-                    pass
-        return f"""Project Documentation Health{dir_str}
------------------------------
-[GREEN] Green:   {summary['green']}
-[YELLOW] Yellow:  {summary['yellow']}
-[RED] Red:     {summary['red']}
-
-Pending updates: {pending_count}
-{dep_lines}
-
-Use get_files_needing_attention() for the actual list. Use get_cycles(analysis=True) + get_dependencies(format="json") for ACS confidence_explanation Recommendations."""
-
-    except Exception:
-        # Prefer library summary over shell text parsing. Live health text uses
-        # emoji (🟢/🟡/🔴); counting legacy [GREEN]/[YELLOW]/[RED] tags always
-        # yielded zeros and lied to agents.
-        root = _get_effective_root(project_root)
-        pending = _read_file_safe("pending_updates.md", root=root)
-        if hasattr(health_module, "count_pending"):
-            pending_count = int(health_module.count_pending(root))
-        else:
-            pending_count = len([
-                l for l in pending.splitlines()
-                if l.strip().startswith("- ") and not l.strip().startswith("- (")
-            ])
-        green = yellow = red = total = 0
-        summary_fb: dict = {}
-        try:
-            import importlib
-            health_module = importlib.import_module("wikifier.health")
-            summary_fb = health_module.get_summary(root, directory) or {}
-            total = int(summary_fb.get("total", 0) or 0)
-            green = int(summary_fb.get("green", 0) or 0)
-            yellow = int(summary_fb.get("yellow", 0) or 0)
-            red = int(summary_fb.get("red", 0) or 0)
-        except Exception:
-            # Last resort: emoji-aware (+ legacy tag) counts from health text.
-            try:
-                health_text = _run_wikifier_command("health", root=root)
-                green = health_text.count("🟢") + health_text.count("[GREEN]")
-                yellow = health_text.count("🟡") + health_text.count("[YELLOW]")
-                red = health_text.count("🔴") + health_text.count("[RED]")
-                total = green + yellow + red
-            except Exception:
-                pass
-
-        if format == "json":
-            _hs = summary_fb.get("health_score")
-            if not _hs:
-                _hs = (
-                    "Good"
-                    if red == 0 and yellow < 5
-                    else "Needs Attention"
-                    if red < 3
-                    else "Critical"
-                )
-            return ProjectHealthSummary(
-                total_files=total or (green + yellow + red),
-                green=green,
-                yellow=yellow,
-                red=red,
-                pending_updates=pending_count,
-                health_score=str(_hs)
-            )
-
-        dir_str = f" (in {directory})" if directory else ""
-        return f"""Project Documentation Health{dir_str}
------------------------------
-[GREEN] Green:   {green}
-[YELLOW] Yellow:  {yellow}
-[RED] Red:     {red}
-
-Pending updates: {pending_count}
-
-Use get_files_needing_attention() for the actual list."""
+    return run_project_status(
+        root, directory=directory, format=format, timeout_s=timeout_s
+    )
 
 
 @mcp.tool()

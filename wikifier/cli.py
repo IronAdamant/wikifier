@@ -269,7 +269,10 @@ def main(argv=None) -> int:
                     print("[wikifier] health module unavailable", file=sys.stderr)
                     return 1
                 root = _get_effective_root(project_root)
-                res = _health_mod.prune_health_outside_monitored(root)
+                if any(a in ("--deleted-missing", "--deleted") for a in _args):
+                    res = _health_mod.prune_deleted_missing(root)
+                else:
+                    res = _health_mod.prune_health_outside_monitored(root)
                 print(json.dumps(res, indent=2, default=str))
                 return 0 if res.get("success") else 1
             if _cmd0 in ("autonomous-status", "autonomous_status", "readiness", "long-horizon"):

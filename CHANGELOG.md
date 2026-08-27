@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.6.13] - 2026-08-27
+
+### Added
+- `record_change` returns additive `needs_mark_green: true` and does not auto-green.
+- `suggest_next_actions` / `session_bootstrap` emit a `mark_green` action for recorded yellows.
+- `prune-health --deleted-missing` retires DELETED audit rows whose files are gone.
+- MCP in-process deadline (`timeout_s`, default 60s) on status/check-changes/mutators; `timed_out` structured failure.
+- Shared `wikifier/parsers/_ldsi.py` so importing the Python parser does not load JavaScript/BREE/CDIA.
+
+### Fixed
+- Collect/parse `.mjs/.cjs/.mts/.cts` as JavaScript sources (map suffixes now match `_parse_file`).
+- `import a, b` emits two Python edges; CJS `const {a, b} = require(...)` keeps both names.
+- Missing configured `src/` / map dirs no longer fall back to walking the whole project root.
+- `record_change` uses `_do_upsert_entry` under the held lock; Core mutators accept finite `timeout=`.
+- MCP `validate` calls `validate_health` in-process (no shell-out).
+- Unused MCP stub registrars (`intel.py` / `status.py` / `workflow.py`) removed.
+- BREE public names `follow_barrel_chain` / `get_barrel_cache_stats` are defined.
+- Unresolved parser edges no longer fill `resolved` from display `module` (ACS noise).
+- `assess_autonomous_readiness` treats `import_cache.sqlite` as a map.
+
+### Changed
+- Protocol v0.6 close-the-loop: never skip `mark_green` after wiki refresh on the recorded file.
+- Project-relative `monitored_paths` are canonical; foreign-FS absolute paths are not required.
+- CI installs `wikifier[mcp]` for contract tests and smokes the built wheel via `wikifier --help`.
+- Agent docs retargeted off deleted `health.py` / `bree.py` megamodule names.
+
+### Operator follow-up
+- Target-project `AGENTS.md` (e.g. ConsistencyHub) should teach the record → wiki → mark-green loop. Not this package.
+
 ## [4.6.12] - 2026-08-13
 
 ### Fixed

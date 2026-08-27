@@ -38,11 +38,12 @@ __all__ = [
     'seed_source_content_hashes', 'get_stale_wikis',
     # Map-first operations  
     'seed_health_from_map', 'seed_health_for_monitored_sources',
-    'find_ghost_entries', 'validate_health',
+    'find_ghost_entries', 'find_deleted_missing', 'validate_health',
     # Pending operations
     'add_to_pending', 'remove_from_pending', 'count_pending',
     # Pruning
     'prune_pending_to_monitored', 'prune_health_outside_monitored',
+    'prune_deleted_missing',
     # Healing
     'heal_with_policy', 'heal_outdated_stubs', 'get_healable_stubs',
     'get_healing_statistics',

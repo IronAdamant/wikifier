@@ -24,17 +24,30 @@ def make_edge(
 ) -> Dict[str, Any]:
     """Build a parser edge dict matching the shared py/js contract (additive fields OK)."""
     conf = resolution_confidence
-    if confidence_score is None:
-        confidence_score = {"high": 0.9, "medium": 0.6, "low": 0.4, "unresolved": 0.2}.get(conf, 0.5)
-    reasons = list(confidence_reasons or [f"base:{conf}"])
-    if not resolved_path and "no_resolved_path" not in reasons:
-        reasons.append("no_resolved_path")
-    expl = f"Base {conf} ({confidence_score:.2f})."
-    if not resolved_path:
-        expl += " unresolved/partial target."
-    if diagnostic and diagnostic.get("category") == "external_or_bare":
-        expl += " External/stdlib-style include."
-    expl += " Recommendation: Use project-relative edges for automation trust; externals are expected noise."
+    try:
+        from ..contracts import compute_acs_confidence
+        score, reasons, expl = compute_acs_confidence(
+            conf,
+            is_dynamic=is_dynamic,
+            resolved_path=resolved_path,
+            strategy=strategy,
+        )
+        if confidence_score is None:
+            confidence_score = score
+        if confidence_reasons:
+            reasons = list(confidence_reasons)
+    except Exception:
+        if confidence_score is None:
+            confidence_score = {"high": 0.9, "medium": 0.6, "low": 0.4, "unresolved": 0.2}.get(conf, 0.5)
+        reasons = list(confidence_reasons or [f"base:{conf}"])
+        if not resolved_path and "no_resolved_path" not in reasons:
+            reasons.append("no_resolved_path")
+        expl = f"Base {conf} ({confidence_score:.2f})."
+        if not resolved_path:
+            expl += " unresolved/partial target."
+        if diagnostic and diagnostic.get("category") == "external_or_bare":
+            expl += " External/stdlib-style include."
+        expl += " Recommendation: Use project-relative edges for automation trust; externals are expected noise."
 
     edge: Dict[str, Any] = {
         "module": module,

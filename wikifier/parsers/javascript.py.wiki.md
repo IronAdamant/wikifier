@@ -8,6 +8,8 @@ This is the second foundational language parser in Wikifier. It follows the exac
 
 Extract import/require/re-export information from JS and TS files with best-effort resolution and confidence scoring. This data powers the cross-language dependency graph, reverse dependencies, and all high-level MCP tools.
 
+**4.6.13:** `.mjs/.cjs/.mts/.cts` collect+parse; `const {a,b}=require(...)` keeps names; LDSI helpers imported from `_ldsi.py`.
+
 ## Key Innovations Compared to Python Parser
 
 - **Confidence scoring**: Every resolution includes `resolution_confidence` ("high" | "medium" | "low" | "unresolved").

@@ -50,7 +50,7 @@ WIKIFIER_PROJECT_ROOT=/abs/path wikifier-mcp   # MCP server (requires pip instal
 ./scripts/publish.sh [test|prod]       # PyPI release (build + twine)
 ```
 
-**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; ~49 tests covering parsers, cache schema, cycles, barrel invalidation, health workflow, gap-closure hygiene). Run it after any core change. Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
+**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; 158+ `test_` methods covering parsers, cache schema, cycles, barrel invalidation, health workflow, gap-closure hygiene, 4.6.13 contracts). Run it after any core change. Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
 
 ## Architecture
 
@@ -59,16 +59,16 @@ Pipeline: **scan → parse → resolve → cache → health → artifacts**, all
 - `cli.py` — entry point, unified project-root discovery (env var → `.wikifier/`/marker walk → `.git`/manifest markers → cwd), and `run_full_update()` — the pure-Python pipeline (dirty detection → parsers → persist → cycles → ACS).
 - `parsers/python.py`, `parsers/javascript.py` — regex-based import extraction (zero-dep), returning a rich shared contract per edge: resolved path, confidence score/reasons/explanation, dynamic/conditional analysis, barrel info, strategy provenance.
 - `parsers/cdia.py` — **CDIA**: pluggable registry of 12 detectors for conditional imports (feature flags, env checks, ternaries) and dynamic imports (computed paths, dataflow aliases, registry maps).
-- `parsers/bree.py` — **BREE**: barrel/re-export chain expansion (bounded depth 3, cycle-safe) with mtime-aware persistent cache and reverse index used for stale-importer invalidation.
+- `parsers/bree/` — **BREE**: barrel/re-export chain expansion (bounded depth 3, cycle-safe) with mtime-aware persistent cache and reverse index used for stale-importer invalidation.
 - `resolution.py` — single source of truth for path canonicalization (symlinks, TS paths, package.json exports, workspaces). All identity goes through `to_canonical_rel`.
 - `import_cache.py` — persistence + graph intelligence in `.wikifier_staging/import_cache.json`: resolved pairs, Tarjan SCC cycles with **CIABRE** break recommendations, reverse dependencies, **ACS** aggregation. Reserved keys start with `_` (`_cycles`, `_acs_summary`, `_barrel_resolutions`, …). A 48-bit graph signature short-circuits recomputes when topology is unchanged.
-- `health.py` — 🟢/🟡/🔴 matrix (`file_health.json` is source of truth; `.md` regenerated on save) with freshness tracking (`wiki_content_hash`, `last_meaningful_edit` vs `last_wiki_refresh`) and stale-wiki detection. Prunes out-of-tree entries to prevent cross-project pollution.
+- `health_impl.py` / `health_pkg/` — 🟢/🟡/🔴 matrix (`file_health.json` is source of truth; `.md` regenerated on save) with freshness tracking (`wiki_content_hash`, `last_meaningful_edit` vs `last_wiki_refresh`) and stale-wiki detection. Prunes out-of-tree entries to prevent cross-project pollution.
 - `contracts.py` — frozen shared dataclasses/shapes (CDIA v1, barrel v2, ResolutionMetadata, `compute_acs_confidence`) keeping parsers/cache/MCP from drifting. New fields are additive only; pipe payloads are versioned base64 (`cdia_v1`, `barrel_v2`, `res_meta_v1`).
 - `locking.py` — advisory project-level `fcntl.flock` on `.wikifier_staging/.lock`; shell paths use mkdir locks. High-level tools lock automatically; never bypass them with raw writes to state files.
 - `daemon.py` — background loop running check-changes + update-maps.
 - `mcp/server.py` — optional MCP server exposing ~23 tools that delegate to the library (workflow: `check_changes`/`record_change`/`mark_green`; intel: `get_dependencies`, `get_cycles`, `get_barrel_reports`, `get_resolution_diagnostics`; status: `get_project_status`, `health`, `suggest_next_actions`).
 
-Generated artifacts (in the target project root): `file_health.md/.json`, `library.md` (Mermaid + dependency tables + ACS/cycle reports), `pending_updates.md`, `journal/YYYY/MM/DD.md` (audit trail), per-file `*.wiki.md`, `.wikifier_staging/` (cache, locks, daemon state). Scoping for large repos: `monitored_paths.txt` (use absolute paths for external projects) and `exclude_patterns.txt`.
+Generated artifacts (in the target project root): `file_health.md/.json`, `library.md` (Mermaid + dependency tables + ACS/cycle reports), `pending_updates.md`, `journal/YYYY/MM/DD.md` (audit trail), per-file `*.wiki.md`, `.wikifier_staging/` (cache, locks, daemon state). Scoping for large repos: `monitored_paths.txt` (project-relative paths; foreign-FS absolute paths are ignored when missing) and `exclude_patterns.txt`.
 
 Adding a language = new `wikifier/parsers/{lang}.py` exposing `parse_{lang}_imports(filepath) -> List[Dict]` with the same edge contract.
 

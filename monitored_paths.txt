@@ -17,6 +17,7 @@ wikifier/mcp/README.md
 wikifier/mcp/server.py
 
 # Note: No broad dirs like "wikifier/" (would require entries for all .py), no pyproject/.mcp.json unless wiki'd, no external dogfood.
-# For external dogfood on other projects (e.g. RecipeLab_alt): always use WIKIFIER_PROJECT_ROOT=/absolute/path/to/target
-# and put absolute paths (no ../) in that target's monitored_paths.txt.
-# This was fixed in M5.1 to prevent pollution in main health (see health.py _entry_is_under_root).
+# For external dogfood: always use WIKIFIER_PROJECT_ROOT=/absolute/path/to/target
+# and put *project-relative* paths (no ../) in that target's monitored_paths.txt.
+# Foreign-FS absolute prefixes (/home vs /Users) are ignored when missing.
+# This was fixed in M5.1 to prevent pollution in main health (see health_impl._entry_is_under_root).

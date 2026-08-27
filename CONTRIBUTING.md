@@ -42,7 +42,7 @@ Please use the appropriate GitHub issue template:
 ### 3. Pull Request Guidelines
 
 - Keep PRs focused. One logical change per PR.
-- Update documentation (`README.md`, `Basis-v0.3.md`, `skills/run.md`) when behavior changes.
+- Update documentation (`README.md`, `docs/spec.md`, `skills/run.md`) when behavior changes.
 - If you add a new command, document it in `skills/run.md` and the help text in `wikifier.sh`.
 - All shell changes must remain POSIX-compatible where possible (or clearly PowerShell-only).
 - Add yourself to the journal if you want (`wikifier record-change` is the proper way).

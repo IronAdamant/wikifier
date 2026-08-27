@@ -76,7 +76,7 @@ except Exception:
         get_cdia_engine = None
 
 try:
-    from .javascript import (
+    from ._ldsi import (
         _extract_balanced_argument,
         _extract_candidate_literals,
         _apply_dynamic_registry,
@@ -544,10 +544,9 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
     #
     # This design keeps the system modular and easy to extend.
 
-    # Pattern 1: "import module" or "import module as alias"
-    # Matches absolute and relative module imports at the start of a line.
+    # Pattern 1: "import module" / "import a, b as c" (comma-separated names).
     import_pattern = re.compile(
-        r'^\s*import\s+([a-zA-Z0-9_.]+)(?:\s+as\s+([a-zA-Z0-9_]+))?',
+        r'^\s*import\s+([^\n#]+)',
         re.MULTILINE
     )
 
@@ -559,83 +558,96 @@ def parse_python_imports(filepath: str) -> List[Dict[str, Any]]:
         re.MULTILINE
     )
 
-    # Process "import ..." statements
+    # Process "import ..." statements (one edge per comma-separated name)
     for match in import_pattern.finditer(content):
-        raw_module = match.group(1).strip()
-        alias = match.group(2)
         original = match.group(0).strip()
+        rest = (match.group(1) or "").strip()
+        parts = []
+        for chunk in rest.split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if re.search(r"\s+as\s+", chunk):
+                name, alias_part = re.split(r"\s+as\s+", chunk, maxsplit=1)
+                parts.append((name.strip(), alias_part.strip() or None))
+            else:
+                name = chunk.split()[0].strip()
+                parts.append((name, None))
+        for raw_module, alias in parts:
+            if not raw_module or not re.match(r"^[a-zA-Z0-9_.]+$", raw_module):
+                continue
 
-        is_relative = raw_module.startswith('.')
-        _dots = re.match(r'\.+', raw_module) if is_relative else None
-        level = len(_dots.group()) if _dots else 0
-
-        resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
-
-        # ACS (Lim #2 + F2) Python parity - now passes real resolved_path when available
-        conf_score, conf_reasons, conf_explanation = _compute_confidence_score_and_reasons(
-            confidence,
-            is_dynamic=False,
-            is_conditional=False,
-            barrel_depth=None,
-            via_barrel=False,
-            resolved_path=resolved_path,
-        )
-
-        # Rich diagnostic for low/unresolved static cases (parity with JS _make_diag_for_js + diagnostics layer)
-        # Makes failure modes (missing target, relative misresolve) visible + actionable.
-        diag = None
-        if (confidence or "").lower() in ("low", "unresolved") or not resolved_path:
-            try:
-                if hasattr(diagnostics, "make_diagnostic"):
-                    cat = "relative_misresolve" if is_relative and level > 0 else ("no_fs_match" if is_relative else "external_or_bare")
-                    reason = (
-                        f"Python relative import '{raw_module}' resolved to '{resolved_module}' "
-                        "but no on-disk .py / __init__.py target located via package hierarchy."
-                        if is_relative else
-                        f"Absolute/bare Python import '{raw_module}' (stdlib, third-party, or intra-project bare module not resolvable by static walk)."
-                    )
-                    diag = diagnostics.make_diagnostic(
-                        cat,
-                        reason[:280],
-                        severity="info" if not is_relative else "warn",
-                        suggestion_for_agent=(
-                            "For project-internal deps, use explicit relative imports (from .foo import) with matching files on disk. "
-                            "Externals/bare are expected; safe to ignore or pin via comments for graph completeness."
-                        ),
-                        details={"raw_module": raw_module, "level": level, "resolved_module": resolved_module, "has_resolved_path": bool(resolved_path)},
-                    )
-            except Exception:
-                diag = None
-
-        # Per-edge provenance (closes asymmetry; flows to resolved_pairs/cache/MCP/ACS/CIABRE automatically via update_file_data RICH preservation)
-        provenance = {
-            "parser": "python",
-            "resolution_strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
-            "resolution_metadata": {
-                "strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
-                "package_hierarchy_walk": is_relative,
-                "target_on_disk": bool(resolved_path),
-                "relative_level": level,
-            },
-        }
-
-        imports.append({
-            "module": resolved_module,
-            "raw_module": raw_module,
-            "is_relative": is_relative,
-            "level": level,
-            "alias": alias,
-            "imported_names": [],
-            "original_statement": original,
-            "statement_type": "import_as" if alias else "import",
-            "resolved_path": resolved_path,
-            "resolution_confidence": confidence,
-            "confidence_score": conf_score,
-            "confidence_reasons": conf_reasons,
-            "confidence_explanation": conf_explanation,
-            "diagnostic": diag,
-            **provenance,
-        })
+            is_relative = raw_module.startswith('.')
+            _dots = re.match(r'\.+', raw_module) if is_relative else None
+            level = len(_dots.group()) if _dots else 0
+    
+            resolved_module, confidence, resolved_path = _resolve_relative_import(path, raw_module, level)
+    
+            # ACS (Lim #2 + F2) Python parity - now passes real resolved_path when available
+            conf_score, conf_reasons, conf_explanation = _compute_confidence_score_and_reasons(
+                confidence,
+                is_dynamic=False,
+                is_conditional=False,
+                barrel_depth=None,
+                via_barrel=False,
+                resolved_path=resolved_path,
+            )
+    
+            # Rich diagnostic for low/unresolved static cases (parity with JS _make_diag_for_js + diagnostics layer)
+            # Makes failure modes (missing target, relative misresolve) visible + actionable.
+            diag = None
+            if (confidence or "").lower() in ("low", "unresolved") or not resolved_path:
+                try:
+                    if hasattr(diagnostics, "make_diagnostic"):
+                        cat = "relative_misresolve" if is_relative and level > 0 else ("no_fs_match" if is_relative else "external_or_bare")
+                        reason = (
+                            f"Python relative import '{raw_module}' resolved to '{resolved_module}' "
+                            "but no on-disk .py / __init__.py target located via package hierarchy."
+                            if is_relative else
+                            f"Absolute/bare Python import '{raw_module}' (stdlib, third-party, or intra-project bare module not resolvable by static walk)."
+                        )
+                        diag = diagnostics.make_diagnostic(
+                            cat,
+                            reason[:280],
+                            severity="info" if not is_relative else "warn",
+                            suggestion_for_agent=(
+                                "For project-internal deps, use explicit relative imports (from .foo import) with matching files on disk. "
+                                "Externals/bare are expected; safe to ignore or pin via comments for graph completeness."
+                            ),
+                            details={"raw_module": raw_module, "level": level, "resolved_module": resolved_module, "has_resolved_path": bool(resolved_path)},
+                        )
+                except Exception:
+                    diag = None
+    
+            # Per-edge provenance (closes asymmetry; flows to resolved_pairs/cache/MCP/ACS/CIABRE automatically via update_file_data RICH preservation)
+            provenance = {
+                "parser": "python",
+                "resolution_strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
+                "resolution_metadata": {
+                    "strategy": "python-relative-hierarchy" if is_relative else "python-bare-or-external",
+                    "package_hierarchy_walk": is_relative,
+                    "target_on_disk": bool(resolved_path),
+                    "relative_level": level,
+                },
+            }
+    
+            imports.append({
+                "module": resolved_module,
+                "raw_module": raw_module,
+                "is_relative": is_relative,
+                "level": level,
+                "alias": alias,
+                "imported_names": [],
+                "original_statement": original,
+                "statement_type": "import_as" if alias else "import",
+                "resolved_path": resolved_path,
+                "resolution_confidence": confidence,
+                "confidence_score": conf_score,
+                "confidence_reasons": conf_reasons,
+                "confidence_explanation": conf_explanation,
+                "diagnostic": diag,
+                **provenance,
+            })
 
     # Process "from ... import ..." statements
     for match in from_import_pattern.finditer(content):

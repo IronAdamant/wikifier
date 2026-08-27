@@ -31,9 +31,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install build wheel setuptools
           pip install -e .
+          pip install -e '.[mcp]'
       
       - name: Run tests
         run: python -m unittest discover tests -v
       
-      - name: Verify package build
-        run: python -m build --wheel --outdir dist/
+      - name: Verify package build and wheel CLI
+        run: |
+          python -m build --wheel --outdir dist/
+          python -m venv /tmp/wikifier-wheel
+          /tmp/wikifier-wheel/bin/pip install dist/wikifier-*.whl
+          /tmp/wikifier-wheel/bin/wikifier --help
