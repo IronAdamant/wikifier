@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "last_updated": "2026-08-27 11:27:44",
+  "last_updated": "2026-09-04 06:17:32",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
@@ -107,12 +107,14 @@
       "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f"
     },
     "wikifier/import_cache.py": {
-      "status": "🟡 Yellow",
-      "last_updated": "2026-08-13 16:31:56",
-      "reason": "content changed since last trusted baseline (check_changes content-honest)",
-      "source_content_hash": "sha256:326f128df8811dd11db9a022d43b30a04746e56f98190fbe13282719aa0d21d7",
-      "last_wiki_refresh": "2026-07-12 11:56:20",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:25 (wiki hash captured); mark-green:2026-07-12 11:56:20 (wiki hash captured)"
+      "status": "🟢 Green",
+      "last_updated": "2026-09-04 06:16:42",
+      "reason": "wiki + baseline after shim confirmation; tests OK",
+      "wiki_content_hash": "sha256:c106a74263abfae1beb95702a62ed6f0bdddea5ce6795ecb08647b443986b82e",
+      "source_content_hash": "sha256:43ee3452c190e77a29d647c945b19b1fd033b83568985dda06d4f2266d2c2845",
+      "last_meaningful_edit": "2026-09-04 06:16:42",
+      "last_wiki_refresh": "2026-09-04 06:16:42",
+      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:16:42 | wiki refresh: shim → wikifier.cache; close stale content-hash yellow; mark-green:2026-09-04 06:16:42 (wiki hash captured); wiki=import_cache.py.wiki.md"
     },
     "wikifier/parsers/python.py": {
       "status": "🟢 Green",
@@ -142,10 +144,13 @@
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:14:09",
-      "reason": "test count synced to 49",
-      "source_content_hash": "sha256:f0c3056aa33c49b5d12b03828e99a69a5e5e8aab45bc0389c07b94c65c1352f2",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-09-04 06:17:32",
+      "reason": "live hash synced; case-ghost Claude.md pruned",
+      "wiki_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
+      "source_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
+      "last_meaningful_edit": "2026-09-04 06:17:31",
+      "last_wiki_refresh": "2026-09-04 06:17:32",
+      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:17:31 | re-baseline live hash after Claude.md case-ghost retirement; mark-green:2026-09-04 06:17:32 (wiki hash captured); wiki=CLAUDE.md"
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
@@ -304,12 +309,14 @@
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_gap_closure.py": {
-      "status": "🟡 Yellow",
-      "last_updated": "2026-08-13 16:31:56",
-      "reason": "content changed since last trusted baseline (check_changes content-honest)",
-      "source_content_hash": "sha256:0542cc16186a5a1ea062be5cbab5e09b3944d20326179ed2cc89df8fcd34f97a",
-      "last_wiki_refresh": "2026-07-12 11:01:27",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:27 (wiki hash captured)"
+      "status": "🟢 Green",
+      "last_updated": "2026-09-04 06:16:42",
+      "reason": "wiki + baseline; gap_closure tests OK",
+      "wiki_content_hash": "sha256:db99a46c4fe0b580736250e924352860543b82606d6d4156a722a6fe4675228a",
+      "source_content_hash": "sha256:2103a68526ec83c50d1e904802eb63288beafe42afff2eb137c682893e83bb01",
+      "last_meaningful_edit": "2026-09-04 06:16:42",
+      "last_wiki_refresh": "2026-09-04 06:16:42",
+      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:16:42 | wiki refresh: G4/G5/G7 gap-closure suite; close stale yellow; mark-green:2026-09-04 06:16:42 (wiki hash captured); wiki=test_gap_closure.py.wiki.md"
     },
     "wikifier/resolution.py": {
       "status": "🟢 Green",
@@ -349,12 +356,14 @@
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:21 (wiki hash captured)"
     },
     "wikifier/parsers/c_cpp.py": {
-      "status": "🟡 Yellow",
-      "last_updated": "2026-08-13 16:31:56",
-      "reason": "content changed since last trusted baseline (check_changes content-honest)",
-      "source_content_hash": "sha256:c346d1f71f2cb936b657be5160f37c0ed1581faec9cd4072b02cdebbf60f4527",
-      "last_wiki_refresh": "2026-07-12 12:47:38",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:38 (wiki hash captured)"
+      "status": "🟢 Green",
+      "last_updated": "2026-09-04 06:16:42",
+      "reason": "wiki + baseline; C include tests OK",
+      "wiki_content_hash": "sha256:5c271dfec43714c0f05f29f8c1bc57d88febf3bb5319f6ab3134580f781b6f14",
+      "source_content_hash": "sha256:9eed3d0c9e3ea8f8da651f220efd91540a8d198e84fdb8f0951aa2075675ab7d",
+      "last_meaningful_edit": "2026-09-04 06:16:42",
+      "last_wiki_refresh": "2026-09-04 06:16:42",
+      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:16:42 | wiki refresh: C/C++ include parser AGENT MAP; close stale yellow; mark-green:2026-09-04 06:16:42 (wiki hash captured); wiki=c_cpp.py.wiki.md"
     },
     "wikifier/parsers/csharp.py": {
       "status": "🟢 Green",
@@ -717,16 +726,6 @@
       "source_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
       "last_wiki_refresh": "2026-08-01 11:25:18",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-08-01 11:25:18 (wiki hash captured); wiki=gap-amendment-closure-2026-08-01.md"
-    },
-    "Claude.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
-      "source_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13: live module names, test count, relative monitors; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=Claude.md"
     },
     "wikifier/api.py": {
       "status": "🟢 Green",

@@ -6,9 +6,8 @@
 | .github/workflows/ci.yml | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | .github/workflows/publish.yml | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | CHANGELOG.md | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
-| CLAUDE.md | 🟢 Green | 2026-07-09 06:14:09 | test count synced to 49 |
+| CLAUDE.md | 🟢 Green | 2026-09-04 06:17:32 | live hash synced; case-ghost Claude.md pruned |
 | CONTRIBUTING.md | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
-| Claude.md | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | Findings/2026-06-10-Dogfood-Refactor-Validation.md | 🟢 Green | 2026-06-10 09:54:26 AEST | Self-describing findings doc |
 | Findings/2026-06-10-Fix-Plan.md | 🟢 Green | 2026-06-10 14:20:33 AEST | Results appended, all phases verified |
 | Findings/2026-08-13-implementation-plan.md | 🟢 Green | 2026-08-13 16:50:52 | implementation plan |
@@ -66,7 +65,7 @@
 | tests/test_barrel_invalidation.py | 🟢 Green | 2026-08-13 16:50:52 | unskipped content-honest barrel tests |
 | tests/test_cache_store.py | 🟢 Green | 2026-07-12 12:00:51 | instrumented warm load assertion |
 | tests/test_gap_amendment_2026_08.py | 🟢 Green | 2026-08-01 11:25:16 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
-| tests/test_gap_closure.py | 🟡 Yellow | 2026-08-13 16:31:56 | content changed since last trusted baseline (check_changes content-honest) |
+| tests/test_gap_closure.py | 🟢 Green | 2026-09-04 06:16:42 | wiki + baseline; gap_closure tests OK |
 | tests/test_health.py | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | tests/test_import_cache.py | 🟢 Green | 2026-08-13 17:08:27 | Persist-path reverse increment test green. |
 | tests/test_index_map_paths.py | 🟢 Green | 2026-07-12 13:41:02 | 125 unittest OK |
@@ -94,7 +93,7 @@
 | wikifier/diagnostics.py | 🟢 Green | 2026-07-09 06:34:55 | hygiene session complete 4.5.6; 53 tests OK |
 | wikifier/health_impl.py | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | wikifier/health_pkg/__init__.py | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
-| wikifier/import_cache.py | 🟡 Yellow | 2026-08-13 16:31:56 | content changed since last trusted baseline (check_changes content-honest) |
+| wikifier/import_cache.py | 🟢 Green | 2026-09-04 06:16:42 | wiki + baseline after shim confirmation; tests OK |
 | wikifier/index.html | 🟢 Green | 2026-06-11 00:20:18 AEST | Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges |
 | wikifier/library.py | 🟢 Green | 2026-08-01 11:25:15 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
 | wikifier/locking.py | 🟢 Green | 2026-08-01 11:25:14 | gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure) |
@@ -110,7 +109,7 @@
 | wikifier/parsers/_edge.py | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | wikifier/parsers/_ldsi.py | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
 | wikifier/parsers/bree/__init__.py | 🟢 Green | 2026-08-27 11:15:12 | 4.6.13 plan WP0–WP7 wiki/protocol aligned |
-| wikifier/parsers/c_cpp.py | 🟡 Yellow | 2026-08-13 16:31:56 | content changed since last trusted baseline (check_changes content-honest) |
+| wikifier/parsers/c_cpp.py | 🟢 Green | 2026-09-04 06:16:42 | wiki + baseline; C include tests OK |
 | wikifier/parsers/cdia.py | 🟢 Green | 2026-07-09 06:13:34 | mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first) |
 | wikifier/parsers/csharp.py | 🟢 Green | 2026-07-12 12:47:37 | 4.6.5 verified |
 | wikifier/parsers/go_lang.py | 🟢 Green | 2026-07-12 11:56:21 | 4.6.4 sqlite coverage verified 93 tests |
