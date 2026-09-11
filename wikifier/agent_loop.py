@@ -648,8 +648,18 @@ def session_bootstrap(
             cache = ic.load_cache(root) or {}
             acs = ic.ensure_acs_summary_persisted(cache, root) or {}
             cyc = cache.get("_cycles") or {}
-            if cs is not None and not out.get("cache_backend"):
+            # Re-read after persist: creating an empty sqlite must not leave "none".
+            if cs is not None:
                 out["cache_backend"] = cs.backend_name(root)
+        try:
+            n = 0
+            if cs is not None:
+                n = len(cs.load_mtime_index(root) or {})
+            out["cache_files_indexed"] = n
+            out["cache_empty"] = n == 0
+        except Exception:
+            out.setdefault("cache_files_indexed", 0)
+            out.setdefault("cache_empty", True)
         acs_actionable = int(acs.get("actionable_low_conf_edges") or 0)
         out["acs"] = {
             "acs_version": acs.get("acs_version"),

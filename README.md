@@ -8,17 +8,12 @@
 
 Wikifier is an **agent-to-agent** tool: it builds a living map of a project (health matrix, dependency graph, short file summaries) and agents keep that map current as they work. Humans can peek via a small dashboard; the product is the agent loop, not a general docs site or IDE.
 
-Works from small scripts to large monorepos. **Deep import/include maps** (zero-dep regex parsers):
+Works from small scripts to large monorepos. Parsers are **zero-dep regex** (not cargo / `go.mod` / classpath / `-I`). Depth is two-tier:
 
-| Language | Extensions | Notes |
-|----------|------------|--------|
-| Python | `.py` | full ACS/CDIA path |
-| JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` | barrels (BREE), dynamic/CDIA |
-| Rust | `.rs` | `use` / `mod` / `extern crate` |
-| Go | `.go` | `import` / import blocks |
-| C / C++ | `.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh` | `#include` (local + system) |
-| C# | `.cs` | `using` namespaces |
-| Java | `.java` | `import` / `import static` |
+| Depth | Languages | What agents should trust |
+|-------|-----------|--------------------------|
+| **Deep / ACS** | Python (`.py`); JavaScript / TypeScript (`.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts`) | CDIA, BREE barrels, scored resolve, ACS work queue |
+| **Regex hint** | Rust (`.rs`); Go (`.go`); C / C++ (`.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh`); C# (`.cs`); Java (`.java`) | `use` / `import` / `#include` / `using` smokes — not compiler-faithful |
 
 Health/journal still work for any monitored path. Parsers are **pragmatic regex** (not full cargo/`go.mod`/classpath/`-I` resolution). On huge monorepos, split scope deliberately:
 
@@ -62,7 +57,7 @@ Always set an explicit root for external trees: `WIKIFIER_PROJECT_ROOT=/abs/path
 
 ## Steady state (only touch what needs it)
 
-Full protocol: [`skills/run.md`](skills/run.md) (Agent Protocol v0.6 — package **4.6.x**).
+Full protocol: [`skills/run.md`](skills/run.md) (Agent Protocol v0.6.1 — package **4.6.x**).
 
 ```bash
 wikifier session-bootstrap      # one-shot: root, health, attention, actions[]
@@ -85,7 +80,7 @@ Advanced intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`, ba
 
 ## What you get
 
-- **Import analysis** — Python, JS/TS (ESM/CJS, barrels), Rust (`use`/`mod` + best-effort `crate::` paths), Go, C/C++ includes, C# usings; per-edge confidence; barrel expansion for TS/JS
+- **Import analysis** — deep/ACS for Python + JS/TS (ESM/CJS, barrels, CDIA); regex-hint maps for Rust/Go/C/C++/C#/Java; per-edge confidence on the deep path
 - **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
 - **Warm agent maps (4.6.3–4.6.7)** — zero-dirty + **index-first** candidates (re-list only when fingerprint / map-scoped index / live count disagree); **MapScope** keeps collect, live count, index filter, and prune aligned; **stdlib SQLite**; content-hash dirty
 - **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = wiki/health watch (**independent** — wiki file lists never collapse the map)
