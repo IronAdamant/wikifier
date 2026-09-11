@@ -1,16 +1,16 @@
 {
   "version": 2,
-  "last_updated": "2026-09-04 06:17:32",
+  "last_updated": "2026-09-11 06:38:37",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:30f6da4a7b46920c1255c339c4c976c43c3323c6a66f03aed9a5e34cca197e04",
-      "source_content_hash": "sha256:30f6da4a7b46920c1255c339c4c976c43c3323c6a66f03aed9a5e34cca197e04",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13: close-the-loop mark-green; relative monitors; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=run.md"
+      "last_updated": "2026-09-11 06:37:25",
+      "reason": "Protocol v0.6.1 notes and language depth table.",
+      "wiki_content_hash": "sha256:4660244d3ed7b22c8d8bdb3e9473a0cafb0e3bff71b1fde7ef392e49cccc2abc",
+      "source_content_hash": "sha256:4660244d3ed7b22c8d8bdb3e9473a0cafb0e3bff71b1fde7ef392e49cccc2abc",
+      "last_meaningful_edit": "2026-09-11 06:37:17",
+      "last_wiki_refresh": "2026-09-11 06:37:25",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:37:17 | Protocol v0.6.1 additive 4.6.x field notes including sqlite-empty vs cache_backend none; language depth table (subid=hon; mark-green:2026-09-11 06:37:25 (wiki hash captured); wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
@@ -57,13 +57,13 @@
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:ea07d5a76184443393d655eb09084e42d7f6d521f0168fe8e56f043b441327e9",
-      "source_content_hash": "sha256:ea07d5a76184443393d655eb09084e42d7f6d521f0168fe8e56f043b441327e9",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 test count; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-09-11 06:37:25",
+      "reason": "Deep/ACS vs regex-hint language table.",
+      "wiki_content_hash": "sha256:10dc0533d5f4db138e593d63173d2d016173976274bf0e47e3ef2d38664d08ff",
+      "source_content_hash": "sha256:10dc0533d5f4db138e593d63173d2d016173976274bf0e47e3ef2d38664d08ff",
+      "last_meaningful_edit": "2026-09-11 06:37:17",
+      "last_wiki_refresh": "2026-09-11 06:37:25",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:37:17 | Language table: deep/ACS vs regex hint; protocol v0.6.1 (subid=honest-map).; mark-green:2026-09-11 06:37:25 (wiki hash captured); wiki=README.md"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
@@ -134,23 +134,23 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:7a0a54cb4ea5a95815dad3dad5d2e841c74b5b1a47e5cc9b193c96e1a50b7b1c",
-      "source_content_hash": "sha256:7a0a54cb4ea5a95815dad3dad5d2e841c74b5b1a47e5cc9b193c96e1a50b7b1c",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 Keep a Changelog; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=CHANGELOG.md"
+      "last_updated": "2026-09-11 06:37:25",
+      "reason": "Unreleased honesty notes.",
+      "wiki_content_hash": "sha256:3a12d8851eaa663ea26b6997143b39b66efb6768dea5965bbae73e104771dbad",
+      "source_content_hash": "sha256:3a12d8851eaa663ea26b6997143b39b66efb6768dea5965bbae73e104771dbad",
+      "last_meaningful_edit": "2026-09-11 06:37:17",
+      "last_wiki_refresh": "2026-09-11 06:37:25",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:37:17 | Unreleased: library.md honesty, protocol v0.6.1, language table (subid=honest-map).; mark-green:2026-09-11 06:37:25 (wiki hash captured); wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-04 06:17:32",
-      "reason": "live hash synced; case-ghost Claude.md pruned",
-      "wiki_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
-      "source_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
-      "last_meaningful_edit": "2026-09-04 06:17:31",
-      "last_wiki_refresh": "2026-09-04 06:17:32",
-      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:17:31 | re-baseline live hash after Claude.md case-ghost retirement; mark-green:2026-09-04 06:17:32 (wiki hash captured); wiki=CLAUDE.md"
+      "last_updated": "2026-09-11 06:37:25",
+      "reason": "Protocol pointer v0.6.1.",
+      "wiki_content_hash": "sha256:d2a708614ef48b5d1dd0f7bda001f9fff0b65f30f004513200636c00125bcc0d",
+      "source_content_hash": "sha256:d2a708614ef48b5d1dd0f7bda001f9fff0b65f30f004513200636c00125bcc0d",
+      "last_meaningful_edit": "2026-09-11 06:37:17",
+      "last_wiki_refresh": "2026-09-11 06:37:25",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:37:17 | Point agent contract at protocol v0.6.1 (subid=honest-map).; mark-green:2026-09-11 06:37:25 (wiki hash captured); wiki=CLAUDE.md"
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
@@ -223,11 +223,13 @@
     },
     "wikifier/library.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:15",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "source_content_hash": "sha256:6312ddc20cd7cd1adef0ec2e5e9818c5030d57ddf1dc49e0384952cf03681ad4",
-      "last_wiki_refresh": "2026-08-01 11:25:15",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:15 (wiki hash captured)"
+      "last_updated": "2026-09-11 06:38:32",
+      "reason": "Wiki captions handle **Role:** as well as ## Purpose.",
+      "wiki_content_hash": "sha256:89e1fc5b8dbfddb8306f55135392fb5bf5faa5d2e18177285d89f26a649665b8",
+      "source_content_hash": "sha256:edd02e80508eb135e50681b05307fd2a0e8d269278171f9b2c1d4cf10975a8f6",
+      "last_meaningful_edit": "2026-09-11 06:38:12",
+      "last_wiki_refresh": "2026-09-11 06:38:32",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:38:12 | Match **Role:** wiki captions (colon inside bold) so tree lines are not Role:** leftover (subid=honest-map).; mark-green:2026-09-11 06:38:32 (wiki hash captured); wiki=library.py.wiki.md"
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
@@ -291,9 +293,13 @@
     },
     "library.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 20:20:38 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
-      "source_content_hash": "sha256:f3f717512ac8c856b79d46d5d47906fdb3f2311025be1bc65186bc3b751bbe2e"
+      "last_updated": "2026-09-11 06:38:37",
+      "reason": "Committed map matches live tree after update-maps --full.",
+      "wiki_content_hash": "sha256:5ced31b3d5598e13d38877627603fcd813d425531c1b3b555c80e1a5211afc03",
+      "source_content_hash": "sha256:5ced31b3d5598e13d38877627603fcd813d425531c1b3b555c80e1a5211afc03",
+      "last_meaningful_edit": "2026-09-11 06:38:37",
+      "last_wiki_refresh": "2026-09-11 06:38:37",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:38:37 | Regenerated from full update-maps on live tree; 4.6.10 leftovers gone (subid=honest-map).; mark-green:2026-09-11 06:38:37 (wiki hash captured); wiki=library.md"
     },
     "screenshot/front_page_review.png": {
       "status": "🟢 Green",
@@ -565,12 +571,12 @@
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:11",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:e08d0f9d3d7ffd57a544277a7ddb7342abd0d216cd4b846f6878b4f1126e7a4a",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:11",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: emit mark_green action for recorded yellows; mark-green:2026-08-27 11:15:11 (wiki hash captured)"
+      "last_updated": "2026-09-11 06:37:25",
+      "reason": "Bootstrap cache_backend refresh; cache_empty / cache_files_indexed additive.",
+      "source_content_hash": "sha256:feb6a159759552f27af71035557515ca6f367df7e0277df99b769814c27b7893",
+      "last_meaningful_edit": "2026-09-11 06:37:17",
+      "last_wiki_refresh": "2026-09-11 06:37:25",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:37:17 | Refresh cache_backend after ACS persist; add cache_empty and cache_files_indexed so sqlite-empty is not none (subid=hone; mark-green:2026-09-11 06:37:25 (wiki hash captured)"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
@@ -971,6 +977,25 @@
       "last_meaningful_edit": "2026-08-27 11:27:44",
       "last_wiki_refresh": "2026-08-27 11:27:44",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:27:44 | 4.6.13: status tools wrap health/cache in call_with_deadline; mark-green:2026-08-27 11:27:44 (wiki hash captured); wiki=status_ops.py.wiki.md"
+    },
+    "tests/test_library_map_honesty.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-09-11 06:38:32",
+      "reason": "Caption **Role:** unit test.",
+      "source_content_hash": "sha256:c9e8e37d44908971ee3167281d1934186d71f8ed97d73ab9019cb1afec616165",
+      "last_meaningful_edit": "2026-09-11 06:38:32",
+      "last_wiki_refresh": "2026-09-11 06:38:32",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:38:32 | Cover **Role:** wiki caption parsing (subid=honest-map).; mark-green:2026-09-11 06:38:32 (wiki hash captured)"
+    },
+    "wikifier/library.py.wiki.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-09-11 06:37:25",
+      "reason": "Generator wiki current.",
+      "wiki_content_hash": "sha256:89e1fc5b8dbfddb8306f55135392fb5bf5faa5d2e18177285d89f26a649665b8",
+      "source_content_hash": "sha256:89e1fc5b8dbfddb8306f55135392fb5bf5faa5d2e18177285d89f26a649665b8",
+      "last_meaningful_edit": "2026-09-11 06:37:18",
+      "last_wiki_refresh": "2026-09-11 06:37:25",
+      "freshness_provenance": "record-meaningful-edit:2026-09-11 06:37:18 | Wiki for library.md generator: live-path filter and wiki captions (subid=honest-map).; mark-green:2026-09-11 06:37:25 (wiki hash captured); wiki=library.py.wiki.md"
     }
   }
 }

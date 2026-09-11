@@ -507,41 +507,95 @@ def _generate_conditional_dynamic_section(cache: Dict[str, Any]) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Live-path filter (stale cache keys must not become map nodes)
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# File tree (the primary human/agent view of project shape)
-# ---------------------------------------------------------------------------
-
-def _clean_reason(reason: str) -> Optional[str]:
-    """Normalise a health reason into a short description, or None for
-    auto-yellow boilerplate (it describes the tracking system, not the file)."""
-    reason = re.sub(r"\s+", " ", str(reason or "")).strip()
-    if not reason or reason.startswith("mtime changed") or "auto-detected" in reason:
-        return None
-    return (reason[:90] + "…") if len(reason) > 91 else reason
+_SOURCE_SUFFIXES = (
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
+    ".go", ".rs", ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh",
+    ".cs", ".java", ".md", ".sh",
+)
 
 
-def _load_health_descriptions(root: Path) -> Dict[str, str]:
-    """file -> short description, from file_health.json or file_health.md.
+def _is_live_file(root: Path, rel: str) -> bool:
+    rel = str(rel or "").replace("\\", "/").strip()
+    if not rel or rel.startswith("_") or "\n" in rel:
+        return False
+    try:
+        return Path(root, rel).is_file()
+    except (OSError, ValueError):
+        return False
 
-    Projects maintained through the shell workflow only have the .md table
-    (the JSON is written by the Python health module), so both are read.
+
+def _looks_like_rel_file(rel: str) -> bool:
+    rel = str(rel or "").replace("\\", "/").strip()
+    if not rel or rel.startswith("_"):
+        return False
+    lower = rel.lower()
+    return ("/" in rel) or lower.endswith(_SOURCE_SUFFIXES)
+
+
+def _wiki_caption(root: Path, rel: str) -> Optional[str]:
+    """Short purpose/role line from ``{rel}.wiki.md``, or None.
+
+    Health *reasons* are audit stamps and must not be used as captions.
     """
-    desc: Dict[str, str] = {}
+    wiki = Path(root, rel + ".wiki.md")
+    if not wiki.is_file():
+        return None
+    try:
+        text = wiki.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = text.splitlines()
+    picked = None
+    heading_re = re.compile(r"^#{1,6}\s+(purpose|role)\b", re.I)
+    role_re = re.compile(r"^\*\*role:?\*\*\s*(.*)$", re.I)
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if heading_re.match(s):
+            for nxt in lines[i + 1:]:
+                n = nxt.strip()
+                if not n:
+                    continue
+                if n.startswith("#"):
+                    break
+                picked = n.lstrip("-* ").strip()
+                break
+            if picked:
+                break
+        m2 = role_re.match(s)
+        if m2 and m2.group(1).strip():
+            picked = m2.group(1).strip()
+            break
+    if not picked:
+        for line in lines:
+            s = line.strip()
+            if not s or s.startswith("#") or s.startswith(">") or s.startswith("|"):
+                continue
+            picked = s.lstrip("-* ").strip()
+            break
+    if not picked:
+        return None
+    picked = re.sub(r"\s+", " ", picked)
+    return (picked[:90] + "…") if len(picked) > 91 else picked
+
+
+def _health_tracked_files(root: Path) -> List[str]:
+    """On-disk files listed in the health matrix (keys only; reasons ignored)."""
+    tracked: List[str] = []
     try:
         with open(root / "file_health.json", "r", encoding="utf-8") as f:
             data = json.load(f)
         entries = data.get("entries", data) if isinstance(data, dict) else {}
-        for file, e in entries.items():
-            r = _clean_reason((e or {}).get("reason"))
-            if r:
-                desc[str(file)] = r
+        for file in entries:
+            k2 = str(file).rstrip("/")
+            if k2 and _is_live_file(root, k2):
+                tracked.append(k2)
     except Exception:
         pass
-    if desc:
-        return desc
+    if tracked:
+        return tracked
     try:  # .md fallback: | File | Status | Last Updated | Reason / Intent |
         with open(root / "file_health.md", "r", encoding="utf-8") as f:
             for line in f:
@@ -550,12 +604,69 @@ def _load_health_descriptions(root: Path) -> Dict[str, str]:
                     continue
                 parts = [p.strip() for p in line.split("|")]
                 if len(parts) >= 6 and parts[1]:
-                    r = _clean_reason(parts[4])
-                    if r:
-                        desc[parts[1]] = r
+                    k2 = parts[1].rstrip("/")
+                    if k2 and _is_live_file(root, k2):
+                        tracked.append(k2)
     except Exception:
         pass
-    return desc
+    return tracked
+
+
+def _live_cache_view(root: Path, cache: Dict[str, Any]) -> Dict[str, Any]:
+    """Shallow copy dropping per-file entries whose source is missing on disk."""
+    if not isinstance(cache, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for k, v in cache.items():
+        if not isinstance(k, str):
+            continue
+        if k.startswith("_"):
+            out[k] = v
+            continue
+        if _is_live_file(root, k):
+            out[k] = v
+    rev = out.get("_reverse_dependencies")
+    if isinstance(rev, dict):
+        new_rev: Dict[str, List[str]] = {}
+        for tgt, srcs in rev.items():
+            tgt_s = str(tgt)
+            if _looks_like_rel_file(tgt_s) and not _is_live_file(root, tgt_s):
+                continue
+            if not isinstance(srcs, list):
+                continue
+            live_srcs = []
+            for s in srcs:
+                ss = str(s)
+                if _looks_like_rel_file(ss) and not _is_live_file(root, ss):
+                    continue
+                live_srcs.append(ss)
+            if live_srcs:
+                new_rev[tgt_s] = live_srcs
+        out["_reverse_dependencies"] = new_rev
+    return out
+
+
+def _filter_live_edges(
+    root: Path, edges: List[Tuple[str, str, str, str, bool]]
+) -> List[Tuple[str, str, str, str, bool]]:
+    """Drop edges whose source (or resolved internal target) is not on disk."""
+    out = []
+    for src, raw, target, conf, internal in edges:
+        if _looks_like_rel_file(src) and not _is_live_file(root, src):
+            continue
+        if internal and _looks_like_rel_file(target) and not _is_live_file(root, target):
+            continue
+        out.append((src, raw, target, conf, internal))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# File tree (the primary human/agent view of project shape)
+# ---------------------------------------------------------------------------
 
 
 TREE_DIR_FILE_CAP = 40      # files listed per directory before "… +N more"
@@ -574,21 +685,12 @@ def _generate_tree_section(root: Path, cache: Dict[str, Any]) -> List[str]:
         │   └── python.py
         └── cli.py — entry point + full update pipeline
     """
-    descriptions = _load_health_descriptions(root)
-    parsed = {k for k in cache.keys() if isinstance(k, str) and not k.startswith("_")}
-    # Health keys are free text (audit records may use whole sentences as the
-    # "file"; some entries point at directories): only real on-disk files —
-    # or parser-confirmed ones — belong in the tree.
-    tracked = set()
-    for k in descriptions:
-        k2 = k.rstrip("/")
-        if not k2 or k2 in parsed:
-            continue
-        try:
-            if (root / k2).is_file():
-                tracked.add(k2)
-        except OSError:
-            continue
+    parsed = {
+        k for k in cache.keys()
+        if isinstance(k, str) and not k.startswith("_") and _is_live_file(root, k)
+    }
+    # Health keys may be sentences or directories; only live files belong here.
+    tracked = {k for k in _health_tracked_files(root) if k not in parsed}
     files = sorted(parsed | tracked)
     if not files:
         return ["## File Tree", "", "```text",
@@ -632,15 +734,16 @@ def _generate_tree_section(root: Path, cache: Dict[str, Any]) -> List[str]:
                 out.append(prefix + connector + name + suffix)
                 render(sub, child_prefix, path_prefix + name)
             else:
-                d = descriptions.get(path_prefix + name)
+                d = _wiki_caption(root, path_prefix + name)
                 out.append(prefix + connector + name + ((" — " + d) if d else ""))
 
     render(tree, "", "")
 
     lines = [
         "## File Tree", "",
-        "> Every parsed/tracked file, organised by folder. Descriptions come from",
-        "> the agent wiki (file_health). The dependency graph is further below.",
+        "> Every parsed/tracked file, organised by folder. Captions come from",
+        "> `*.wiki.md` purpose/role text when present. Health *reasons* are audit",
+        "> stamps and are not copied here. The dependency graph is further below.",
         "", "```text",
         "{0}/  ({1} files)".format(root.name, len(files)),
     ]
@@ -655,7 +758,8 @@ def generate_library_md(root: Path, cache: Dict[str, Any]) -> str:
     """Render library.md content from an import cache (see module docstring)."""
     if not isinstance(cache, dict):
         cache = {}
-    edges = _collect_edges(cache)
+    cache = _live_cache_view(root, cache)
+    edges = _filter_live_edges(root, _collect_edges(cache))
 
     lines = [
         "# Library & Imports Map (auto-generated by wikifier update-maps)",
@@ -702,8 +806,9 @@ def write_library_md(root: Path, cache: Optional[Dict[str, Any]] = None) -> Dict
             cache = load_cache(root)
         if not isinstance(cache, dict):
             cache = {}
-        content = generate_library_md(root, cache)
-        nodes, edges = _graph_stats(cache)
+        live = _live_cache_view(root, cache)
+        content = generate_library_md(root, live)
+        nodes, edges = _graph_stats(live)
         tmp_path = out_path.with_name(out_path.name + ".tmp")
         tmp_path.write_text(content, encoding="utf-8")
         os.replace(str(tmp_path), str(out_path))

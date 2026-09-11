@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - CI: install `wikifier[mcp]` only on Python ≥3.10 (`mcp` has no 3.8/3.9 wheels).
+- Regenerated committed `library.md` from a full `update-maps` so deleted 4.6.10 leftovers (`mcp/tools/{intel,status,workflow}.py`, `parsers/javascript/_parser.py`, `health.py`, `server_backup.py`) no longer appear in the file tree, Mermaid graph, or reverse-deps.
+- `generate_library_md` drops cache keys / reverse-deps whose source is not a file on disk (stale cache cannot resurrect ghosts).
+- File-tree captions prefer `*.wiki.md` purpose/role text; health *reasons* are audit stamps and are not copied as descriptions.
+- `session_bootstrap`: re-read `cache_backend` after ACS persist so creating an empty SQLite stub does not leave `cache_backend: "none"`. Additive `cache_empty` / `cache_files_indexed` distinguish sqlite-empty from no store.
+
+### Added
+- `tests/test_library_map_honesty.py`: fails if committed `library.md` names a path that is not a file on disk.
+
+### Changed
+- Agent Protocol **v0.6.1**: 4.6.x additive field notes (readiness tiers, `map_paths`, ACS v1.3 `agent_signal`, `needs_mark_green`, sqlite-empty vs `cache_backend: none`).
+- README / protocol language table: deep/ACS (Python, JS/TS) vs regex hint (Rust/Go/C/C++/C#/Java).
 
 ## [4.6.13] - 2026-08-27
 

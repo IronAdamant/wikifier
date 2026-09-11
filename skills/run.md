@@ -1,13 +1,13 @@
-# Wikifier Agent Protocol v0.6
+# Wikifier Agent Protocol v0.6.1
 
 **Formerly "Wikifier Skills & Commands". This is the authoritative, versioned specification for agent behavior when using Wikifier.**
 
-**Version**: v0.6 (v4.2.0 real-pipeline + reliability update; package current **4.6.x**, live `__version__` in `wikifier/__init__.py`)  
-**Date**: 2026-06-10 (package notes refreshed 2026-08-01; gap-closure contract 2026-07-09)  
-**Status**: Active. Supersedes v0.5.  
+**Version**: v0.6.1 (additive 4.6.x I/O notes on v0.6; package current **4.6.x**, live `__version__` in `wikifier/__init__.py`)  
+**Date**: 2026-09-11 (v0.6 dated 2026-06-10; package notes refreshed 2026-08-01; gap-closure 2026-07-09)  
+**Status**: Active. Supersedes v0.6. v0.6 agent behavior keeps working (additive fields only).  
 **See also**: `README.md`, `Findings/gap-closure-report.md`, `Findings/gap-amendment-plan-2026-08-01.md`, and the library in wikifier/.
 
-**Package 4.6.x + gap-closure notes (additive; protocol still v0.6):**
+**Package 4.6.x + gap-closure notes (additive; folded into v0.6.1):**
 - File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
 - **First-run:** `init` → lean `monitored_paths.txt` + `map_paths.txt` (default active root `src/`, not bare `.`) → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
 - **`session_bootstrap` readiness:** message embeds the readiness tier. `blocked` is not a crash — see **§ Readiness blocked**. Hard blockers = missing map/health (or severe ghosts). Bare `.` monitor alone → `map_ok_scope_risk` when map+health exist (scope warnings / fix_scope), not the same tier as missing map. Unattended ops require **`readiness=ready_for_daemon`**, not `health_score=Map Ready` alone.
@@ -20,7 +20,7 @@
 - **Dual scope:** `monitored_paths` = check-changes/health scope (keep lean). `update-maps --directory=` / `--max-files=` = map walk. Never set `project_root` to a multi-repo parent (e.g. `cloned_sample_projects`).
 - **CLI target:** `wikifier --target /abs/project health --summary` (flags stripped before the command). Or `WIKIFIER_PROJECT_ROOT=…`.
 - **Long-horizon:** `wikifier autonomous-status` (or `readiness`) before unattended runs; daemon writes `.wikifier_staging/daemon_heartbeat.json`. Soak ≥72h is still evidence work, not automatic.
-- **Deletions:** `record-deletion` + ghost detection. **Languages:** py/js/ts/rust/go/c/c#/java (regex). journal/pending = audit queue, not Jira.
+- **Deletions:** `record-deletion` + ghost detection. **Languages:** two-tier (see table below). journal/pending = audit queue, not Jira.
 - **Huge monorepos:** lean `monitored_paths.txt` (not bare `.`). `WIKIFIER_CHECK_CHANGES_MAX` default 2000. Hygiene: `seed-health`, `prune-pending`, `prune-health`.
 - **Monitor/daemon:** mtime heartbeat; agents still own wiki/mark-green. `WIKIFIER_DAEMON_MAPS_INTERVAL` default 600s; `WIKIFIER_DAEMON_MAPS=0` for check-only.
 - Health module: `importlib.import_module("wikifier.health")` or `wikifier.health_module` — `from wikifier import health` is the *function*.
@@ -31,6 +31,21 @@
 - `wikifier health --summary|--json|--format=...` now work from the CLI (previously library-only).
 - A POSIX lock self-deadlock in library `record_change`/`mark_green`/`check_changes` was fixed (locking is now re-entrant per process). MCP timeouts on those tools should no longer occur; the CLI fallback guidance below remains valid as defense in depth.
 - A stdlib-only test suite exists: `python -m unittest discover tests` (run it when working on Wikifier itself).
+
+**v0.6.1 migration notes (package 4.6.x; additive on v0.6)** — no mandatory I/O break; tolerate new keys:
+- **Readiness tiers** (`session_bootstrap.readiness`): `blocked` / `map_ok_scope_risk` / `ready_for_daemon` / `ready_with_agent_wiki_work` / `not_ready`. Unattended work needs `ready_for_daemon`, not `health_score=Map Ready` alone.
+- **`map_paths.txt` vs `monitored_paths.txt`:** map package roots vs wiki/health watch. Independent. Wiki-only monitor lists do **not** define the map.
+- **ACS v1.3:** `actionable_low_conf_edges`, `reason_code_counts`, `agent_signal` (`skip`|`investigate`). Never thrash on raw `low_conf_edges`.
+- **Index-first maps:** `index_first_dirty` / `candidates_reused` on `update_maps`. `success: true` ≠ map complete — use `map_coverage.complete`.
+- **`record_change`:** additive `needs_mark_green: true`; stays Yellow until `mark_green`.
+- **`session_bootstrap` cache fields:** `cache_backend` is `sqlite` | `sqlite+json` | `json` | `none`. **`none` means no sqlite/json file at read time.** An empty SQLite file (schema only, `files` table count = 0) is still `sqlite`, not `none`. Additive `cache_empty` (bool) and `cache_files_indexed` (int) make that split explicit. ACS zeros + `cache_empty: true` means “no pairs yet”, not “no backend”. `cache-status` reports the file backend; bootstrap used to leave `cache_backend: "none"` after creating the empty stub — that is fixed; do not equate the two tools without checking `cache_empty`.
+- **Committed `library.md`:** regenerate with `update-maps`; do not hand-edit. Nodes must be files on disk.
+- **Language depth (G9):** deep/ACS = Python + JS/TS; Rust/Go/C/C++/C#/Java are regex hints.
+
+| Depth | Languages | Trust |
+|-------|-----------|--------|
+| Deep / ACS | Python, JS/TS | CDIA, BREE, scored resolve, ACS work queue |
+| Regex hint | Rust, Go, C/C++, C#, Java | `use`/`import`/`#include`/`using` smokes — not cargo/`go.mod`/classpath/`-I` |
 
 **Core design**: Token-efficient agent-to-agent wiki. Agents use it to look up files (health matrix + file wikis + BRC + stele chunks instead of full sources), autonomously update wiki summaries, and create new ones as work progresses. **It should not be used for anything more than that.** 
 
@@ -140,7 +155,7 @@ See also: Findings note `Findings/readiness-blocked-bare-monitor-2026-07.md`.
 **Copy this exact block into the system prompt or the very first instruction of every new LLM session that uses Wikifier:**
 
 ```
-You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 — package 4.6.x).
+You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6.1 — package 4.6.x).
 
 This is strictly an agent-to-agent wiki for token saving: map lookup (health + file wikis + deps) instead of full sources; selective wiki updates; not a human docs product or Jira.
 
