@@ -1,16 +1,16 @@
 {
   "version": 2,
-  "last_updated": "2026-09-04 06:17:32",
+  "last_updated": "2026-09-14 10:02:22",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:30f6da4a7b46920c1255c339c4c976c43c3323c6a66f03aed9a5e34cca197e04",
-      "source_content_hash": "sha256:30f6da4a7b46920c1255c339c4c976c43c3323c6a66f03aed9a5e34cca197e04",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13: close-the-loop mark-green; relative monitors; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=run.md"
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "wiki_content_hash": "sha256:a4b1f692772e525faee52e943761bcc9cb5d236a2653e416fc7c06bfe54e74d5",
+      "source_content_hash": "sha256:a4b1f692772e525faee52e943761bcc9cb5d236a2653e416fc7c06bfe54e74d5",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
@@ -57,13 +57,13 @@
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:ea07d5a76184443393d655eb09084e42d7f6d521f0168fe8e56f043b441327e9",
-      "source_content_hash": "sha256:ea07d5a76184443393d655eb09084e42d7f6d521f0168fe8e56f043b441327e9",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 test count; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "wiki_content_hash": "sha256:c2dd6ca5a5bdf1ce84f429c1c05055f8302fe266f5d6aec4d81ef74ad00fd44e",
+      "source_content_hash": "sha256:c2dd6ca5a5bdf1ce84f429c1c05055f8302fe266f5d6aec4d81ef74ad00fd44e",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=README.md"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
@@ -77,22 +77,23 @@
     },
     "wikifier/mcp/README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "wiki_content_hash": "sha256:64b72cad5e0af9ae9bd02b39ff467eacf8521f4a712d09a649bf9718bc4486dc",
-      "source_content_hash": "sha256:64b72cad5e0af9ae9bd02b39ff467eacf8521f4a712d09a649bf9718bc4486dc",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=README.md; mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "wiki_content_hash": "sha256:0802d3a8f66ea289cacda38a299ae24c307adb339ef63a8b9067ed44c48f2923",
+      "source_content_hash": "sha256:0802d3a8f66ea289cacda38a299ae24c307adb339ef63a8b9067ed44c48f2923",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=README.md"
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
       "wiki_content_hash": "sha256:54a90524f571b7e856227e7397689a30b13dd414312b988527ed9a984d4c8b78",
-      "source_content_hash": "sha256:78b71f99f602db41cd700d59c3998455efa75a613194a1463cb6537f70b2debd",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: prune-health --deleted-missing; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=cli.py.wiki.md"
+      "source_content_hash": "sha256:3161c07d975bf894f6706b209bd1d7e4daf275e0de9dd50b7953d20afd4b716a",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=cli.py.wiki.md"
     },
     "diagnostics.html": {
       "status": "🟢 Green",
@@ -134,13 +135,13 @@
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:7a0a54cb4ea5a95815dad3dad5d2e841c74b5b1a47e5cc9b193c96e1a50b7b1c",
-      "source_content_hash": "sha256:7a0a54cb4ea5a95815dad3dad5d2e841c74b5b1a47e5cc9b193c96e1a50b7b1c",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 Keep a Changelog; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=CHANGELOG.md"
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "wiki_content_hash": "sha256:74641d30d34f2ddd9c4d91f29b667a421b54f6c5afbb5dfbbfffd98d5465f9fa",
+      "source_content_hash": "sha256:74641d30d34f2ddd9c4d91f29b667a421b54f6c5afbb5dfbbfffd98d5465f9fa",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
@@ -154,12 +155,12 @@
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:f32f050091a87a20f9071edbc7e4bb66eb5b139f885d6970aef17964c7a1c16f",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13 version bump; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
+      "last_updated": "2026-09-13 20:18:33",
+      "reason": "wiki/reason current for map-split catalog (subid=map-split-catalog)",
+      "source_content_hash": "sha256:bdcc6675e859f90c70d5a2166fe8bf945c987cb7aa604ac8ed85d27b8222355b",
+      "last_meaningful_edit": "2026-09-13 20:18:33",
+      "last_wiki_refresh": "2026-09-13 20:18:33",
+      "freshness_provenance": "record-meaningful-edit:2026-09-13 20:18:33 | Export list_paths on public library surface (subid=map-split-catalog); mark-green:2026-09-13 20:18:33 (wiki hash captured)"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
@@ -565,12 +566,12 @@
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:11",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:e08d0f9d3d7ffd57a544277a7ddb7342abd0d216cd4b846f6878b4f1126e7a4a",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:11",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: emit mark_green action for recorded yellows; mark-green:2026-08-27 11:15:11 (wiki hash captured)"
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "source_content_hash": "sha256:41eb715d3629eec89f02c77e00a56fb9ba22bfcf8cee849008c6cf9904cecb42",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured)"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
@@ -729,12 +730,12 @@
     },
     "wikifier/api.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:11",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:ada04b8172de1703ad19f6752b712a6eb2b0ee7d12e22e31a3fd79852498a1f3",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:11",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: timeout= on mutators, needs_mark_green, _do_upsert under held lock; mark-green:2026-08-27 11:15:11 (wiki hash captured)"
+      "last_updated": "2026-09-14 10:02:21",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "source_content_hash": "sha256:b57cfe983eaf17a9d025f3d9933899991644e84b4905ca9de9d1f59c49ef1646",
+      "last_meaningful_edit": "2026-09-14 10:02:21",
+      "last_wiki_refresh": "2026-09-14 10:02:21",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:21 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:21 (wiki hash captured)"
     },
     "wikifier/cache/__init__.py": {
       "status": "🟢 Green",
@@ -889,12 +890,12 @@
     },
     "wikifier/mcp/server_impl.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:27:44",
-      "reason": "status tools delegate wiki",
-      "source_content_hash": "sha256:6c23c303c7c6b1291378396ed056290e8ed97c15b74a4ab7a25aa3b9a20db713",
-      "last_meaningful_edit": "2026-08-27 11:27:44",
-      "last_wiki_refresh": "2026-08-27 11:27:44",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:27:44 | 4.6.13: get_project_status/get_files_needing_attention delegate to status_ops; mark-green:2026-08-27 11:27:44 (wiki hash captured)"
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "source_content_hash": "sha256:3f87e0cb50e6fa7a35479fe5ce75f80a002f052d17250ed68839c69586d1b608",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured)"
     },
     "wikifier/parsers/bree/__init__.py": {
       "status": "🟢 Green",
@@ -971,6 +972,35 @@
       "last_meaningful_edit": "2026-08-27 11:27:44",
       "last_wiki_refresh": "2026-08-27 11:27:44",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:27:44 | 4.6.13: status tools wrap health/cache in call_with_deadline; mark-green:2026-08-27 11:27:44 (wiki hash captured); wiki=status_ops.py.wiki.md"
+    },
+    "wikifier/map_index.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-09-14 10:02:21",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "wiki_content_hash": "sha256:85dfa00ad4f7bf9ba419858db18b998e7e5808f74f9c601ce6ecb941abf62bf3",
+      "source_content_hash": "sha256:8553bdfb50f47b69f572b9e1dfde5c3d1afd78a7b17860a6f12648a03437da3d",
+      "last_meaningful_edit": "2026-09-14 10:02:21",
+      "last_wiki_refresh": "2026-09-14 10:02:21",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:21 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:21 (wiki hash captured); wiki=map_index.py.wiki.md"
+    },
+    "tests/test_map_index.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "source_content_hash": "sha256:f125d1296bf07440ebe3fc954256af888a1c263f01e959684042555585fe415d",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured)"
+    },
+    "wikifier/map_index.py.wiki.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-09-14 10:02:22",
+      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "wiki_content_hash": "sha256:85dfa00ad4f7bf9ba419858db18b998e7e5808f74f9c601ce6ecb941abf62bf3",
+      "source_content_hash": "sha256:85dfa00ad4f7bf9ba419858db18b998e7e5808f74f9c601ce6ecb941abf62bf3",
+      "last_meaningful_edit": "2026-09-14 10:02:22",
+      "last_wiki_refresh": "2026-09-14 10:02:22",
+      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=map_index.py.wiki.md"
     }
   }
 }

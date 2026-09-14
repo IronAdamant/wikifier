@@ -65,7 +65,7 @@ Always set an explicit root for external trees: `WIKIFIER_PROJECT_ROOT=/abs/path
 Full protocol: [`skills/run.md`](skills/run.md) (Agent Protocol v0.6 — package **4.6.x**).
 
 ```bash
-wikifier session-bootstrap      # one-shot: root, health, attention, actions[]
+wikifier session-bootstrap      # one-shot: root, health, attention, actions[], names-only map_index
 wikifier check-changes          # content-honest dirty; red ghosts (missing paths)
 # prioritize 🔴 then *actionable* 🟡 — do NOT re-wiki 🟢 Green files
 wikifier prepare-edit path/file.py   # wiki + status + deps/dependents preflight
@@ -81,7 +81,9 @@ wikifier record-deletion "path/gone.py" "why removed"
 **Core 6** (prefer every session — MCP or library/CLI):  
 `session_bootstrap` → `check_changes` → `prepare_edit` → `suggest_next_actions` (json `actions[]`) → `record_change` → `mark_green`.
 
-Advanced intel as needed: `get_dependencies`, `get_dependents`, `get_cycles`, barrels/diagnostics. Always pass `project_root=` / `WIKIFIER_PROJECT_ROOT` for external trees. **Never** point `project_root` at a multi-repo parent folder (e.g. a directory of clones).
+Advanced intel as needed: `list_paths` (names-only folder expand), `get_dependencies`, `get_dependents`, `get_cycles`, barrels/diagnostics. Always pass `project_root=` / `WIKIFIER_PROJECT_ROOT` for external trees. **Never** point `project_root` at a multi-repo parent folder (e.g. a directory of clones).
+
+**Map split:** `update-maps` writes two views from the same import cache — human `library.md` (File Tree + mermaid, dashboard only) and sharded agent folder cards (`.wikifier_staging/maps/`, depth-1). Bootstrap returns the root card; `list_paths` expands one folder; `prepare_edit` follows file-to-file links. Do **not** read `library.md` mermaid for orientation.
 
 ## What you get
 
@@ -126,14 +128,15 @@ Tests: `python -m unittest discover tests` (stdlib only; **158+** `test_` method
 | Command | Purpose |
 |---------|---------|
 | `wikifier init [--target DIR]` | Bootstrap project + human `index.html` |
-| `wikifier session-bootstrap` | Session start: health, attention, dispatchable `actions[]` |
+| `wikifier session-bootstrap` | Session start: health, attention, `actions[]`, names-only `map_index` |
 | `wikifier check-changes` | Content-honest scan → health / pending |
 | `wikifier prepare-edit <file>` | Preflight: status, wiki snippet, deps, dependents |
+| `wikifier list-paths [prefix]` | Depth-1 folder card (names only). `--recursive` / `--depth=0` for a subtree. Then `prepare-edit` for file links. |
 | `wikifier record-change <file> "reason"` | Log *why* (required after edits) |
 | `wikifier mark-green <file>` | Mark wiki current + source content-hash baseline |
 | `wikifier record-deletion <file> "reason"` | Mark removed paths 🔴 + prune barrel refs |
 | `wikifier suggest-next` | Next actions (🔴/actionable 🟡 only; `--json` for `actions[]`) |
-| `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + `library.md` (warm 0-dirty is fast; honors `map_paths.txt`) |
+| `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + human `library.md` + agent folder maps (warm 0-dirty is fast; honors `map_paths.txt`) |
 | `wikifier cache-status` | SQLite/JSON backend, dual-write policy, coverage snapshot (no full pair load) |
 | `wikifier health [--summary\|--json]` | Health matrix (machine-friendly flags) |
 | `wikifier validate` | Missing wiki rows + ghost paths |
@@ -141,7 +144,7 @@ Tests: `python -m unittest discover tests` (stdlib only; **158+** `test_` method
 | `wikifier monitor` / `daemon` | Background maintenance (`WIKIFIER_DAEMON_MAPS=0` for check-only) |
 | `wikifier serve` | Localhost dashboard with Run/Stop |
 
-Library: `from wikifier import session_bootstrap, prepare_edit, check_changes, record_change, mark_green, suggest_next_actions, update_maps, health, list_core_tools`.
+Library: `from wikifier import session_bootstrap, prepare_edit, list_paths, check_changes, record_change, mark_green, suggest_next_actions, update_maps, health, list_core_tools`.
 
 ## MCP
 

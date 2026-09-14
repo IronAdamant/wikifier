@@ -2,8 +2,9 @@
 Agent-first ideal loop helpers (bootstrap, preflight, journal, dispatchable actions).
 
 AGENT MAP:
-  session_bootstrap(root)     — one-shot session start snapshot
+  session_bootstrap(root)     — one-shot session start snapshot (+ map_index)
   prepare_edit(file, root)    — wiki + status + deps + dependents preflight
+  list_paths(prefix)          — names-only catalog query (not library.md mermaid)
   search_journal(...)         — free-text / file-filtered journal search
   why_file(file, root)        — recent semantic reasons for a path
   build_structured_actions()  — dispatchable work items for suggest
@@ -32,6 +33,7 @@ CORE_DAILY_TOOLS: List[Dict[str, str]] = [
 ]
 CORE_DAILY_NAMES: List[str] = [t["name"] for t in CORE_DAILY_TOOLS]
 ADVANCED_INTEL_TOOLS: List[str] = [
+    "list_paths",
     "get_dependencies",
     "get_dependents",
     "get_cycles",
@@ -550,8 +552,13 @@ def session_bootstrap(
     project_root: Optional[Union[str, Path]] = None,
     directory: Optional[str] = None,
     max_attention_files: int = 15,
+    map_index_file_budget: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """One-shot agent session start snapshot (Core daily surface)."""
+    """One-shot agent session start snapshot (Core daily surface).
+
+    ``map_index`` is the root folder card (depth-1 names only). Expand with
+    ``list_paths``; file-to-file links via ``prepare_edit``. Never mermaid.
+    """
     root = _root(project_root)
     out: Dict[str, Any] = {
         "success": True,
@@ -675,6 +682,24 @@ def session_bootstrap(
                 out["map_coverage"] = snap["map_coverage"]
     except Exception as e:
         out["acs_error"] = str(e)
+
+    try:
+        from .map_index import bootstrap_map_index
+        out["map_index"] = bootstrap_map_index(
+            root,
+            directory=directory,
+            file_budget=map_index_file_budget,
+        )
+    except Exception as e:
+        out["map_index"] = {
+            "success": False,
+            "error": str(e),
+            "dirs": [],
+            "files": [],
+            "file_count": 0,
+            "files_complete": False,
+            "files_truncated": False,
+        }
 
     red_n = int(health_sum.get("red") or len(red_files) or 0)
     action_y = int(health_sum.get("actionable_yellow") or len(actionable_yellow_files) or 0)

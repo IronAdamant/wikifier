@@ -211,7 +211,7 @@ def run_full_update(
       4. persist canonical per-file entries {mtime, imports, resolved,
          resolved_pairs} into import_cache.json (single save)
       5. rebuild reverse dependencies, cycles + analyses, ACS summary
-      6. regenerate library.md atomically (wikifier.library)
+      6. regenerate library.md (human) and sharded agent folder maps (maps/_root.json)
 
     `directory`/`max_files` are explicit scoping. When max_files truncates the
     dirty set, the result reports `files_skipped` — there are no silent caps.
@@ -437,6 +437,13 @@ def run_full_update(
                     result["library"] = write_library_md(root, cache)
                 except Exception as e:
                     result["library"] = {"success": False, "error": str(e)}
+            try:
+                from .map_index import ensure_map_index
+                result["map_index"] = ensure_map_index(
+                    root, cache=None, reuse_if_present=True
+                )
+            except Exception as e:
+                result["map_index"] = {"success": False, "error": str(e)}
             result["health_stubs_seeded"] = 0
             result["persist_pipeline_exercised"] = True
             result["map_coverage"] = ic.build_map_coverage(
@@ -700,12 +707,19 @@ def run_full_update(
                 health_seeded = 0
         result["health_stubs_seeded"] = health_seeded
 
-        # === 6. library.md (atomic; pure Python) ===
+        # === 6. library.md (human) + sharded agent folder maps ===
         try:
             from .library import write_library_md
             result["library"] = write_library_md(root, cache)
         except Exception as e:
             result["library"] = {"success": False, "error": str(e)}
+        try:
+            from .map_index import ensure_map_index
+            result["map_index"] = ensure_map_index(
+                root, cache, reuse_if_present=False
+            )
+        except Exception as e:
+            result["map_index"] = {"success": False, "error": str(e)}
 
         # map_coverage for agents (partial budget ≠ complete)
         try:
@@ -1549,10 +1563,33 @@ def suggest_next_actions(
 def session_bootstrap(
     project_root: Optional[Union[str, Path]] = None,
     directory: Optional[str] = None,
+    map_index_file_budget: Optional[int] = None,
 ) -> Dict[str, Any]:
     """One-shot agent session start (delegates to agent_loop.session_bootstrap)."""
     from .agent_loop import session_bootstrap as _sb
-    return _sb(project_root=project_root, directory=directory)
+    return _sb(
+        project_root=project_root,
+        directory=directory,
+        map_index_file_budget=map_index_file_budget,
+    )
+
+
+def list_paths(
+    prefix: Optional[str] = None,
+    directory: Optional[str] = None,
+    project_root: Optional[Union[str, Path]] = None,
+    max_files: Optional[int] = None,
+    depth: int = 1,
+) -> Dict[str, Any]:
+    """Names-only folder card (depth=1) or recursive listing (depth=0)."""
+    root = _get_effective_root(project_root)
+    from .map_index import list_paths as _lp
+    return _lp(
+        root,
+        prefix=prefix or directory,
+        max_files=max_files,
+        depth=depth,
+    )
 
 
 def prepare_edit(

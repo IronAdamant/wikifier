@@ -5,8 +5,8 @@ Wikifier CLI — thin dispatcher over wikifier.api + shell fallback.
 Python-primary (this module): check-changes, record-change, mark-green,
   record-deletion, suggest-next, session-bootstrap, prepare-edit, why-file,
   search-journal, seed-source-hashes, validate, seed-health, prune-*,
-  autonomous-status, cache-status, list-core-tools, health --summary|--json,
-  update-maps.
+  autonomous-status, cache-status, list-core-tools, list-paths,
+  health --summary|--json, update-maps.
 Shell fallback (wikifier.sh via get_script_path): init, monitor, daemon,
   serve, journal, issues, heal-stubs, cycles, plain health matrix text.
 
@@ -41,6 +41,7 @@ from .api import (  # noqa: F401 — public re-exports
     cache_status,
     update_maps,
     health,
+    list_paths,
     copy_human_dashboards,
     get_script_path,
     _get_effective_root,
@@ -238,6 +239,70 @@ def main(argv=None) -> int:
                 res = list_core_tools()
                 print(json.dumps(res, indent=2, default=str))
                 return 0
+            if _cmd0 in ("list-paths", "list_paths", "map-index", "list-map"):
+                prefix = None
+                max_files = None
+                depth = 1
+                i = 0
+                while i < len(_args):
+                    a = _args[i]
+                    if a in ("--prefix", "-p", "--directory", "--dir") and i + 1 < len(_args):
+                        if prefix is None or a in ("--prefix", "-p"):
+                            prefix = _args[i + 1]
+                        i += 2
+                        continue
+                    if a.startswith("--prefix="):
+                        prefix = a.split("=", 1)[1]
+                        i += 1
+                        continue
+                    if a.startswith("--directory=") or a.startswith("--dir="):
+                        if prefix is None:
+                            prefix = a.split("=", 1)[1]
+                        i += 1
+                        continue
+                    if a.startswith("--max-files=") or a.startswith("--max_files="):
+                        try:
+                            max_files = int(a.split("=", 1)[1])
+                        except ValueError:
+                            pass
+                        i += 1
+                        continue
+                    if a in ("--max-files", "--max_files") and i + 1 < len(_args):
+                        try:
+                            max_files = int(_args[i + 1])
+                        except ValueError:
+                            pass
+                        i += 2
+                        continue
+                    if a in ("--recursive", "-r"):
+                        depth = 0
+                        i += 1
+                        continue
+                    if a.startswith("--depth="):
+                        try:
+                            depth = int(a.split("=", 1)[1])
+                        except ValueError:
+                            pass
+                        i += 1
+                        continue
+                    if a in ("--depth",) and i + 1 < len(_args):
+                        try:
+                            depth = int(_args[i + 1])
+                        except ValueError:
+                            pass
+                        i += 2
+                        continue
+                    if prefix is None and not a.startswith("-"):
+                        prefix = a
+                    i += 1
+                res = list_paths(
+                    prefix=prefix,
+                    project_root=project_root,
+                    max_files=max_files,
+                    depth=depth,
+                )
+                print(json.dumps(res, indent=2, default=str))
+                return 0 if res.get("success") else 1
             if _cmd0 == "validate":
                 if _health_mod is not None:
                     root = _get_effective_root(project_root)
@@ -370,8 +435,9 @@ def main(argv=None) -> int:
                 "Wikifier — zero-dependency agent-to-agent codebase wiki.\n"
                 "Commands: check-changes, record-change, mark-green, record-deletion,\n"
                 "  prepare-edit, why-file, search-journal, session-bootstrap, suggest-next,\n"
-                "  health --summary, update-maps, validate, cache-status, list-core-tools,\n"
-                "  autonomous-status. Shell (init/monitor/daemon/serve/journal) needs wikifier.sh.",
+                "  list-paths, health --summary, update-maps, validate, cache-status,\n"
+                "  list-core-tools, autonomous-status. Shell (init/monitor/daemon/serve/journal)\n"
+                "  needs wikifier.sh.",
                 file=sys.stderr,
             )
             return 0

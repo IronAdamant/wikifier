@@ -24,11 +24,11 @@ Use these core tools every session; use advanced intel only when needed:
 Also core-adjacent: `why_file`, `search_journal`, `get_file_wiki`, `get_files_needing_attention`,
 `list_core_tools`, `seed_source_content_hashes` (migration for content-honest baselines).
 
-**Advanced (non-core):** `get_cycles`, `get_barrel_reports`, `get_resolution_diagnostics`, full `health(format=json)` dependency_intel.
+**Advanced (non-core):** `list_paths` (depth-1 folder card; files hop to `prepare_edit`), `get_cycles`, `get_barrel_reports`, `get_resolution_diagnostics`, full `health(format=json)` dependency_intel.
 
 Call `list_core_tools` or `session_bootstrap` → `core_surface` / `core_daily` to discover Core without scanning the full tool list.
 
-CLI mirrors: `session-bootstrap`, `prepare-edit`, `why-file`, `search-journal`, `suggest-next --json`,
+CLI mirrors: `session-bootstrap`, `prepare-edit`, `list-paths`, `why-file`, `search-journal`, `suggest-next --json`,
 `seed-source-hashes`, `list-core-tools`.
 
 ## Installation (Zero-Dependency Core + Optional MCP)

@@ -13,8 +13,8 @@ AGENT MAP — Core daily surface (start here every session):
 
 Also useful core: get_file_wiki, why_file, search_journal, get_files_needing_attention
 
-Advanced intel (non-core): get_dependencies, get_dependents, get_cycles, get_barrel_reports,
-  get_resolution_diagnostics, health(format=json) full intel
+Advanced intel (non-core): list_paths (depth-1 folder card), get_dependencies, get_dependents,
+  get_cycles, get_barrel_reports, get_resolution_diagnostics, health(format=json) full intel
 Always pass project_root= for external trees. Deep import maps: Python + JS/TS.
 Run: WIKIFIER_PROJECT_ROOT=/path wikifier-mcp  |  python -m wikifier.mcp.server
 """
@@ -526,11 +526,40 @@ def session_bootstrap(
     project_root: Optional[str] = None,
     directory: Optional[str] = None,
 ) -> dict:
-    """One-shot agent session start: root, readiness, health taxonomy, attention, actions[]."""
+    """One-shot agent session start: root, readiness, health taxonomy, attention, actions[], map_index."""
     root = _get_effective_root(project_root)
     try:
         from wikifier.cli import session_bootstrap as _lib_sb
         return _lib_sb(project_root=root, directory=directory)
+    except Exception as e:
+        return {"success": False, "project_root": str(root), "error": str(e)}
+
+
+@mcp.tool()
+def list_paths(
+    prefix: Optional[str] = None,
+    directory: Optional[str] = None,
+    project_root: Optional[str] = None,
+    max_files: Optional[int] = None,
+    depth: int = 1,
+) -> dict:
+    """Names-only folder map (default depth=1: immediate children).
+
+    Each directory is a small card. Pass prefix to expand one folder.
+    depth=0 lists recursively (cap with max_files). Files hop to
+    prepare_edit (deps/dependents); child folders hop to list_paths.
+    Does not parse library.md or emit mermaid.
+    """
+    root = _get_effective_root(project_root)
+    try:
+        from wikifier.cli import list_paths as _lib_lp
+        return _lib_lp(
+            prefix=prefix,
+            directory=directory,
+            project_root=root,
+            max_files=max_files,
+            depth=depth,
+        )
     except Exception as e:
         return {"success": False, "project_root": str(root), "error": str(e)}
 

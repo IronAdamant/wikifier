@@ -54,6 +54,7 @@ from .cli import (
     seed_source_content_hashes,
     list_core_tools,
     cache_status,
+    list_paths,
 )
 from . import agent_loop
 

@@ -9,6 +9,7 @@
 
 **Package 4.6.x + gap-closure notes (additive; protocol still v0.6):**
 - File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
+- **Map split:** `update-maps` writes human `library.md` (File Tree + mermaid) **and** sharded agent folder cards under `.wikifier_staging/maps/` (depth-1 names only; rewrite a card only when that folder's children change). `session_bootstrap` returns the **root card** (not a whole-tree dump). `list_paths(prefix)` expands one folder; file-to-file links are `prepare_edit`. Do **not** read `library.md` mermaid for orientation.
 - **First-run:** `init` → lean `monitored_paths.txt` + `map_paths.txt` (default active root `src/`, not bare `.`) → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
 - **`session_bootstrap` readiness:** message embeds the readiness tier. `blocked` is not a crash — see **§ Readiness blocked**. Hard blockers = missing map/health (or severe ghosts). Bare `.` monitor alone → `map_ok_scope_risk` when map+health exist (scope warnings / fix_scope), not the same tier as missing map. Unattended ops require **`readiness=ready_for_daemon`**, not `health_score=Map Ready` alone.
 - **Map-first ≠ wiki-done:** `health_score` **Map Ready** + many 🟡 *Initial stubs* means structural coverage only. Do **not** bulk-wiki stubs. Wiki a file when you edit it, then `mark-green`. Prefer `actionable_yellow` / 🔴 over raw yellow counts.
@@ -47,7 +48,7 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py` / `cache/_core.p
 | Need | Use |
 |------|-----|
 | First-run map | `init` → lean paths (not bare `.`) → `update-maps` → `health --summary` → `suggest-next` |
-| **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]`. If `readiness` is `blocked`, fix `actions[]` / `blockers[]` first (usually scope + maps). |
+| **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]`, names-only `map_index`. If `readiness` is `blocked`, fix `actions[]` / `blockers[]` first (usually scope + maps). Do **not** read `library.md` mermaid to orient. |
 | **Unblock readiness** | Write lean `monitored_paths.txt` + `map_paths.txt` → `update_maps` (full once) → re-`session_bootstrap` until **`readiness=ready_for_daemon`** (not Map Ready alone) |
 | **Core tool list** | `list_core_tools` / bootstrap `core_surface` — prefer Core 6; advanced is non-core |
 | Steady-state | `check-changes` (content-honest) → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
@@ -55,7 +56,8 @@ Do **not** open megamodules (`javascript.py`, `import_cache.py` / `cache/_core.p
 | **Preflight edit** | `prepare_edit` / CLI `prepare-edit <file>` — wiki + status + deps + dependents (multi-shape reverse index) |
 | **Why / journal** | `why_file` / `search_journal` — semantic trail, not mtime theater |
 | Lookup Core | `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green` |
-| Advanced intel | `get_dependencies`, `get_dependents`, `get_cycles`, barrel/diagnostics — not daily Core |
+| **Names-only catalog** | Bootstrap **root card**; `list_paths` / CLI `list-paths [prefix]` (depth-1 folder card). Then `prepare_edit` for file-to-file links. Not mermaid. |
+| Advanced intel | `list_paths`, `get_dependencies`, `get_dependents`, `get_cycles`, barrel/diagnostics — not daily Core |
 | Deletion | `record-deletion` |
 | Long-horizon prep | `autonomous-status` / `readiness`; then `daemon start` with lean monitor |
 | Hygiene | `seed-health`, `prune-pending`, `prune-health` (`--deleted-missing` to retire gone DELETED audits), `validate` |
@@ -147,7 +149,7 @@ This is strictly an agent-to-agent wiki for token saving: map lookup (health + f
 SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and *actionable* 🟡 Yellow files. Do **not** re-summarize 🟢 Green files, and do **not** bulk-wiki 🟡 Initial/map stubs (map coverage only — wiki a stub only when you edit that file). First-run builds the structural map; wiki depth is filled as you touch files. check-changes is content-honest (mtime-only thrash does not re-Yellow when source hash matches mark-green baseline).
 
 FIRST ACTIONS:
-1. Prefer MCP Core: session_bootstrap, check_changes, prepare_edit, suggest_next_actions (use actions[]), record_change, mark_green. Always pass project_root= for external projects.
+1. Prefer MCP Core: session_bootstrap, check_changes, prepare_edit, suggest_next_actions (use actions[]), record_change, mark_green. Orient from bootstrap root card + list_paths(prefix) (one folder); prepare_edit for file links — do not read library.md mermaid. Always pass project_root= for external projects.
 2. CLI/library fallback:
      WIKIFIER_PROJECT_ROOT=/path/to/target python -m wikifier session-bootstrap
      python -m wikifier check-changes
@@ -276,6 +278,7 @@ See the full design, mandatory workflow example, and M2 exit criteria in the pla
 | `wikifier record-change` | `<file> "<reason>"` | Semantic log of *why* you changed something. Required after edits. |
 | `wikifier record-deletion` | `<file> "<reason>"` | Log a deletion with reasoning. |
 | `wikifier prepare-edit` | `<file>` | Preflight: wiki snippet, status, deps, dependents. |
+| `wikifier list-paths` | `[prefix]` | Depth-1 folder card. `--recursive` for a subtree. Then `prepare-edit` for file links. |
 | `wikifier mark-green` | `<file> [reason]` | Flip file status to Green after you have written/updated its wiki summary. |
 | `wikifier monitor` | — | Start background 30s heartbeat (run with `&` or in separate terminal). |
 | `wikifier update-maps` | `[--full] [--directory=...] [--max-files=N]` | Rebuild `library.md` + import cache (single pure-Python pipeline; the shell launcher delegates here). |
@@ -300,8 +303,9 @@ Legacy shell (`wikifier check-changes` etc.) and direct `wikifier-mcp` remain fu
 See `wikifier/mcp/server.py` (updated M5.1 for reliability + external) and `wikifier/mcp/README.md`.
 
 High-value for agents (token-saving lookup + autonomous update):
+- session_bootstrap root card + list_paths (folder hop) + prepare_edit (file hop) — not library.md mermaid
 - get_project_status / health equivalents
-- get_file_wiki(file) — the direct "look up this file's wiki summary"
+- get_file_wiki(file) / prepare_edit — wiki + deps for one file
 - get_barrel_reports (deep BRC for importers on re-export stress)
 - record_change + mark_green (the autonomous update cycle)
 - check_changes + suggest_next_actions

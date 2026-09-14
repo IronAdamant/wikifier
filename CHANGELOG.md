@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Sharded agent folder maps:** `update-maps` writes `.wikifier_staging/maps/` (root `_root.json` + per-folder `_index.json`). Each card is depth-1 names only. A shard rewrites only when that folder's child set (names + child counts) changes.
+- `session_bootstrap` `map_index` is the **root card** (not a whole-tree dump). Fat roots cap immediate files only.
+- `list_paths` / CLI `list-paths [prefix]` / MCP `list_paths` default `depth=1`. `hop`: dirs → `list_paths`, files → `prepare_edit`. `depth=0` / `--recursive` for a subtree.
+- Protocol + README: walk folder cards + `prepare_edit`; do not read `library.md` mermaid.
+
+### Changed
+- Zero-dirty `update-maps` reuses existing maps if the root card is present, and rebuilds shards if it is missing.
+
 ### Fixed
 - CI: install `wikifier[mcp]` only on Python ≥3.10 (`mcp` has no 3.8/3.9 wheels).
 
