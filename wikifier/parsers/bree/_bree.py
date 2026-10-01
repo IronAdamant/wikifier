@@ -46,10 +46,10 @@ PHASE 3 — INTEGRATION (javascript.py edits)
 - Import BREE in javascript.py.
 - Refactor (non-breaking):
     _extract_barrel_reexports -> delegates to engine.extract_reexports (lightweight default)
-    _looks_like_barrel_file  -> delegates to engine.is_barrel(...) using detectors
-    _follow_reexports        -> thin wrapper around engine.expand_chain(...) that maps
+    _looks_like_barrel_file -> delegates to engine.is_barrel(...) using detectors
+    _follow_reexports -> thin wrapper around engine.expand_chain(...) that maps
                                  result back to exact old dict shape + metadata.
-    _resolve_from_exports    -> delegates to engine.resolve_via_exports(...)
+    _resolve_from_exports -> delegates to engine.resolve_via_exports(...)
   All existing caches (_reexport_cache, _parse_cache, _package_marker_cache) remain;
   BREE may layer its own short-term memo for the engine lifetime.
 - New rich fields (additive, optional, backward compatible):
@@ -79,7 +79,7 @@ PHASE 5 — EXTENSIBILITY, TESTS, VALIDATION
 - Documentation: this docstring + inline; later sync to CHANGELOG / v0.4 plan.
 
 FUTURE (post this subagent, coordinated with other Limitations):
-- Phase 4 complete: SpecifierResolver / barrel hops now receive rich Resolution objects (strategy, metadata) via central engine delegation in JS parser. Full direct use of ResolutionStrategy possible in future.
+- SpecifierResolver / barrel hops now receive rich Resolution objects (strategy, metadata) via central engine delegation in JS parser. Full direct use of ResolutionStrategy possible in future.
 - AST extractor via optional "tree-sitter" or subprocess to tsc/acorn (behind flag).
 - Persisted _bree_barrel_index.json for cross-run monorepo speed (with mtime).
 - Diagnostics attachment per hop (for #5 Failure Transparency).
@@ -88,7 +88,7 @@ FUTURE (post this subagent, coordinated with other Limitations):
 
 Design invariants (never violated):
 1. Zero new runtime dependencies.
-2. Exact preservation of public parse dict contract and all  barrel_*/conditional fields.
+2. Exact preservation of public parse dict contract and all barrel_*/conditional fields.
 3. Default behavior = previous behavior (bit-for-bit on synthetic + dogfood).
 4. Registration is additive; core never hardcodes the list of strategies.
 5. Performance: cheap path (lightweight) is default and fast; heavy paths opt-in.
@@ -102,44 +102,19 @@ from __future__ import annotations
 
 import json
 import re
-import warnings
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tuple, Union
 
 # =============================================================================
-# Wave 2 External / Packaged helpers: improved fallbacks (used by norm/expand/store paths)
+# improved fallbacks (used by norm/expand/store paths)
 # =============================================================================
 
 def _get_project_root_fallback(default: Optional[Union[str, Path]] = None) -> Path:
-    """Robust project root for BREE/parser internals (Wave 3).
+    """Project root for BREE internals (env → markers → cwd; see project_root)."""
+    from ...project_root import discover_project_root
 
-    Tries canonical discover_project_root() first — now hardened (Wave 3) for symlinks,
-    pnpm/yarn store layouts via logical $PWD parent-walk (see cli.py). Supports pip-installed
-    wikifier + external monorepo + cwd-in-subdir or cwd-via-symlink/store. Then env, default/cwd.
-    Prevents state/cache pollution or wrong root when parsers/BREE run directly or
-    from subdirs of user monorepos. Safe, zero-dep, never raises.
-    """
-    try:
-        # Load-safe: project_root (not cli) — avoids bree→cli→import_cache→bree cycle
-        from ..project_root import discover_project_root
-        root = discover_project_root()
-        if root:
-            return Path(root).resolve()
-    except Exception:
-        pass
-    env = os.environ.get("WIKIFIER_PROJECT_ROOT") or os.environ.get("WIKIFIER_ROOT")
-    if env:
-        try:
-            return Path(env).expanduser().resolve()
-        except Exception:
-            pass
-    if default is not None:
-        try:
-            return Path(default).resolve()
-        except Exception:
-            pass
-    return Path.cwd().resolve()
+    return Path(discover_project_root()).resolve()
 
 
 # =============================================================================
@@ -189,10 +164,10 @@ class ExpandedChainResult:
     policy: ExpansionPolicy
     hops: List[ReexportHop] = field(default_factory=list)  # full trace for #5 diagnostics
     precomputed: bool = False
-    # Phase 2 additions for persistent cache + graceful degradation
+    # additions for persistent cache + graceful degradation
     is_partial: bool = False
     partial_reason: Optional[str] = None
-    # E1 fix (additive): canonical rel paths of EVERY file traversed in this expansion
+    # fix (additive): canonical rel paths of EVERY file traversed in this expansion
     # (entry barrel + intermediate barrel hops + leaves). Lets the top-level store build
     # a complete mtimes_snapshot / file_index covering mid-chain barrels, which the
     # results list alone cannot provide (it only carries final leaves).
@@ -200,7 +175,7 @@ class ExpandedChainResult:
 
 
 # =============================================================================
-# Phase 2: Persistent BarrelResolutionCache & BarrelChainResolution (Gap #1 Finisher)
+# Persistent BarrelResolutionCache & BarrelChainResolution
 # =============================================================================
 
 # Additional imports for cache layer (placed here for locality with the feature)
@@ -208,51 +183,24 @@ import hashlib
 import os
 import time
 
-# Canonical normalization (Wave 1 of deep barrel invalidation long-term strategy)
-# Single source of truth from resolution.py; follow_symlinks=True for physical inode identity
-# under symlinked monorepos/workspaces. Graceful fallback if import fails (direct tests).
-try:
-    from ..resolution import to_canonical_rel as _to_canonical_rel, canonical_for_bree as _canonical_for_bree
-except ImportError:
-    try:
-        from wikifier.resolution import to_canonical_rel as _to_canonical_rel, canonical_for_bree as _canonical_for_bree
-    except Exception:
-        _to_canonical_rel = None
-        _canonical_for_bree = None
+from ...resolution import canonical_for_bree as _canonical_for_bree
+from ...resolution import to_canonical_rel as _to_canonical_rel
 
 
 def _brc_canonical(p: Any, root: Path) -> str:
-    """Return canonical POSIX relpath string for BRC keys (barrel_chain, mtimes keys, importer_rel, index).
-    Wave 2: delegates to canonical_for_bree (which uses to_canonical_rel v1 physical) on all BRC paths.
-    Ensures every store/ctx/hit/lookup/index uses the v1 stamped canonical form. Fallback safe.
-    """
+    """Canonical POSIX relpath for every barrel-cache key (chains, mtimes, importers, index)."""
     if p is None:
         return ""
+    canonical = _canonical_for_bree(p, root) or _to_canonical_rel(p, root, follow_symlinks=True)
+    if canonical:
+        return canonical
+    path = Path(p)
+    if not path.is_absolute():
+        path = root / path
     try:
-        if _canonical_for_bree is not None:
-            c = _canonical_for_bree(p, root)
-            if c:
-                return c
-        if _to_canonical_rel is not None:
-            c = _to_canonical_rel(p, root, follow_symlinks=True)
-            if c:
-                return c
-    except Exception:
-        pass
-    # Fallback (never introduces deps; matches old .resolve().relative_to behavior for compat)
-    try:
-        pp = Path(p)
-        if not pp.is_absolute():
-            pp = (root / pp).resolve(strict=False)
-        rroot = root.resolve(strict=False)
-        try:
-            rel = pp.resolve(strict=False).relative_to(rroot)
-        except ValueError:
-            rel = pp.resolve(strict=False)
-        canon = str(rel).replace("\\", "/").lstrip("./")
-        return canon or str(p)
-    except Exception:
-        return str(p) if p else ""
+        return path.resolve(strict=False).relative_to(root.resolve(strict=False)).as_posix()
+    except ValueError:
+        return str(p)
 
 
 @dataclass
@@ -274,7 +222,7 @@ class BarrelChainResolution:
     partial_reason: Optional[str] = None
     mtimes_snapshot: Dict[str, int] = field(default_factory=dict)  # path -> mtime at expansion time
     mtimes_signature: str = ""  # for fast equality / debug
-    node_identity_version: str = "v1"  # Wave 1: canonical normalization pass uses v1 (to_canonical_rel + physical identity)
+    node_identity_version: str = "v1"  # canonical normalization pass uses v1 (to_canonical_rel + physical identity)
     created_at: float = field(default_factory=lambda: time.time())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -291,7 +239,7 @@ class BarrelChainResolution:
 @dataclass
 class BarrelInvalidationReport:
     """
-    Structured observability record (Wave 1/2 of deep barrel invalidation strategy).
+    Structured observability record.
     Returned by future rich invalidation APIs (or enhanced invalidate(..., rich=True)).
 
     Answers "why was this importer re-parsed?": exactly which barrel change(s) + which
@@ -329,14 +277,15 @@ class BarrelResolutionCache:
 
     @classmethod
     def from_cache(cls, cache: Dict[str, Any]) -> "BarrelResolutionCache":
-        res = get_barrel_resolutions(cache) if "get_barrel_resolutions" in globals() else cache.get("_barrel_resolutions", {}) or {}
-        idx = get_barrel_file_index(cache) if "get_barrel_file_index" in globals() else cache.get("_barrel_file_index", {}) or {}
-        return cls(resolutions=dict(res), file_index=dict(idx))
+        return cls(
+            resolutions=dict((cache or {}).get("_barrel_resolutions") or {}),
+            file_index=dict((cache or {}).get("_barrel_file_index") or {}),
+        )
 
     def to_cache_updates(self, cache: Dict[str, Any]) -> None:
         """Push mutations back into the main cache dict (caller decides save).
 
-        E1 fix: always materialize both reserved keys (even when empty) instead of
+        always materialize both reserved keys (even when empty) instead of
         popping them. save_cache() preserves on-disk barrel state only when the
         keys are *absent* from the dict being saved (caller never touched barrel
         state); an explicit empty dict therefore remains the way to express
@@ -431,16 +380,16 @@ class BarrelResolutionCache:
         is_partial: bool = False,
         partial_reason: Optional[str] = None,
         mtimes_snapshot: Optional[Dict[str, int]] = None,
-        node_identity_version: str = "v1",  # canonical v1 for Wave 1
+        node_identity_version: str = "v1",  # canonical v1 for
         ctx: Optional[Dict[str, Any]] = None,  # additive for defensive importer_rel recording from top consumer ctx (final squeeze)
     ) -> str:
         """Store (or merge) a resolution, update reverse indexes, return the chain_id used.
-        Wave 1: all incoming paths (importers, barrel_chain, mtimes keys) are forced through
+        all incoming paths (importers, barrel_chain, mtimes keys) are forced through
         canonical v1 normalizer (physical rel) before indexing or id computation. Ensures
         symlink/workspace safety and single identity for overlapping chains.
         """
         # Canonical normalization pass (importer_rel, barrel_chain, mtimes_snapshot keys, file_index)
-        # We defensively normalize here. E1 fix: prefer the caller's project root (ctx["cache_root"],
+        # We defensively normalize here. fix: prefer the caller's project root (ctx["cache_root"],
         # set by expand_chain) over CWD/env inference — when CWD != project root the fallback
         # produced wrong canonical keys for relative paths, silently corrupting the snapshot/index.
         root_for_norm = None
@@ -471,7 +420,7 @@ class BarrelResolutionCache:
         for k, v in (mtimes_snapshot or {}).items():
             if k:
                 ck = _brc_canonical(k, root_for_norm)
-                # E1: keep sub-second precision (float). Whole-second ints made a
+                # keep sub-second precision (float). Whole-second ints made a
                 # snapshot-then-edit within the same second invisible to is_stale.
                 try:
                     snap[ck or str(k)] = float(v)
@@ -528,7 +477,7 @@ class BarrelResolutionCache:
         True iff any file in the snapshot has been modified since the snapshot was taken,
         *or* no longer exists on disk (broken chain / deletion case → importers must re-analyze).
 
-        This closes the deletion staleness gap (Wave 1 correctness hardening).
+        This closes the deletion staleness gap.
         """
         snap = entry.get("mtimes_snapshot", {}) or {}
         if not snap:
@@ -540,48 +489,20 @@ class BarrelResolutionCache:
                     # Deleted barrel in chain → treat as stale so consumers get refreshed
                     # (they will naturally observe the missing import on re-expand).
                     return True
-                # E1: compare with sub-second precision (snapshots now store float
+                # compare with sub-second precision (snapshots now store float
                 # mtimes); whole-second int comparison missed same-second edits.
-                try:
-                    cur = float(fp.stat().st_mtime)
-                except Exception:
-                    cur = float(ic_get_mtime(fp)) if callable(ic_get_mtime) else 0.0
-                if cur > float(old or 0):
+                if float(fp.stat().st_mtime) > float(old or 0):
                     return True
-            except Exception:
-                return True
+            except (OSError, ValueError, TypeError):
+                return True  # unreadable snapshot entry: re-analyze to be safe
         return False
 
     def get_affected_importers(self, changed_file: str) -> List[str]:
-        """Fast path using the reverse index (no full scan).
-        Additive tolerance for abs/rel/tail key forms (harness synth + real monorepo path variants + canon v1);
-        still O(1) hot for common case, falls back to cheap tail scan over tiny #barrels.
-        """
-        affected: set[str] = set()
-        cf = str(changed_file)
-        # direct (common after canon)
-        e = self.file_index.get(cf, {})
-        for imp in (e.get("importers", []) or []):
-            affected.add(imp)
-        for cid in (e.get("chain_ids", []) or []):
-            res = self.resolutions.get(cid, {})
-            for imp in (res.get("importers", []) or []):
-                affected.add(imp)
-        # tolerant tail/name/contains match (fixes harness abs vs rel, symlink edge, deletion renorm)
-        try:
-            tail = Path(cf).name if cf else ""
-            if tail and tail != cf:
-                for k, ee in list(self.file_index.items()):
-                    kstr = str(k)
-                    if kstr == tail or kstr.endswith("/" + tail) or tail in kstr.split("/")[-1] or tail in kstr:
-                        for imp in (ee.get("importers", []) or []):
-                            affected.add(imp)
-                        for cid in (ee.get("chain_ids", []) or []):
-                            res = self.resolutions.get(cid, {})
-                            for imp in (res.get("importers", []) or []):
-                                affected.add(imp)
-        except Exception:
-            pass
+        """Importers registered for ``changed_file`` (an exact canonical index key)."""
+        entry = self.file_index.get(str(changed_file), {})
+        affected = set(entry.get("importers", []) or [])
+        for cid in entry.get("chain_ids", []) or []:
+            affected.update(self.resolutions.get(cid, {}).get("importers", []) or [])
         return sorted(affected)
 
     def collect_stale_importers(self, root: Path) -> List[str]:
@@ -598,7 +519,7 @@ class BarrelResolutionCache:
         changed_files: Optional[Iterable[str]] = None,
         root: Optional[Path] = None,
     ) -> List[BarrelInvalidationReport]:
-        """Wave 1/2: produce structured BarrelInvalidationReport list for observability.
+        """: produce structured BarrelInvalidationReport list for observability.
         When changed_files given, uses fast index path + enriches with per-chain details
         (triggering barrels, chain_ids, partial flag, reason). Falls back to full scan.
         Zero-dep, ready for sh debug prints, diagnostics, journal, MCP get_files_needing...
@@ -610,20 +531,8 @@ class BarrelResolutionCache:
         if changed_files is not None:
             cset = {str(c) for c in changed_files if c}
             for cf in cset:
-                # direct + tolerant key match (abs/rel/tail) so leaf edits find their index entries even under variant canon forms
-                matched = []
-                if cf in self.file_index:
-                    matched.append(cf)
-                try:
-                    t = Path(cf).name if cf else ""
-                    if t:
-                        for k in list(self.file_index.keys()):
-                            ks = str(k)
-                            if ks == cf or ks == t or ks.endswith("/" + t) or t in ks:
-                                if k not in matched:
-                                    matched.append(k)
-                except Exception:
-                    pass
+                # Exact canonical keys only (a basename match would hit unrelated files).
+                matched = [k for k in dict.fromkeys((cf, _brc_canonical(cf, root))) if k in self.file_index]
                 for mk in matched:
                     for cid in (self.file_index.get(mk, {}) or {}).get("chain_ids", []):
                         ent = self.resolutions.get(cid, {})
@@ -672,7 +581,7 @@ class BarrelResolutionCache:
         return reports
 
     def prune_aged_entries(self, max_age_days: float = 90.0, now: Optional[float] = None) -> int:
-        """Lightweight age-based cleanup / GC for BRC entries at massive scale (Wave 4 starter).
+        """Lightweight age-based cleanup / GC for BRC entries at massive scale.
 
         Removes any BarrelChainResolution entries whose `created_at` exceeds the age cutoff.
         Cleans dangling chain_id references from the reverse `file_index` (importer lists left
@@ -712,7 +621,7 @@ class BarrelResolutionCache:
         return len(to_prune)
 
     def prune_references_to(self, deleted_paths: List[str]) -> int:
-        """Wave 4 continuation for Deep Barrel GC (per long-term strategy): on record-deletion etc.
+        """for Deep Barrel GC (per long-term strategy): on record-deletion etc.
 
         Remove any BarrelChainResolution entries whose barrel_chain list or importers list
         (or whose keys appear in file_index) reference any of the deleted canonical paths.
@@ -770,32 +679,6 @@ class BarrelResolutionCache:
 
 
 # Thin import guard so bree.py can be imported early; real load in helpers
-def _ensure_import_cache_helpers():
-    global get_barrel_resolutions, get_barrel_file_index, ic_get_mtime
-    try:
-        if "get_barrel_resolutions" not in globals() or get_barrel_resolutions is None:
-            from .. import import_cache as _ic
-            get_barrel_resolutions = _ic.get_barrel_resolutions
-            get_barrel_file_index = _ic.get_barrel_file_index
-            ic_get_mtime = _ic.get_mtime
-    except Exception:
-        # Fallback no-op for standalone bree usage / tests (e.g. direct import or synthetic tests)
-        def _fb_get_barrel_resolutions(c): return (c or {}).get("_barrel_resolutions", {}) or {}
-        def _fb_get_barrel_file_index(c): return (c or {}).get("_barrel_file_index", {}) or {}
-        def _fb_ic_get_mtime(p):
-            try:
-                return int(Path(p).stat().st_mtime) if Path(p).exists() else 0
-            except Exception:
-                return 0
-        get_barrel_resolutions = _fb_get_barrel_resolutions
-        get_barrel_file_index = _fb_get_barrel_file_index
-        ic_get_mtime = _fb_ic_get_mtime
-
-
-get_barrel_resolutions = None
-get_barrel_file_index = None
-ic_get_mtime = None
-_ensure_import_cache_helpers()
 
 
 # =============================================================================
@@ -809,6 +692,21 @@ _ensure_import_cache_helpers()
 # run when the caller brackets the run with begin_batch()/end_batch().
 # =============================================================================
 
+_BARREL_KEYS = ("_barrel_resolutions", "_barrel_file_index")
+
+
+def _persist_barrel_cache(root: Path, brc: "BarrelResolutionCache") -> None:
+    """Write the barrel structures as meta keys (no full cache rewrite)."""
+    from ... import cache_store, locking
+
+    updates: Dict[str, Any] = {}
+    brc.to_cache_updates(updates)
+    with locking.file_lock(root):
+        for key in _BARREL_KEYS:
+            if key in updates:
+                cache_store.save_meta_key(root, key, updates[key])
+
+
 _BRC_SESSION: Dict[str, Any] = {"root": None, "brc": None, "dirty": False, "batch": False}
 
 
@@ -818,21 +716,14 @@ def get_session_barrel_cache(cache_root: Path) -> Optional["BarrelResolutionCach
     Switching roots flushes any pending state for the previous root first.
     Returns None when the import cache cannot be loaded (standalone usage).
     """
-    try:
-        root_key = str(Path(cache_root).resolve())
-    except Exception:
-        root_key = str(cache_root)
+    root_key = str(Path(cache_root).resolve())
     if _BRC_SESSION["brc"] is not None and _BRC_SESSION["root"] == root_key:
         return _BRC_SESSION["brc"]
     if _BRC_SESSION["dirty"]:
         flush_barrel_cache()
-    try:
-        _ensure_import_cache_helpers()
-        from .. import import_cache as _ic
-        cdict = _ic.load_cache(Path(cache_root))
-        brc = BarrelResolutionCache.from_cache(cdict)
-    except Exception:
-        return None
+    from ... import cache_store
+
+    brc = BarrelResolutionCache.from_cache(cache_store.load_meta(Path(cache_root), keys=_BARREL_KEYS))
     _BRC_SESSION.update({"root": root_key, "brc": brc, "dirty": False})
     return brc
 
@@ -863,16 +754,10 @@ def flush_barrel_cache(force: bool = False) -> bool:
         return False
     if not (_BRC_SESSION["dirty"] or force):
         return False
-    try:
-        from .. import import_cache as _ic
-        root = Path(_BRC_SESSION["root"])
-        cdict = _ic.load_cache(root)
-        _BRC_SESSION["brc"].to_cache_updates(cdict)
-        _ic.save_cache(root, cdict)
-        _BRC_SESSION["dirty"] = False
-        return True
-    except Exception:
-        return False
+    root = Path(_BRC_SESSION["root"])
+    _persist_barrel_cache(root, _BRC_SESSION["brc"])
+    _BRC_SESSION["dirty"] = False
+    return True
 
 
 def flush_barrel_cache_if_not_batched() -> bool:
@@ -927,7 +812,7 @@ class ExportsMapHandler(Protocol):
 
 class SpecifierResolver(Protocol):
     """Unified specifier (bare/relative) → filesystem resolution.
-    Thin wrapper today; Phase 4 Resolution Core (resolution.py) is now the
+    Thin wrapper today; Resolution Core (resolution.py) is now the
     authoritative engine. Future: delegate to wikifier.resolution.resolve or
     the strategy objects for canonical + metadata-rich results.
     """
@@ -1043,7 +928,7 @@ class LightweightRegexReexportExtractor:
         if content is None:
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
+            except OSError:
                 return []
 
         # Early-out (perf critical)
@@ -1095,11 +980,11 @@ class ASTReexportExtractor:
 class DefaultExportsMapHandler:
     """Production handler with wildcard ("*") pattern support + full condition logic.
 
-    DEPRECATION NOTE (P4 + R4 Legacy Deprecation Execution): Wildcard + exports resolution provided by
+    DEPRECATION NOTE: Wildcard + exports resolution provided by
     central wikifier.resolution (resolve_exports_map + PackageExportsStrategy). BREE registry allows
     pluggable barrel handlers (local fallback only, now ultra-slim: main + wildcards only; standard
     matching deduped via delegation to central _read/_target/_pick + resolve_exports_map).
-    ALWAYS prefers central first; warn only on fallback. JS shims match (R4 thinned). Central is the
+    ALWAYS prefers central first; warn only on fallback. JS shims match. Central is the
     UNAMBIGUOUS DEFAULT. Removal of remaining dupe: v0.5. See resolution.py.
     """
     name = "default-exports-map"
@@ -1108,100 +993,22 @@ class DefaultExportsMapHandler:
         self._pkg_cache: Dict[str, Optional[dict]] = {}
 
     def _read_pkg(self, pkg_dir: Path) -> Optional[dict]:
-        """R4: thin caching wrapper around central _read_package_json (deduped impl)."""
         key = str(pkg_dir)
-        if key in self._pkg_cache:
-            return self._pkg_cache[key]
-        try:
-            from ..resolution import _read_package_json as _central_read
-            data = _central_read(pkg_dir)
-            self._pkg_cache[key] = data
-            return data
-        except Exception:
-            pass
-        # Rare fallback (central unavailable) — minimal to avoid reintroducing dupe
-        pj = pkg_dir / "package.json"
-        if not pj.exists():
-            self._pkg_cache[key] = None
-            return None
-        try:
-            with pj.open(encoding="utf-8") as f:
-                data = json.load(f)
-            self._pkg_cache[key] = data if isinstance(data, dict) else None
-        except Exception:
-            self._pkg_cache[key] = None
+        if key not in self._pkg_cache:
+            from ...resolution import _read_package_json
+
+            self._pkg_cache[key] = _read_package_json(pkg_dir)
         return self._pkg_cache[key]
 
     def _resolve_target(self, pkg_dir: Path, target: str) -> Optional[Path]:
-        """R4 Legacy Deprecation: delegates to central _resolve_target_path (single source, no dupe)."""
-        try:
-            from ..resolution import _resolve_target_path as _central_target
-            return _central_target(pkg_dir, target)
-        except Exception:
-            pass
-        # Minimal fallback only if central missing (should not happen post-R4)
-        if not target or not isinstance(target, str):
-            return None
-        t = target.strip()
-        if t.startswith("file:"):
-            t = t[5:]
-        p = pkg_dir / t.lstrip("/").lstrip("./")
-        try:
-            if p.exists():
-                if p.is_file():
-                    return p
-                if p.is_dir():
-                    for idx in ("index.js", "index.ts", "index.jsx", "index.tsx", "index.mjs", "index.cjs"):
-                        cand = p / idx
-                        if cand.exists():
-                            return cand
-            if not p.suffix:
-                for ext in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"):
-                    cand = p.with_suffix(ext)
-                    if cand.exists() and cand.is_file():
-                        return cand
-                if p.exists() and p.is_dir():
-                    for idx in ("index.js", "index.ts", "index.mjs", "index.cjs"):
-                        cand = p / idx
-                        if cand.exists():
-                            return cand
-        except Exception:
-            pass
-        return None
+        from ...resolution import _resolve_target_path
+
+        return _resolve_target_path(pkg_dir, target)
 
     def _pick_from_conditions(self, spec: Any, pkg_dir: Path) -> Optional[Path]:
-        """R4: delegates to central _pick_target_from_conditions (deduped priority/condition logic)."""
-        try:
-            from ..resolution import _pick_target_from_conditions as _central_pick
-            return _central_pick(spec, pkg_dir)
-        except Exception:
-            pass
-        # Fallback minimal (rare)
-        if isinstance(spec, str):
-            return self._resolve_target(pkg_dir, spec)
-        if isinstance(spec, list):
-            for item in spec:
-                res = self._pick_from_conditions(item, pkg_dir)
-                if res:
-                    return res
-            return None
-        if not isinstance(spec, dict):
-            return None
+        from ...resolution import _pick_target_from_conditions
 
-        priority = [
-            "import", "module", "esm", "es2020", "es2015", "es6",
-            "default", "node", "node-addons", "require", "types", "typings", "browser"
-        ]
-        for cond in priority:
-            if cond in spec:
-                res = self._pick_from_conditions(spec[cond], pkg_dir)
-                if res:
-                    return res
-        for v in spec.values():
-            res = self._pick_from_conditions(v, pkg_dir)
-            if res:
-                return res
-        return None
+        return _pick_target_from_conditions(spec, pkg_dir)
 
     def _apply_wildcard(self, key: str, subpath: str, target_template: Any) -> Optional[str]:
         """Return substituted target string if key is a wildcard pattern matching subpath."""
@@ -1224,35 +1031,13 @@ class DefaultExportsMapHandler:
         if not pkg:
             return None
 
-        # P4/F4 deprecation path: ALWAYS prefer central resolution.py first (no warning).
-        # This eliminates duplication and gains monorepo-hardened logic (complex conditionals,
-        # ts refs, pnpm stores, rich metadata). Local BREE impl kept only as fallback for
-        # registry pluggability + transition compat. Warn ONLY when legacy path is actually taken.
-        # Full removal of duplicate after v0.5.
-        try:
-            from ..resolution import resolve_exports_map as _central_exp
-            via = _central_exp(pkg_dir, subpath)
-            if via:
-                return via
-        except Exception:
-            pass  # fallthrough to local BREE logic (kept for compat + registry) --> warn below
+        from ...resolution import resolve_exports_map
 
-        # Reached legacy duplicate path: emit deprecation warning (R4 strengthened: only on fallback)
-        try:
-            warnings.warn(
-                "DefaultExportsMapHandler.resolve (bree.py) legacy path deprecated (R4). "
-                "BREE delegates to central wikifier.resolution (JS side now also thin shims; low-levels deduped). "
-                "Full removal of duplicate after v0.5. Central is the unambiguous default. "
-                "See resolution.py + contracts for migration.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        except Exception:
-            pass
-
-        # R4 final slim: only no-exports main + BREE's wildcard block (its pluggable value-add).
-        # All standard export key/exact/subpath/condition/string-shorthand matching removed from
-        # here (now exclusively in central resolve_exports_map). Reduces dupe surface in BREE.
+        via = resolve_exports_map(pkg_dir, subpath)
+        if via:
+            return via
+        # Central resolution found nothing: only the main/module fields and BREE's
+        # wildcard extension remain.
         exports = pkg.get("exports")
         if exports is None:
             # legacy main/module fallback only
@@ -1349,21 +1134,17 @@ BREERegistry.register_extractor("ast-full", ASTReexportExtractor())
 _default_exports = DefaultExportsMapHandler()
 BREERegistry.register_exports_handler("default-exports-map", _default_exports)
 
-# Phase 2 / Agent 2 integration: SpecifierResolver adapter (defined early for load; registered at end of module)
+# SpecifierResolver adapter (defined early for load; registered at end of module)
 class DefaultSpecifierResolver:
-    """Delegates to wikifier.resolution.resolve for canonical + rich strategy output (from Agent 2)."""
+    """Delegates to wikifier.resolution.resolve for canonical + rich strategy output."""
     name = "resolution-layer-v1"
 
     def resolve(self, current_file: Path, raw_module: str, **context: Any) -> Tuple[str, Optional[str]]:
-        try:
-            from ..resolution import resolve
-            root = context.get("root") or _get_project_root_fallback(".")
-            res = resolve(raw_module, str(current_file), root, follow_symlinks=True)
-            disp = res.display_module or raw_module
-            rp = str(res.resolved_file) if res.resolved_file else None
-            return disp, rp
-        except Exception:
-            return raw_module, None
+        from ...resolution import resolve
+
+        root = context.get("root") or _get_project_root_fallback(".")
+        res = resolve(raw_module, str(current_file), root, follow_symlinks=True)
+        return res.display_module or raw_module, (str(res.resolved_file) if res.resolved_file else None)
 
 
 # =============================================================================
@@ -1451,7 +1232,7 @@ class BarrelReexportAnalysisEngine:
         Replicates the semantics and exact output shape of the legacy _follow_reexports
         while adding structure, policy control, and future hooks.
 
-        Phase 2 extension: if "barrel_cache" in context (or engine holds one), performs
+        if "barrel_cache" in context (or engine holds one), performs
         mtimes_snapshot-validated persistent lookup before work and stores rich result
         (including is_partial) + updates reverse index on successful expansion.
         """
@@ -1464,11 +1245,11 @@ class BarrelReexportAnalysisEngine:
         if depth_limit <= 0:
             return ExpandedChainResult([], [], 0, "none", policy, is_partial=True, partial_reason="depth_limit")
 
-        # --- Phase 2 persistent cache wiring (mtimes-aware) ---
+        # persistent cache wiring (mtimes-aware) ---
         barrel_cache: Optional[BarrelResolutionCache] = context.get("barrel_cache")
         cache_root: Path = context.get("cache_root") or _get_project_root_fallback(".")
         importer_rel: Optional[str] = context.get("importer_rel")
-        # Wave 1 canonical normalization pass: ensure importer_rel is always canonical v1 physical rel
+        # ensure importer_rel is always canonical v1 physical rel
         if importer_rel:
             importer_rel = _brc_canonical(importer_rel, cache_root)
             context["importer_rel"] = importer_rel  # propagate normalized form to recursive + hit paths
@@ -1490,7 +1271,7 @@ class BarrelReexportAnalysisEngine:
 
         # Resolve the current specifier using the caller's resolver (keeps resolution
         # logic in javascript.py for now; BREE can take over later via SpecifierResolver)
-        # Phase 4 / Gap#1 barrel completeness: resolver may return 2-tuple (display, path)
+        # resolver may return 2-tuple (display, path)
         # or 3-tuple (display, path, resolution_metadata_dict) when the closure (in
         # javascript.py) delegates to central_resolve. We capture hop_meta here so that
         # terminal leaves constructed below carry the *final hop*'s metadata for res_meta_v1.
@@ -1510,10 +1291,10 @@ class BarrelReexportAnalysisEngine:
             display, resolved_path = start_specifier, None
             hop_meta = None
 
-        # Wave 1 canonical: use physical canonical form for all BRC keys/ids/snapshots
+        # use physical canonical form for all BRC keys/ids/snapshots
         resolved_for_brc = _brc_canonical(resolved_path, cache_root) if resolved_path else None
 
-        # E1 fix: anchor the (often project-relative, e.g. central_resolve canonical rel)
+        # anchor the (often project-relative, e.g. central_resolve canonical rel)
         # resolved path to the project root for ALL file IO below (detector content reads,
         # re-export extraction, recursion start file, mtime snapshots). Without this, every
         # run with CWD != project root silently saw "file does not exist": no re-exports
@@ -1525,7 +1306,7 @@ class BarrelReexportAnalysisEngine:
                 resolved_abs = _rp if _rp.is_absolute() else (Path(cache_root) / _rp)
             except Exception:
                 resolved_abs = Path(str(resolved_path))
-        # E1: tolerate resolvers that return a DIRECTORY for a package/dir import
+        # tolerate resolvers that return a DIRECTORY for a package/dir import
         # (node-style). Without this, the directory was treated as an unreadable
         # terminal leaf — no re-export extraction, chain never reached the real
         # entry barrel, and leaf churn could not invalidate the consumer.
@@ -1542,7 +1323,7 @@ class BarrelReexportAnalysisEngine:
             except Exception:
                 pass
 
-        # --- Phase 2: mtime-validated persistent cache hit (after first resolve gives us identity) ---
+        # mtime-validated persistent cache hit (after first resolve gives us identity) ---
         cache_hit = False
         cached_entry: Optional[Dict[str, Any]] = None
         if barrel_cache is not None and resolved_for_brc:
@@ -1580,7 +1361,7 @@ class BarrelReexportAnalysisEngine:
                     hops=[],  # hops can be reconstructed from stored if needed; for perf we skip
                     is_partial=ch_partial,
                     partial_reason=ch_reason,
-                    # E1: replayed chains expose their full file set too (barrel_chain is canonical)
+                    # replayed chains expose their full file set too (barrel_chain is canonical)
                     chain_files=[str(c) for c in (cached_entry.get("barrel_chain") or []) if c],
                 )
 
@@ -1594,7 +1375,7 @@ class BarrelReexportAnalysisEngine:
                 "barrel_depth": 1,
                 "is_conditional": False,
                 "conditional_context": None,
-                # Defensive barrel_v2 synthesis (Gap #1 Option 3 emission audit): every via_barrel
+                # Defensive barrel_v2 synthesis: every via_barrel
                 # creation site must carry barrel_v2 so BRC-stored results, direct BREE consumers,
                 # and cache-hit replays are rich-complete (post-processing in javascript._follow
                 # will still normalize/overwrite for live parse returns using chain_result flags).
@@ -1608,7 +1389,7 @@ class BarrelReexportAnalysisEngine:
                     "hops": [],
                     "mtimes_signature": "",
                 },
-                # Gap #1 barrel completeness (Option 1): attach resolution_metadata + strategy
+                # attach resolution_metadata + strategy
                 # from this hop's resolver call (if the JS closure provided 3-tuple from central_resolve).
                 # For unresolved case, meta may describe the failure strategy.
                 "resolution_metadata": hop_meta or {},
@@ -1633,7 +1414,7 @@ class BarrelReexportAnalysisEngine:
         if resolved_path in visited:
             return ExpandedChainResult([], [], 0, "cycle", policy, is_partial=True, partial_reason="cycle_detected")
 
-        # E1: an empty visited set marks the chain-root call (the consumer's own import
+        # an empty visited set marks the chain-root call (the consumer's own import
         # statement). Used below so the entry barrel itself is also emitted as an edge
         # (legacy edge contract: consumer -> barrel/index.js) in addition to the leaves.
         entry_is_chain_root = not visited
@@ -1641,7 +1422,7 @@ class BarrelReexportAnalysisEngine:
         visited.add(resolved_path)
 
         # Detect + extract using BREE strategies
-        # E1 fix: hand strategies the ROOT-ANCHORED path so file reads work from any CWD.
+        # hand strategies the ROOT-ANCHORED path so file reads work from any CWD.
         detect_path = str(resolved_abs) if resolved_abs is not None else str(resolved_path)
         barrel_info = self.is_barrel(
             detect_path,
@@ -1662,12 +1443,12 @@ class BarrelReexportAnalysisEngine:
 
         results: List[Dict[str, Any]] = []
         hops: List[ReexportHop] = []
-        sub_chain_files: List[str] = []  # E1: intermediate barrel hops + sub-leaves from recursion
+        sub_chain_files: List[str] = []  # intermediate barrel hops + sub-leaves from recursion
         current_depth = 1
         detector_name = barrel_info.detector_name if barrel_info.is_barrel else "none"
 
         if reexports and depth_limit > 1 and barrel_info.is_barrel:
-            # E1: at the chain root, FIRST emit the entry barrel itself as a regular
+            # at the chain root, FIRST emit the entry barrel itself as a regular
             # via_barrel edge (consumer -> barrel/index.js). Expansion then appends
             # the transitive leaves after it. This preserves the legacy edge contract
             # (the entry barrel is the consumer's direct dependency) while the leaves
@@ -1717,7 +1498,7 @@ class BarrelReexportAnalysisEngine:
                 if importer_rel:
                     sub_context["importer_rel"] = importer_rel
                 sub_res = self.expand_chain(
-                    # E1 fix: recurse with the root-anchored file so the resolver
+                    # recurse with the root-anchored file so the resolver
                     # (e.g. central_resolve via javascript closure) gets a real
                     # importer path regardless of CWD.
                     resolved_abs if resolved_abs is not None else Path(resolved_path),
@@ -1727,7 +1508,7 @@ class BarrelReexportAnalysisEngine:
                     visited=visited,
                     **sub_context,
                 )
-                # E1: accumulate every file the sub-expansion traversed (intermediate
+                # accumulate every file the sub-expansion traversed (intermediate
                 # barrels + leaves) so the top-level snapshot/index covers the FULL chain.
                 try:
                     for scf in (getattr(sub_res, "chain_files", None) or []):
@@ -1742,7 +1523,7 @@ class BarrelReexportAnalysisEngine:
                     sub["barrel_chain"] = chain
                     sub["barrel_depth"] = sub.get("barrel_depth", 0) + 1
 
-                    # Conditional OR propagation (Limitation #6 fidelity)
+                    # Conditional OR propagation
                     if hop.is_conditional:
                         sub["is_conditional"] = bool(sub.get("is_conditional") or True)
                         if not sub.get("conditional_context"):
@@ -1765,7 +1546,7 @@ class BarrelReexportAnalysisEngine:
                 "is_conditional": False,
                 "conditional_context": None,
                 "barrel_detector": detector_name,
-                # Defensive barrel_v2 synthesis (Gap #1 Option 3 emission audit): every via_barrel
+                # Defensive barrel_v2 synthesis: every via_barrel
                 # creation site must carry barrel_v2 so BRC-stored results, direct BREE consumers,
                 # and cache-hit replays are rich-complete (post-processing in javascript._follow
                 # will still normalize/overwrite for live parse returns using chain_result flags).
@@ -1779,7 +1560,7 @@ class BarrelReexportAnalysisEngine:
                     "hops": [h.__dict__ if hasattr(h, "__dict__") else h for h in (hops or [])],
                     "mtimes_signature": "",
                 },
-                # Gap #1 barrel completeness (Option 1): attach resolution_metadata/strategy
+                # attach resolution_metadata/strategy
                 # captured from *this* level's resolver_func return (the final hop for this leaf).
                 # This is populated when the closure in javascript._follow_reexports delegates
                 # to central_resolve; enables res_meta_v1 emission for all barrel-tagged leaves
@@ -1790,11 +1571,11 @@ class BarrelReexportAnalysisEngine:
             }
             results.append(leaf)
 
-        # --- Phase 2: build mtimes snapshot for the chain we just expanded (or partial) ---
+        # build mtimes snapshot for the chain we just expanded (or partial) ---
         # Snapshot covers the entry barrel + every intermediate barrel hop traversed during
         # recursion (sub_chain_files) + every leaf resolved_path in results.
-        # Wave 1: canonicalize all barrel paths (barrel_chain + mtimes_snapshot keys) via to_canonical_rel v1
-        # E1 fix: (a) include intermediate hops, (b) anchor relative paths to cache_root before
+        # canonicalize all barrel paths (barrel_chain + mtimes_snapshot keys) via to_canonical_rel v1
+        # (a) include intermediate hops, (b) anchor relative paths to cache_root before
         # the exists()/mtime probe (they are project-relative canonical forms, NOT CWD-relative),
         # (c) per-item tolerance — one bad path must not empty the whole snapshot.
         mtimes_snap: Dict[str, int] = {}
@@ -1842,7 +1623,7 @@ class BarrelReexportAnalysisEngine:
 
         if barrel_cache is not None:
             imps_list = [importer_rel] if importer_rel else []
-            # E1 fix: store under the SAME chain_id the lookup above computes
+            # store under the SAME chain_id the lookup above computes
             # ([entry barrel] + specifier). The full multi-file barrel_chain would
             # otherwise hash to a different id, so hits/promotions would target a
             # different entry than the one stored here.
@@ -1871,14 +1652,7 @@ class BarrelReexportAnalysisEngine:
             if barrel_cache is _BRC_SESSION["brc"]:
                 mark_session_dirty(barrel_cache)
             else:
-                try:
-                    _ensure_import_cache_helpers()
-                    from .. import import_cache as _ic
-                    cdict = _ic.load_cache(cache_root)
-                    barrel_cache.to_cache_updates(cdict)
-                    _ic.save_cache(cache_root, cdict)
-                except Exception:
-                    pass  # best effort; cache still consistent in mem for this run
+                _persist_barrel_cache(Path(cache_root), barrel_cache)
 
         return ExpandedChainResult(
             results=results,
@@ -1889,7 +1663,7 @@ class BarrelReexportAnalysisEngine:
             hops=hops,
             is_partial=final_is_partial,
             partial_reason="partial_chain" if final_is_partial else None,
-            # E1: expose the canonical file set so PARENT expansions can fold our
+            # expose the canonical file set so PARENT expansions can fold our
             # entry barrel (their intermediate hop) + leaves into their snapshot.
             chain_files=list(canon_chain_files),
         )
@@ -1897,7 +1671,7 @@ class BarrelReexportAnalysisEngine:
     def clear_memo(self) -> None:
         self._memo.clear()
 
-    # Precomputation hook (Phase 4 skeleton)
+    # Precomputation hook
     def build_barrel_index(
         self,
         files: List[str],
@@ -1944,7 +1718,7 @@ def get_bree_engine(policy: Optional[ExpansionPolicy] = None) -> BarrelReexportA
 def reset_bree_engine() -> None:
     """Test / diagnostic helper.
 
-    E1 fix: clearing the registry used to leave it EMPTY for the rest of the
+    clearing the registry used to leave it EMPTY for the rest of the
     process (defaults were registered exactly once at import), which silently
     disabled barrel detection/extraction — chains stopped at the entry barrel
     and importers were never invalidated on leaf edits. We now re-register the
@@ -1956,10 +1730,7 @@ def reset_bree_engine() -> None:
     global _ENGINE
     _ENGINE = None
     # Persist any pending session barrel state before discarding it.
-    try:
-        flush_barrel_cache()
-    except Exception:
-        pass
+    flush_barrel_cache()
     _BRC_SESSION.update({"root": None, "brc": None, "dirty": False, "batch": False})
     BREERegistry.clear()
     # Restore the default strategy wiring (same singleton instances as import time).
@@ -1982,15 +1753,9 @@ def describe_bree() -> Dict[str, Any]:
     }
 
 
-# Late registration for SpecifierResolver (Agent 2 integration) — after all classes defined
-try:
-    _spec_res = DefaultSpecifierResolver()
-    # If registry grows a map for specifiers in future, it would be registered here.
-    # For now the adapter class is available for direct use or wiring into expand_chain resolver_func.
-    BREERegistry._specifier_resolvers = getattr(BREERegistry, "_specifier_resolvers", {})
-    BREERegistry._specifier_resolvers[_spec_res.name] = _spec_res
-except Exception:
-    pass
+# Late registration for SpecifierResolver — after all classes defined
+_spec_res = DefaultSpecifierResolver()
+BREERegistry._specifier_resolvers[_spec_res.name] = _spec_res
 
 
 # =============================================================================

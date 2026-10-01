@@ -1,4 +1,4 @@
-"""Contract tests for Findings/2026-08-27-plan.md (4.6.13).
+"""Contract tests for Findings/archive/2026-08-27-plan.md (4.6.13).
 
 Drives shipped library/CLI/MCP entry points — not mocks of the unit under test.
 """
@@ -99,11 +99,7 @@ class TestMcpStubsValidateDeadline(unittest.TestCase):
         src = (REPO_ROOT / "wikifier" / "mcp" / "server_impl.py").read_text(encoding="utf-8")
         self.assertNotIn("register_intel_tools", src)
         self.assertNotIn("Not yet implemented", src)
-        tools_init = (REPO_ROOT / "wikifier" / "mcp" / "tools" / "__init__.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertNotIn("register_intel_tools", tools_init)
-        self.assertFalse((REPO_ROOT / "wikifier" / "mcp" / "tools" / "intel.py").is_file())
+        self.assertFalse((REPO_ROOT / "wikifier" / "mcp" / "tools").exists(), "unused stub package removed")
 
     def test_validate_is_in_process(self):
         src = (REPO_ROOT / "wikifier" / "mcp" / "server_impl.py").read_text(encoding="utf-8")
@@ -163,14 +159,15 @@ class TestMcpStubsValidateDeadline(unittest.TestCase):
         self.assertNotIn("if t <= 0", chunk)
         ops = (REPO_ROOT / "wikifier" / "mcp" / "status_ops.py").read_text(encoding="utf-8")
         self.assertIn("call_with_deadline", ops)
-        self.assertIn("ensure_acs_summary_persisted", ops)
+        self.assertIn("load_meta", ops, "status reads persisted summaries")
+        self.assertNotIn("load_cache(", ops, "status must not deserialize the whole cache")
         self.assertIn("get_files_needing_attention", ops)
 
 
 class TestParserMapHonesty(TempProjectTestCase):
     def test_source_exts_include_extra_js(self):
         from wikifier.candidates import SOURCE_EXTS
-        from wikifier.health_impl import PARSEABLE_SOURCE_SUFFIXES
+        from wikifier.health_pkg import PARSEABLE_SOURCE_SUFFIXES
 
         for ext in (".mjs", ".cjs", ".mts", ".cts"):
             self.assertIn(ext, SOURCE_EXTS, ext)
@@ -295,10 +292,11 @@ class TestBreeAdvertisedNames(unittest.TestCase):
 
 
 class TestVersionAndDeps(unittest.TestCase):
-    def test_version_is_4_6_13(self):
+    def test_version_has_changelog_entry(self):
         import wikifier
 
-        self.assertEqual(wikifier.__version__, "4.6.13")
+        changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn(f"## [{wikifier.__version__}]", changelog)
 
     def test_pyproject_core_deps_empty(self):
         text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")

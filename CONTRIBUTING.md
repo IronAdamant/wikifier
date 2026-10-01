@@ -7,7 +7,7 @@ Thank you for your interest in Wikifier! This project is intentionally **agent-f
 - **Zero external dependencies** is sacred. No new Python packages, Node modules, Docker images, or heavy CLIs.
 - **Agent-first design** comes first. If something makes life harder for LLMs/Grok Build/Cline/etc., we probably shouldn't do it.
 - **Semantic logging** (`record-change`) is the heart of the system. Changes without intent are less valuable.
-- Keep it simple. This is a shell + Markdown tool, not a full framework.
+- Keep it simple: a stdlib-Python package + Markdown artifacts, not a framework.
 
 ## How to Contribute
 
@@ -25,31 +25,31 @@ Please use the appropriate GitHub issue template:
 1. **Fork** the repository and create a feature branch from `main`.
 2. **Follow the rules yourself**:
    ```bash
-   ./wikifier.sh check-changes
-   # Read file_health.md and pending_updates.md
-   # Prioritise Red → Yellow
+   python -m wikifier session-bootstrap
+   python -m wikifier check-changes
+   # Prioritise 🔴 Red → actionable 🟡 Yellow
    ```
 3. For **any** code or documentation change you make:
    ```bash
-   ./wikifier.sh record-change "path/to/your/file" "I changed X because Y. This improves Z for agents."
+   python -m wikifier record-change "path/to/your/file" "I changed X because Y. This improves Z for agents."
    ```
 4. After you update the corresponding wiki summary (if applicable):
    ```bash
-   ./wikifier.sh mark-green "path/to/your/file"
+   python -m wikifier mark-green "path/to/your/file"
    ```
-5. Run `./wikifier.sh validate` and `./wikifier.sh update-maps` before opening a PR.
+5. Before opening a PR: `python -m unittest discover tests`, `python scripts/parser_accuracy.py` (parser changes must stay 1.00/1.00), `python -m wikifier update-maps` and `python -m wikifier validate`. For parser or lookup-output changes, also run `python scripts/benchmark_lookup.py <a real Python project>` and compare with `Findings/2026-10-01-lookup-benchmark.md`.
 
 ### 3. Pull Request Guidelines
 
 - Keep PRs focused. One logical change per PR.
 - Update documentation (`README.md`, `docs/spec.md`, `skills/run.md`) when behavior changes.
-- If you add a new command, document it in `skills/run.md` and the help text in `wikifier.sh`.
-- All shell changes must remain POSIX-compatible where possible (or clearly PowerShell-only).
+- If you add a command, implement it in `wikifier/api.py` (library) + `wikifier/cli.py` (argparse), add it to `skills/run.md`, and add a test. The launchers (`wikifier.sh`/`.ps1`/`.bat`) stay thin.
+- Fix a bug with a regression test that fails without the fix.
 - Add yourself to the journal if you want (`wikifier record-change` is the proper way).
 
 ### 4. Code Style
 
-- **Shell**: Keep it readable. Use functions. Prefer clarity over cleverness.
+- **Python**: stdlib only, Python 3.8+. Catch specific exceptions; never swallow errors silently — return `{"success": False, "error": …}` at the API boundary instead.
 - **Markdown**: Short paragraphs. Use tables for commands. Use emojis sparingly and consistently.
 - **No new dependencies**. If your idea requires one, it probably doesn't belong here.
 - Test on at least one Unix-like system and (ideally) Windows.
@@ -67,11 +67,12 @@ Wikifier is self-documenting. The best documentation contributions usually come 
 When working on Wikifier itself, treat this repository as a Wikifier project:
 
 ```bash
-./wikifier.sh check-changes
+python -m wikifier check-changes
 # Work
-./wikifier.sh record-change "wikifier.sh" "Added support for X because..."
-./wikifier.sh mark-green "wikifier.sh"
-./wikifier.sh update-maps
+python -m wikifier record-change "wikifier/api.py" "Added support for X because..."
+# refresh wikifier/api.py.wiki.md if it exists
+python -m wikifier mark-green "wikifier/api.py"
+python -m wikifier update-maps
 ```
 
 ## Questions?

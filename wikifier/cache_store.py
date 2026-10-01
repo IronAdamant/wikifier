@@ -1,17 +1,19 @@
-"""Stdlib SQLite import-cache store (agent warm-path; zero new deps).
+"""
+SQLite import-cache store (stdlib ``sqlite3``).
 
-AGENT MAP:
-  load_cache_dict / save_cache_dict  — full cache dict (file entries + _meta keys)
-  load_mtime_index                   — light {rel: mtime, content_hash} for dirty
-  load_meta / save_meta_key          — reserved _keys without loading pairs
-  update_file_index_rows             — mtime/hash refresh without full rewrite
-  prune_file_index_outside_scope     — drop files rows outside MapScope prefixes
-  backend_name / has_sqlite / cache_status
+Tables:
+  files(rel_path, mtime, content_hash, payload)  one row per mapped source file
+  edges(src, dst, raw, confidence, score)        resolved internal edges, indexed both ways
+  meta(key, value)                               reserved ``_*`` keys (cycles, ACS, barrels…)
 
-Dual-read: if ``import_cache.sqlite`` missing but legacy ``import_cache.json``
-exists, load JSON and migrate on next save. Dual-write is opt-in only
-(``WIKIFIER_CACHE_JSON=1``). Warm dirty detection should use
-``load_mtime_index`` so agents avoid deserializing multi‑MB pair payloads.
+Per-file lookups (``load_file_entry``, ``load_dependents``) use indexed queries so
+agent tools never deserialize the whole cache. ``load_cache_dict`` still returns
+the historical dict shape for whole-graph work (cycles, library.md).
+
+Legacy ``import_cache.json`` is read only when no SQLite database exists and is
+migrated on the next save. JSON dual-write is opt-in (``WIKIFIER_CACHE_JSON=1``).
+Errors reading an existing database propagate — a corrupt cache must be visible,
+not silently replaced by stale JSON.
 """
 
 from __future__ import annotations
@@ -38,7 +40,19 @@ CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS edges (
+  src TEXT NOT NULL,
+  dst TEXT NOT NULL,
+  raw TEXT NOT NULL DEFAULT '',
+  confidence TEXT,
+  score REAL
+);
+CREATE INDEX IF NOT EXISTS edges_by_dst ON edges(dst);
+CREATE INDEX IF NOT EXISTS edges_by_src ON edges(src);
 """
+
+# Marker meta key: edges table has been populated for this database.
+_EDGES_READY = "_edges_ready"
 
 
 def sqlite_path(root: Path) -> Path:
@@ -50,10 +64,8 @@ def json_path(root: Path) -> Path:
 
 
 def has_sqlite(root: Path) -> bool:
-    try:
-        return sqlite_path(root).is_file() and sqlite_path(root).stat().st_size > 0
-    except Exception:
-        return False
+    path = sqlite_path(root)
+    return path.is_file() and path.stat().st_size > 0
 
 
 def backend_name(root: Path) -> str:
@@ -72,7 +84,7 @@ def _connect(root: Path) -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.executescript(_SCHEMA)
-    except Exception:
+    except sqlite3.Error:
         conn.close()
         raise
     return conn
@@ -88,356 +100,316 @@ def _db(root: Path) -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
-def load_mtime_index(root: Path) -> Dict[str, Dict[str, Any]]:
-    """Light index for dirty detection: rel → {mtime, content_hash}.
+def _load_legacy_json(root: Path) -> Dict[str, Any]:
+    path = json_path(root)
+    if not path.is_file():
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
 
-    Prefers SQLite. Falls back to scanning legacy JSON (expensive once).
-    """
+
+def _decode(raw: Any) -> Any:
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+
+
+def _edge_rows(rel: str, entry: Dict[str, Any]) -> List[Tuple[str, str, str, Optional[str], Optional[float]]]:
+    """Resolved internal edges of one file entry, deduplicated by target."""
+    rows = []
+    seen = set()
+    for pair in entry.get("resolved_pairs") or []:
+        if not isinstance(pair, dict):
+            continue
+        dst = str(pair.get("resolved") or "")
+        if not dst or dst == rel or dst in seen:
+            continue
+        seen.add(dst)
+        score = pair.get("confidence_score")
+        rows.append((
+            rel,
+            dst,
+            str(pair.get("raw") or ""),
+            pair.get("confidence"),
+            float(score) if isinstance(score, (int, float)) else None,
+        ))
+    return rows
+
+
+def _ensure_edges(conn: sqlite3.Connection) -> None:
+    """Backfill the edges table for databases written before it existed."""
+    if conn.execute("SELECT 1 FROM meta WHERE key = ?", (_EDGES_READY,)).fetchone():
+        return
+    conn.execute("DELETE FROM edges")
+    rows = []
+    for rel, payload in conn.execute("SELECT rel_path, payload FROM files"):
+        entry = _decode(payload)
+        if isinstance(entry, dict):
+            rows.extend(_edge_rows(str(rel), entry))
+    conn.executemany("INSERT INTO edges(src, dst, raw, confidence, score) VALUES (?, ?, ?, ?, ?)", rows)
+    conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (_EDGES_READY, "true"))
+
+
+def load_mtime_index(root: Path) -> Dict[str, Dict[str, Any]]:
+    """Light index for dirty detection: ``rel → {mtime, content_hash}``."""
     root = Path(root)
     if has_sqlite(root):
-        out: Dict[str, Dict[str, Any]] = {}
-        try:
-            with _db(root) as conn:
-                for rel, mtime, chash in conn.execute(
-                    "SELECT rel_path, mtime, content_hash FROM files"
-                ):
-                    out[str(rel)] = {
-                        "mtime": int(mtime or 0),
-                        "content_hash": chash,
-                    }
-            return out
-        except Exception:
-            pass
-    # Legacy JSON fallback
-    jp = json_path(root)
-    if not jp.is_file():
-        return {}
-    try:
-        with open(jp, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return {}
-    out = {}
-    if not isinstance(data, dict):
-        return out
-    for k, v in data.items():
-        if not isinstance(k, str) or k.startswith("_") or not isinstance(v, dict):
-            continue
-        out[k] = {
-            "mtime": int(v.get("mtime", 0) or 0),
-            "content_hash": v.get("content_hash"),
-        }
-    return out
+        with _db(root) as conn:
+            return {
+                str(rel): {"mtime": int(mtime or 0), "content_hash": chash}
+                for rel, mtime, chash in conn.execute("SELECT rel_path, mtime, content_hash FROM files")
+            }
+    return {
+        k: {"mtime": int(v.get("mtime", 0) or 0), "content_hash": v.get("content_hash")}
+        for k, v in _load_legacy_json(root).items()
+        if isinstance(k, str) and not k.startswith("_") and isinstance(v, dict)
+    }
 
 
 def load_meta(root: Path, keys: Optional[Iterable[str]] = None) -> Dict[str, Any]:
-    """Load reserved meta keys (``_acs_summary``, ``_cycles``, …) without file payloads."""
+    """Reserved ``_*`` keys without file payloads (all keys when ``keys`` is None)."""
     root = Path(root)
-    want = set(keys) if keys is not None else None
+    wanted = set(keys) if keys is not None else None
     if has_sqlite(root):
-        try:
-            with _db(root) as conn:
-                rows = conn.execute("SELECT key, value FROM meta").fetchall()
-            out: Dict[str, Any] = {}
-            for k, raw in rows:
-                if want is not None and k not in want:
-                    continue
-                try:
-                    out[str(k)] = json.loads(raw)
-                except Exception:
-                    out[str(k)] = raw
-            return out
-        except Exception:
-            pass
-    # JSON fallback — still full parse (legacy only)
-    jp = json_path(root)
-    if not jp.is_file():
-        return {}
-    try:
-        with open(jp, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    out = {}
-    for k, v in data.items():
-        if not isinstance(k, str) or not k.startswith("_"):
-            continue
-        if want is not None and k not in want:
-            continue
-        out[k] = v
-    return out
+        with _db(root) as conn:
+            rows = conn.execute("SELECT key, value FROM meta").fetchall()
+        return {
+            str(k): _decode(raw)
+            for k, raw in rows
+            if k != _EDGES_READY and (wanted is None or k in wanted)
+        }
+    return {
+        k: v
+        for k, v in _load_legacy_json(root).items()
+        if isinstance(k, str) and k.startswith("_") and (wanted is None or k in wanted)
+    }
+
+
+def _row_to_entry(mtime: Any, chash: Any, payload: Any) -> Dict[str, Any]:
+    entry = _decode(payload) if payload else {}
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["mtime"] = int(mtime or 0)
+    if chash:
+        entry["content_hash"] = chash
+    return entry
 
 
 def load_cache_dict(root: Path) -> Dict[str, Any]:
-    """Full cache dict: file entries + reserved keys (same shape as historical JSON)."""
+    """Full cache dict: file entries + reserved keys (historical JSON shape)."""
     root = Path(root)
-    if has_sqlite(root):
-        try:
-            cache: Dict[str, Any] = {}
-            with _db(root) as conn:
-                for rel, mtime, chash, payload in conn.execute(
-                    "SELECT rel_path, mtime, content_hash, payload FROM files"
-                ):
-                    try:
-                        ent = json.loads(payload) if payload else {}
-                    except Exception:
-                        ent = {}
-                    if not isinstance(ent, dict):
-                        ent = {}
-                    ent["mtime"] = int(mtime or 0)
-                    if chash:
-                        ent["content_hash"] = chash
-                    cache[str(rel)] = ent
-                for k, raw in conn.execute("SELECT key, value FROM meta"):
-                    try:
-                        cache[str(k)] = json.loads(raw)
-                    except Exception:
-                        cache[str(k)] = raw
-            return cache
-        except Exception:
-            pass
-    jp = json_path(root)
-    if not jp.is_file():
-        return {}
-    try:
-        with open(jp, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    if not has_sqlite(root):
+        return _load_legacy_json(root)
+    cache: Dict[str, Any] = {}
+    with _db(root) as conn:
+        for rel, mtime, chash, payload in conn.execute(
+            "SELECT rel_path, mtime, content_hash, payload FROM files"
+        ):
+            cache[str(rel)] = _row_to_entry(mtime, chash, payload)
+        for key, raw in conn.execute("SELECT key, value FROM meta"):
+            if key != _EDGES_READY:
+                cache[str(key)] = _decode(raw)
+    return cache
+
+
+def load_file_entry(root: Path, rel: str) -> Optional[Dict[str, Any]]:
+    """One file's cache entry (or None) without loading the rest of the cache."""
+    root = Path(root)
+    if not has_sqlite(root):
+        entry = _load_legacy_json(root).get(rel)
+        return entry if isinstance(entry, dict) else None
+    with _db(root) as conn:
+        row = conn.execute(
+            "SELECT mtime, content_hash, payload FROM files WHERE rel_path = ?", (rel,)
+        ).fetchone()
+    return _row_to_entry(*row) if row else None
+
+
+def load_dependents(root: Path, rel: str) -> List[str]:
+    """Files that import ``rel`` (indexed lookup; sorted)."""
+    root = Path(root)
+    if not has_sqlite(root):
+        cache = _load_legacy_json(root)
+        return sorted(
+            src for src, entry in cache.items()
+            if isinstance(entry, dict) and not src.startswith("_")
+            and any(dst == rel for _, dst, *_ in _edge_rows(src, entry))
+        )
+    with _db(root) as conn:
+        _ensure_edges(conn)
+        return [r[0] for r in conn.execute("SELECT DISTINCT src FROM edges WHERE dst = ? ORDER BY src", (rel,))]
+
+
+def load_dependencies(root: Path, rel: str) -> List[str]:
+    """Internal files that ``rel`` imports (indexed lookup; sorted)."""
+    root = Path(root)
+    if not has_sqlite(root):
+        entry = _load_legacy_json(root).get(rel)
+        return sorted({dst for _, dst, *_ in _edge_rows(rel, entry)}) if isinstance(entry, dict) else []
+    with _db(root) as conn:
+        _ensure_edges(conn)
+        return [r[0] for r in conn.execute("SELECT DISTINCT dst FROM edges WHERE src = ? ORDER BY dst", (rel,))]
 
 
 def save_cache_dict(root: Path, cache: Dict[str, Any], write_json: Optional[bool] = None) -> str:
-    """Persist cache to SQLite (primary). Optional legacy JSON dual-write (deprecated).
+    """Persist the cache dict to SQLite (files, edges, meta in one transaction).
 
-    Dual-read of legacy ``import_cache.json`` remains for migrate forever.
-
-    ``write_json`` policy (4.6.6+ deprecation):
-      - None → **opt-in only**: dual-write iff ``WIKIFIER_CACHE_JSON=1|true|yes|always``
-        (default is sqlite-only — no silent multi‑MB JSON rewrite)
-      - True / False → force on/off
-
-    Returns backend name written: ``sqlite`` or ``sqlite+json``.
+    Rows the dict no longer owns are deleted. ``write_json`` (default: env
+    ``WIKIFIER_CACHE_JSON``) additionally writes the legacy JSON file.
+    Returns the backend written: ``sqlite`` or ``sqlite+json``.
     """
     root = Path(root)
     if not isinstance(cache, dict):
-        return "none"
-    # Barrel preservation: merge missing barrel keys from meta only (no pair hydrate)
-    _BARREL = ("_barrel_resolutions", "_barrel_file_index")
-    if any(k not in cache for k in _BARREL):
-        try:
-            prev = load_meta(root, keys=_BARREL)
-            for k in _BARREL:
-                if k not in cache and prev.get(k):
-                    cache[k] = prev[k]
-        except Exception:
-            pass
-
+        raise TypeError("cache must be a dict")
+    # Barrel structures are flushed separately by BREE; keep them if absent here.
+    barrel_keys = ("_barrel_resolutions", "_barrel_file_index")
+    if any(k not in cache for k in barrel_keys) and has_sqlite(root):
+        previous = load_meta(root, keys=barrel_keys)
+        for key in barrel_keys:
+            if key not in cache and previous.get(key):
+                cache[key] = previous[key]
     if write_json is None:
-        env = os.environ.get("WIKIFIER_CACHE_JSON", "").strip().lower()
-        # Deprecated default dual-write for small trees removed: opt-in only
-        write_json = env in ("1", "true", "yes", "always")
+        write_json = os.environ.get("WIKIFIER_CACHE_JSON", "").strip().lower() in ("1", "true", "yes", "always")
 
+    file_rows = []
+    edge_rows = []
+    meta_rows = []
+    for key, value in cache.items():
+        if not isinstance(key, str):
+            continue
+        if key.startswith("_"):
+            meta_rows.append((key, json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)))
+        elif isinstance(value, dict):
+            file_rows.append((
+                key,
+                int(value.get("mtime", 0) or 0),
+                value.get("content_hash"),
+                json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str),
+            ))
+            edge_rows.extend(_edge_rows(key, value))
     with _db(root) as conn:
-        keep_files = set()
-        keep_meta = set()
-        for k, v in cache.items():
-            if not isinstance(k, str):
-                continue
-            if k.startswith("_"):
-                try:
-                    raw = json.dumps(v, ensure_ascii=False, separators=(",", ":"))
-                except Exception:
-                    raw = json.dumps(str(v))
-                conn.execute(
-                    "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-                    (k, raw),
-                )
-                keep_meta.add(k)
-            elif isinstance(v, dict):
-                mtime = int(v.get("mtime", 0) or 0)
-                chash = v.get("content_hash")
-                try:
-                    payload = json.dumps(v, ensure_ascii=False, separators=(",", ":"))
-                except Exception:
-                    payload = "{}"
-                conn.execute(
-                    "INSERT OR REPLACE INTO files(rel_path, mtime, content_hash, payload) "
-                    "VALUES (?, ?, ?, ?)",
-                    (k, mtime, chash, payload),
-                )
-                keep_files.add(k)
-        # Drop rows the in-memory cache no longer owns (ghosts / scoped full rebuild)
-        if keep_files:
-            existing = [r[0] for r in conn.execute("SELECT rel_path FROM files")]
-            for rel in existing:
-                if rel not in keep_files:
-                    conn.execute("DELETE FROM files WHERE rel_path = ?", (rel,))
-        if keep_meta:
-            existing_m = [r[0] for r in conn.execute("SELECT key FROM meta")]
-            for key in existing_m:
-                if key not in keep_meta:
-                    conn.execute("DELETE FROM meta WHERE key = ?", (key,))
+        # A dict without file entries (or without meta) must never wipe the other half.
+        if file_rows:
+            conn.execute("DELETE FROM files")
+            conn.execute("DELETE FROM edges")
+            conn.executemany(
+                "INSERT INTO files(rel_path, mtime, content_hash, payload) VALUES (?, ?, ?, ?)", file_rows
+            )
+            conn.executemany(
+                "INSERT INTO edges(src, dst, raw, confidence, score) VALUES (?, ?, ?, ?, ?)", edge_rows
+            )
+        if meta_rows:
+            conn.execute("DELETE FROM meta")
+            conn.executemany("INSERT INTO meta(key, value) VALUES (?, ?)", meta_rows)
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (_EDGES_READY, "true"))
 
     if write_json:
-        jp = json_path(root)
-        jp.parent.mkdir(parents=True, exist_ok=True)
-        with open(jp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False, separators=(",", ":"))
+        path = json_path(root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, separators=(",", ":"), default=str)
         return "sqlite+json"
-    # If dual-write disabled, leave legacy json in place for dual-read until removed;
-    # do not delete automatically (safe migration).
     return "sqlite"
 
 
-def update_file_index_rows(
-    root: Path,
-    rows: List[Tuple[str, int, Optional[str]]],
-) -> int:
-    """Update mtime/content_hash for existing file rows without rewriting payloads.
-
-    rows: (rel_path, mtime, content_hash|None)
-    Returns number of rows updated (SQLite only; 0 if no db).
-    """
+def update_file_index_rows(root: Path, rows: List[Tuple[str, int, Optional[str]]]) -> int:
+    """Refresh mtime/content_hash for existing rows without rewriting payloads."""
     root = Path(root)
     if not has_sqlite(root) or not rows:
         return 0
-    n = 0
+    updated = 0
     with _db(root) as conn:
         for rel, mtime, chash in rows:
             if chash:
                 cur = conn.execute(
-                    "UPDATE files SET mtime = ?, content_hash = ? WHERE rel_path = ?",
-                    (int(mtime), chash, rel),
+                    "UPDATE files SET mtime = ?, content_hash = ? WHERE rel_path = ?", (int(mtime), chash, rel)
                 )
             else:
-                cur = conn.execute(
-                    "UPDATE files SET mtime = ? WHERE rel_path = ?",
-                    (int(mtime), rel),
-                )
-            n += int(cur.rowcount or 0)
-    return n
+                cur = conn.execute("UPDATE files SET mtime = ? WHERE rel_path = ?", (int(mtime), rel))
+            updated += int(cur.rowcount or 0)
+    return updated
 
 
-def prune_file_index_outside_scope(
-    root: Path,
-    rel_prefixes: Sequence[str],
-    *,
-    is_full_tree: bool = False,
-) -> int:
-    """Delete files-table rows outside map scope prefixes (SQLite).
-
-    Full-tree scope (``is_full_tree`` or empty/'.' prefixes) → no prune.
-    Used after narrowing map_paths so leftover full-tree index keys cannot
-    poison candidate-list reuse forever.
-
-    Returns number of rows deleted.
-    """
+def prune_file_index_outside_scope(root: Path, rel_prefixes: Sequence[str], *, is_full_tree: bool = False) -> int:
+    """Delete file (and edge) rows outside the map scope prefixes. Returns rows deleted."""
     root = Path(root)
     if is_full_tree or not has_sqlite(root):
         return 0
-    prefixes = [
-        str(p).replace("\\", "/").strip().rstrip("/")
-        for p in (rel_prefixes or [])
-        if p is not None and str(p).strip() and str(p).strip() not in (".", "./")
-    ]
+    prefixes = []
+    for prefix in rel_prefixes or []:
+        p = str(prefix or "").replace("\\", "/").strip().rstrip("/")
+        while p.startswith("./"):
+            p = p[2:]
+        if p and p != ".":
+            prefixes.append(p)
     if not prefixes:
         return 0
 
-    def _in_scope(rel: str) -> bool:
-        r = rel.replace("\\", "/").lstrip("./")
-        for pref in prefixes:
-            if r == pref or r.startswith(pref + "/"):
-                return True
-        return False
+    def in_scope(rel: str) -> bool:
+        return any(rel == p or rel.startswith(p + "/") for p in prefixes)
 
-    deleted = 0
     with _db(root) as conn:
-        rows = [r[0] for r in conn.execute("SELECT rel_path FROM files")]
-        for rel in rows:
-            if not isinstance(rel, str) or not rel:
-                continue
-            if not _in_scope(rel):
-                conn.execute("DELETE FROM files WHERE rel_path = ?", (rel,))
-                deleted += 1
-    return deleted
+        doomed = [r[0] for r in conn.execute("SELECT rel_path FROM files") if not in_scope(str(r[0]))]
+        conn.executemany("DELETE FROM files WHERE rel_path = ?", [(rel,) for rel in doomed])
+        conn.executemany("DELETE FROM edges WHERE src = ?", [(rel,) for rel in doomed])
+    return len(doomed)
 
 
 def save_meta_key(root: Path, key: str, value: Any) -> bool:
-    """Write a single meta key to SQLite (warm ACS upgrade without full rewrite)."""
+    """Write one reserved meta key without rewriting file payloads."""
     root = Path(root)
     if not key.startswith("_"):
         return False
-    try:
-        raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    except Exception:
-        return False
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
     if not has_sqlite(root):
-        # Fall back: load full, set, save
         cache = load_cache_dict(root)
         cache[key] = value
         save_cache_dict(root, cache)
         return True
     with _db(root) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (key, raw),
-        )
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, raw))
     return True
 
 
-def get_map_coverage_from_meta(root: Path) -> Dict[str, Any]:
-    """Read last map_coverage snapshot from meta if present."""
-    meta = load_meta(root, keys=("_map_coverage", "_acs_summary"))
-    cov = meta.get("_map_coverage") if isinstance(meta.get("_map_coverage"), dict) else {}
-    acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
-    return {
-        "map_coverage": cov,
-        "acs_version": acs.get("acs_version"),
-        "cache_backend": backend_name(root),
-        "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
-        "reason_code_counts": acs.get("reason_code_counts"),
-    }
-
-
 def cache_status(root: Path) -> Dict[str, Any]:
-    """Machine-readable dual-cache status for agents/ops (zero full pair load)."""
+    """Machine-readable cache status (no payload load)."""
     root = Path(root)
     sp = sqlite_path(root)
     jp = json_path(root)
-    backend = backend_name(root)
-    sqlite_bytes = int(sp.stat().st_size) if sp.is_file() else 0
-    json_bytes = int(jp.stat().st_size) if jp.is_file() else 0
-    snap = get_map_coverage_from_meta(root)
     meta = load_meta(root, keys=("_acs_summary", "_map_coverage", "_candidate_list"))
     acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
     cand = meta.get("_candidate_list") if isinstance(meta.get("_candidate_list"), dict) else {}
+    edge_count = None
+    if has_sqlite(root):
+        with _db(root) as conn:
+            _ensure_edges(conn)
+            edge_count = conn.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
     return {
         "success": True,
         "project_root": str(root.resolve()) if root.exists() else str(root),
-        "cache_backend": backend,
+        "cache_backend": backend_name(root),
         "sqlite_path": str(sp) if sp.is_file() else None,
         "json_path": str(jp) if jp.is_file() else None,
-        "sqlite_bytes": sqlite_bytes,
-        "json_bytes": json_bytes,
-        "acs_version": acs.get("acs_version") or snap.get("acs_version"),
+        "sqlite_bytes": int(sp.stat().st_size) if sp.is_file() else 0,
+        "json_bytes": int(jp.stat().st_size) if jp.is_file() else 0,
+        "edge_count": edge_count,
+        "acs_version": acs.get("acs_version"),
         "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
-        "map_coverage": snap.get("map_coverage") or meta.get("_map_coverage"),
+        "map_coverage": meta.get("_map_coverage"),
         "candidate_list_count": cand.get("count"),
         "candidate_list_directory": cand.get("directory"),
         "dual_write_policy": (
-            "SQLite is primary. Legacy JSON dual-read remains for migrate. "
-            "JSON dual-write is DEPRECATED default-off; set WIKIFIER_CACHE_JSON=1 to opt in. "
-            "Prefer sqlite for warm agents."
+            "SQLite is primary. JSON dual-write is DEPRECATED and off by default; "
+            "set WIKIFIER_CACHE_JSON=1 to also write import_cache.json."
         ),
         "migrate_note": (
-            "update_maps migrates legacy import_cache.json → import_cache.sqlite once "
-            "when sqlite is missing. Dual-read never deletes legacy JSON automatically."
+            "Legacy import_cache.json is read only when no SQLite database exists and is "
+            "migrated on the next update_maps; it is never deleted automatically."
         ),
         "map_paths_note": (
             "map_paths.txt = map package roots; monitored_paths.txt = wiki/health watch list. "
-            "They are independent; wiki-only monitored lists do not define the map."
+            "They are independent."
         ),
     }

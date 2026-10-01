@@ -1,5 +1,5 @@
 """
-Diagnostics and Failure Transparency Layer for Wikifier (Limitation #5 / Gap #1).
+Diagnostics and Failure Transparency Layer for Wikifier.
 
 This module defines the canonical schema, categories, and helpers for
 resolution diagnostics. It is the single source of truth for "why" a
@@ -20,14 +20,14 @@ Integration points:
 - library.md generation consumes aggregates + samples for the dynamic section.
 
 Phased rollout (executed 2026-05-17+):
-  Phase 0 (done): Research + plan (this docstring + todos).
-  Phase 1 (this file): Schema + helpers (no behavior change).
-  Phase 2: Instrument parsers (JS first).
-  Phase 3: Propagate + cache aggregates.
-  Phase 4: MCP tool + enrichments.
-  Phase 5: library.md + CLI "diagnose".
-  Phase 6: Scale polish, tests, dogfood.
-  Phase 7: Docs, changelog, issue closure.
+  (done): Research + plan (this docstring + todos).
+  (this file): Schema + helpers (no behavior change).
+  Instrument parsers (JS first).
+  Propagate + cache aggregates.
+  MCP tool + enrichments.
+  library.md + CLI "diagnose".
+  Scale polish, tests, dogfood.
+  Docs, changelog, issue closure.
 """
 
 from __future__ import annotations
@@ -46,12 +46,12 @@ class DiagnosticCategory(str, Enum):
     """
     EXTERNAL = "external"
     DYNAMIC = "dynamic"                    # template literal, expression, unknown dynamic
-    CREATIVE_DYNAMIC = "creative_dynamic"  # Phase 1: extremely creative (tagged templates, registry maps, call-produced, multi-cond feature wrappers via LDSI+CDIA)
+    CREATIVE_DYNAMIC = "creative_dynamic"  # extremely creative (tagged templates, registry maps, call-produced, multi-cond feature wrappers via LDSI+CDIA)
     CONDITIONAL = "conditional"            # inside if/try/etc or propagated from barrel
-    # Phase 5e (66): diagnostics surfaces (via get_resolution_diagnostics) complement A3 summaries (format=summary + ACS/barrel in health/MCP) as first-class for 20k+ (O(k) bounded, per 48/58 richer A3).
+    # diagnostics surfaces (via get_resolution_diagnostics) complement summaries (format=summary + ACS/barrel in health/MCP) as first-class for 20k+ (O(k) bounded, per 48/58 richer ).
     NO_FS_MATCH = "no_fs_match"            # walked FS + exports, no hit
     BARREL_DEPTH_EXCEEDED = "barrel_depth_exceeded"
-    BARREL_INVALIDATION = "barrel_invalidation"  # Wave 2: importer marked stale due to barrel leaf/mid change (for health yellow notes + explain via BRC reports)
+    BARREL_INVALIDATION = "barrel_invalidation"  # importer marked stale due to barrel leaf/mid change (for health yellow notes + explain via BRC reports)
     UNPARSED_DYNAMIC = "unparsed_dynamic"  # Python importlib etc.
     RELATIVE_MISRESOLVE = "relative_misresolve"
     EXPORTS_UNMATCHED = "exports_unmatched" # package.json exports present but no match
@@ -162,7 +162,7 @@ def make_creative_dynamic_diagnostic(
     severity: Severity = "warn",
     suggestion_for_agent: str = "Creative dynamic pattern detected by CDIA (LDSI coverage). Provide static mapping or treat edge as runtime-only for reliable graphs.",
 ) -> Dict[str, Any]:
-    """Phase 1: dedicated factory for wiring extremely creative CDIA signals into diagnostics.
+    """: dedicated factory for wiring extremely creative CDIA signals into diagnostics.
     Used by JS parser (and future Python parity) when new detectors (TaggedTemplate etc.) fire.
     """
     tags = creative_tags or []
@@ -203,11 +203,13 @@ def summarize_diagnostics(
 ) -> Dict[str, Any]:
     """Produce an aggregates-first summary suitable for _resolution_diagnostics and MCP.
 
-    Never returns the full per-import list unless asked; always starts with counts + top samples.
-    Safe to call on large lists (O(n) with early cutoffs).
+    Never returns the full per-import list; always starts with counts + samples.
+    Samples are capped per category and ordered actionable-first, so expected
+    noise (``external_or_bare``) never crowds out imports an agent can fix.
+    O(n).
     """
     by_category: Dict[str, int] = {}
-    samples: List[Dict[str, Any]] = []
+    per_category: Dict[str, List[Dict[str, Any]]] = {}
     low_or_unresolved = 0
     total = len(resolved_pairs)
 
@@ -224,8 +226,8 @@ def summarize_diagnostics(
         by_category[cat] = by_category.get(cat, 0) + 1
         low_or_unresolved += 1
 
-        if len(samples) < max_total_samples:
-            # Keep a compact sample record
+        bucket = per_category.setdefault(cat, [])
+        if len(bucket) < max_samples_per_category:
             sample = {
                 "src": p.get("src") or p.get("source") or "?",
                 "raw": p.get("raw", ""),
@@ -237,17 +239,19 @@ def summarize_diagnostics(
             }
             # Only add if it actually has a diagnostic story
             if sample["reason"] or cat != "unknown":
-                samples.append(sample)
+                bucket.append(sample)
 
     # Sort categories by frequency desc for nice presentation
     sorted_cats = sorted(by_category.items(), key=lambda kv: (-kv[1], kv[0]))
+    sample_order = sorted(per_category, key=lambda c: (c == "external_or_bare", -by_category[c], c))
+    samples = [s for c in sample_order for s in per_category[c]][:max_total_samples]
 
     return {
         "total_imports": total,
         "low_or_unresolved_count": low_or_unresolved,
         "by_category": {k: v for k, v in sorted_cats},
         "top_categories": [k for k, _ in sorted_cats[:5]],
-        "samples": samples[:max_total_samples],
+        "samples": samples,
         "has_more": low_or_unresolved > len(samples),
     }
 

@@ -22,6 +22,7 @@ import sys
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 DEFAULT_PORT = 8787
 
@@ -34,15 +35,92 @@ ALLOWED_COMMANDS = {
 RUN_TIMEOUT_SECONDS = 1800
 
 
+def _api_bootstrap(root: Path, q: dict) -> dict:
+    from .api import session_bootstrap
+
+    return session_bootstrap(project_root=root)
+
+
+def _api_file(root: Path, q: dict) -> dict:
+    """Everything the dashboard shows for one file: preflight + wiki text."""
+    from . import health_pkg
+    from .api import prepare_edit
+    from .paths import to_rel
+
+    rel = to_rel(root, q.get("path", ""))
+    out = prepare_edit(rel, project_root=root)
+    wiki = health_pkg._find_existing_wiki_file(root, rel)
+    if wiki and wiki.resolve() != (root / rel).resolve():
+        out["wiki"] = wiki.read_text(encoding="utf-8", errors="replace")
+        out["wiki_path"] = wiki.relative_to(root).as_posix()
+    entry = health_pkg.load_health(root).get("entries", {}).get(rel) or {}
+    out["health_entry"] = entry
+    return out
+
+
+def _api_dependencies(root: Path, q: dict) -> dict:
+    from .api import get_dependencies
+
+    return get_dependencies(q.get("path", ""), project_root=root, detail="full" if q.get("detail") == "full" else "compact")
+
+
+def _api_dependents(root: Path, q: dict) -> dict:
+    from .api import get_dependents
+
+    return get_dependents(q.get("path", ""), project_root=root)
+
+
+def _api_cycles(root: Path, q: dict) -> dict:
+    from .api import cycles_report
+
+    return cycles_report(project_root=root, analysis=True)
+
+
+def _api_journal(root: Path, q: dict) -> dict:
+    from .api import journal, search_journal
+
+    if q.get("query") or q.get("path"):
+        return search_journal(project_root=root, query=q.get("query"), file=q.get("path"), max_results=50)
+    return journal(q.get("date") or None, project_root=root)
+
+
+def _api_diagnostics(root: Path, q: dict) -> dict:
+    """Cache, ACS, resolution, barrel and metrics intel for the maintainer page."""
+    from . import cache_store, import_cache
+    from .health_pkg import read_metrics_history
+
+    meta = cache_store.load_meta(root, keys=(
+        "_acs_summary", "_resolution_diagnostics", "_barrel_resolutions", "_barrel_file_index",
+        "_cycle_analyses", "_map_coverage",
+    )) if cache_store.backend_name(root) != "none" else {}
+    return {
+        "success": True,
+        "cache": cache_store.cache_status(root) if cache_store.backend_name(root) != "none" else {"cache_backend": "none"},
+        "acs": meta.get("_acs_summary") or {},
+        "resolution": meta.get("_resolution_diagnostics") or {},
+        "barrels": import_cache.get_barrel_cache_summary(meta) if meta else {},
+        "cycle_summary": (meta.get("_cycle_analyses") or {}).get("summary") or {},
+        "map_coverage": meta.get("_map_coverage") or {},
+        "metrics_history": read_metrics_history(root, limit=60),
+    }
+
+
+# Read-only endpoints under /__wikifier/api/<name>; query: ?path=, ?date=, ?query=
+API_ENDPOINTS = {
+    "bootstrap": _api_bootstrap,
+    "file": _api_file,
+    "dependencies": _api_dependencies,
+    "dependents": _api_dependents,
+    "cycles": _api_cycles,
+    "journal": _api_journal,
+    "diagnostics": _api_diagnostics,
+}
+
+
 def _project_root() -> Path:
-    env = os.environ.get("WIKIFIER_PROJECT_ROOT")
-    if env and Path(env).is_dir():
-        return Path(env).resolve()
-    try:
-        from .cli import discover_project_root
-        return Path(discover_project_root()).resolve()
-    except Exception:
-        return Path.cwd().resolve()
+    from .paths import resolve_root
+
+    return resolve_root()
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
@@ -80,21 +158,35 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if not self._host_is_local():
             self._send_json(403, {"error": "non-local Host header rejected"})
             return
-        if self.path.split("?")[0] == "/__wikifier/status":
-            version = "?"
-            try:
-                from . import __version__ as version
-            except Exception:
-                pass
+        route = self.path.split("?")[0]
+        if route == "/__wikifier/status":
+            from . import __version__
+
             self._send_json(200, {
                 "wikifier_serve": True,
-                "version": version,
+                "version": __version__,
                 "project": self.root.name,
                 "root": str(self.root),
                 "allowed_commands": sorted(ALLOWED_COMMANDS.keys()),
+                "api": sorted(API_ENDPOINTS),
             })
             return
+        if route.startswith("/__wikifier/api/"):
+            self._serve_api(route[len("/__wikifier/api/"):])
+            return
         super().do_GET()
+
+    def _serve_api(self, name: str) -> None:
+        """Read-only JSON views over the library (see API_ENDPOINTS)."""
+        handler = API_ENDPOINTS.get(name)
+        if handler is None:
+            self._send_json(404, {"success": False, "error": f"unknown endpoint: {name}", "endpoints": sorted(API_ENDPOINTS)})
+            return
+        query = {k: v[-1] for k, v in parse_qs(urlsplit(self.path).query).items()}
+        try:
+            self._send_json(200, handler(self.root, query))
+        except (ValueError, OSError) as exc:
+            self._send_json(400, {"success": False, "error": str(exc), "error_type": type(exc).__name__})
 
     def do_POST(self):
         if not (self._host_is_local() and self._origin_is_local()):

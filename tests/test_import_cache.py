@@ -1,4 +1,4 @@
-"""Import-cache schema and graph-intel tests (Phase 0 of Findings/2026-06-10-Fix-Plan.md).
+"""Import-cache schema and graph-intel tests (Phase 0 of Findings/archive/2026-06-10-Fix-Plan.md).
 
 Canonical per-file schema round-trip through the real save_cache/load_cache,
 reserved "_" key preservation, reverse dependencies on a 3-file chain, and

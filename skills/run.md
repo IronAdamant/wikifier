@@ -1,377 +1,179 @@
-# Wikifier Agent Protocol v0.6
+# Wikifier Agent Protocol v0.7
 
-**Formerly "Wikifier Skills & Commands". This is the authoritative, versioned specification for agent behavior when using Wikifier.**
+**Package 4.7.x** (live version: `wikifier.__version__`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
-**Version**: v0.6 (v4.2.0 real-pipeline + reliability update; package current **4.6.x**, live `__version__` in `wikifier/__init__.py`)  
-**Date**: 2026-06-10 (package notes refreshed 2026-08-01; gap-closure contract 2026-07-09)  
-**Status**: Active. Supersedes v0.5.  
-**See also**: `README.md`, `Findings/gap-closure-report.md`, `Findings/gap-amendment-plan-2026-08-01.md`, and the library in wikifier/.
+This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference.
 
-**Package 4.6.x + gap-closure notes (additive; protocol still v0.6):**
-- File Tree + `wikifier serve`; MCP status/attention use library + emoji (not `[GREEN]` tags).
-- **Map split:** `update-maps` writes human `library.md` (File Tree + mermaid) **and** sharded agent folder cards under `.wikifier_staging/maps/` (depth-1 names only; rewrite a card only when that folder's children change). `session_bootstrap` returns the **root card** (not a whole-tree dump). `list_paths(prefix)` expands one folder; file-to-file links are `prepare_edit`. Do **not** read `library.md` mermaid for orientation.
-- **First-run:** `init` → lean `monitored_paths.txt` + `map_paths.txt` (default active root `src/`, not bare `.`) → `update-maps` → `health --summary` → `suggest_next_actions`. Map is automatic; wiki *prose* is agent-filled over time.
-- **`session_bootstrap` readiness:** message embeds the readiness tier. `blocked` is not a crash — see **§ Readiness blocked**. Hard blockers = missing map/health (or severe ghosts). Bare `.` monitor alone → `map_ok_scope_risk` when map+health exist (scope warnings / fix_scope), not the same tier as missing map. Unattended ops require **`readiness=ready_for_daemon`**, not `health_score=Map Ready` alone.
-- **Map-first ≠ wiki-done:** `health_score` **Map Ready** + many 🟡 *Initial stubs* means structural coverage only. Do **not** bulk-wiki stubs. Wiki a file when you edit it, then `mark-green`. Prefer `actionable_yellow` / 🔴 over raw yellow counts.
-- **Steady-state selective work:** only 🔴 and *actionable* 🟡 (never re-wiki 🟢; never bulk-wiki Initial/map stubs). **ACS v1.3:** use `actionable_low_conf_edges` + `reason_code_counts` / `agent_signal` (`skip`|`investigate`). Do **not** thrash on raw `low_conf_edges` (includes external/bare scores ~0.48). Prefer `map_coverage.complete` / `map_ready` / `files_remaining_dirty` after budgeted `update-maps` — `success: true` ≠ map complete.
-- **Warm maps:** SQLite primary; zero-dirty uses mtime index + meta. **Index-first:** re-list candidates only when fingerprint / map-scoped index / live count disagree (`index_first_dirty` / `candidates_reused` on `update_maps`). Prefer `--directory=` or `map_paths.txt` package roots (not bare `.`). Collect, live count, index filter, and prune share **MapScope** so full-tree→`map_paths` narrow does not thrash.
-- **map_paths vs monitored_paths:** `map_paths.txt` = import-map package roots; `monitored_paths.txt` = wiki/health thrash bound. Independent. Wiki-only monitored lists do **not** define the map.
-- **Cache ops:** `wikifier cache-status`. Dual-write JSON **deprecated default-off** (`WIKIFIER_CACHE_JSON=1` to opt in). Dual-read legacy JSON for migrate remains.
-- **ACS:** prefer `actionable_low_conf_edges` + `reason_code_counts` / `agent_signal`; never thrash on raw `low_conf_edges` alone.
-- **Dual scope:** `monitored_paths` = check-changes/health scope (keep lean). `update-maps --directory=` / `--max-files=` = map walk. Never set `project_root` to a multi-repo parent (e.g. `cloned_sample_projects`).
-- **CLI target:** `wikifier --target /abs/project health --summary` (flags stripped before the command). Or `WIKIFIER_PROJECT_ROOT=…`.
-- **Long-horizon:** `wikifier autonomous-status` (or `readiness`) before unattended runs; daemon writes `.wikifier_staging/daemon_heartbeat.json`. Soak ≥72h is still evidence work, not automatic.
-- **Deletions:** `record-deletion` + ghost detection. **Languages:** py/js/ts/rust/go/c/c#/java (regex). journal/pending = audit queue, not Jira.
-- **Huge monorepos:** lean `monitored_paths.txt` (not bare `.`). `WIKIFIER_CHECK_CHANGES_MAX` default 2000. Hygiene: `seed-health`, `prune-pending`, `prune-health`.
-- **Monitor/daemon:** mtime heartbeat; agents still own wiki/mark-green. `WIKIFIER_DAEMON_MAPS_INTERVAL` default 600s; `WIKIFIER_DAEMON_MAPS=0` for check-only.
-- Health module: `importlib.import_module("wikifier.health")` or `wikifier.health_module` — `from wikifier import health` is the *function*.
+---
 
-**v0.6 migration notes (packages v4.2.0–v4.3.0)** — changes are additive or strictly-better defaults; v0.5 agent behavior keeps working:
-- `update-maps` (CLI) now runs the **pure-Python full pipeline**: every dirty file is parsed in-process, the canonical per-file cache is persisted, reverse deps + cycles + ACS are computed, and `library.md` is regenerated atomically. `--python-primary` is accepted but redundant; the in-shell first-pass was retired entirely (wikifier.sh's update-maps delegates to this pipeline; `--sh`/`--legacy-sh` are deprecated no-ops). Scoping is explicit via `--directory=`/`--max-files=` and reported in the result (`files_skipped`) — there are no silent caps.
-- `run_full_update`/`update_maps` returns gained additive fields: `files_parsed` (actual), `parseable_files`, `edges_persisted`, `files_skipped`, `cycles`, `library`. Tolerate additive fields as always.
-- `wikifier health --summary|--json|--format=...` now work from the CLI (previously library-only).
-- A POSIX lock self-deadlock in library `record_change`/`mark_green`/`check_changes` was fixed (locking is now re-entrant per process). MCP timeouts on those tools should no longer occur; the CLI fallback guidance below remains valid as defense in depth.
-- A stdlib-only test suite exists: `python -m unittest discover tests` (run it when working on Wikifier itself).
+## Part 1 — The core loop (read this)
 
-**Core design**: Token-efficient agent-to-agent wiki. Agents use it to look up files (health matrix + file wikis + BRC + stele chunks instead of full sources), autonomously update wiki summaries, and create new ones as work progresses. **It should not be used for anything more than that.** 
+**SELECTIVE WORK (mandatory):** only touch 🔴 Red and *actionable* 🟡 Yellow files. Never re-summarize 🟢 Green files. Never bulk-wiki 🟡 *Initial* stubs — a stub means "on the map", not "needs prose"; write a wiki for a file only when you edit it.
 
-This protocol + the Python package + MCP server form the bridge for consistent, low-ambiguity agent operation on real external projects.
+### Every session
 
-**This file + the `wikifier` Python package (`from wikifier import ...`) together form the M2/M3 bridge for consistent, low-ambiguity agent operation.**
+| Step | MCP tool | CLI (`python -m wikifier …` / `wikifier …`) |
+|---|---|---|
+| 1. Orient | `session_bootstrap` | `session-bootstrap` |
+| 2. What changed | `check_changes` | `check-changes` |
+| 3. What to do | `suggest_next_actions` (use `actions[]`) | `suggest-next --json` |
+| 4. Before editing a file | `prepare_edit(file)` (status, wiki, deps, dependents) | `prepare-edit <file>` |
+| 5. After editing it | `record_change(file, why)` — **never skip** | `record-change <file> "<why>"` |
+| 6. After refreshing its wiki | `mark_green(file)` — closes the loop; **refused** if the wiki misses public symbols you added/removed | `mark-green <file>` |
+| 7. Imports/structure changed | `update_maps` | `update-maps` |
+| 5+6 for many files | `record_changes(reasons, green=True)` — reasons per path/glob/`dir/`, from git | `record-changes -r "src/=why" --green` |
 
-**This file is the primary contract for any LLM or agent operating Wikifier.**
+- Always pass `project_root=` (MCP/library) or `--target DIR` / `WIKIFIER_PROJECT_ROOT` (CLI) for any project other than the current directory. **A root that does not exist is an error** — nothing is ever written elsewhere.
+- File arguments may be project-relative, `./`-prefixed or absolute (inside the project). Results return the canonical project-relative `file`.
+- `record_change` and `mark_green` require the file to exist; for removed files use `record_deletion`.
+- `check_changes` watches every mapped file, every file ever marked Green, and `monitored_paths.txt` entries — the list only adds files (docs, scripts), it never hides mapped ones.
+- Green means the wiki was checked against the code (see *Wiki verification*). A failed check lists the symbols to document; update the wiki and retry. `force=True` with a reason overrides and is recorded as `forced`.
+- Orient with the bootstrap **root folder card** → `list_paths(prefix)` for one folder → `prepare_edit(file)` for file-to-file links. Do not read `library.md` mermaid to orient.
+- Wiki convention: `<file>.wiki.md` next to the source (e.g. `src/api.py.wiki.md`).
 
-## Agent architecture (navigability — G12)
+### Readiness
 
-Do **not** open megamodules (`javascript.py`, `import_cache.py` / `cache/_core.py`, `parsers/bree/_bree.py`) to decide workflow. Use this map:
+`session_bootstrap.readiness` must be **`ready_for_daemon`** before unattended work — not Map Ready alone. If it is `blocked`, do the priority-1/2 `actions[]` first (they are not install failures):
 
-| Need | Use |
-|------|-----|
-| First-run map | `init` → lean paths (not bare `.`) → `update-maps` → `health --summary` → `suggest-next` |
-| **Session start (4.6+)** | `session_bootstrap` (or CLI `session-bootstrap`) — one shot: root, health, attention, `actions[]`, names-only `map_index`. If `readiness` is `blocked`, fix `actions[]` / `blockers[]` first (usually scope + maps). Do **not** read `library.md` mermaid to orient. |
-| **Unblock readiness** | Write lean `monitored_paths.txt` + `map_paths.txt` → `update_maps` (full once) → re-`session_bootstrap` until **`readiness=ready_for_daemon`** (not Map Ready alone) |
-| **Core tool list** | `list_core_tools` / bootstrap `core_surface` — prefer Core 6; advanced is non-core |
-| Steady-state | `check-changes` (content-honest) → edit 🔴/actionable 🟡 only → `record-change` → wiki → `mark-green` |
-| **Hash migration** | `seed_source_content_hashes` / CLI `seed-source-hashes` — baseline Greens without mass Yellow |
-| **Preflight edit** | `prepare_edit` / CLI `prepare-edit <file>` — wiki + status + deps + dependents (multi-shape reverse index) |
-| **Why / journal** | `why_file` / `search_journal` — semantic trail, not mtime theater |
-| Lookup Core | `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green` |
-| **Names-only catalog** | Bootstrap **root card**; `list_paths` / CLI `list-paths [prefix]` (depth-1 folder card). Then `prepare_edit` for file-to-file links. Not mermaid. |
-| Advanced intel | `list_paths`, `get_dependencies`, `get_dependents`, `get_cycles`, barrel/diagnostics — not daily Core |
-| Deletion | `record-deletion` |
-| Long-horizon prep | `autonomous-status` / `readiness`; then `daemon start` with lean monitor |
-| Hygiene | `seed-health`, `prune-pending`, `prune-health` (`--deleted-missing` to retire gone DELETED audits), `validate` |
-| Code entry | `cli.py` + `agent_loop.py` + `health_impl.py` / `health_pkg` + parsers — tests in `tests/` |
+1. Write lean `monitored_paths.txt` (extra watch list — the docs and scripts you maintain; mapped sources are watched anyway; never bare `.` on real trees).
+2. Write `map_paths.txt` (import-map package roots; independent of monitored paths).
+3. `update_maps(full=True)`, then re-run `session_bootstrap`.
 
-**Do not open megamodules** (`javascript.py` ~2.6k, `cache/_core.py`, `parsers/bree/_bree.py`) for workflow decisions — use tools + this table.
+### Paste into new sessions
 
-**CLI pure-Python vs shell:** mutators and maps prefer `python -m wikifier …`. Shell still owns `init`, `monitor`, `daemon`, `serve`, `journal`.  
-**Scope:** `monitored_paths` = change detection; `exclude_patterns` + optional `--directory` = map walk.  
-**Human HTML** is secondary observation only.
+```
+You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 4.7.x).
+It is an agent-to-agent wiki: look things up (health, file wikis, deps) instead of re-reading sources.
 
-## Readiness blocked (`session_bootstrap` / external projects)
+SELECTIVE WORK: only update 🔴 Red and actionable 🟡 Yellow files; never re-wiki 🟢 Green files;
+never bulk-wiki 🟡 Initial stubs (wiki a file only when you edit it).
 
-When MCP `session_bootstrap` (or CLI `session-bootstrap`) returns:
-
-```text
-readiness: "blocked"
-scope.ok: false
-blockers: [ ... ]
-actions: [ { "action": "fix_scope", ... }, ... ]
+Loop: session_bootstrap → check_changes → suggest_next_actions (json actions[]) →
+prepare_edit(file) → edit → record_change(file, why) → refresh <file>.wiki.md → mark_green(file).
+Many files: record_changes({"path or glob or dir/": "why"}, green=True, only=[files you touched]).
+mark_green checks the wiki against the code: if it lists undocumented symbols, document them and retry.
+Run update_maps only when imports or structure changed. Pass project_root= for external projects.
+Never skip record_change after an edit; never skip mark_green after refreshing that file's wiki.
 ```
 
-**this is expected on a project that has never been scoped/mapped**, not a Wikifier install failure.
+---
 
-### Readiness tiers (code truth — `assess_autonomous_readiness`)
+## Part 2 — Reference
+
+### Health statuses
+
+| Status | Meaning | Agent action |
+|---|---|---|
+| 🟢 Green | wiki checked against the code at mark-green; source/wiki hashes and public symbols captured | look up only |
+| 🟡 Yellow *actionable* | recorded change, content changed since mark-green, or importer of a changed barrel | refresh wiki → mark-green |
+| 🟡 Yellow *Initial stub* | on the dependency map, no wiki yet | nothing until you edit it |
+| 🔴 Red | file missing on disk or recorded deletion | restore, or `record_deletion` / `prune-health --deleted-missing` |
+
+`check_changes` is content-honest: an mtime-only touch with unchanged bytes does not re-Yellow a Green file, and already-flagged files are not re-journaled. It watches explicit files listed in `monitored_paths.txt` (any type, e.g. `README.md`) and parseable sources under listed directories.
+
+### Wiki verification (mark_green)
+
+`mark_green` compares the file's public symbols (Python: `__all__` or top-level public functions/classes; JS/TS: exports) with those recorded at the previous mark-green, and refuses (`error_type: "WikiVerificationError"`, `issues[]`) when:
+
+| Issue code | Meaning |
+|---|---|
+| `undocumented_new_symbols` | a public symbol was added and the wiki does not mention it |
+| `wiki_mentions_removed_symbols` | a removed symbol is still referenced in backticks in the wiki |
+| `wiki_not_updated_for_api_change` | the public surface changed but the wiki file is byte-identical to the last mark-green |
+
+A change that leaves the public surface alone (a bug fix inside a function) passes without touching the wiki. The first mark-green after upgrading only warns (no baseline yet). Each Green row records `verification`: `verified`, `no_wiki` (allowed — map-first), `unchecked` (no symbol extractor for the language), `forced` (overridden with a reason), or `legacy` (marked before verification). `health --summary` shows the split as `green_breakdown`; `verify_wikis` / `verify-wikis` re-checks every Green wiki without writing.
+
+### Batch recording (record_changes)
+
+`record_changes(reasons, default_reason=None, since=None, green=False, dry_run=False, only=None)` reads git (`git diff --name-status <since or HEAD>` plus untracked files, limited to the project root). `reasons` keys are exact paths, globs or `dir/` prefixes (exact wins, then the longest pattern); `default_reason` fills the rest. If any file is left without a reason, **nothing is written** and the result has `missing_reasons` + a fill-in `template`. Deletions and the old side of renames go through `record_deletion`. `green=True` marks each changed file Green through verification (`verification_failed` lists the rest, which stay Yellow) and retires deleted files whose wiki is gone. Wikifier artifacts and `*.wiki.md` files are skipped. `unused_reasons` flags patterns that matched nothing. Without git: `error_type: "GitUnavailableError"` — use `record_change` per file.
+
+### Readiness tiers (`assess_autonomous_readiness`)
 
 | Tier | When |
-|------|------|
-| `blocked` | Hard **blockers[]**: no import map and/or no file_health (or severe ghost flood). |
-| `map_ok_scope_risk` | Map+health present but **scope warnings** (often bare `.` monitor or multi-repo parent) and clean red/actionable yellow. |
-| `ready_for_daemon` | Map Ready/Good **and** not bare_dot_monitor — only safe unattended tier. |
-| `ready_with_agent_wiki_work` | Needs Attention, red=0 — daemon OK but agents still have wiki work. |
-| `not_ready` | Other (e.g. reds). |
+|---|---|
+| `blocked` | no import map and/or no health matrix (or a ghost flood) |
+| `map_ok_scope_risk` | map + health present but scope warnings (bare `.` monitor, multi-repo parent) |
+| `ready_for_daemon` | Map Ready/Good and a lean monitor — the only safe unattended tier |
+| `ready_with_agent_wiki_work` | needs attention, no reds |
+| `not_ready` | anything else (e.g. reds) |
 
-Bare `.` is a **scope warning** (`scope.warnings` / `fix_scope`), not always a hard blocker. Missing map/health **are** hard blockers and emit priority-1 `update_maps` / `seed_health` in `actions[]`.
+### Dependency intelligence
 
-### Why it happens (Grok-Bevy 2026-07 dogfood)
+- `get_dependencies(file)` (default `detail="compact"`): `internal` edges (`path`, `line`, `names`, plus `conditional` / `dynamic` / `via_barrel` / `in_cycle` / `confidence` only when they apply), `external` module names, `needs_review` (unresolved imports that look internal). About 1/10 the size of `detail="full"`, which returns `imports[]` with every per-edge record — `confidence_score` 0.05–0.95, `confidence_reasons`, `confidence_explanation` (ends with a **Recommendation:** sentence), `is_dynamic`/`dynamic_type`, `is_conditional`/`conditional_context`, `via_barrel`/`barrel_depth`, `strategy`, `diagnostic`. `low_confidence_only` / `unresolved_only` (MCP) imply full.
+- `get_dependents(file)`: who imports it (indexed lookup).
+- ACS triage: work from `actionable_low_conf_edges` + `reason_code_counts`. `external_or_bare` and `dynamic_literal` edges are noise, not work items.
+- `get_cycles(analysis=True)`: SCC clusters with severity, external blast radius, weakest links and ranked breaking recommendations.
+- Parsers: Python (stdlib `ast`; absolute, relative and `from pkg import submodule` imports resolve; imports under `if`/`try` are conditional), JS/TS (comments and string literals ignored; tsconfig paths, package `exports`, workspaces, barrel re-export chains; `import()` is a dynamic literal), plus Rust, Go, C/C++, C#, Java.
 
-On **Grok-Bevy** (Rust workspace), first bootstrap reported:
+### Update maps
 
-| Signal | Field / tier | Meaning |
-|--------|--------------|---------|
-| `No import map (run update-maps first)` | `blockers[]` → `blocked` | No dependency/import map yet. Action: **`update_maps`**. |
-| `No file_health` | `blockers[]` → `blocked` | Health matrix not seeded. Action: **`seed_health` / update-maps**. |
-| `monitored_paths is bare '.'` | `scope.warnings` (often `map_ok_scope_risk` once map exists) | check-changes thrash risk. Action: **`fix_scope`**. |
+`update_maps(directory=None, max_files=None, full=False)` runs the whole pipeline in-process and persists it. With a budget, `map_complete=false` / `files_remaining_dirty>0` means re-run with the same scope — already-parsed files are not dirty, so re-running resumes. `success=true` alone is not "map complete". `update-maps --stream` emits JSON progress events while persisting normally.
 
-Also: `bare_dot_monitor: true` and `scope.ok: false` until `monitored_paths.txt` lists **lean package roots**, not bare `.`.
+### Results and errors
 
-### Fix once per project (agents must do this, not ignore blockers)
+- Every library/MCP call returns a dict with `success`. Operational failures (missing root, missing file, path outside the project, lock timeout, I/O) return `{"success": false, "error", "error_type"}`; lock timeouts add `timed_out: true`.
+- MCP mutators run under a deadline (`WIKIFIER_MCP_DEADLINE_S`, default 60s). On `timed_out` the call may still complete in the background (`may_still_complete: true`) — check `why_file` before retrying. Identical `record_change` retries within 120s are de-duplicated in the journal (`duplicate_skipped: true`).
+- Request `format="json"` for decisions; text output is for humans.
+- Tolerate additive fields; never assume an exact key set.
 
-1. **Scope (wiki/health thrash bound)** — create/edit **`monitored_paths.txt`** at project root with *specific* dirs/files, e.g.:
-   ```text
-   crates/foo/src/
-   crates/bar/src/
-   README.md
-   docs/
-   ```
-   Never leave only `.` on non-tiny trees.
-2. **Map roots** — create/edit **`map_paths.txt`** (import-map package roots; independent of monitored):
-   ```text
-   crates/foo/src/
-   crates/bar/src/
-   ```
-3. **Build map + health** — from the target project (or with `project_root=` / `WIKIFIER_PROJECT_ROOT=`):
-   ```bash
-   wikifier update-maps --full    # or MCP update_maps full=true
-   # re-run session_bootstrap until readiness == ready_for_daemon
-   ```
-4. **Do not** bulk-re-wiki 🟡 *Initial stubs* after maps land — stubs = map coverage only.
+### Scale (CLI-at-scale policy)
 
-After a successful fix, bootstrap looks like: `scope.ok: true`, `blockers: []`, `health_score: Map Ready` (stubs OK), **`readiness: ready_for_daemon`**. Map Ready without `ready_for_daemon` is **not** unattended-ready.
+On large or barrel-heavy monorepos, prefer the CLI/library for `update_maps` and long health loops; scope with `--directory` / `max_files` and keep `monitored_paths.txt` lean. `WIKIFIER_CHECK_CHANGES_MAX` (default 2000) bounds one check-changes pass.
 
-### Product note for Wikifier maintainers
+### Concurrency
 
-- Default bare `.` is a footgun for real repos; agents must treat **`fix_scope` as P0** when scope warns bare-dot, and **update_maps/seed_health as P0** when readiness is `blocked`.
-- **`wikifier init` (4.6.8+ / 4.6.9 templates)** seeds comment-guided lean templates with active default **`src/`** (bare `.` is commented opt-in for tiny toys only). Multi-crate / monorepo agents must replace with package roots before map-ready work.
+Mutations take an advisory project lock (`.wikifier_staging/.lock`; `fcntl` on POSIX, `msvcrt` on Windows), re-entrant within a thread, exclusive across threads and processes. Never hand-edit `file_health.json`, `pending_updates.md`, `library.md` or the cache — use the tools.
 
-See also: Findings note `Findings/readiness-blocked-bare-monitor-2026-07.md`.
+### Commands (CLI)
 
-## Mandatory New-Session Rule
+| Command | Purpose |
+|---|---|
+| `init [DIR] [--no-copy]` | lean templates (`src/` default), `.wikifier/` marker, read-only dashboard |
+| `session-bootstrap`, `check-changes`, `suggest-next [--json]` | core loop |
+| `prepare-edit F`, `record-change F WHY`, `mark-green F [WHY] [--force]`, `record-deletion F [WHY]` | per-file loop |
+| `record-changes [-r PATH=WHY]… [--reasons FILE] [--default WHY] [--only P]… [--since REF] [--green] [--dry-run]` | batch loop (git) |
+| `verify-wikis [DIR]` | re-check Green wikis against the code (exit 1 if any fail) |
+| `dependencies F [--full]`, `dependents F`, `cycles [--json]`, `why-file F`, `search-journal [TEXT] [--file F]` | lookup |
+| `update-maps [--full] [--directory D] [--max-files N] [--stream]` | dependency map |
+| `health [--summary\|--json]`, `validate`, `cache-status`, `autonomous-status` | status |
+| `seed-health`, `seed-source-hashes`, `prune-pending`, `prune-health [--deleted-missing]`, `prune-barrels` | hygiene |
+| `heal-stubs [--dry-run]`, `healable-stubs`, `healing-stats`, `stale-wikis` | stub healing |
+| `journal [YYYY-MM-DD]`, `issues [SEVERITY]`, `list-paths [PREFIX]`, `list-core-tools` | misc |
+| `monitor`, `daemon start\|stop\|status\|logs\|run\|install-service`, `serve [PORT]` | background / human view |
 
-**Copy this exact block into the system prompt or the very first instruction of every new LLM session that uses Wikifier:**
+All commands are Python; `wikifier.sh` / `.ps1` / `.bat` only run `python -m wikifier`.
 
-```
-You are now operating inside a Wikifier-managed codebase (Agent Protocol v0.6 — package 4.6.x).
-
-This is strictly an agent-to-agent wiki for token saving: map lookup (health + file wikis + deps) instead of full sources; selective wiki updates; not a human docs product or Jira.
-
-SELECTIVE WORK (mandatory): Only update/remove/re-wiki 🔴 Red and *actionable* 🟡 Yellow files. Do **not** re-summarize 🟢 Green files, and do **not** bulk-wiki 🟡 Initial/map stubs (map coverage only — wiki a stub only when you edit that file). First-run builds the structural map; wiki depth is filled as you touch files. check-changes is content-honest (mtime-only thrash does not re-Yellow when source hash matches mark-green baseline).
-
-FIRST ACTIONS:
-1. Prefer MCP Core: session_bootstrap, check_changes, prepare_edit, suggest_next_actions (use actions[]), record_change, mark_green. Orient from bootstrap root card + list_paths(prefix) (one folder); prepare_edit for file links — do not read library.md mermaid. Always pass project_root= for external projects.
-2. CLI/library fallback:
-     WIKIFIER_PROJECT_ROOT=/path/to/target python -m wikifier session-bootstrap
-     python -m wikifier check-changes
-     python -m wikifier suggest-next --json   # actions[] dispatchable
-     python -m wikifier prepare-edit path/to/file
-     ... edit only red/actionable yellow sources ...
-     python -m wikifier record-change "path/to/file" "why (semantic). Include subid if agent work."
-     ... update that file's wiki only ...
-     python -m wikifier mark-green "path/to/file" "reason"
-     if imports changed: python -m wikifier update-maps [--directory=src/]
-     if file removed: python -m wikifier record-deletion "path" "why"
-     python -m wikifier health --summary
-3. Optional background: `python -m wikifier monitor` or daemon — you still own wiki + mark-green.
-4. Prioritize 🔴 then actionable 🟡. Lookup greens via prepare_edit / get_file_wiki; do not rewrite them.
-5. why_file / search_journal for semantic trail.
-6. Always explicit project_root / WIKIFIER_PROJECT_ROOT for external/multi-project work.
-7. End turn: health + suggest_next_actions (json).
-
-Never skip record-change — semantic audit trail (journal + health + pending).
-Never skip mark-green after you wiki-refresh the file you just recorded (close the loop; record_change stays Yellow until mark_green).
-
-**M5+ notes (2026-06)**: 
-- External projects: always explicit root. CLI is battle-tested fallback (M5.1 MCP reliability: 60s in-process deadline + better errors; M5 dogfood on alt BRC exact named services, 79k llvm, etc.).
-- Scope: token-efficient agent-to-agent wiki only (see README "Intended Use").
-- Sustained: monitors + subagents for 72h+ gate (M5.3).
-- See health matrix for current Green/Yellow state of M5 agent records (Progress, Assessment, etc.).
-- Post-4.0.1 health hygiene (in `health_impl.py`): `_coerce_root` makes direct library calls robust with plain str roots (e.g. `health(".")` or `load_health(".")` now work without TypeError; used by agents/MCP consumers). `SUPERSEDED_PATTERNS` + prune keeps the matrix lean. Explicit 🔴 DELETED audits are retired with `prune-health --deleted-missing` when the files are gone.
-```
-
-**Packaging / External (M5 strengthened)**: After pip install, use global `wikifier` / `wikifier-mcp` or `from wikifier import ...`. For user projects: `WIKIFIER_PROJECT_ROOT=/abs/path/to/target wikifier ...` or pass project_root to every call/MCP tool. Bootstrap with `wikifier init`. **Project-relative** paths in that target's `monitored_paths.txt` are canonical; foreign-FS absolute prefixes (`/home` vs `/Users`) are ignored when missing. Python library + CLI preferred for reliability on large/BRC scale.
-
-## Concurrency & Locking (M2-Rem-07)
-
-Wikifier is designed to be used safely by multiple agents and humans at the same time (e.g. one background `monitor` + several LLM agents + occasional human edits).
-
-### What is Protected
-- `file_health.json` (and the generated `file_health.md`)
-- `import_cache.json` (used by incremental `update-maps`)
-- `pending_updates.md` (in most code paths)
-- Journal entries (protected via a compatible mkdir-based lock in `write_journal`)
-
-### How It Works
-- Python-side operations (MCP tools, `wikifier.health`, `wikifier.import_cache`) use `fcntl.flock` via `wikifier/locking.py`.
-- Shell fallback paths use a portable `mkdir`-based lock (the same technique already used by `write_journal`).
-- A reusable helper `with_project_lock` exists in `wikifier.sh` for future critical sections.
-
-### What Agents Need to Know
-In most cases, **you do not need to think about locking**. The high-level tools (`record_change`, `mark_green`, `upsert_health`, `update_maps`, etc.) acquire the necessary locks automatically.
-
-However, if you are doing low-level direct writes to Wikifier state files (e.g. manually editing `file_health.md`, `pending_updates.md`, or `import_cache.json`), you should be aware that concurrent access is possible and should prefer going through the official tools.
-
-### Limitations (Final M2-Rem-07 Assessment)
-- Locks are **advisory** — a broken or malicious process can ignore them.
-- Currently **project-level** (one lock for the entire project). This is the right tradeoff for current needs (including heavy multi-agent + monitor dogfooding) and keeps the implementation simple and fast.
-- **Finite timeout** is supported: `file_lock(root, timeout=seconds)` raises `LockTimeoutError` if the lock is not free in time (`timeout=None` still blocks). `is_project_locked()` remains a diagnostic non-blocking probe.
-- Per-file / sharded locking is a permanent non-goal unless extreme concurrency pressure appears.
-- Best-effort portability on non-Unix systems.
-
-The locking system (Python `file_lock` + shell `with_project_lock`) is production-ready for the M2 scope.
-
-## Protocol v0.4 Additions: I/O Contracts, Error Handling, Structured Output, Versioning
-
-**All agents following this protocol MUST treat the Python library surface (see m2-full-closure-longterm-scalable-plan.md Workstream E) as the source of truth for I/O shapes when the package is importable.**
-
-### Versioning & Compatibility
-- Protocol versions are independent of package `__version__` but coordinated (v0.4 aligns with M2 closure library skeleton).
-- Changes to mandatory I/O or error behavior require a new minor protocol version + migration notes here.
-- Agents should tolerate additive fields in dict returns. Never hardcode exact key sets without "or newer" logic.
-- Shell/MCP outputs remain supported as fallbacks but are secondary to library structured returns.
-
-### Core I/O Contracts (Library Preferred)
-All high-level functions accept:
-- `project_root: Optional[str | Path] = None` (auto-discovers via hardened discover_project_root(); explicit for multi-project or daemon swarms)
-- Scoping: `directory: Optional[str] = None` (prefix filter, e.g. "src/")
-- `format: Literal["text", "json", "summary"] = "text"` where applicable
-
-Key returns (structured dict primary; "success": bool always present on library paths):
-- `check_changes(project_root=None) -> dict`: { "success", "project_root", "changes_detected": int, "message", "recommendation", "barrel_invalidation_summary", "rich_auto_yellow_via", "error"? }
-- `record_change(file: str, reason: str, project_root=None, timeout=None) -> dict`: { "success", "file", "project_root", "reason", "message", "needs_mark_green", "error"? } — stays Yellow; never skip mark_green after wiki refresh.
-- `health(project_root=None, directory=None, format="text"|"json"|"summary") -> str | dict`: json includes full entries + "dependency_intel" (acs_summary, etc.) for agent reasoning.
-- `mark_green(file, reason="", project_root=None) -> dict`
-- `suggest_next_actions(..., format="json") -> dict`: { "success", "red", "yellow", "suggestions": list[str], "health_summary", "acs_note" }
-- `update_maps(..., directory=..., max_files=...) -> dict`: delegates to run_full_update — the real full pipeline (all dirty files parsed in-process, canonical persist, cycles/ACS/reverse deps, atomic library.md) + facade metadata.
-- `run_full_update(...) -> dict`: { "success", "root", "mode", "parseable_files", "files_to_reparse", "files_parsed", "files_skipped", "edges_persisted", "cycles", "library", "dirty_sample", "persist_pipeline_exercised" (compat), ... }
-
-Text formats are for human review only. Agents MUST request json/summary for machine use in loops.
-
-Pending/journal/health side effects are observable via the returned messages + direct file reads (or health()).
-
-### Error Handling Expectations
-- **Operational failures** (e.g., partial scan on huge tree, lock edge): return `{"success": False, "error": "...", "project_root": "...", ...partial_data }`. Agent must handle gracefully and log; continue where safe.
-- **Programming / contract errors** (bad types, missing required): raise (standard Python exceptions) — these indicate agent bug.
-- **Locking**: Mutators block on project lock by default; optional finite `timeout=` raises on contention.
-- Never assume text output parsability. Always use structured returns + explicit format="json".
-- On external/packaged installs: discovery is robust; pass explicit project_root if cwd is ambiguous.
-
-**Error Taxonomy (for conformance harness + agent robustness)**:
-- Operational (partial, lock contention, scale bounds): success=False + "error" + partial + "project_root". Recoverable.
-- Programming (type, missing arg, import of lib): raise Exception (agent code bug; do not catch silently in loops).
-- State inconsistency (rare): success=False + diagnostic; run check_changes + health to heal.
-- Conformance failures (I/O shape mismatch vs this spec + library design): treat as protocol violation; log + fallback.
-
-Conformance harness (see gap1_validation_harness.py and m2 plan) exercises the above + mandatory workflow shapes.
-
-### Structured Output Expectations (Mandatory for Agents)
-- Prefer `format="json"` (or equivalent MCP structured) for all decision-making steps.
-- Expect rich "dependency_intel", ACS explanations, barrel reports, cycles_reuse in health/json and suggest paths (on-demand persisted via import_cache).
-- Bounded results on scale: use directory + summary; do not request full on 10k+ without resource budget.
-- All protocol surfaces (library, MCP, shell) aim for parity on structured shapes.
-
-### Concurrency, Scaling & Best Practices (v0.4)
-- Use directory scoping + summaries on Medium+ repos.
-- Python library or MCP for all long-running or high-volume work.
-- Record intent with record_change on every semantic edit (this is non-negotiable for the living memory guarantee).
-- After sleep/wake (daemon) or concurrent human activity: always lead with check_changes + health.
-- Multi-agent: locking protects; agents cooperate via advisory protocol.
-
-See the full design, mandatory workflow example, and M2 exit criteria in the plan. This protocol makes sessions predictable across models.
-
-## Available Commands (treat as atomic MCP tools — legacy/compat surface)
-
-| Command | Arguments | Description |
-|---------|-----------|-------------|
-| `wikifier check-changes` | — | Content-hash dirty scan. Updates health matrix + pending queue. |
-| `wikifier health` | — | Show current Documentation Health Matrix (🟢🟡🔴). |
-| `wikifier record-change` | `<file> "<reason>"` | Semantic log of *why* you changed something. Required after edits. |
-| `wikifier record-deletion` | `<file> "<reason>"` | Log a deletion with reasoning. |
-| `wikifier prepare-edit` | `<file>` | Preflight: wiki snippet, status, deps, dependents. |
-| `wikifier list-paths` | `[prefix]` | Depth-1 folder card. `--recursive` for a subtree. Then `prepare-edit` for file links. |
-| `wikifier mark-green` | `<file> [reason]` | Flip file status to Green after you have written/updated its wiki summary. |
-| `wikifier monitor` | — | Start background 30s heartbeat (run with `&` or in separate terminal). |
-| `wikifier update-maps` | `[--full] [--directory=...] [--max-files=N]` | Rebuild `library.md` + import cache (single pure-Python pipeline; the shell launcher delegates here). |
-| `wikifier validate` | — | Ensure every file in monitored_paths has at least a health row. |
-| `wikifier journal` | `[YYYY-MM-DD]` | Read the journal for a day (default = today). |
-| `wikifier issues` | `[simple|moderate|high|critical]` | List logged issues by severity. |
-| `wikifier init` | — | Bootstrap config files if they are missing. |
-| `wikifier help` | — | Full command reference. |
-
-## MCP Server (Primary Interface — M5 Hardened)
-
-This project exposes a first-class MCP server (wikifier-mcp or python -m wikifier.mcp.server).
-
-**M5.1+ reality (from dogfood on external 5k-79k+ projects)**: MCP tools are preferred when available (get_project_status, get_file_wiki, get_barrel_reports for deep BRC, check_changes, record_change, mark_green, suggest_next_actions, health equivalents, etc.). **Always pass project_root= (or use WIKIFIER_PROJECT_ROOT env)** for external/user projects (RecipeLab_alt BRC stress, ConsistencyHub, llvm subs, etc.). 
-
-**CLI-at-scale policy (G15):** On barrel-heavy or large monorepos (BRC stress, multi-k source trees), treat **CLI/library as the primary reliability path** for `update_maps`, barrel reports, and long health/suggest loops. MCP subprocess tools use a ~60s cap and may still time out; that is **not** a product failure — **immediately fall back** to `python -m wikifier …` / library calls. Do not claim DoD2 (&lt;30s MCP on alt/Consistency/llama) closed without a fresh measured pack; default operator policy is CLI for scale.
-
-The server implements hardened external discovery (delegates to cli.py discover_project_root / _get_effective_root), 60s timeouts, actionable errors, and parity with library.
-
-Legacy shell (`wikifier check-changes` etc.) and direct `wikifier-mcp` remain full fallbacks.
-
-See `wikifier/mcp/server.py` (updated M5.1 for reliability + external) and `wikifier/mcp/README.md`.
-
-High-value for agents (token-saving lookup + autonomous update):
-- session_bootstrap root card + list_paths (folder hop) + prepare_edit (file hop) — not library.md mermaid
-- get_project_status / health equivalents
-- get_file_wiki(file) / prepare_edit — wiki + deps for one file
-- get_barrel_reports (deep BRC for importers on re-export stress)
-- record_change + mark_green (the autonomous update cycle)
-- check_changes + suggest_next_actions
-
-## MCP / Tool Exposure Recommendations
-
-For reference, run:
-```bash
-wikifier-mcp
-# or
-python -m wikifier.mcp.server
-```
-
-The MCP tools are the primary structured interface for agents. Use them with explicit project_root for all non-self work.
-
-## Best Practices for Agents
-
-1. **Always** use `record-change` for your own work, then wiki that file, then **mark-green**. Never skip mark-green on the file you recorded.
-2. Keep reasons concise (1–2 sentences) but specific.
-3. After large refactors, run `update-maps` and then `validate`.
-4. When you see many 🔴 Red items, tackle them before writing new features.
-5. The background `monitor` process lets you "sleep" — the health matrix will be waiting for you on next wakeup.
-
-## Example Agent Turn (v0.4 — Python library preferred when available)
+### Library
 
 ```python
-# Preferred (direct, structured, no shell, Python-primary paths)
-from wikifier import check_changes, health, record_change, mark_green, suggest_next_actions, update_maps
+from wikifier import (session_bootstrap, check_changes, prepare_edit, suggest_next_actions,
+                      record_change, mark_green, record_deletion, update_maps,
+                      get_dependencies, get_dependents, cycles_report, health, init_project)
 
-check_changes()
-print(health(format="summary"))
-
-record_change("src/api/client.py", "Switched to httpx.AsyncClient because the sync requests library was causing blocking in the FastAPI event loop under high concurrency.")
-
-# ... perform the actual edit ...
-
-# Later, after writing the wiki summary for that file:
-mark_green("src/api/client.py", "Purpose + import summary updated to reflect httpx usage and retry logic.")
-
-print(suggest_next_actions(format="json"))
-update_maps(directory="src/")  # if imports changed — full pure-Python pipeline (v4.2.0)
+session_bootstrap(project_root="/abs/project")
+record_change("src/api/client.py", "Switched to httpx.AsyncClient: sync requests blocked the event loop.")
+# … refresh src/api/client.py.wiki.md …
+mark_green("src/api/client.py", "Wiki reflects httpx usage and retry policy.")
 ```
 
-Fallback (shell or MCP) when library not directly importable in the agent env:
-```bash
-wikifier check-changes
-# (reads output or file_health.md)
+The health *module* is `importlib.import_module("wikifier.health")` (or `wikifier.health_module`); `from wikifier import health` is the convenience *function*.
 
-wikifier record-change "src/api/client.py" "Switched to httpx.AsyncClient because the sync requests library was causing blocking in the FastAPI event loop under high concurrency."
+### Migration v0.6 → v0.7 (package 4.7.0)
 
-# ... perform the actual edit ...
+- Missing explicit project roots are errors (previously: silent fallback to the current directory).
+- `record_change` / `mark_green` normalize paths, require existing files, and return the canonical `file`; `record_change` adds `journaled` / `duplicate_skipped`.
+- `prepare_edit.dependencies[].resolved_path` is populated; `dependents` come from the indexed edge table.
+- Python absolute imports now resolve (Django/`src/`-layout graphs were mostly missing before); JS comment/string imports are no longer edges; duplicate edges from overlapping patterns are gone; unresolved relative imports no longer appear as phantom files. Expect more edges and different ACS numbers after the first full `update_maps`.
+- Conditional detection only counts *enclosing* guards (most top-level imports were previously flagged conditional).
+- New CLI commands: `dependencies`, `dependents`, `heal-stubs`, `healable-stubs`, `healing-stats`, `stale-wikis`, `prune-barrels`, `cycles --json`, `journal --json`, `issues --json`. Every former shell command is now Python.
+- Streaming moved: `wikifier.streaming.run_update_stream` (was `wikifier.import_cache.run_update_stream`); it now persists the map.
+- MCP no longer shells out; failures are reported, never retried through a second code path.
+- `mark_green` verifies the wiki against the code and can now fail (`WikiVerificationError`); pass `force=True` with a reason to override. New entry fields: `public_symbols`, `verification`, `source_mtime_ns`; `health --summary` adds `green_breakdown`.
+- `get_dependencies` returns the compact shape by default (`internal`, `external`, `needs_review`); pass `detail="full"` (CLI `--full`) for the previous `imports[]` records.
+- `check_changes` watches mapped and Green files regardless of `monitored_paths.txt`; files that were invisible before may turn Yellow on the first run.
+- New: `record_changes` / `record-changes`, `verify_wikis` / `verify-wikis`.
+- `python -m wikifier` now exits non-zero on failure (it always exited 0).
 
-# Later, after writing the wiki summary for that file:
-wikifier mark-green "src/api/client.py" "Purpose + import summary updated to reflect httpx usage and retry logic."
-```
+### Human layer (secondary)
 
-This protocol (v0.6) + the zero-dependency Python library (core has no deps; MCP is optional via `pip install wikifier[mcp]`) make Wikifier a first-class, low-ambiguity citizen in any LLM-driven development workflow across models and environments. The design ensures the mandatory loop is executable with minimal deviation.
-
-**Explicitly zero-dependency by design** (see pyproject.toml: dependencies = [] ; MCP via optional extra only). All core agent operations (health matrix for token-saving lookup, record-change/mark-green for autonomous wiki updates, check-changes, etc.) work with plain Python + the installed package or source — no external services or heavy deps required.
-
-## Quick Reference — Library Surface (v0.6)
-Core imports (all zero-dep for main paths; support project_root= for external/agent-to-agent use):
-`from wikifier import check_changes, record_change, health, mark_green, suggest_next_actions, update_maps, discover_project_root, run_full_update`
-
-All support `project_root=...` and return structured data (plus side-effecting state files for human review).
-
-See README.md "Intended Use" for the strict agent-to-agent wiki scope (token saving for lookup + autonomous update/create of wiki entries only). M5 dogfood validated this on real external projects with the exact patterns above. Recent 4.0.1 hygiene (health coerce + superseded prune) further improves reliability of the matrix for agents doing direct lookups/updates.
-
-**Human investigation layer (secondary, opt-in)**: `wikifier init` copies only `index.html` (the clean human wiki viewer) into the target project (the folder where MCP/CLI run). `diagnostics.html` (Wikifier maintainer hub) is no longer copied — it would show the wrong tree (Wikifier's internals) and be stale for the host project. Humans run `wikifier serve` and open http://localhost:8787/index.html (browsers block file:// fetches, so a double-clicked index.html shows an empty map — the page itself now detects this and shows the fix) to see a clean visual of *that project's* agent-maintained wiki: prominent code structure / dependency chart (Mermaid) as the hero, followed by a simple "Files & descriptions" list (paths + short "what this file is about" summaries pulled from the wiki notes), and a lightweight "Browse by folder" tree derived from the health data. A "Quick actions" toolbar provides one-click copy buttons for the main commands (check-changes, update-maps, monitor &); empty states ("No structure map yet", "No files in the wiki yet") have prominent primary buttons for first-time commands (update-maps prioritized, combined check-changes+update-maps for files). On first open with no map, the `wikifier update-maps` command is auto-copied (sessionStorage-guarded one-time per browser session) and live-wait mode is immediately activated. Buttons use copy + live-wait: they copy the exact command and inject a fixed top "Waiting for `wikifier ...` to produce data... (auto-polling)" banner with aggressive 3s polling that auto-detects when library.md / file_health.* update (from the terminal run) and refreshes the chart/files automatically; includes an "I ran it — refresh now" link in the banner and a success toast on detection. A short explanatory note in the UI clarifies the model: this is a pure static zero-dep viewer (browser JS cannot execute host shell commands due to security sandbox); the auto we provide is copy + immediate live-wait + fast poll so results (trees, files, descriptions) appear automatically after the user pastes/runs in their terminal. "Good enough" acceptance recorded for this copy+live-wait UX. Prominent copy buttons also export "structure as text" (Mermaid source) and a clean full snapshot (tree + file list + descriptions) — exactly the compact, token-saving view agents use. The default human page is intentionally free of dense agent internals (those live in `diagnostics.html` in the Wikifier source for technical users). If an old diagnostics.html is present, it can be safely deleted. The .md files + MCP/CLI/tools remain the primary SSOT and update mechanism for agents. This layer lets humans (or teams) visually investigate and copy-paste wiki summaries for their own work / LLM chats without touching agent behavior or adding deps.
+`init` copies only `index.html`. Run `wikifier serve` and open `http://localhost:8787/index.html` (browsers block `file://` fetches). It is a read-only view of the same artifacts; `diagnostics.html` is maintainer-only and stays in the Wikifier repo. `wikifier serve` also answers read-only JSON at `/__wikifier/api/*` (`file`, `dependencies`, `dependents`, `cycles`, `journal`, `bootstrap`, `diagnostics`).

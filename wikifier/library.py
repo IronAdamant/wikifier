@@ -312,7 +312,7 @@ def _generate_cycles_section(cache: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 def _generate_acs_section(cache: Dict[str, Any]) -> List[str]:
-    """ACS section for library.md — prefer actionable + reason codes (G9)."""
+    """ACS section for library.md — prefer actionable + reason codes."""
     lines = ["## ACS Risk Snapshot", ""]
     acs = cache.get("_acs_summary") or {}
     if not isinstance(acs, dict) or not acs.get("total_scored_edges"):
@@ -393,16 +393,7 @@ def _generate_reverse_section(cache: Dict[str, Any]) -> List[str]:
 
 def _generate_barrel_section(cache: Dict[str, Any]) -> List[str]:
     lines = ["## Barrel Expansions", ""]
-    summary = None
-    try:
-        from wikifier import import_cache as ic
-        fn = getattr(ic, "summarize_barrel_expansions", None)
-        if callable(fn):
-            summary = fn(cache)
-    except Exception:
-        summary = None
-
-    if not isinstance(summary, dict):
+    if True:  # summary derived directly from the cached pairs
         # Fallback: derive a basic summary directly from the pairs.
         per_file: Dict[str, Dict[str, int]] = {}
         total = 0
@@ -453,16 +444,7 @@ def _generate_barrel_section(cache: Dict[str, Any]) -> List[str]:
 
 def _generate_conditional_dynamic_section(cache: Dict[str, Any]) -> List[str]:
     lines = ["## Conditional & Dynamic Intelligence", ""]
-    summary = None
-    try:
-        from wikifier import import_cache as ic
-        fn = getattr(ic, "summarize_conditional_dynamic", None)
-        if callable(fn):
-            summary = fn(cache)
-    except Exception:
-        summary = None
-
-    if not isinstance(summary, dict):
+    if True:  # summary derived directly from the cached pairs
         cond_examples = []
         dyn_examples = []
         cond = dyn = 0
@@ -538,8 +520,8 @@ def _load_health_descriptions(root: Path) -> Dict[str, str]:
             r = _clean_reason((e or {}).get("reason"))
             if r:
                 desc[str(file)] = r
-    except Exception:
-        pass
+    except (OSError, ValueError, AttributeError):
+        pass  # no/unreadable health json: fall back to file_health.md below
     if desc:
         return desc
     try:  # .md fallback: | File | Status | Last Updated | Reason / Intent |
@@ -553,8 +535,8 @@ def _load_health_descriptions(root: Path) -> Dict[str, str]:
                     r = _clean_reason(parts[4])
                     if r:
                         desc[parts[1]] = r
-    except Exception:
-        pass
+    except (OSError, ValueError):
+        pass  # no health matrix yet: the tree simply has no descriptions
     return desc
 
 

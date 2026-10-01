@@ -1,4 +1,4 @@
-"""Parser edge-contract tests (Phase 0 of Findings/2026-06-10-Fix-Plan.md).
+"""Parser edge-contract tests (Phase 0 of Findings/archive/2026-06-10-Fix-Plan.md).
 
 Python + JavaScript parsers on small temp fixtures: static / relative /
 dynamic imports plus one barrel chain. Asserts the canonical per-edge
@@ -141,7 +141,7 @@ class TestJavaScriptParser(TempProjectTestCase):
         self.assertGreaterEqual(edge.get("barrel_depth") or 0, 1)
 
     def test_static_es_import_is_not_dynamic_and_not_via_barrel(self):
-        # Currently failing — fixed by Phase 4 of Findings/2026-06-10-Fix-Plan.md
+        # Currently failing — fixed by Phase 4 of Findings/archive/2026-06-10-Fix-Plan.md
         # (W10 canonical edge representation). Today the parser marks a plain
         # `import {x} from './a.js'` as is_dynamic=True / via_barrel=True with
         # confidence "low", even though it is a static, resolved, direct-file

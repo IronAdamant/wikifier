@@ -1,5 +1,11 @@
 # Wikifier Modularization Plan
 
+> **Status (4.7.0, 2026-10-01):** `cache/` and `health_pkg/` are done for real — `cache/_core.py` and
+> `health_impl.py` were split into named modules and deleted (no re-export shims). The CLI is an
+> argparse front end over `api.py`; the MCP server is a thin adapter (`mcp/server_impl.py`, ~800 lines).
+> Still large: `parsers/javascript.py`, `parsers/bree/_bree.py`, `contracts.py`, `resolution.py`.
+> See `Findings/2026-10-01-review-4.7.0.md`.
+
 ## Overview
 
 Several modules in wikifier have grown to 2000+ lines, making them difficult to navigate and maintain. This document outlines a plan for modularizing these "god modules" into coherent package structures.

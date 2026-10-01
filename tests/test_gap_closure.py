@@ -183,7 +183,7 @@ class TestLoadSafetyNoImportCycle(unittest.TestCase):
         text = bree_src.read_text(encoding="utf-8")
         self.assertNotIn("from ..cli import", text)
         self.assertNotIn("from wikifier.cli import", text)
-        self.assertIn("from ..project_root import", text)
+        self.assertIn("from ...project_root import", text)
 
 
 class TestGhostAndDeletionG7(TempProjectTestCase):

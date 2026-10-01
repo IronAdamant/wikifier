@@ -95,19 +95,13 @@ def mapped_files_from_root(
         files = mapped_files_from_cache(cache)
         if files:
             return files
-    try:
-        from . import cache_store as cs
-        idx = cs.load_mtime_index(Path(root)) or {}
-        out = sorted(
-            _posix(k)
-            for k in idx
-            if isinstance(k, str) and k and not k.startswith("_") and "\n" not in k
-        )
-        if out:
-            return out
-    except Exception:
-        pass
-    return mapped_files_from_cache(_load_cache(Path(root)))
+    from . import cache_store as cs
+
+    return sorted(
+        _posix(k)
+        for k in cs.load_mtime_index(Path(root))
+        if isinstance(k, str) and k and not k.startswith("_") and "\n" not in k
+    )
 
 
 def dirs_from_files(files: List[str]) -> List[Dict[str, Any]]:
@@ -125,26 +119,6 @@ def dirs_from_files(files: List[str]) -> List[Dict[str, Any]]:
             d = "/".join(acc) + "/"
             counts[d] = counts.get(d, 0) + 1
     return [{"p": p, "n": counts[p]} for p in sorted(counts)]
-
-
-def build_map_index(cache: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Compat full snapshot (tests / recursive list_paths). Not written as one dump."""
-    files = mapped_files_from_cache(cache or {})
-    return {
-        "v": MAP_INDEX_VERSION,
-        "file_count": len(files),
-        "dirs": dirs_from_files(files),
-        "files": files,
-    }
-
-
-def _load_cache(root: Path) -> Dict[str, Any]:
-    try:
-        from . import import_cache as ic
-        cache = ic.load_cache(root) or {}
-        return cache if isinstance(cache, dict) else {}
-    except Exception:
-        return {}
 
 
 def build_folder_cards(files: Iterable[str]) -> Dict[str, Dict[str, Any]]:
@@ -247,9 +221,9 @@ def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else None
-    except Exception:
+    except (OSError, ValueError):
         return None
+    return data if isinstance(data, dict) else None
 
 
 def _existing_sig(path: Path) -> Optional[str]:
@@ -299,11 +273,8 @@ def write_map_index(
                 if not p.is_file():
                     continue
                 if p.resolve() not in keep_paths:
-                    try:
-                        p.unlink()
-                        pruned += 1
-                    except Exception:
-                        pass
+                    p.unlink(missing_ok=True)
+                    pruned += 1
         result.update({
             "success": True,
             "file_count": int((cards.get("") or {}).get("n") or 0),

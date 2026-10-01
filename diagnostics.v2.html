@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wikifier Diagnostics</title>
+<meta name="description" content="Maintainer view of Wikifier's own source: module map from the wiki, pipeline, import confidence, resolution, cycles, barrels, cache and health trend.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23157f5b'/%3E%3Cpath d='M7 10l3.2 12L13 13l3 9 2.8-9 2.9 9L25 10' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --border: #e2e5ea; --border-strong: #cfd4dc;
+  --text: #1a1f29; --text-2: #4d5665; --text-3: #7a8494;
+  --accent: #157f5b; --accent-soft: #e3f3ec; --accent-text: #0f6648; --on-accent: #ffffff;
+  --green: #1f9d66; --yellow: #c98a0c; --red: #d4473d; --stub: #a0a8b6; --blue: #3b6fd8; --violet: #7c5cd6;
+  --green-soft: #e3f5ec; --yellow-soft: #fbf1db; --red-soft: #fbe6e4;
+  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  --radius: 10px; --radius-sm: 7px;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1116; --surface: #151a21; --surface-2: #1b212a; --border: #262d38; --border-strong: #343d4b;
+    --text: #e6e9ee; --text-2: #aab2bf; --text-3: #7d8796;
+    --accent: #3ccf91; --accent-soft: #123526; --accent-text: #6fe0ae; --on-accent: #06140d;
+    --green: #3ccf91; --yellow: #f0b43c; --red: #f0685e; --stub: #6b7586; --blue: #6f9cff; --violet: #a68cff;
+    --green-soft: #12301f; --yellow-soft: #33280f; --red-soft: #3a1714;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1116; --surface: #151a21; --surface-2: #1b212a; --border: #262d38; --border-strong: #343d4b;
+  --text: #e6e9ee; --text-2: #aab2bf; --text-3: #7d8796;
+  --accent: #3ccf91; --accent-soft: #123526; --accent-text: #6fe0ae; --on-accent: #06140d;
+  --green: #3ccf91; --yellow: #f0b43c; --red: #f0685e; --stub: #6b7586; --blue: #6f9cff; --violet: #a68cff;
+  --green-soft: #12301f; --yellow-soft: #33280f; --red-soft: #3a1714;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+button { font: inherit; color: inherit; }
+a { color: var(--accent-text); }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+header.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); overflow: hidden; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; white-space: nowrap; }
+.brand small { font-weight: 400; color: var(--text-2); }
+.spacer { flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); white-space: nowrap; }
+.chip .led { width: 7px; height: 7px; border-radius: 50%; background: var(--stub); }
+.chip.live .led { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--text); }
+.btn:hover { background: var(--surface-2); }
+.btn.icon { width: 32px; padding: 0; justify-content: center; }
+.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); max-width: 1280px; margin: 0 auto; }
+nav.toc { position: sticky; top: 56px; align-self: start; padding: 24px 8px 24px 16px; height: calc(100vh - 56px); overflow: auto; }
+nav.toc a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--text-2); text-decoration: none; font-size: 13px; }
+nav.toc a:hover { background: var(--surface-2); color: var(--text); }
+nav.toc a.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+main { padding: 24px 28px 80px; min-width: 0; }
+section { scroll-margin-top: 72px; margin-bottom: 28px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: -.015em; }
+h2 { font-size: 16px; margin: 0 0 4px; letter-spacing: -.005em; }
+h3 { font-size: 13px; margin: 0 0 10px; color: var(--text-2); font-weight: 600; }
+.lead { color: var(--text-2); margin: 4px 0 20px; max-width: 760px; }
+.desc { color: var(--text-2); margin: 0 0 14px; font-size: 13px; max-width: 760px; }
+.grid { display: grid; gap: 16px; }
+.cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; min-width: 0; }
+.kpi .label { color: var(--text-2); font-size: 12px; }
+.kpi .value { font-size: 24px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.kpi .foot { color: var(--text-3); font-size: 12px; }
+.notice { border: 1px solid var(--yellow); background: var(--yellow-soft); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; }
+.empty { color: var(--text-3); padding: 14px 4px; text-align: center; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-3); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface-2); }
+.scroll { max-height: 520px; overflow: auto; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--stub); margin-right: 6px; }
+.dot.g { background: var(--green); } .dot.y { background: var(--yellow); } .dot.r { background: var(--red); } .dot.s { background: transparent; border: 1.5px solid var(--stub); }
+.input { height: 32px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; width: 260px; max-width: 100%; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.seg button { border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: 2px 9px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+.stack { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin: 6px 0 10px; }
+.stack span { height: 100%; }
+.legend { display: grid; gap: 6px; font-size: 13px; }
+.legend .row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; }
+.legend .n { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.legend .hint { grid-column: 2 / 4; color: var(--text-3); font-size: 12px; margin-top: -4px; }
+.bars .row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 44px; gap: 10px; align-items: center; padding: 3px 0; font-size: 12.5px; }
+.bars .track { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.bars .fill { height: 100%; background: var(--blue); border-radius: 999px; }
+.bars .n { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; }
+.kv dt { color: var(--text-3); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-all; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.tag.warn { background: var(--yellow-soft); color: var(--yellow); } .tag.bad { background: var(--red-soft); color: var(--red); } .tag.ok { background: var(--green-soft); color: var(--green); }
+svg text { font-family: var(--sans); }
+.pipe .stage rect { fill: var(--surface); stroke: var(--border-strong); }
+.pipe .stage .t { fill: var(--text); font-size: 13px; font-weight: 650; }
+.pipe .stage .m { fill: var(--text-3); font: 10.5px var(--mono); }
+.pipe .stage .v { fill: var(--accent-text); font-size: 12px; font-weight: 600; }
+.pipe .arrow { stroke: var(--border-strong); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+.pipe .side rect { fill: var(--surface-2); stroke: var(--border); stroke-dasharray: 4 3; }
+.pipe .side text { fill: var(--text-2); font-size: 11.5px; }
+.trend svg { width: 100%; height: auto; display: block; }
+.trend .axis { stroke: var(--border); }
+.trend .lbl { fill: var(--text-3); font-size: 11px; }
+ol.check { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+ol.check li::marker { color: var(--text-3); }
+@media (max-width: 1100px) { .cols-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); } nav.toc { display: none; }
+  .cols-2 { grid-template-columns: minmax(0, 1fr); } main { padding: 16px 16px 60px; }
+  .brand small, #server-chip span:last-child { display: none; }
+  .hide-sm { display: none; }
+}
+@media (max-width: 480px) { .cols-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bars .row { grid-template-columns: minmax(0, 1fr) 70px 36px; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M7 10l3.2 12L13 13l3 9 2.8-9 2.9 9L25 10" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Diagnostics <small>maintainers</small>
+  </div>
+  <div class="spacer"></div>
+  <span class="chip" id="server-chip"><span class="led"></span><span>checking…</span></span>
+  <a class="btn" href="index.v2.html">Dashboard</a>
+  <button class="btn icon" id="btn-refresh" aria-label="Reload data" title="Reload data">⟳</button>
+  <button class="btn icon" id="btn-theme" aria-label="Toggle colour theme" title="Toggle theme">◐</button>
+</header>
+<div class="layout">
+  <nav class="toc" aria-label="Sections">
+    <a href="#summary">Summary</a><a href="#pipeline">Pipeline</a><a href="#modules">Modules</a><a href="#confidence">Import confidence</a>
+    <a href="#resolution">Resolution</a><a href="#graph">Cycles &amp; barrels</a><a href="#trend">Health trend</a><a href="#cache">Cache</a><a href="#extend">Extending</a>
+  </nav>
+  <main id="main">
+    <div id="notice"></div>
+    <section id="summary">
+      <h1>Wikifier internals</h1>
+      <p class="lead">For people changing or porting Wikifier itself. Every number comes from this repo's own map (<code>wikifier serve</code> API) and every module description from its <code>*.wiki.md</code>, so this page stays current as agents maintain the wiki.</p>
+      <div class="grid cols-6" id="kpis"></div>
+    </section>
+    <section id="pipeline">
+      <h2>Pipeline</h2>
+      <p class="desc"><code>update-maps</code> runs these stages in <code>api.run_full_update</code>; live counts are from the last run.</p>
+      <div class="card" id="pipe"></div>
+    </section>
+    <section id="modules">
+      <h2>Modules</h2>
+      <p class="desc">Purpose lines come from each module's wiki. Click a row to open it in the dashboard.</p>
+      <div class="card">
+        <div class="toolbar"><input class="input" id="mod-filter" type="search" placeholder="Filter modules…" aria-label="Filter modules">
+          <div class="seg" id="mod-group" role="group" aria-label="Package area"></div></div>
+        <div class="scroll"><table><thead><tr><th>Module</th><th>Purpose</th><th class="hide-sm">Status</th></tr></thead><tbody id="mod-rows"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody></table></div>
+      </div>
+    </section>
+    <section id="confidence">
+      <h2>Import confidence (ACS)</h2>
+      <p class="desc">Every parsed import gets a confidence score. Only <em>actionable</em> low-confidence edges — internal imports the resolver is unsure about — need attention; external packages and literal dynamic imports are expected noise.</p>
+      <div class="grid cols-2"><div class="card" id="acs-mix"></div><div class="card" id="acs-reasons"></div></div>
+    </section>
+    <section id="resolution">
+      <h2>Resolution</h2>
+      <p class="desc">Imports that did not resolve to a project file, with the resolver's suggestion.</p>
+      <div class="card">
+        <div class="toolbar"><div class="seg" id="res-cat" role="group" aria-label="Category"></div><span class="desc" id="res-note" style="margin:0"></span></div>
+        <div class="scroll"><table><thead><tr><th>Importer</th><th>Import</th><th class="hide-sm">Category</th><th>Suggestion</th></tr></thead><tbody id="res-rows"></tbody></table></div>
+      </div>
+    </section>
+    <section id="graph">
+      <h2>Cycles &amp; barrels</h2>
+      <div class="grid cols-2"><div class="card" id="cycles"></div><div class="card" id="barrels"></div></div>
+    </section>
+    <section id="trend">
+      <h2>Health trend</h2>
+      <p class="desc">Samples from <code>.wikifier_staging/metrics.jsonl</code> (written by status calls and the daemon).</p>
+      <div class="card trend" id="trend-chart"></div>
+    </section>
+    <section id="cache">
+      <h2>Cache &amp; map coverage</h2>
+      <div class="grid cols-2"><div class="card" id="cache-kv"></div><div class="card" id="cov-kv"></div></div>
+    </section>
+    <section id="extend">
+      <h2>Extending Wikifier</h2>
+      <div class="grid cols-2">
+        <div class="card"><h3>Add a language</h3><ol class="check">
+          <li>Create <code>wikifier/parsers/&lt;lang&gt;.py</code> exposing <code>parse_&lt;lang&gt;_imports(path) -&gt; List[Dict]</code> with the shared edge contract (<code>contracts.py</code>).</li>
+          <li>Add its suffixes to <code>candidates.SOURCE_EXTS</code> and route them in <code>api._parser_for</code>.</li>
+          <li>Add a fixture to <code>tests/accuracy_fixtures.py</code>; <code>scripts/parser_accuracy.py</code> must stay at 1.00 / 1.00.</li>
+          <li>Stdlib only — no tree-sitter or other runtime dependency.</li></ol></div>
+        <div class="card"><h3>Add a command or tool</h3><ol class="check">
+          <li>Implement it once in <code>wikifier/api.py</code>; return <code>{"success": …}</code>, never raise across the boundary.</li>
+          <li>Expose it in <code>cli.py</code> (argparse) and, if agents need it, as a thin wrapper in <code>mcp/server_impl.py</code>.</li>
+          <li>Document it in <code>skills/run.md</code>; add a regression test.</li>
+          <li>Launchers stay 15-line wrappers around <code>python -m wikifier</code>.</li></ol></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+'use strict';
+/* Maintainer diagnostics v2. Live data from `wikifier serve` (/__wikifier/api/*);
+ * module purposes from <module>.wiki.md. No external scripts. */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => n == null || n === '' ? '—' : typeof n === 'number' ? n.toLocaleString() : esc(n);
+const bytes = n => n == null ? '—' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : n > 1e3 ? Math.round(n / 1e3) + ' KB' : n + ' B';
+const state = { server: null, diag: null, cycles: null, health: {}, modules: [], group: 'all', resCat: 'actionable' };
+const STUB = ['initial stub', 'seed_health_from_map', 'seed_health_for_monitored', 'present in dependency map', 'parseable source under monitored'];
+function statusOf(e) { const s = String(e && e.status || ''); if (s.includes('🔴')) return 'r'; if (s.includes('🟢')) return 'g'; const b = String(e && e.reason || '').toLowerCase(); return STUB.some(m => b.includes(m)) ? 's' : 'y'; }
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+async function getText(p) { try { const r = await fetch(p + (p.includes('?') ? '&' : '?') + 'cb=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.text() : null; } catch (e) { return null; } }
+async function getJson(p) { const t = await getText(p); if (t == null) return null; try { return JSON.parse(t); } catch (e) { return null; } }
+const api = (n, q = {}) => state.server ? getJson('/__wikifier/api/' + n + '?' + new URLSearchParams(q)) : Promise.resolve(null);
+const needsServer = what => `<div class="empty">${what} needs <code>wikifier serve</code>.</div>`;
+function inline(s) { return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\*([^*\s][^*]*)\*/g, '<em>$1</em>'); }
+
+/* ---------- data ---------- */
+async function load() {
+  const info = await getJson('/__wikifier/status');
+  state.server = info && info.wikifier_serve ? info : null;
+  const chip = $('#server-chip'); chip.classList.toggle('live', !!state.server);
+  chip.lastElementChild.textContent = state.server ? 'live · v' + (state.server.version || '?') : 'static';
+  $('#notice').innerHTML = location.protocol === 'file:'
+    ? '<div class="notice"><strong>Opened from disk.</strong> Run <code>wikifier serve</code> in this repo and open <a href="http://localhost:8787/diagnostics.v2.html">localhost:8787/diagnostics.v2.html</a>.</div>'
+    : state.server ? '' : '<div class="notice"><strong>Static server detected.</strong> Module purposes are shown; live graph numbers need <code>wikifier serve</code>.</div>';
+  const health = await getJson('file_health.json');
+  state.health = (health && health.entries) || {};
+  [state.diag, state.cycles] = await Promise.all([api('diagnostics'), api('cycles')]);
+  await loadModules();
+  render();
+}
+function purposeOf(md) {
+  if (!md) return '';
+  const p = md.match(/\*\*Purpose:?\*\*:?\s*(.+)/i); if (p) return p[1].trim();
+  const para = md.split('\n').map(l => l.trim()).find(l => l && !/^(#|-|\*|\||```|>)/.test(l));
+  return para || '';
+}
+async function loadModules() {
+  const paths = Object.keys(state.health).filter(p => /^wikifier\/.*\.(py|sh|ps1|bat)$/.test(p) && !p.endsWith('.wiki.md')).sort();
+  const wikis = await Promise.all(paths.map(p => getText(p + '.wiki.md')));
+  state.modules = paths.map((p, i) => ({ path: p, purpose: purposeOf(wikis[i]), hasWiki: !!wikis[i], st: statusOf(state.health[p]) }));
+}
+
+/* ---------- render ---------- */
+function render() { renderKpis(); renderPipeline(); renderModules(); renderAcs(); renderResolution(); renderGraph(); renderTrend(); renderCache(); }
+function kpi(label, value, foot, cls = '') { return `<div class="card kpi"><div class="label">${label}</div><div class="value ${cls}">${value}</div><div class="foot">${foot}</div></div>`; }
+function renderKpis() {
+  const d = state.diag || {}; const c = d.cache || {}; const a = d.acs || {}; const b = d.barrels || {};
+  const withWiki = state.modules.filter(m => m.hasWiki).length;
+  $('#kpis').innerHTML = [
+    kpi('Modules', state.modules.length, withWiki + ' with a wiki'),
+    kpi('Graph edges', fmt(c.edge_count), 'internal, indexed'),
+    kpi('Avg confidence', a.avg_confidence != null ? a.avg_confidence.toFixed(2) : '—', fmt(a.total_scored_edges) + ' scored imports'),
+    kpi('Actionable low', fmt(a.actionable_low_conf_edges), 'internal imports to check', a.actionable_low_conf_edges > 20 ? 'score bad' : ''),
+    kpi('Cycles', state.cycles ? fmt(state.cycles.count) : '—', state.cycles && state.cycles.count ? 'see below' : 'acyclic'),
+    kpi('Barrel chains', fmt(b.num_chains), fmt(b.num_indexed_barrels) + ' indexed barrels'),
+  ].join('');
+}
+function renderPipeline() {
+  const d = state.diag || {}; const c = d.cache || {}; const a = d.acs || {}; const cov = d.map_coverage || {};
+  const total = Object.keys(state.health).length;
+  const stages = [
+    ['Scan', 'candidates.py', (c.candidate_list_count ?? cov.parseable_files) != null ? fmt(c.candidate_list_count ?? cov.parseable_files) + ' files' : ''],
+    ['Parse', 'parsers/*.py · cdia', a.total_scored_edges != null ? fmt(a.total_scored_edges) + ' imports' : ''],
+    ['Resolve', 'resolution.py · bree', a.unresolved_project_edges != null ? fmt(a.unresolved_project_edges) + ' unresolved' : ''],
+    ['Cache', 'cache_store.py', c.edge_count != null ? fmt(c.edge_count) + ' edges' : ''],
+    ['Analyse', 'cache/{cycles,acs}.py', state.cycles ? fmt(state.cycles.count) + ' cycles' : ''],
+    ['Health', 'health_pkg/', total ? fmt(total) + ' tracked' : ''],
+  ];
+  const W = 1000, bw = 150, gap = (W - 20 - bw * stages.length) / (stages.length - 1), y = 20, h = 78;
+  let s = `<svg class="pipe" viewBox="0 0 ${W} 200" role="img" aria-label="Pipeline: ${stages.map(x => x[0]).join(', ')}"><defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--border-strong)"/></marker></defs>`;
+  stages.forEach(([t, m, v], i) => {
+    const x = 10 + i * (bw + gap);
+    s += `<g class="stage"><rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="9"/><text class="t" x="${x + 12}" y="${y + 24}">${t}</text><text class="m" x="${x + 12}" y="${y + 43}">${esc(m)}</text><text class="v" x="${x + 12}" y="${y + 64}">${esc(v)}</text></g>`;
+    if (i) s += `<path class="arrow" d="M${x - gap + 2},${y + h / 2} L${x - 3},${y + h / 2}"/>`;
+  });
+  const out = 10 + 5 * (bw + gap);
+  s += `<path class="arrow" d="M${out + bw / 2},${y + h + 2} L${out + bw / 2},${y + h + 30}"/>`;
+  s += `<g class="side"><rect x="${out - 230}" y="${y + h + 34}" width="${bw + 230}" height="58" rx="9"/><text x="${out - 216}" y="${y + h + 56}">Artifacts: library.md · file_health.{json,md} · pending_updates.md</text><text x="${out - 216}" y="${y + h + 76}">journal/YYYY/MM/DD.md · *.wiki.md (written by agents)</text></g>`;
+  s += `<g class="side"><rect x="10" y="${y + h + 34}" width="420" height="58" rx="9"/><text x="24" y="${y + h + 56}">Surfaces: api.py (library) → cli.py · mcp/server_impl.py</text><text x="24" y="${y + h + 76}">daemon.py · serve.py (this page) · locking.py guards writes</text></g>`;
+  $('#pipe').innerHTML = s + '</svg>';
+}
+function renderModules() {
+  const groups = ['all', ...new Set(state.modules.map(m => m.path.split('/').length > 2 ? m.path.split('/')[1] : 'core'))];
+  $('#mod-group').innerHTML = groups.map(g => `<button data-g="${esc(g)}" aria-pressed="${g === state.group}">${esc(g)}</button>`).join('');
+  const q = ($('#mod-filter').value || '').toLowerCase();
+  const rows = state.modules.filter(m => {
+    const g = m.path.split('/').length > 2 ? m.path.split('/')[1] : 'core';
+    return (state.group === 'all' || g === state.group) && (!q || m.path.toLowerCase().includes(q) || m.purpose.toLowerCase().includes(q));
+  });
+  $('#mod-rows').innerHTML = rows.map(m => `<tr class="click" data-file="${esc(m.path)}" tabindex="0"><td class="mono">${esc(m.path.replace(/^wikifier\//, ''))}</td><td>${m.purpose ? inline(m.purpose.length > 220 ? m.purpose.slice(0, 217) + '…' : m.purpose) : '<span class="desc">No wiki yet</span>'}</td><td class="hide-sm" style="white-space:nowrap"><span class="dot ${m.st}"></span>${({ g: 'green', y: 'needs wiki', r: 'red', s: 'mapped' })[m.st]}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="empty">No modules match.</td></tr>';
+}
+const ACS_LABELS = {
+  high_confidence_ok: ['Resolved, high confidence', 'var(--green)', 'Nothing to do.'],
+  external_or_bare: ['External / stdlib', 'var(--stub)', 'Not part of the project graph — expected.'],
+  dynamic_literal: ['Literal dynamic import', 'var(--blue)', 'import()/importlib with a fixed string — resolved when possible.'],
+  low_confidence_internal: ['Internal, low confidence', 'var(--yellow)', 'Actionable: check the resolver picked the right file.'],
+  unresolved_project: ['Unresolved project import', 'var(--red)', 'Actionable: path looks internal but no file matched.'],
+};
+function renderAcs() {
+  const a = state.diag && state.diag.acs;
+  if (!a) { $('#acs-mix').innerHTML = '<h3>Import mix</h3>' + needsServer('Confidence data'); $('#acs-reasons').innerHTML = '<h3>Resolution strategies</h3>' + needsServer('Strategy data'); return; }
+  const counts = a.reason_code_counts || {}; const total = Object.values(counts).reduce((x, y) => x + y, 0) || 1;
+  const keys = Object.keys(counts).sort((x, y) => counts[y] - counts[x]);
+  const lab = k => ACS_LABELS[k] || [k.replace(/_/g, ' '), 'var(--violet)', ''];
+  $('#acs-mix').innerHTML = `<h3>Import mix · ${fmt(a.total_scored_edges)} imports · threshold ${a.low_conf_threshold ?? '—'}</h3>
+    <div class="stack" role="img" aria-label="Import confidence mix">${keys.map(k => `<span style="width:${100 * counts[k] / total}%;background:${lab(k)[1]}" title="${esc(lab(k)[0])}: ${counts[k]}"></span>`).join('')}</div>
+    <div class="legend">${keys.map(k => `<div class="row"><i style="background:${lab(k)[1]}"></i><span>${esc(lab(k)[0])}</span><span class="n">${fmt(counts[k])}</span>${lab(k)[2] ? `<span class="hint">${esc(lab(k)[2])}</span>` : ''}</div>`).join('')}</div>`;
+  const strat = Object.entries(a.top_risk_reasons || {}).filter(([k]) => k.startsWith('strategy:'));
+  const max = Math.max(1, ...strat.map(x => x[1]));
+  $('#acs-reasons').innerHTML = `<h3>How imports were resolved</h3><div class="bars">${strat.map(([k, n]) => `<div class="row"><span class="mono" title="${esc(k)}">${esc(k.slice(9))}</span><div class="track"><div class="fill" style="width:${100 * n / max}%"></div></div><span class="n">${fmt(n)}</span></div>`).join('') || '<div class="empty">No strategy data.</div>'}</div>
+    <p class="desc" style="margin:12px 0 0">Generated ${esc(String(a.generated_at || '').slice(0, 16).replace('T', ' '))} UTC · ACS v${esc(a.acs_version || '?')}</p>`;
+}
+function renderResolution() {
+  const r = state.diag && state.diag.resolution;
+  if (!r) { $('#res-cat').innerHTML = ''; $('#res-rows').innerHTML = `<tr><td colspan="4">${needsServer('Resolution data')}</td></tr>`; return; }
+  const cats = r.by_category || {};
+  const opts = [['actionable', 'Actionable'], ...Object.keys(cats).map(k => [k, k.replace(/_/g, ' ') + ' ' + cats[k]]), ['all', 'All']];
+  $('#res-cat').innerHTML = opts.map(([k, l]) => `<button data-cat="${esc(k)}" aria-pressed="${k === state.resCat}">${esc(l)}</button>`).join('');
+  const rows = (r.samples || []).filter(s => state.resCat === 'all' || (state.resCat === 'actionable' ? s.category !== 'external_or_bare' : s.category === state.resCat));
+  $('#res-note').textContent = r.has_more ? `Showing a ${(r.samples || []).length}-item sample of ${r.low_or_unresolved_count}.` : '';
+  const tagCls = c => c === 'external_or_bare' ? '' : c === 'unknown' ? 'bad' : 'warn';
+  $('#res-rows').innerHTML = rows.map(s => `<tr class="click" data-file="${esc(s.src)}"><td class="mono">${esc(s.src)}</td><td class="mono">${esc(s.raw)}</td><td class="hide-sm"><span class="tag ${tagCls(s.category)}">${esc(String(s.category).replace(/_/g, ' '))}</span></td><td>${esc(s.suggestion || s.reason || '')}</td></tr>`).join('')
+    || `<tr><td colspan="4" class="empty">${state.resCat === 'actionable' ? 'Nothing actionable in this sample — only external imports.' : 'No samples.'}</td></tr>`;
+}
+function renderGraph() {
+  const c = state.cycles; const s = state.diag && state.diag.cycle_summary;
+  $('#cycles').innerHTML = '<h3>Import cycles</h3>' + (!c ? needsServer('Cycle data') : !c.count
+    ? '<div class="empty"><strong style="color:var(--green)">No cycles.</strong><br>The import graph is acyclic.</div>'
+    : `<table><thead><tr><th>Example</th><th>Size</th></tr></thead><tbody>${(c.sccs || []).map(x => `<tr class="click" data-file="${esc(x.example_path)}"><td class="mono">${esc(x.example_path)}</td><td>${x.size}</td></tr>`).join('')}</tbody></table>
+       ${s ? `<p class="desc" style="margin-top:10px">${fmt(s.high_severity_count)} high severity · max blast radius ${fmt(s.max_blast_radius)}</p>` : ''}`);
+  const b = state.diag && state.diag.barrels;
+  $('#barrels').innerHTML = '<h3>Barrel / re-export chains (BREE)</h3>' + (!b ? needsServer('Barrel data') : `<dl class="kv">
+    <dt>Chains</dt><dd>${fmt(b.num_chains)}</dd><dt>Indexed barrels</dt><dd>${fmt(b.num_indexed_barrels)}</dd>
+    <dt>Partial chains</dt><dd>${b.partial_chains ? `<span class="tag warn">${fmt(b.partial_chains)}</span>` : '0'}</dd>
+    <dt>Persistent cache</dt><dd>${b.has_brc ? '<span class="tag ok">loaded</span>' : '<span class="tag">empty</span>'}</dd><dt>Engine</dt><dd class="mono">${esc(b.version || '')}</dd></dl>
+    <p class="desc" style="margin:12px 0 0">A barrel re-exports other modules (<code>index.ts</code>, <code>__init__.py</code>). Chains are expanded to depth 3 so importers point at the real file.</p>`);
+}
+function renderTrend() {
+  const hist = (state.diag && state.diag.metrics_history) || [];
+  if (!state.diag) { $('#trend-chart').innerHTML = needsServer('Trend data'); return; }
+  if (hist.length < 2) { $('#trend-chart').innerHTML = '<div class="empty">Not enough samples yet.</div>'; return; }
+  const W = 1000, H = 220, L = 40, R = 12, T = 14, B = 30;
+  const max = Math.max(...hist.map(h => h.total || 0), 1);
+  const x = i => L + (W - L - R) * i / (hist.length - 1), y = v => T + (H - T - B) * (1 - v / max);
+  const line = (k, color) => `<path d="${hist.map((h, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(h[k] || 0).toFixed(1)).join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+  const area = `<path d="M${x(0)},${y(0)} ${hist.map((h, i) => 'L' + x(i).toFixed(1) + ',' + y(h.green || 0).toFixed(1)).join(' ')} L${x(hist.length - 1)},${y(0)} Z" fill="var(--green)" opacity=".12"/>`;
+  const ticks = [0, Math.round(max / 2), max].map(v => `<line class="axis" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="lbl" x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('');
+  const first = String(hist[0].ts || '').slice(0, 10), last = String(hist[hist.length - 1].ts || '').slice(0, 10);
+  const h = hist[hist.length - 1];
+  $('#trend-chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Green, yellow and red file counts over ${hist.length} samples">${ticks}${area}${line('green', 'var(--green)')}${line('yellow', 'var(--yellow)')}${line('red', 'var(--red)')}
+    <text class="lbl" x="${L}" y="${H - 8}">${esc(first)}</text><text class="lbl" x="${W - R}" y="${H - 8}" text-anchor="end">${esc(last)}</text></svg>
+    <div class="legend" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-top:8px">
+      <div class="row"><i style="background:var(--green)"></i><span>Green</span><span class="n">${fmt(h.green)}</span></div>
+      <div class="row"><i style="background:var(--yellow)"></i><span>Yellow</span><span class="n">${fmt(h.yellow)}</span></div>
+      <div class="row"><i style="background:var(--red)"></i><span>Red</span><span class="n">${fmt(h.red)}</span></div>
+      <div class="row"><i style="background:var(--stub)"></i><span>Samples</span><span class="n">${hist.length}</span></div></div>`;
+}
+function renderCache() {
+  const c = state.diag && state.diag.cache; const m = state.diag && state.diag.map_coverage;
+  $('#cache-kv').innerHTML = '<h3>Import cache</h3>' + (!c ? needsServer('Cache data') : `<dl class="kv">
+    <dt>Backend</dt><dd>${esc(c.cache_backend)}</dd><dt>SQLite</dt><dd>${bytes(c.sqlite_bytes)}</dd>
+    <dt>Legacy JSON</dt><dd>${c.json_bytes ? bytes(c.json_bytes) + ' <span class="tag warn">not read while SQLite exists</span>' : '—'}</dd>
+    <dt>Edges</dt><dd>${fmt(c.edge_count)}</dd><dt>Candidates</dt><dd>${fmt(c.candidate_list_count)}</dd><dt>ACS</dt><dd>v${esc(c.acs_version || '?')}</dd></dl>`);
+  $('#cov-kv').innerHTML = '<h3>Last update-maps run</h3>' + (!m ? needsServer('Coverage data') : `<dl class="kv">
+    <dt>Map complete</dt><dd>${m.complete ? '<span class="tag ok">yes</span>' : '<span class="tag warn">no — re-run with the same scope</span>'}</dd>
+    <dt>Parseable files</dt><dd>${fmt(m.parseable_files)}</dd><dt>Dirty / parsed</dt><dd>${fmt(m.dirty_total)} / ${fmt(m.files_parsed)}</dd>
+    <dt>Remaining dirty</dt><dd>${fmt(m.files_remaining_dirty)}</dd><dt>Scope</dt><dd class="mono">${esc(m.scoped_directory || 'whole project')}</dd>
+    <dt>Budget</dt><dd>${m.budget_max_files ? fmt(m.budget_max_files) + ' files' : 'none'}</dd></dl>`);
+}
+
+/* ---------- wiring ---------- */
+function applyTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-file],[data-g],[data-cat]'); if (!t) return;
+  if (t.dataset.file) location.href = 'index.v2.html#/file/' + encodeURIComponent(t.dataset.file).replace(/%2F/g, '/');
+  else if (t.dataset.g) { state.group = t.dataset.g; renderModules(); }
+  else if (t.dataset.cat) { state.resCat = t.dataset.cat; renderResolution(); }
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.dataset && ev.target.dataset.file) ev.target.click(); });
+$('#mod-filter').addEventListener('input', renderModules);
+$('#btn-refresh').onclick = load;
+$('#btn-theme').onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = dark ? 'light' : 'dark'; applyTheme(next); store('wikifier-theme', next);
+};
+const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) $$('nav.toc a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+}), { rootMargin: '-80px 0px -70% 0px' }) : null;
+if (io) $$('main section').forEach(s => io.observe(s));
+applyTheme(store('wikifier-theme'));
+if (location.protocol !== 'file:') load(); else { $('#notice').innerHTML = '<div class="notice"><strong>Opened from disk.</strong> Run <code>wikifier serve</code> in this repo and open <a href="http://localhost:8787/diagnostics.v2.html">localhost:8787/diagnostics.v2.html</a>.</div>'; }
+</script>
+</body>
+</html>

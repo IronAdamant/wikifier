@@ -1,13 +1,15 @@
-"""Real-path tests for `wikifier init` lean path-list templates (4.6.8+).
+"""Real-path tests for `wikifier init` lean path-list templates.
 
-Drives the shipped shell launcher (`./wikifier.sh init --target …`) so a
-silent bare-`.` seed cannot regress without failing the suite.
+Drives the shipped launcher (`./wikifier.sh init --target …`, which execs
+`python -m wikifier`) so a silent bare-`.` seed cannot regress unnoticed.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -24,8 +26,14 @@ class TestInitSeedTemplates(TempProjectTestCase):
         # (init --target should write into the given directory, not the harness root).
         env = os.environ.copy()
         env.pop("WIKIFIER_PROJECT_ROOT", None)
+        env["WIKIFIER_PYTHON"] = sys.executable
+        if shutil.which("bash"):
+            cmd = ["bash", str(script), "init", "--target", str(target), "--no-copy"]
+        else:
+            cmd = [sys.executable, "-m", "wikifier", "init", "--target", str(target), "--no-copy"]
+            env["PYTHONPATH"] = str(REPO_ROOT)
         return subprocess.run(
-            ["bash", str(script), "init", "--target", str(target), "--no-copy"],
+            cmd,
             cwd=str(REPO_ROOT),
             env=env,
             capture_output=True,
@@ -104,19 +112,19 @@ class TestInitSeedTemplates(TempProjectTestCase):
         excl_text = excl.read_text(encoding="utf-8")
         self.assertIn("target", excl_text.splitlines())
 
-    def test_packaged_launcher_matches_root_init_seed(self):
-        """Root and packaged wikifier.sh must stay in sync for init templates."""
-        root_sh = (REPO_ROOT / "wikifier.sh").read_text(encoding="utf-8")
-        pkg_sh = (REPO_ROOT / "wikifier" / "scripts" / "wikifier.sh").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("map_paths.txt", root_sh)
-        self.assertIn("lean package roots", root_sh)
-        self.assertEqual(
-            root_sh,
-            pkg_sh,
-            "wikifier/scripts/wikifier.sh must match root wikifier.sh (init templates)",
-        )
+    def test_launchers_are_thin_and_in_sync(self):
+        """Root and packaged launchers are identical thin wrappers; templates live in Python."""
+        for name in ("wikifier.sh", "wikifier.ps1", "wikifier.bat"):
+            root_copy = (REPO_ROOT / name).read_text(encoding="utf-8")
+            packaged = (REPO_ROOT / "wikifier" / "scripts" / name).read_text(encoding="utf-8")
+            self.assertEqual(root_copy, packaged, f"{name}: root and packaged copies differ")
+            self.assertIn("-m wikifier", root_copy, f"{name} must delegate to python -m wikifier")
+            self.assertLess(len(root_copy.splitlines()), 40, f"{name} must stay a thin launcher")
+        from wikifier.api import MAP_PATHS_TEMPLATE, MONITORED_TEMPLATE
+
+        self.assertIn("map_paths.txt", MONITORED_TEMPLATE)
+        self.assertIn("lean package roots", MONITORED_TEMPLATE)
+        self.assertIn("monitored_paths", MAP_PATHS_TEMPLATE)
 
 
 if __name__ == "__main__":

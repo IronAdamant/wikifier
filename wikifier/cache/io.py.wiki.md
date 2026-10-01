@@ -1,3 +1,5 @@
-# cache/io.py
+# wikifier/cache/io.py
 
-SQLite-primary `load_cache` / `save_cache` / `load_mtime_index`. Legacy JSON dual-read only. Public `wikifier.import_cache` re-exports these.
+**Purpose:** the historical dict API over `wikifier.cache_store` (SQLite).
+
+`load_cache` (full dict incl. `_*` keys), `load_mtime_index` (light), `save_cache` (locks) / `_do_save_cache` (caller holds the lock). Errors propagate — there is no silent JSON fallback.

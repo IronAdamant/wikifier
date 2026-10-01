@@ -1,146 +1,94 @@
+"""
+Wikifier library API — the functions agents call (the CLI and MCP server are thin
+wrappers over these).
+
+Workflow  check_changes → edit → record_change → refresh wiki → mark_green
+Maps      update_maps / run_full_update
+Lookup    session_bootstrap, prepare_edit, suggest_next_actions, why_file,
+          search_journal, list_paths, get_dependencies, get_dependents, cycles_report
+Setup     init_project, health, cache_status, heal_stubs, journal, issues
+
+Contract: every function returns a dict containing ``success``. Operational
+failures (unknown project root, missing file, lock timeout, I/O errors) return
+``{"success": False, "error": ..., "error_type": ...}`` — they never fall back
+to another directory or report success after a failed write.
+"""
+
 from __future__ import annotations
 
-#!/usr/bin/env python3
-"""
-Wikifier CLI / library entry (agent-first).
-
-AGENT MAP (read this, not the whole file):
-  Pure-Python (python -m wikifier …): check-changes, record-change, mark-green,
-    record-deletion, suggest-next, validate, health --summary|--json, update-maps
-  Shell fallback (wikifier.sh): init, monitor, daemon, journal, issues, serve,
-    heal-stubs, cycles, plain health matrix text
-  Library: check_changes, record_change, mark_green, record_deletion,
-    suggest_next_actions, update_maps, run_full_update, health (fn), discover_project_root
-  Scope: monitored_paths → check-changes; exclude_patterns + walk → update-maps
-  Self-tests: tests/ + tests/selftest/ (not inlined here)
-"""
-
+import fnmatch
 import os
-import sys
-import platform
-import subprocess
+import shutil
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from contextlib import nullcontext as _nullcontext
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
-# Canonical discovery lives in project_root (no cli↔cache↔bree load cycle).
-# Re-export for public API: `from wikifier.cli import discover_project_root`.
-from .project_root import discover_project_root  # noqa: F401
+from . import cache_store as cs
+from . import health_pkg as health_mod
+from . import import_cache as ic
+from . import journal as journal_mod
+from . import locking
+from .candidates import (
+    candidate_list_meta,
+    collect_candidate_source_files,
+    resolve_candidates,
+    resolve_map_scope,
+    scope_fingerprint,
+)
+from .paths import ProjectPathError, ProjectRootError, resolve_root, to_rel
+from .project_root import discover_project_root  # noqa: F401 — public re-export
+
+PathArg = Union[str, Path]
+
+# Historical private name used by the MCP layer and older callers.
+_get_effective_root = resolve_root
+
+GREEN = health_mod.GREEN
+YELLOW = health_mod.YELLOW
+RED = health_mod.RED
+
+
+def _fail(result: Dict[str, Any], exc: BaseException) -> Dict[str, Any]:
+    """Mark ``result`` failed with a typed, human-readable error."""
+    result["success"] = False
+    result["error"] = str(exc) or type(exc).__name__
+    result["error_type"] = type(exc).__name__
+    if isinstance(exc, locking.LockTimeoutError):
+        result["timed_out"] = True
+    return result
+
+
+def _in_directory(path: str, directory: Optional[str]) -> bool:
+    if not directory:
+        return True
+    prefix = directory.rstrip("/")
+    return path == prefix or path.startswith(prefix + "/")
 
 
 # =============================================================================
-# Python-primary heavy path for update-maps (Wave 3/4/5 External/Packaged Full-Update Robustness)
+# update-maps pipeline
 # =============================================================================
-
-def _collect_candidate_source_files(
-    root: Path,
-    directory: Optional[str] = None,
-) -> List[Path]:
-    """Thin wrapper → ``wikifier.candidates`` (scoped walk, no per-file resolve)."""
-    from .candidates import collect_candidate_source_files
-    return collect_candidate_source_files(root, directory=directory)
-
-
-def _exercise_persist_pipeline(
-    root: Path,
-    sample_parser_outputs: List[Dict[str, Any]],
-    cache: Dict[str, Any],
-    verbose: bool = False,
-) -> tuple[bool, int]:
-    """
-    Wave 5 extracted helper: more of the persist pipeline now directly callable
-    from run_full_update (and thus daemon/MCP pure path).
-
-    Mirrors sh's parse_parser_json_output + process_file_imports + persist_rich_cache_data
-    using the shared contracts.parse_pipeline_line normalizer + load/merge/save via import_cache.
-
-    Also ties barrel_v2 + creative Gap#1 signals into the pure-Py persisted pairs
-    (cdia_v1 / barrel_v2 / creative_v1 rich suffixes survive exactly for ACS/CIABRE surfaces).
-
-    Bounded, defensive, zero side effects on error. Returns (exercised, count).
-    """
-    from .contracts import parse_pipeline_line
-
-    persist_exercised = False
-    persisted_pairs = 0
-    if not isinstance(cache.get("resolved_pairs"), list):
-        cache["resolved_pairs"] = []
-
-    for item in sample_parser_outputs[: min(8, len(sample_parser_outputs))]:  # deeper than before
-        fstr = item.get("file", "")
-        imps = item.get("imports") or []
-        for imp in imps[:2]:
-            raw = imp.get("raw_module") or imp.get("module", "unknown")
-            res = imp.get("resolved_path") or ""
-            conf = imp.get("resolution_confidence", "medium")
-            via_b = "true" if imp.get("via_barrel") else "false"
-            cdia = imp.get("cdia") or imp.get("conditional_analysis") or {}
-            barrelv2 = imp.get("barrel_v2") or {}
-            # Wave 5 creative tie-in (Gap #1 broader)
-            dyn = imp.get("dynamic_analysis") or {}
-            creative_tags = dyn.get("semantic_tags", []) if isinstance(dyn, dict) else []
-            creative_v1 = "1" if any(t in str(creative_tags) for t in ("tagged_template", "registry_map", "call_produced", "creative")) else ""
-
-            cdia_b64 = "eyJjcmVhdGl2ZSI6dHJ1ZX0=" if cdia or creative_v1 else ""
-            line = f"{fstr}|{raw}|{res}|{conf}|false||false||{via_b}|0"
-            if cdia_b64:
-                line += f"|cdia_v1={cdia_b64}"
-            if barrelv2:
-                line += "|barrel_v2=e30="
-            if creative_v1:
-                line += "|creative_v1=1"
-
-            try:
-                parsed = parse_pipeline_line(line)
-                pair = {
-                    "src": parsed.get("src", fstr),
-                    "raw": parsed.get("raw", raw),
-                    "resolved": parsed.get("resolved", res),
-                    "confidence": parsed.get("confidence", conf),
-                    "is_dynamic": parsed.get("is_dynamic", "false"),
-                    "via_barrel": parsed.get("via_barrel", via_b),
-                    "cdia_v1": cdia_b64 or None,
-                    "barrel_v2": "e30=" if barrelv2 else None,
-                    "creative_v1": creative_v1 or None,  # tie-in surfaced
-                }
-                key = (str(pair["src"]), str(pair["raw"]))
-                if not any((str(p.get("src")), str(p.get("raw"))) == key for p in cache["resolved_pairs"]):
-                    cache["resolved_pairs"].append(pair)
-                    persisted_pairs += 1
-            except Exception:
-                continue
-
-    if persisted_pairs > 0:
-        # caller does the save
-        persist_exercised = True
-        if verbose:
-            print(f"[_exercise_persist_pipeline] merged {persisted_pairs} rich pairs (barrel+creative tied)")
-    return persist_exercised, persisted_pairs
-
 
 def _pair_from_parser_edge(edge: Dict[str, Any], root: Path) -> Optional[Dict[str, Any]]:
-    """Normalize one parser edge into the canonical resolved_pairs shape.
+    """Normalize one parser edge into the canonical ``resolved_pairs`` shape.
 
-    Canonical pair: project-relative `resolved` path (display module for
-    non-path resolutions, "" when unresolved), string `confidence`, real
-    booleans, plus passthrough of the rich payloads (barrel_v2,
-    resolution_metadata, ACS fields, CDIA analyses) when the parser provided
-    them. The per-file cache entry implies the source, so no `src` key.
+    ``resolved`` is a project-relative path, or "" when unresolved (never the
+    display module name — that would invent fake internal edges).
     """
     if not isinstance(edge, dict):
         return None
     raw = edge.get("raw_module") or edge.get("module") or edge.get("raw") or ""
     resolved = ""
-    rp = edge.get("resolved_path")
-    if rp:
+    target = edge.get("resolved_path")
+    if target:
+        path = Path(target)
+        if not path.is_absolute():  # parsers may report root-relative targets
+            path = root / path
         try:
-            resolved = Path(rp).resolve().relative_to(root).as_posix()
-        except Exception:
-            resolved = str(rp)
-    else:
-        # Do not fill `resolved` from display `module` — that turns unresolved
-        # multi-lang edges into fake internal low-confidence pairs.
-        resolved = ""
+            resolved = path.resolve().relative_to(root).as_posix()
+        except ValueError:
+            resolved = ""  # outside the project: external, not an internal edge
     pair: Dict[str, Any] = {
         "raw": str(raw),
         "resolved": resolved,
@@ -152,41 +100,82 @@ def _pair_from_parser_edge(edge: Dict[str, Any], root: Path) -> Optional[Dict[st
     }
     if edge.get("dynamic_type"):
         pair["dynamic_type"] = edge["dynamic_type"]
-    for k in (
+    for key in (
         "confidence_score", "confidence_reasons", "confidence_explanation",
         "barrel_v2", "resolution_metadata", "strategy", "cdia_v1",
         "conditional_analysis", "dynamic_analysis", "diagnostic",
-        "imported_names", "barrel_leaf_selection",
+        "imported_names", "barrel_leaf_selection", "line",
     ):
-        v = edge.get(k)
-        if v not in (None, "", [], {}):
-            pair[k] = v
+        value = edge.get(key)
+        if value not in (None, "", [], {}):
+            pair[key] = value
     return pair
 
 
+def _dedupe_pairs(pairs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Collapse duplicate (raw, resolved) pairs, keeping the most confident one."""
+    best: Dict[tuple, Dict[str, Any]] = {}
+    order: List[tuple] = []
+    for pair in pairs:
+        key = (pair.get("raw"), pair.get("resolved"))
+        if key not in best:
+            best[key] = pair
+            order.append(key)
+            continue
+        current = best[key]
+        if float(pair.get("confidence_score") or 0) > float(current.get("confidence_score") or 0):
+            merged = dict(pair)
+        else:
+            merged = dict(current)
+        merged["is_dynamic"] = bool(current.get("is_dynamic") or pair.get("is_dynamic"))
+        merged["is_conditional"] = bool(current.get("is_conditional") or pair.get("is_conditional"))
+        best[key] = merged
+    return [best[k] for k in order]
+
+
 def _resolved_targets_from_entry(entry: Any) -> List[str]:
-    """Project-relative resolved targets from a per-file cache entry."""
+    """Distinct project-relative targets of a per-file cache entry."""
     if not isinstance(entry, dict):
         return []
     out: List[str] = []
-    seen = set()
-    pairs = entry.get("resolved_pairs") or []
-    for p in pairs:
-        tgt = ""
-        if isinstance(p, dict):
-            tgt = str(p.get("resolved") or "")
-        elif p:
-            tgt = str(p)
-        if tgt and tgt not in seen:
-            seen.add(tgt)
-            out.append(tgt)
-    if not out:
-        for t in entry.get("resolved") or []:
-            tgt = str(t) if t else ""
-            if tgt and tgt not in seen:
-                seen.add(tgt)
-                out.append(tgt)
+    for pair in entry.get("resolved_pairs") or []:
+        target = str(pair.get("resolved") or "") if isinstance(pair, dict) else str(pair or "")
+        if target and target not in out:
+            out.append(target)
     return out
+
+
+def _parser_for(path: str):
+    """The import parser for a source file, or None for unsupported suffixes."""
+    from .parsers import c_cpp, csharp, go_lang, java, javascript, python, rust
+
+    low = path.lower()
+    if low.endswith((".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts")):
+        return javascript.parse_javascript_imports
+    if low.endswith(".py"):
+        return python.parse_python_imports
+    if low.endswith(".rs"):
+        return rust.parse_rust_imports
+    if low.endswith(".go"):
+        return go_lang.parse_go_imports
+    if low.endswith((".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh")):
+        return c_cpp.parse_c_cpp_imports
+    if low.endswith(".cs"):
+        return csharp.parse_csharp_imports
+    if low.endswith(".java"):
+        return java.parse_java_imports
+    return None
+
+
+def _save_scope_meta(root: Path, result: Dict[str, Any], directory: Optional[str], cands: List[Path], reused: bool) -> None:
+    cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
+    if cands and not reused:
+        cs.save_meta_key(root, "_candidate_list", candidate_list_meta(root, directory, cands))
+    scope = resolve_map_scope(root, directory)
+    if not scope.is_full_tree:
+        pruned = cs.prune_file_index_outside_scope(root, list(scope.rel_prefixes), is_full_tree=False)
+        if pruned:
+            result["index_pruned_outside_scope"] = pruned
 
 
 def run_full_update(
@@ -197,41 +186,26 @@ def run_full_update(
     use_python_primary: bool = True,
     directory: Optional[str] = None,
     max_files: Optional[int] = None,
+    time_budget_s: Optional[float] = None,
+    progress: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
+    """The update-maps pipeline.
+
+    1. collect candidate sources (map_paths / directory / full walk; exclude_patterns)
+    2. dirty detection from the light mtime index, plus importers of stale barrels
+    3. parse every dirty file in-process (barrel cache flushed once per run)
+    4. persist per-file entries + reverse index, cycles, cycle analyses, ACS
+    5. regenerate library.md and the sharded agent folder maps
+
+    ``max_files`` / ``time_budget_s`` cap parsing; the result reports
+    ``files_skipped`` and ``map_complete`` — re-run until ``map_complete`` is
+    true (already-parsed files are not dirty on the next run, so re-running
+    resumes). ``progress`` is called with ``{"file", "edges", "index", "total"}``
+    after each parsed file.
+    ``use_python_primary`` is accepted for compatibility and ignored.
     """
-    Python-primary implementation of `update-maps [--full]` — the full pipeline,
-    no shell:
-
-      1. collect candidate sources (git fast-path / pruned walk; honors
-         exclude_patterns.txt including file globs)
-      2. dirty detection via import_cache.compute_files_needing_reparse,
-         merged with barrel-stale importers (BRC reverse index)
-      3. parse EVERY dirty file in-process (BREE persistence batched: one
-         barrel-cache flush per run, not per chain)
-      4. persist canonical per-file entries {mtime, imports, resolved,
-         resolved_pairs} into import_cache.json (single save)
-      5. rebuild reverse dependencies, cycles + analyses, ACS summary
-      6. regenerate library.md (human) and sharded agent folder maps (maps/_root.json)
-
-    `directory`/`max_files` are explicit scoping. When max_files truncates the
-    dirty set, the result reports `files_skipped` — there are no silent caps.
-
-    Returns a dict with: success, root, mode, parseable_files, files_to_reparse,
-    files_parsed, files_skipped, edges_persisted, parse_errors (bounded sample),
-    cycles, library, dirty_sample, timestamp. `persist_pipeline_exercised` is
-    kept for backward compatibility (True whenever the persist step ran).
-    """
-    if root is None:
-        root = discover_project_root()
-    root = Path(root).resolve()
-
-    # Ensure env for any child parser/resolution helpers (packaged safety)
+    root = Path(root).resolve() if root is not None else resolve_root()
     os.environ["WIKIFIER_PROJECT_ROOT"] = str(root)
-
-    if verbose:
-        print(f"[run_full_update] target root: {root}")
-
-    from datetime import datetime as _dt
     result: Dict[str, Any] = {
         "success": False,
         "root": str(root),
@@ -241,1289 +215,858 @@ def run_full_update(
         "files_parsed": 0,
         "files_skipped": 0,
         "edges_persisted": 0,
-        "timestamp": _dt.now().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "use_canonical": use_canonical,
-        "use_python_primary": use_python_primary,
     }
 
+    def say(msg: str) -> None:
+        if verbose:
+            print(f"[update-maps] {msg}")
+
     try:
-        from . import import_cache as ic
+        if not cs.has_sqlite(root) and cs.json_path(root).is_file():
+            legacy = cs.load_cache_dict(root)
+            if legacy:
+                cs.save_cache_dict(root, legacy)
+                result["cache_migrated_to_sqlite"] = True
 
-        # One-time migrate legacy import_cache.json → SQLite so warm paths avoid JSON tax
-        try:
-            from . import cache_store as cs
-            if not cs.has_sqlite(root) and cs.json_path(root).is_file():
-                legacy = cs.load_cache_dict(root)
-                if legacy:
-                    cs.save_cache_dict(root, legacy)
-                    result["cache_migrated_to_sqlite"] = True
-        except Exception as mig_e:
-            result["cache_migrate_note"] = str(mig_e)
-
-        # === 1. Collect stage (index-first; re-list only on fp/count disagreement) ===
-        from .candidates import (
-            collect_candidate_source_files,
-            resolve_candidates,
-            candidate_list_meta,
-            scope_fingerprint,
-        )
-        mtime_index: Optional[Dict[str, Any]] = None
-        meta_c: Dict[str, Any] = {}
-        try:
-            from . import cache_store as cs
-            loaded_idx = ic.load_mtime_index(root) or {}
-            # Empty index must be None so try_cached uses live-count (not false reuse)
-            mtime_index = loaded_idx if loaded_idx else None
-            meta_c = cs.load_meta(root, keys=("_candidate_list",))
-        except Exception:
-            mtime_index = None
-            meta_c = {}
+        # 1. Collect
+        index = ic.load_mtime_index(root) or None
         cres = resolve_candidates(
             root,
             directory=directory,
             force_full=force_full,
-            index=mtime_index,
-            meta=meta_c,
+            index=index,
+            meta=cs.load_meta(root, keys=("_candidate_list",)),
         )
         cands: List[Path] = list(cres.get("paths") or [])
         cand_reused = bool(cres.get("reused"))
-        index_first = bool(cres.get("index_first"))
-        result["parseable_files"] = len(cands)
-        result["candidates_reused"] = cand_reused
-        result["index_first_dirty"] = index_first
-        result["candidates_relisted"] = bool(cres.get("relisted"))
-        result["scope_fingerprint"] = cres.get("fingerprint") or scope_fingerprint(
-            root, directory
-        )
+        result.update({
+            "parseable_files": len(cands),
+            "candidates_reused": cand_reused,
+            "index_first_dirty": bool(cres.get("index_first")),
+            "candidates_relisted": bool(cres.get("relisted")),
+            "scope_fingerprint": cres.get("fingerprint") or scope_fingerprint(root, directory),
+        })
         if directory:
             result["scoped_directory"] = directory
-        if verbose:
-            print(
-                f"[run_full_update] {len(cands)} candidate sources "
-                f"(reused={cand_reused} index_first={index_first} "
-                f"reason={cres.get('reason')})"
-            )
+        say(f"{len(cands)} candidate sources (reused={cand_reused}, reason={cres.get('reason')})")
 
-        # === 2. Dirty stage (light mtime index; no full pair load) ===
-        # CRITICAL (warm path): do NOT load full pair payloads when dirty is empty.
-        # Barrel merge only when mtime-index dirty is non-empty.
-        content_stable_updates: list = []
+        # 2. Dirty
+        content_stable: List[tuple] = []
         dirty = ic.compute_files_needing_reparse(
-            root,
-            cands,
-            full_rebuild=force_full,
-            content_stable_mtime_updates=content_stable_updates,
-        ) or []
+            root, cands, full_rebuild=force_full, content_stable_mtime_updates=content_stable
+        )
         if dirty:
-            try:
-                from . import cache_store as _cs_barrel
-                barrel_cache: Dict[str, Any] = {}
-                if _cs_barrel.has_sqlite(root):
-                    barrel_cache = _cs_barrel.load_meta(
-                        root,
-                        keys=(
-                            "_barrel_resolutions",
-                            "_barrel_file_index",
-                            "_barrel_invalidation_log",
-                        ),
-                    )
-                else:
-                    # Legacy JSON only: unavoidable full read once (no sqlite yet)
-                    barrel_cache = ic.load_cache(root) or {}
-                if barrel_cache.get("_barrel_resolutions") or barrel_cache.get(
-                    "_barrel_file_index"
-                ):
-                    barrel_stale = ic.invalidate_stale_barrel_entries(
-                        barrel_cache, root, changed_files=[str(p) for p in dirty]
-                    ) or []
-                    seen = {str(Path(p).resolve()) for p in dirty}
-                    for rel in barrel_stale:
-                        if rel:
-                            p = (root / rel).resolve()
-                            if p.exists() and str(p) not in seen:
-                                dirty.append(p)
-                                seen.add(str(p))
-            except Exception:
-                pass  # barrel merge is best-effort; mtime dirty set is authoritative
-        dirty_total: int = len(dirty)
-        result["dirty_total"] = dirty_total
-        result["files_to_reparse"] = dirty_total
+            barrel_meta = cs.load_meta(
+                root, keys=("_barrel_resolutions", "_barrel_file_index", "_barrel_invalidation_log")
+            )
+            if barrel_meta.get("_barrel_resolutions") or barrel_meta.get("_barrel_file_index"):
+                seen = {str(p) for p in dirty}
+                for rel in ic.invalidate_stale_barrel_entries(
+                    barrel_meta, root, changed_files=[str(p) for p in dirty]
+                ) or []:
+                    path = (root / rel).resolve()
+                    if path.exists() and str(path) not in seen:
+                        dirty.append(path)
+                        seen.add(str(path))
+        result["dirty_total"] = result["files_to_reparse"] = len(dirty)
         result["dirty_sample"] = [str(p) for p in dirty[:3]]
-        if content_stable_updates:
-            result["content_stable_mtime_refreshes"] = len(content_stable_updates)
+        if max_files is not None and len(dirty) > int(max_files):
+            result["files_skipped"] = len(dirty) - int(max_files)
+            dirty = dirty[: int(max_files)]
+        if content_stable:
+            cs.update_file_index_rows(root, [(r, int(m), h) for r, m, h in content_stable])
+            result["content_stable_mtime_refreshes"] = len(content_stable)
 
-        if max_files is not None:
-            try:
-                cap = int(max_files)
-                if len(dirty) > cap:
-                    result["files_skipped"] = len(dirty) - cap
-                    dirty = dirty[:cap]
-            except (TypeError, ValueError):
-                pass
+        # Mapped files that no longer exist on disk must leave the graph on any run.
+        vanished = sorted(rel for rel in (index or {}) if not (root / rel).exists())
+        if vanished:
+            result["files_removed"] = len(vanished)
+        if not dirty and not vanished and not force_full:
+            return _zero_dirty_result(root, result, directory, max_files, cands, cand_reused)
 
-        # === 2b. Zero-dirty fast path (agent warm maps) ===
-        # Light path: mtime index + meta only — do NOT load multi-MB pair payloads.
-        if not dirty and not force_full:
-            try:
-                from . import cache_store as cs
-            except Exception:
-                cs = None  # type: ignore
-            mtime_refreshed = 0
-            if content_stable_updates and cs is not None:
-                try:
-                    mtime_refreshed = cs.update_file_index_rows(
-                        root,
-                        [(r, int(m), h) for r, m, h in content_stable_updates],
-                    )
-                except Exception:
-                    mtime_refreshed = 0
-            result["files_parsed"] = 0
-            result["edges_persisted"] = 0
-            result["languages_parsed"] = {}
-            result["zero_dirty_fast_path"] = True
-            result["content_stable_mtime_refreshes"] = mtime_refreshed or len(
-                content_stable_updates or []
-            )
-            backend = "json"
-            try:
-                if cs is not None:
-                    backend = cs.backend_name(root)
-            except Exception:
-                pass
-            result["cache_backend"] = backend
-            # ACS from meta only when already v1.3+; else full load + ensure
-            acs: Dict[str, Any] = {}
-            try:
-                meta = cs.load_meta(root, keys=("_acs_summary", "_cycles")) if cs else {}
-                acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
-                needs_full = (
-                    not acs
-                    or str(acs.get("acs_version") or "") < "1.3"
-                    or "reason_code_counts" not in acs
-                )
-                if needs_full:
-                    cache = ic.load_cache(root) or {}
-                    acs = ic.ensure_acs_summary_persisted(cache, root) or {}
-                    cy = cache.get("_cycles") if isinstance(cache.get("_cycles"), dict) else {}
-                else:
-                    cy = meta.get("_cycles") if isinstance(meta.get("_cycles"), dict) else {}
-                result["acs"] = {
-                    "acs_version": acs.get("acs_version"),
-                    "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
-                    "low_conf_edges": acs.get("low_conf_edges"),
-                    "reason_code_counts": acs.get("reason_code_counts"),
-                }
-            except Exception as ae:
-                result["acs_error"] = str(ae)
-                cy = {}
-            sccs = cy.get("sccs") if isinstance(cy, dict) else []
-            result["cycles"] = {
-                "count": len(sccs or []),
-                "reused": True,
-                "fast_path": True,
-            }
-            lib_path = root / "library.md"
-            if lib_path.is_file():
-                result["library"] = {
-                    "success": True,
-                    "path": str(lib_path),
-                    "skipped": True,
-                    "reason": "zero_dirty_reuse",
-                }
-            else:
-                try:
-                    from .library import write_library_md
-                    cache = ic.load_cache(root) or {}
-                    result["library"] = write_library_md(root, cache)
-                except Exception as e:
-                    result["library"] = {"success": False, "error": str(e)}
-            try:
-                from .map_index import ensure_map_index
-                result["map_index"] = ensure_map_index(
-                    root, cache=None, reuse_if_present=True
-                )
-            except Exception as e:
-                result["map_index"] = {"success": False, "error": str(e)}
-            result["health_stubs_seeded"] = 0
-            result["persist_pipeline_exercised"] = True
-            result["map_coverage"] = ic.build_map_coverage(
-                dirty_total=0,
-                files_parsed=0,
-                files_skipped=0,
-                files_to_reparse=0,
-                max_files=max_files,
-                parseable_files=int(result.get("parseable_files") or 0),
-                zero_dirty_fast_path=True,
-                acs_version=(result.get("acs") or {}).get("acs_version"),
-                cache_backend=backend,
-                directory=directory,
-            )
-            _mc0 = result["map_coverage"] if isinstance(result["map_coverage"], dict) else {}
-            result["map_complete"] = bool(_mc0.get("complete"))
-            result["map_ready"] = bool(_mc0.get("complete")) and int(
-                _mc0.get("files_remaining_dirty") or 0
-            ) == 0
-            try:
-                if cs is not None:
-                    cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
-                    # Persist candidate list for next warm (fp reuse) when freshly collected
-                    if not cand_reused and cands:
-                        cs.save_meta_key(
-                            root,
-                            "_candidate_list",
-                            candidate_list_meta(root, directory, cands),
-                        )
-                    # Prune leftover full-tree index keys after map_paths narrow
-                    # so migration cannot poison reuse forever.
-                    try:
-                        from .candidates import resolve_map_scope as _rms
-                        _sc = _rms(root, directory)
-                        if not _sc.is_full_tree:
-                            pruned_n = cs.prune_file_index_outside_scope(
-                                root,
-                                list(_sc.rel_prefixes),
-                                is_full_tree=False,
-                            )
-                            if pruned_n:
-                                result["index_pruned_outside_scope"] = pruned_n
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            result["success"] = True
-            if verbose:
-                print(
-                    f"[run_full_update] zero-dirty fast path: backend={backend} "
-                    f"mtime_refreshes={mtime_refreshed}, library_skipped={lib_path.is_file()}"
-                )
-            return result
-
-        # === 3. Parse every dirty file (in-process, BREE batched) ===
-        from .parsers import javascript as js_parser
-        from .parsers import python as py_parser
-        try:
-            from .parsers import rust as rust_parser
-        except Exception:
-            rust_parser = None
-        try:
-            from .parsers import go_lang as go_parser
-        except Exception:
-            go_parser = None
-        try:
-            from .parsers import c_cpp as c_cpp_parser
-        except Exception:
-            c_cpp_parser = None
-        try:
-            from .parsers import csharp as csharp_parser
-        except Exception:
-            csharp_parser = None
-        try:
-            from .parsers import java as java_parser
-        except Exception:
-            java_parser = None
-        try:
-            from .parsers import bree as bree_mod
-        except Exception:
-            bree_mod = None
-        try:
-            from .resolution import to_canonical_rel as _canon
-        except Exception:
-            _canon = None
-
-        def _rel(p: Path) -> Optional[str]:
-            try:
-                if _canon is not None:
-                    c = _canon(p, root, follow_symlinks=True)
-                    if c:
-                        return c
-            except Exception:
-                pass
-            try:
-                return Path(p).resolve().relative_to(root).as_posix()
-            except Exception:
-                return None
-
-        def _parse_file(fstr: str, low: str):
-            if low.endswith((".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts")):
-                return js_parser.parse_javascript_imports(fstr) or []
-            if low.endswith(".py"):
-                return py_parser.parse_python_imports(fstr) or []
-            if low.endswith(".rs") and rust_parser is not None:
-                return rust_parser.parse_rust_imports(fstr) or []
-            if low.endswith(".go") and go_parser is not None:
-                return go_parser.parse_go_imports(fstr) or []
-            if low.endswith((".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh")) and c_cpp_parser is not None:
-                return c_cpp_parser.parse_c_cpp_imports(fstr) or []
-            if low.endswith(".cs") and csharp_parser is not None:
-                return csharp_parser.parse_csharp_imports(fstr) or []
-            if low.endswith(".java") and java_parser is not None:
-                return java_parser.parse_java_imports(fstr) or []
-            return None
+        # 3. Parse
+        from .parsers import bree
+        from .resolution import to_canonical_rel
 
         new_entries: Dict[str, Dict[str, Any]] = {}
-        edges_total = 0
-        parsed_count = 0
         parse_errors: List[Dict[str, str]] = []
         lang_counts: Dict[str, int] = {}
-
-        if bree_mod is not None:
-            try:
-                bree_mod.begin_batch()
-            except Exception:
-                bree_mod = None
+        edges_total = 0
+        started = time.monotonic()
+        bree.begin_batch()
         try:
-            for f in dirty:
-                fstr = str(f)
-                low = fstr.lower()
-                try:
-                    edges = _parse_file(fstr, low)
-                    if edges is None:
-                        continue
-                except Exception as pe:
-                    parse_errors.append({"file": fstr, "error": f"{type(pe).__name__}: {pe}"})
+            for index, path in enumerate(dirty):
+                if time_budget_s is not None and time.monotonic() - started > time_budget_s:
+                    result["files_skipped"] = int(result.get("files_skipped") or 0) + len(dirty) - index
+                    result["time_budget_hit"] = True
+                    break
+                fstr = str(path)
+                parser = _parser_for(fstr)
+                if parser is None:
                     continue
-                rel = _rel(Path(fstr))
-                if not rel:
-                    continue
-                pairs = [p for p in (_pair_from_parser_edge(e, root) for e in edges) if p]
-                fpath = Path(fstr)
-                chash = None
                 try:
-                    chash = ic.compute_file_content_hash(fpath)
-                except Exception:
-                    chash = None
-                new_entries[rel] = {
-                    "mtime": ic.get_mtime(fpath),
+                    edges = parser(fstr) or []
+                except Exception as exc:  # one bad file must not abort the map
+                    parse_errors.append({"file": fstr, "error": f"{type(exc).__name__}: {exc}"})
+                    continue
+                rel = to_canonical_rel(path, root, follow_symlinks=True) or Path(fstr).resolve().relative_to(root).as_posix()
+                pairs = _dedupe_pairs([p for p in (_pair_from_parser_edge(e, root) for e in edges) if p])
+                entry: Dict[str, Any] = {
+                    "mtime": ic.get_mtime_ns(path),
                     "imports": [p.get("raw", "") for p in pairs],
                     "resolved": [p["resolved"] for p in pairs if p.get("resolved")],
                     "resolved_pairs": pairs,
                 }
-                if chash:
-                    new_entries[rel]["content_hash"] = chash
-                parsed_count += 1
+                content_hash = ic.compute_file_content_hash(path)
+                if content_hash:
+                    entry["content_hash"] = content_hash
+                new_entries[rel] = entry
                 edges_total += len(pairs)
-                ext = Path(low).suffix.lower() or "unknown"
-                lang_counts[ext] = lang_counts.get(ext, 0) + 1
-                if verbose and parsed_count % 200 == 0:
-                    print(f"[run_full_update] parsed {parsed_count}/{len(dirty)}")
+                if progress is not None:
+                    progress({"file": rel, "edges": len(pairs), "index": index + 1, "total": len(dirty)})
+                suffix = Path(fstr).suffix.lower() or "unknown"
+                lang_counts[suffix] = lang_counts.get(suffix, 0) + 1
+                if verbose and len(new_entries) % 200 == 0:
+                    say(f"parsed {len(new_entries)}/{len(dirty)}")
         finally:
-            if bree_mod is not None:
-                try:
-                    bree_mod.end_batch()  # one barrel-cache flush for the whole run
-                except Exception:
-                    pass
-
-        result["files_parsed"] = parsed_count
-        result["edges_persisted"] = edges_total
-        result["languages_parsed"] = lang_counts
+            bree.end_batch()
+        result.update({
+            "files_parsed": len(new_entries),
+            "edges_persisted": edges_total,
+            "languages_parsed": lang_counts,
+        })
         if parse_errors:
             result["parse_errors"] = parse_errors[:10]
             result["parse_error_count"] = len(parse_errors)
 
-        # === 4. Persist (single save; reload first to pick up the barrel flush) ===
-        cache = ic.load_cache(root) or {}
-        # Snapshot old resolved targets *before* overlay so incremental reverse
-        # can subtract the previous edges (maintain_reverse_dependencies_for_source
-        # requires old_targets + new_targets).
-        old_targets_by_src: Dict[str, List[str]] = {}
-        if not force_full and new_entries:
-            for src in new_entries:
-                if isinstance(src, str) and src and not src.startswith("_"):
-                    old_targets_by_src[src] = _resolved_targets_from_entry(cache.get(src))
-        cache.update(new_entries)
-        if force_full:
-            # Drop ghosts: per-file entries whose source no longer exists in scope.
-            # Only safe on an unscoped full rebuild (scoped runs see partial candidates).
-            if not directory and not max_files:
-                valid = {r for r in (_rel(Path(p)) for p in cands) if r}
-                for stale_key in [k for k in cache if not k.startswith("_") and k not in valid]:
-                    cache.pop(stale_key, None)
-
-        # === 5. Graph intelligence (reverse deps, cycles, ACS) ===
-        try:
-            if force_full or not new_entries:
-                rev = ic.rebuild_reverse_dependencies(cache)
-                ic.set_reverse_dependencies(cache, rev)
+        # 4. Persist + graph intelligence (reload first to pick up the barrel flush)
+        with locking.file_lock(root):
+            cache = ic.load_cache(root)
+            for rel in vanished:
+                ic.remove_file_from_graph(cache, rel)
+            old_targets = {src: _resolved_targets_from_entry(cache.get(src)) for src in new_entries}
+            cache.update(new_entries)
+            if force_full and not directory and not max_files:
+                valid = {to_canonical_rel(p, root, follow_symlinks=True) for p in cands}
+                for stale in [k for k in cache if not k.startswith("_") and k not in valid]:
+                    cache.pop(stale, None)
+            if force_full or not ic.get_reverse_dependencies(cache):
+                ic.set_reverse_dependencies(cache, ic.rebuild_reverse_dependencies(cache))
                 result["reverse_incremental"] = False
             else:
-                existing_rev = ic.get_reverse_dependencies(cache) or {}
-                if not existing_rev:
-                    rev = ic.rebuild_reverse_dependencies(cache)
-                    ic.set_reverse_dependencies(cache, rev)
-                    result["reverse_incremental"] = False
-                else:
-                    for src, entry in new_entries.items():
-                        if not isinstance(src, str) or not src or src.startswith("_"):
-                            continue
-                        ic.maintain_reverse_dependencies_for_source(
-                            cache,
-                            src,
-                            old_targets_by_src.get(src) or [],
-                            _resolved_targets_from_entry(entry),
-                        )
-                    result["reverse_incremental"] = True
-        except Exception as e:
-            result["reverse_index_error"] = str(e)
-        try:
-            cycles_payload = ic.compute_cycles(cache, root=root, use_canonical=use_canonical)
-            cache["_cycles"] = cycles_payload
-            if cycles_payload.get("graph_signature") and hasattr(ic, "set_graph_signature"):
-                ic.set_graph_signature(cache, cycles_payload["graph_signature"])
-            result["cycles"] = {
-                "count": len(cycles_payload.get("sccs", []) or []),
-                "reused": bool(cycles_payload.get("reused")),
-            }
-            try:
-                cache["_cycle_analyses"] = ic.compute_cycle_analyses(cache, root=root, use_canonical=use_canonical)
-            except Exception:
-                pass
-        except Exception as e:
-            result["cycles"] = {"error": str(e)}
-        ic.save_cache(root, cache)
+                for src, entry in new_entries.items():
+                    ic.maintain_reverse_dependencies_for_source(
+                        cache, src, old_targets.get(src) or [], _resolved_targets_from_entry(entry)
+                    )
+                result["reverse_incremental"] = True
+            cycles = ic.compute_cycles(cache, root=root, use_canonical=use_canonical)
+            result["cycles"] = {"count": len(cycles.get("sccs") or []), "reused": bool(cycles.get("reused"))}
+            cache["_cycle_analyses"] = ic.compute_cycle_analyses(cache, root=root, use_canonical=use_canonical)
+            ic.set_graph_integrity(cache)  # integrity is derived on read; drop stale copies
+            ic.set_acs_summary(cache, ic.compute_acs_summary(cache))  # edges changed: always recompute
+            cache["_resolution_diagnostics"] = ic.get_resolution_diagnostics(cache)
+            ic.save_cache(root, cache)
         result["persist_pipeline_exercised"] = True
-        try:
-            ic.ensure_acs_summary_persisted(cache, root)
-        except Exception:
-            pass
 
-        # === 5b. Map-first health stubs (always backfill; warm cache safe) ===
-        # 0-dirty incremental runs never used to create file_health.json — fixed here.
-        health_seeded = 0
-        if _health_mod is not None and hasattr(_health_mod, "seed_health_from_map"):
-            try:
-                max_seed = int(os.environ.get("WIKIFIER_HEALTH_SEED_MAX", "20000") or "20000")
-                map_keys = [k for k in cache if isinstance(k, str) and k and not k.startswith("_")]
-                seed_res = _health_mod.seed_health_from_map(
-                    root, map_keys=map_keys, max_new=max_seed,
-                )
-                health_seeded = int(seed_res.get("seeded") or 0)
-                if hasattr(_health_mod, "seed_health_for_monitored_sources"):
-                    disk_res = _health_mod.seed_health_for_monitored_sources(
-                        root, max_new=max_seed,
-                    )
-                    health_seeded += int(disk_res.get("seeded") or 0)
-            except Exception as se:
-                result["health_seed_error"] = str(se)
-                health_seeded = 0
-        result["health_stubs_seeded"] = health_seeded
+        # 4b. Map-first health stubs
+        max_seed = int(os.environ.get("WIKIFIER_HEALTH_SEED_MAX", "20000") or "20000")
+        map_keys = [k for k in cache if isinstance(k, str) and k and not k.startswith("_")]
+        seeded = int(health_mod.seed_health_from_map(root, map_keys=map_keys, max_new=max_seed).get("seeded") or 0)
+        seeded += int(health_mod.seed_health_for_monitored_sources(root, max_new=max_seed).get("seeded") or 0)
+        result["health_stubs_seeded"] = seeded
 
-        # === 6. library.md (human) + sharded agent folder maps ===
-        try:
-            from .library import write_library_md
-            result["library"] = write_library_md(root, cache)
-        except Exception as e:
-            result["library"] = {"success": False, "error": str(e)}
-        try:
-            from .map_index import ensure_map_index
-            result["map_index"] = ensure_map_index(
-                root, cache, reuse_if_present=False
-            )
-        except Exception as e:
-            result["map_index"] = {"success": False, "error": str(e)}
+        # 5. Artifacts
+        from .library import write_library_md
+        from .map_index import ensure_map_index
 
-        # map_coverage for agents (partial budget ≠ complete)
-        try:
-            from . import cache_store as cs
-            backend = cs.backend_name(root)
-        except Exception:
-            backend = "json"
-        acs_ver = None
-        try:
-            acs_ver = (cache.get("_acs_summary") or {}).get("acs_version")
-        except Exception:
-            pass
-        result["cache_backend"] = backend
-        result["map_coverage"] = ic.build_map_coverage(
-            dirty_total=int(result.get("dirty_total") or result.get("files_to_reparse") or 0),
-            files_parsed=int(result.get("files_parsed") or 0),
-            files_skipped=int(result.get("files_skipped") or 0),
-            files_to_reparse=int(result.get("files_to_reparse") or 0),
-            max_files=max_files,
-            parseable_files=int(result.get("parseable_files") or 0),
-            zero_dirty_fast_path=False,
-            acs_version=acs_ver,
-            cache_backend=backend,
-            directory=directory,
-        )
-        # G5: success alone is not map-ready — surface complete flag at top level
-        _mc = result["map_coverage"] if isinstance(result["map_coverage"], dict) else {}
-        result["map_complete"] = bool(_mc.get("complete"))
-        result["map_ready"] = bool(_mc.get("complete")) and int(_mc.get("files_remaining_dirty") or 0) == 0
-        try:
-            cache["_map_coverage"] = result["map_coverage"]
-            if cands:
-                cache["_candidate_list"] = candidate_list_meta(root, directory, cands)
-            from . import cache_store as cs
-            if cs.has_sqlite(root):
-                cs.save_meta_key(root, "_map_coverage", result["map_coverage"])
-                if cands:
-                    cs.save_meta_key(
-                        root, "_candidate_list", cache["_candidate_list"]
-                    )
-                try:
-                    from .candidates import resolve_map_scope as _rms
-                    _sc = _rms(root, directory)
-                    if not _sc.is_full_tree:
-                        pruned_n = cs.prune_file_index_outside_scope(
-                            root,
-                            list(_sc.rel_prefixes),
-                            is_full_tree=False,
-                        )
-                        if pruned_n:
-                            result["index_pruned_outside_scope"] = pruned_n
-                except Exception:
-                    pass
-            else:
-                ic.save_cache(root, cache)
-        except Exception:
-            pass
-
+        result["library"] = write_library_md(root, cache)
+        result["map_index"] = ensure_map_index(root, cache, reuse_if_present=False)
+        _finish_coverage(root, result, directory, max_files, zero_dirty=False,
+                         acs_version=(cache.get("_acs_summary") or {}).get("acs_version"))
+        _save_scope_meta(root, result, directory, cands, reused=False)
         result["success"] = True
-    except Exception as ex:
-        result["error"] = str(ex)
-        result["note"] = "run_full_update failed; the shell update-maps path remains available as fallback."
+    except Exception as exc:
+        _fail(result, exc)
 
-    if verbose:
-        print(f"[run_full_update] done: parsed {result.get('files_parsed')}/{result.get('files_to_reparse')} "
-              f"dirty files, {result.get('edges_persisted')} edges, library={result.get('library', {}).get('success')}")
-
+    say(
+        f"done: parsed {result.get('files_parsed')}/{result.get('files_to_reparse')} dirty files, "
+        f"{result.get('edges_persisted')} edges, success={result.get('success')}"
+    )
     return result
 
 
-def get_script_path() -> Path:
-    """Return the path to the correct platform-specific Wikifier script."""
-    package_dir = Path(__file__).parent
-    scripts_dir = package_dir / "scripts"
-
-    system = platform.system().lower()
-
-    if system == "windows":
-        # Prefer PowerShell on Windows
-        ps_script = scripts_dir / "wikifier.ps1"
-        if ps_script.exists():
-            return ps_script
-        return scripts_dir / "wikifier.bat"
-    else:
-        # Linux, macOS, etc.
-        return scripts_dir / "wikifier.sh"
-
-
-# =============================================================================
-# Workstream E (Python Library + Protocol v0.4 Bridge) — Additional Extraction + MV Skeleton
-# =============================================================================
-# These functions complete more Python-primary extraction and provide the minimal
-# viable public surface for the mandatory agent workflow (check_changes, health,
-# record_change, scoped update_maps, suggest_next_actions, mark_green, etc.).
-# All are directly importable: `from wikifier import record_change, check_changes, ...`
-# or `from wikifier.cli import ...`.
-#
-# Design realized: structured dict returns (success + data), project_root override,
-# auto locking on mutators, pure-Py journal/pending/health updates, delegation to
-# health.py + import_cache.py for rich paths (ACS, BRC, cycles), defensive,
-# zero new deps, scalable-friendly (directory hints, bounded scans).
-# Shell remains thin launcher/compat. MCP/CLI wiring to these is future thin-shim work.
-#
-# API Audit (Agent 6): health submodule/func access documented (flat func via binding;
-# dotted "from wikifier.health import" for internals always works); _get_effective_root
-# now imported+delegated by MCP for centralization; check_changes cands now reuses
-# _collect_candidate_source_files for fidelity/no-dup. Focus: clean public API + rigorous I/O.
-# =============================================================================
-
-from datetime import datetime
-from typing import Union, Literal
-
-try:
-    from . import locking
-except Exception:
-    locking = None  # defensive for import edge cases
-
-try:
-    from . import health_pkg as _health_mod
-except Exception:
-    _health_mod = None
-
-try:
-    from . import import_cache as _ic_mod
-except Exception:
-    _ic_mod = None
+def _finish_coverage(
+    root: Path,
+    result: Dict[str, Any],
+    directory: Optional[str],
+    max_files: Optional[int],
+    zero_dirty: bool,
+    acs_version: Optional[str],
+) -> None:
+    backend = cs.backend_name(root)
+    result["cache_backend"] = backend
+    coverage = ic.build_map_coverage(
+        dirty_total=int(result.get("dirty_total") or 0),
+        files_parsed=int(result.get("files_parsed") or 0),
+        files_skipped=int(result.get("files_skipped") or 0),
+        files_to_reparse=int(result.get("files_to_reparse") or 0),
+        max_files=max_files,
+        parseable_files=int(result.get("parseable_files") or 0),
+        zero_dirty_fast_path=zero_dirty,
+        acs_version=acs_version,
+        cache_backend=backend,
+        directory=directory,
+    )
+    result["map_coverage"] = coverage
+    result["map_complete"] = bool(coverage.get("complete"))
+    result["map_ready"] = result["map_complete"] and int(coverage.get("files_remaining_dirty") or 0) == 0
 
 
-def _project_lock(root: Path, timeout: Optional[float] = None):
-    """Project flock; MCP passes a finite timeout, CLI default blocks."""
-    if locking is None:
-        return _nullcontext()
-    return locking.file_lock(root, timeout=timeout)
-
-
-def _lock_timeout_result(result: Dict[str, Any], exc: BaseException) -> Dict[str, Any]:
-    result["success"] = False
-    result["error"] = str(exc)
-    result["timed_out"] = True
-    return result
-
-
-def _get_effective_root(project_root: Optional[Union[str, Path]] = None) -> Path:
-    """Internal helper (mirrors MCP pattern; single source in future)."""
-    if project_root:
-        try:
-            p = Path(project_root).expanduser().resolve()
-            if p.exists():
-                return p
-        except Exception:
-            pass
-    try:
-        return discover_project_root()
-    except Exception:
-        try:
-            return Path.cwd().resolve()
-        except Exception:
-            return Path.cwd()
-
-
-def _timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _ensure_journal_entry(root: Path, action: str, file: str, reason: str) -> None:
-    """Pure-Py journal writer extracted for record_* / check_changes (skeleton, defensive)."""
-    try:
-        day_dir = root / "journal" / datetime.now().strftime("%Y/%m")
-        day_dir.mkdir(parents=True, exist_ok=True)
-        jf = day_dir / f"{datetime.now().strftime('%d')}.md"
-        entry = f"## [{_timestamp()}] {action}\n**File:** {file}\n**Reason:** {reason}\n\n"
-        with open(jf, "a", encoding="utf-8") as f:
-            f.write(entry)
-    except Exception:
-        # Never break caller workflow on journal side-effect
-        pass
-
-
-def _add_to_pending(root: Path, file: str, msg: str) -> None:
-    """Append to pending_updates.md via health helpers (normalized empty/items)."""
-    try:
-        if _health_mod is not None and hasattr(_health_mod, "add_to_pending"):
-            # Caller may already hold project lock (re-entrant).
-            _health_mod._do_add_to_pending(root, file, msg) if hasattr(
-                _health_mod, "_do_add_to_pending"
-            ) else _health_mod.add_to_pending(root, file, msg)
-            return
-        p = root / "pending_updates.md"
-        line = f"- {file}: {msg}\n"
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(line)
-    except Exception:
-        pass
-
-
-def _remove_from_pending(root: Path, file: str) -> None:
-    """Best-effort removal (used by mark_green). Prefers health normalizer."""
-    try:
-        if _health_mod is not None and hasattr(_health_mod, "_do_remove_from_pending"):
-            _health_mod._do_remove_from_pending(root, file)
-            return
-        if _health_mod is not None and hasattr(_health_mod, "remove_from_pending"):
-            _health_mod.remove_from_pending(root, file)
-            return
-        p = root / "pending_updates.md"
-        if p.exists():
-            lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if file not in ln]
-            p.write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")
-    except Exception:
-        pass
-
-
-def _get_monitored_roots(root: Path) -> List[Path]:
-    """Basic support for monitored_paths.txt (for check_changes skeleton)."""
-    mp = root / "monitored_paths.txt"
-    if mp.exists():
-        try:
-            roots: List[Path] = []
-            for line in mp.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    cand = (root / line).resolve()
-                    if cand.exists():
-                        try:
-                            if not str(cand.resolve()).startswith(str(root.resolve())):
-                                continue  # M5: only accept monitored under the project root (defensive for abs/rel mix)
-                        except Exception:
-                            pass
-                        roots.append(cand)
-            if roots:
-                return roots
-            # monitored_paths.txt exists but every entry is missing (transplanted
-            # trees, Linux paths on macOS). Never fall back to scanning the whole
-            # root — that hangs on multi-repo parents (e.g. COBOL sample farm).
-            return []
-        except Exception:
-            pass
-    return [root]
-
-
-def check_changes(
-    project_root: Optional[Union[str, Path]] = None,
-    timeout: Optional[float] = None,
+def _zero_dirty_result(
+    root: Path,
+    result: Dict[str, Any],
+    directory: Optional[str],
+    max_files: Optional[int],
+    cands: List[Path],
+    cand_reused: bool,
 ) -> Dict[str, Any]:
-    """
-    Python-primary `check-changes` (mandatory workflow entrypoint).
+    """Warm path: nothing changed — reuse persisted summaries, no payload load."""
+    result.update({"files_parsed": 0, "edges_persisted": 0, "languages_parsed": {}, "zero_dirty_fast_path": True})
+    meta = cs.load_meta(root, keys=("_acs_summary", "_cycles"))
+    acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
+    cycles = meta.get("_cycles") if isinstance(meta.get("_cycles"), dict) else {}
+    if not acs or str(acs.get("acs_version") or "") < "1.3" or "reason_code_counts" not in acs:
+        cache = ic.load_cache(root)
+        acs = ic.ensure_acs_summary_persisted(cache, root) or {}
+        cycles = cache.get("_cycles") or {}
+    result["acs"] = {
+        "acs_version": acs.get("acs_version"),
+        "actionable_low_conf_edges": acs.get("actionable_low_conf_edges"),
+        "low_conf_edges": acs.get("low_conf_edges"),
+        "reason_code_counts": acs.get("reason_code_counts"),
+    }
+    result["cycles"] = {"count": len(cycles.get("sccs") or []), "reused": True, "fast_path": True}
+    lib_path = root / "library.md"
+    if lib_path.is_file():
+        result["library"] = {"success": True, "path": str(lib_path), "skipped": True, "reason": "zero_dirty_reuse"}
+    else:
+        from .library import write_library_md
 
-    - Uses import_cache.compute_files_needing_reparse + barrel stale for O(changed) detection.
-    - Updates health (Yellow via pure upsert_entry), pending_updates, journal.
-    - Returns structured result (agent-friendly; matches/extends MCP shape).
-    - Acquires project lock. Directory scoping via monitored_paths + future dir param.
-    - This is a core extraction: no shell required for the change-detection + state update loop.
+        result["library"] = write_library_md(root, ic.load_cache(root))
+    from .map_index import ensure_map_index
+
+    result["map_index"] = ensure_map_index(root, cache=None, reuse_if_present=True)
+    result["health_stubs_seeded"] = 0
+    result["persist_pipeline_exercised"] = True
+    _finish_coverage(root, result, directory, max_files, zero_dirty=True, acs_version=acs.get("acs_version"))
+    _save_scope_meta(root, result, directory, cands, reused=cand_reused)
+    result["success"] = True
+    return result
+
+
+def update_maps(
+    project_root: Optional[PathArg] = None,
+    full: bool = False,
+    directory: Optional[str] = None,
+    use_python_primary: bool = True,
+    verbose: bool = False,
+    max_files: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Rebuild the dependency map (incremental unless ``full``)."""
+    try:
+        root = resolve_root(project_root)
+    except ProjectRootError as exc:
+        return _fail({"project_root": str(project_root), "library_facade": True}, exc)
+    res = dict(run_full_update(
+        root=root, force_full=full, verbose=verbose, directory=directory, max_files=max_files,
+    ))
+    res["library_facade"] = True
+    res["scoped_directory"] = directory
+    res["project_root"] = str(root)
+    return res
+
+
+# =============================================================================
+# Workflow: check_changes / record_change / record_deletion / mark_green
+# =============================================================================
+
+# Files Wikifier itself rewrites; never watched or batch-recorded.
+_ARTIFACT_NAMES = frozenset({"file_health.json", "file_health.md", "pending_updates.md", "library.md"})
+_ARTIFACT_PREFIXES = ("journal/", ".wikifier_staging/")
+
+
+def _is_wikifier_artifact(rel: str) -> bool:
+    return rel in _ARTIFACT_NAMES or rel.startswith(_ARTIFACT_PREFIXES)
+
+
+def _watch_candidates(root: Path, entries: Optional[Dict[str, Any]] = None) -> List[Path]:
+    """Files check_changes watches, deduplicated:
+
+    - every file on the dependency map (import-cache keys);
+    - every file with a trusted baseline (anything ever marked Green);
+    - monitored_paths.txt entries: files of any type, parseable sources under
+      directories (bare ``.`` walks the whole project).
+
+    monitored_paths.txt only adds to the set — a narrow list can no longer hide
+    edits to mapped or Green files. Wikifier's own artifacts are never watched.
     """
-    root = _get_effective_root(project_root)
+    seen: Dict[str, Path] = {}
+
+    def add(path: Path) -> None:
+        resolved = path.resolve()
+        try:
+            if _is_wikifier_artifact(resolved.relative_to(root).as_posix()):
+                return
+        except ValueError:
+            return
+        seen.setdefault(str(resolved), resolved)
+
+    monitored = health_mod.scope._read_monitored_rel_roots(root)
+    if monitored == ["."]:
+        for path in collect_candidate_source_files(root, use_map_paths=False, use_monitored=False):
+            add(Path(path))
+    else:
+        for entry in monitored:
+            try:
+                rel = to_rel(root, entry)
+            except ProjectPathError:
+                continue
+            path = root / rel
+            if path.is_file():
+                add(path)
+            elif path.is_dir():
+                for found in collect_candidate_source_files(root, directory=rel):
+                    add(Path(found))
+    for rel in ic.load_mtime_index(root) or {}:
+        if not str(rel).startswith("_") and (root / rel).is_file():
+            add(root / rel)
+    if entries is None:
+        entries = health_mod.load_health(root).get("entries", {})
+    for rel, entry in entries.items():
+        if isinstance(entry, dict) and entry.get("source_content_hash") and (root / rel).is_file():
+            add(root / rel)
+    return list(seen.values())
+
+
+def _check_changes_locked(root: Path, result: Dict[str, Any]) -> None:
+    max_dirty = max(1, min(int(os.environ.get("WIKIFIER_CHECK_CHANGES_MAX", "2000") or "2000"), 50000))
+    max_ghosts = max(1, min(int(os.environ.get("WIKIFIER_CHECK_CHANGES_GHOST_MAX", "200") or "200"), 10000))
+
+    health = health_mod.load_health(root)
+    entries = health.setdefault("entries", {})
+    candidates = _watch_candidates(root, entries)
+    # Files with a trusted baseline are compared against the mtime recorded with
+    # that baseline, not the parse cache: update-maps advances the parse cache, so
+    # an edit followed by update-maps would otherwise never be seen here.
+    # Files without a baseline (map-first stubs, untracked) use the parse cache.
+    parse_dirty = set(ic.compute_files_needing_reparse(root, candidates, full_rebuild=False))
+    dirty: List[Path] = []
+    for path in candidates:
+        if not _is_inside(root, path):
+            continue
+        entry = entries.get(to_rel(root, path)) or {}
+        if entry.get("source_content_hash"):
+            if entry.get("source_mtime_ns") != health_mod.source_mtime_ns(path):
+                dirty.append(path)
+        elif path in parse_dirty:
+            dirty.append(path)
+    dirty_truncated = len(dirty) > max_dirty
+
+    flagged: List[tuple] = []
+    content_dirty_rels: List[str] = []
+    skipped_unchanged = 0
+    baseline_touched = False
+    for path in dirty[:max_dirty]:
+        rel = to_rel(root, path)
+        entry = entries.get(rel) or {}
+        verdict = health_mod.classify_content_dirty(path, entry.get("source_content_hash"))
+        if not verdict.get("content_dirty"):
+            skipped_unchanged += 1
+            if rel in entries and verdict.get("reason") == "content_unchanged":
+                # Touched but identical: remember the mtime so it is not re-hashed.
+                entries[rel]["source_mtime_ns"] = health_mod.source_mtime_ns(path)
+                baseline_touched = True
+            continue
+        content_dirty_rels.append(rel)
+        status = str(entry.get("status") or "")
+        already_flagged = ("🟡" in status and not health_mod.summary._is_map_first_stub_entry(entry)) or "🔴" in status
+        if already_flagged:
+            continue
+        reason = (
+            "content changed since last mark-green (check-changes)"
+            if verdict.get("reason") == "content_changed"
+            else "content change with no trusted baseline (check-changes)"
+        )
+        flagged.append((rel, YELLOW, reason))
+
+    written = health_mod.upsert_entries_batch(root, flagged, health_data=health) if flagged else 0
+    if baseline_touched and not written:
+        health_mod._do_save_health(root, health)
+    if flagged:
+        for rel, _status, reason in flagged:
+            health_mod._do_add_to_pending(root, rel, "Content change detected — review, refresh wiki, then mark-green")
+            journal_mod.append_entry(root, "auto-detected", rel, reason)
+
+    barrel_marked = 0
+    if content_dirty_rels:
+        barrel_meta = cs.load_meta(root, keys=("_barrel_resolutions", "_barrel_file_index"))
+        if barrel_meta:
+            reports = ic.get_barrel_invalidation_reports(barrel_meta, root, changed_files=content_dirty_rels) or []
+            current = health_mod.load_health(root).get("entries", {})
+            reports = [
+                r for r in reports
+                if r.get("importer") and "🔴" not in str((current.get(r["importer"]) or {}).get("status") or "")
+            ]
+            barrel_marked = health_mod.apply_barrel_invalidation_reports(root, reports)
+        result["barrel_invalidation_summary"] = ic.get_barrel_cache_summary(barrel_meta or {}) or {}
+
+    watched = {to_rel(root, p) for p in candidates if _is_inside(root, p)}
+    pruned = health_mod.prune_pending_to_monitored(root, drop_auto_detected=False, keep=watched)
+    result["pending_pruned"] = pruned.get("removed", 0)
+
+    ghosts_marked = 0
+    for ghost in health_mod.find_ghost_entries(root)[:max_ghosts]:
+        health_mod._do_upsert_entry(root, ghost, RED, "DELETED — path missing on disk (check-changes)")
+        health_mod._do_add_to_pending(root, ghost, "File missing on disk — run record-deletion or restore it")
+        ghosts_marked += 1
+
+    message = f"check_changes: {len(flagged)} file(s) newly flagged Yellow"
+    if skipped_unchanged:
+        message += f", {skipped_unchanged} touched-but-unchanged skipped"
+    if barrel_marked:
+        message += f", {barrel_marked} importer(s) flagged via barrel re-exports"
+    if ghosts_marked:
+        message += f", {ghosts_marked} missing file(s) marked Red"
+    if dirty_truncated:
+        message += f". Dirty set truncated to {max_dirty} of {len(dirty)} (WIKIFIER_CHECK_CHANGES_MAX)"
+    result.update({
+        "success": True,
+        "changes_detected": len(flagged),
+        "content_dirty": len(content_dirty_rels),
+        "changed_files": [rel for rel, _, _ in flagged][:50],
+        "dirty_total": len(dirty),
+        "dirty_truncated": dirty_truncated,
+        "max_dirty": max_dirty,
+        "ghosts_marked": ghosts_marked,
+        "barrel_importers_marked": barrel_marked,
+        "skipped_mtime_only": skipped_unchanged,
+        "content_honest": True,
+        "message": message + ".",
+    })
+
+
+def _is_inside(root: Path, path: Path) -> bool:
+    try:
+        Path(path).resolve().relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def check_changes(project_root: Optional[PathArg] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
+    """Detect content changes under monitored_paths and flag them Yellow.
+
+    Content-honest: an mtime touch with identical bytes (vs the mark-green
+    baseline) is not a change. Already-flagged rows are not re-journaled.
+    Missing files become Red; importers of a changed barrel become Yellow.
+    """
     result: Dict[str, Any] = {
         "success": False,
-        "project_root": str(root),
+        "project_root": str(project_root or ""),
         "changes_detected": 0,
         "message": "",
-        "recommendation": "Read file_health.md / health(format='json') + pending_updates.md. Prioritize 🔴 → 🟡.",
+        "recommendation": "Read health(format='json') + pending_updates.md. Prioritize 🔴 → 🟡.",
         "barrel_invalidation_summary": {},
-        "rich_auto_yellow_via": "Python check_changes + BRC (import_cache)",
     }
     try:
-        lock_ctx = _project_lock(root, timeout=timeout)
-        with lock_ctx:
-            # Leverage existing rich Python dirty + barrel logic (already extracted in prior waves)
-            cands: List[Path] = []
-            for mr in _get_monitored_roots(root):
-                try:
-                    # Reuse the richer pruned collector (full EXCLUDES list, same as run_full_update path)
-                    # for extraction fidelity + no logic dup. monitored roots still honored.
-                    cands.extend(_collect_candidate_source_files(mr))
-                except Exception:
-                    continue
-
-            dirty: List[Path] = []
-            if _ic_mod is not None:
-                try:
-                    dirty = _ic_mod.compute_files_needing_reparse(root, cands, full_rebuild=False) or []
-                    # M5 external dogfood guard: never let outside-root paths (from bad cands/monitored/cwd mix)
-                    # into dirty or health. This + health.py prune prevents pollution in alt/consistency/cloned targets.
-                    root_res = root.resolve()
-                    dirty = [p for p in (dirty or []) if str(Path(p).resolve()).startswith(str(root_res))]
-                    # Warm path: do not hydrate multi-MB pair payloads when nothing is dirty.
-                    barrel_cache: Dict[str, Any] = {}
-                    if dirty:
-                        try:
-                            from . import cache_store as _cs_cc
-                            barrel_cache = _cs_cc.load_meta(
-                                root,
-                                keys=(
-                                    "_barrel_resolutions",
-                                    "_barrel_file_index",
-                                    "_barrel_invalidation_log",
-                                ),
-                            ) or {}
-                        except Exception:
-                            barrel_cache = {}
-                        if not (barrel_cache.get("_barrel_resolutions") or barrel_cache.get("_barrel_file_index")):
-                            try:
-                                barrel_cache = _ic_mod.load_cache(root) or {}
-                            except Exception:
-                                barrel_cache = {}
-                        barrel_stale = _ic_mod.invalidate_stale_barrel_entries(
-                            barrel_cache, root, changed_files=[str(p) for p in dirty]
-                        ) or []
-                        seen = {str(p.resolve()) for p in dirty}
-                        for rel in barrel_stale:
-                            if rel:
-                                pp = (root / rel).resolve()
-                                if pp.exists() and str(pp) not in seen and str(pp).startswith(str(root_res)):
-                                    dirty.append(pp)
-                                    seen.add(str(pp))
-                    try:
-                        result["barrel_invalidation_summary"] = _ic_mod.get_barrel_cache_summary(barrel_cache) or {}
-                    except Exception:
-                        result["barrel_invalidation_summary"] = {}
-                except Exception:
-                    pass
-
-            # Cap is configurable: WIKIFIER_CHECK_CHANGES_MAX (default 2000; was hard 200).
-            # Huge monorepos with monitored_paths=. can still thrash — prefer lean monitored paths.
-            try:
-                max_dirty = int(os.environ.get("WIKIFIER_CHECK_CHANGES_MAX", "2000") or "2000")
-            except ValueError:
-                max_dirty = 2000
-            max_dirty = max(1, min(max_dirty, 50000))
-            try:
-                max_ghosts = int(os.environ.get("WIKIFIER_CHECK_CHANGES_GHOST_MAX", "200") or "200")
-            except ValueError:
-                max_ghosts = 200
-            max_ghosts = max(1, min(max_ghosts, 10000))
-
-            dirty_list = list(dirty or [])
-            dirty_truncated = len(dirty_list) > max_dirty
-            dirty_batch = dirty_list[:max_dirty]
-
-            changed_count = 0
-            skipped_mtime_only = 0
-            seeded_baselines = 0
-            ghosts_marked = 0
-            if _health_mod is None:
-                result["message"] = "check_changes: health module unavailable"
-            if _health_mod is not None:
-                root_res = root.resolve()
-                # Prefer unlocked helpers while we already hold project lock
-                _upsert = getattr(_health_mod, "_do_upsert_entry", None) or _health_mod.upsert_entry
-                classify = getattr(_health_mod, "classify_content_dirty", None)
-                compute_src = getattr(_health_mod, "compute_source_content_hash", None)
-                health_data = None
-                try:
-                    health_data = _health_mod.load_health(root)
-                except Exception:
-                    health_data = {"entries": {}}
-                entries = health_data.setdefault("entries", {}) if isinstance(health_data, dict) else {}
-                health_dirty = False
-                yellow_batch = []
-                pending_batch = []
-                journal_batch = []
-                for p in dirty_batch:
-                    try:
-                        pr = Path(p).resolve()
-                        if not str(pr).startswith(str(root_res)):
-                            continue
-                        rel = str(pr.relative_to(root_res))
-                    except Exception:
-                        continue
-                    # Content-honest dirty: mtime candidates still filtered by source hash
-                    stored_hash = None
-                    ent = entries.get(rel) if isinstance(entries, dict) else None
-                    if isinstance(ent, dict):
-                        stored_hash = ent.get("source_content_hash")
-                    verdict = {"content_dirty": True, "reason": "no_classifier", "seed_baseline": False, "hash": None}
-                    if classify is not None:
-                        try:
-                            verdict = classify(pr, stored_hash)
-                        except Exception:
-                            pass
-                    elif compute_src is not None:
-                        try:
-                            live = compute_src(pr)
-                            if stored_hash and live and stored_hash == live:
-                                verdict = {"content_dirty": False, "reason": "content_unchanged", "seed_baseline": False, "hash": live}
-                            elif not stored_hash and live:
-                                # no baseline → dirty (do not seed post-edit hash)
-                                verdict = {"content_dirty": True, "reason": "no_baseline", "seed_baseline": False, "hash": live}
-                            elif live and stored_hash and stored_hash != live:
-                                verdict = {"content_dirty": True, "reason": "content_changed", "seed_baseline": False, "hash": live}
-                        except Exception:
-                            pass
-
-                    if not verdict.get("content_dirty") and verdict.get("reason") == "content_unchanged":
-                        skipped_mtime_only += 1
-                        continue
-                    # Content changed, no baseline, or unclassifiable: Yellow.
-                    # Never write source_content_hash here — only mark_green sets the
-                    # trusted baseline (avoids seeding post-edit bytes and staying Green).
-                    reason = (
-                        "content changed since last trusted baseline (check_changes content-honest)"
-                        if verdict.get("reason") == "content_changed"
-                        else "content change or no baseline (check_changes content-honest auto-detect)"
-                    )
-                    yellow_batch.append((rel, "🟡 Yellow", reason))
-                    pending_batch.append((rel, "Content change auto-detected — review and run mark-green after wiki update"))
-                    journal_batch.append((rel, reason))
-                    changed_count += 1
-                if yellow_batch:
-                    batch_fn = getattr(_health_mod, "upsert_entries_batch", None)
-                    if batch_fn is not None:
-                        batch_fn(root, yellow_batch, health_data=health_data)
-                        health_dirty = False
-                    else:
-                        for rel, st, reason in yellow_batch:
-                            _upsert(root, rel, st, reason)
-                    for rel, msg in pending_batch:
-                        _add_to_pending(root, rel, msg)
-                    for rel, reason in journal_batch:
-                        _ensure_journal_entry(root, "auto-detected", rel, reason)
-                    try:
-                        health_data = _health_mod.load_health(root)
-                        entries = health_data.setdefault("entries", {})
-                    except Exception:
-                        pass
-                # Keep pending queue aligned with lean monitored_paths (no flood outside scope)
-                if hasattr(_health_mod, "prune_pending_to_monitored"):
-                    try:
-                        pr = _health_mod.prune_pending_to_monitored(root)
-                        result["pending_pruned"] = pr.get("removed", 0)
-                    except Exception:
-                        pass
-
-                # G7: surface ghost health entries (tracked path missing on disk, not already DELETED)
-                try:
-                    if hasattr(_health_mod, "find_ghost_entries"):
-                        ghosts_all = _health_mod.find_ghost_entries(root) or []
-                        for g in ghosts_all[:max_ghosts]:
-                            _upsert(
-                                root, g, "🔴 Red",
-                                "DELETED — path missing on disk (check_changes ghost detection)"
-                            )
-                            _add_to_pending(
-                                root, g,
-                                "File missing on disk — run record-deletion or archival cleanup"
-                            )
-                            ghosts_marked += 1
-                except Exception:
-                    pass
-
-            msg = (
-                f"Python-primary check_changes complete: {changed_count} files marked/updated"
-                + (f", {skipped_mtime_only} mtime-only skip(s)" if skipped_mtime_only else "")
-                + (f", {seeded_baselines} content baseline(s) seeded" if seeded_baselines else "")
-                + (f", {ghosts_marked} ghost(s) marked Red" if ghosts_marked else "")
-                + ". Health + pending + journal touched."
-            )
-            if dirty_truncated:
-                msg += (
-                    f" Note: dirty set truncated to {max_dirty} of {len(dirty_list)} "
-                    f"(set WIKIFIER_CHECK_CHANGES_MAX or lean monitored_paths.txt)."
-                )
-            result.update({
-                "success": True,
-                "changes_detected": changed_count,
-                "dirty_total": len(dirty_list),
-                "dirty_truncated": dirty_truncated,
-                "max_dirty": max_dirty,
-                "ghosts_marked": ghosts_marked,
-                "skipped_mtime_only": skipped_mtime_only,
-                "seeded_content_baselines": seeded_baselines,
-                "content_honest": True,
-                "message": msg,
-            })
-    except Exception as e:
-        if locking is not None and isinstance(e, getattr(locking, "LockTimeoutError", ())):
-            return _lock_timeout_result(result, e)
-        result["error"] = str(e)
-        result["message"] = f"check_changes partial failure: {e}"
+        root = resolve_root(project_root)
+        result["project_root"] = str(root)
+        with locking.file_lock(root, timeout=timeout):
+            _check_changes_locked(root, result)
+    except Exception as exc:
+        _fail(result, exc)
+        result["message"] = f"check_changes failed: {result['error']}"
     return result
 
 
 def record_change(
     file: str,
     reason: str,
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     timeout: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """
-    Python-primary `record-change` (MANDATORY after every agent edit).
-
-    Updates health (Yellow), appends pending_updates.md, writes journal entry.
-    Lock-protected. Structured return. Direct callable without shell.
-    This extracts the core of cmd_record_change + supporting sh fns into the library.
-    """
-    root = _get_effective_root(project_root)
-    result: Dict[str, Any] = {
-        "success": False,
-        "file": file,
-        "project_root": str(root),
-        "reason": reason or "No reason provided.",
-    }
-    if not file or not isinstance(file, str):
-        result["error"] = "file (str) is required"
-        return result
+    """Record why ``file`` was edited (journal + Yellow + pending). Required after edits."""
+    reason = " ".join(str(reason or "").split()) or "No reason provided."
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(project_root or ""), "reason": reason}
     try:
-        lock_ctx = _project_lock(root, timeout=timeout)
-        with lock_ctx:
-            rel = file
-            try:
-                pp = Path(file)
-                if pp.is_absolute() or (root / file).exists():
-                    rel = str(pp.resolve().relative_to(root)) if pp.is_absolute() else file
-            except Exception:
-                pass
-            if _health_mod is not None:
-                _upsert = getattr(_health_mod, "_do_upsert_entry", None) or _health_mod.upsert_entry
-                _upsert(root, rel, "🟡 Yellow", reason or "Agent/LLM edit recorded")
-                _rme = getattr(_health_mod, "_do_record_meaningful_edit", None) or getattr(
-                    _health_mod, "record_meaningful_edit", None
-                )
-                if _rme is not None:
-                    try:
-                        _rme(root, rel, reason or "Agent/LLM edit recorded")
-                    except Exception:
-                        pass
-            _add_to_pending(root, rel, f"LLM/agent edit — {reason}")
-            _ensure_journal_entry(root, "record-change", rel, reason or "No reason provided.")
-            result.update({
-                "success": True,
-                "needs_mark_green": True,
-                "message": "✅ Recorded semantic change (Python primary). Health=🟡, pending + journal updated. Run mark_green after wiki refresh.",
-            })
-    except Exception as e:
-        if locking is not None and isinstance(e, getattr(locking, "LockTimeoutError", ())):
-            return _lock_timeout_result(result, e)
-        result["error"] = str(e)
+        root = resolve_root(project_root)
+        result["project_root"] = str(root)
+        rel = to_rel(root, file)
+        result["file"] = rel
+        if not (root / rel).exists():
+            raise FileNotFoundError(f"file not found: {rel} (use record_deletion for removed files)")
+        with locking.file_lock(root, timeout=timeout):
+            journaled = journal_mod.append_entry(root, "record-change", rel, reason)
+            health_mod._do_record_meaningful_edit(root, rel, reason)
+            health_mod._do_add_to_pending(root, rel, f"LLM/agent edit — {reason}")
+        result.update({
+            "success": True,
+            "journaled": journaled,
+            "duplicate_skipped": not journaled,
+            "needs_mark_green": True,
+            "message": f"Recorded change to {rel}: Yellow, pending + journal updated. Refresh its wiki, then mark_green.",
+        })
+    except Exception as exc:
+        _fail(result, exc)
     return result
 
 
-def record_deletion(file: str, reason: str, project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
-    """Python-primary record_deletion (symmetric to record_change).
-
-    G7: marks 🔴 DELETED, pending + journal, and best-effort prunes barrel cache
-    references so deleted paths do not keep invalidating importers forever.
-    Rejects flag-like paths (`--help`) so CLI misuse cannot pollute health.
-    """
-    root = _get_effective_root(project_root)
-    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root), "action": "deletion"}
-    if not file or str(file).startswith("-") or str(file) in ("--help", "-h", "help"):
-        result["error"] = "file must be a project path, not a flag/empty string"
-        return result
+def record_deletion(
+    file: str,
+    reason: str,
+    project_root: Optional[PathArg] = None,
+    timeout: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Record an intentional deletion: Red audit row, pending, journal, graph cleanup."""
+    reason = " ".join(str(reason or "").split()) or "No reason provided."
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(project_root or ""), "action": "deletion"}
     try:
-        lock_ctx = (locking.file_lock(root) if locking is not None else _nullcontext())
-        with lock_ctx:
-            rel = file
-            try:
-                pp = Path(file)
-                if pp.is_absolute():
-                    rel = str(pp.resolve().relative_to(root.resolve()))
-            except Exception:
-                rel = file
-            if _health_mod is not None:
-                # Prefer unlocked upsert when we already hold the project lock.
-                if hasattr(_health_mod, "_do_upsert_entry"):
-                    _health_mod._do_upsert_entry(root, rel, "🔴 Red", f"DELETED — {reason}")
-                else:
-                    _health_mod.upsert_entry(root, rel, "🔴 Red", f"DELETED — {reason}")
-            _add_to_pending(root, rel, f"File was deleted. Consider wiki archival. {reason}")
-            _ensure_journal_entry(root, "record-deletion", rel, reason or "No reason provided.")
-            prune_stats: Dict[str, Any] = {}
-            if _ic_mod is not None:
-                try:
-                    prune_stats = _ic_mod.prune_barrel_resolutions(
-                        root, deleted_files=[rel]
-                    ) or {}
-                except Exception as pe:
-                    prune_stats = {"error": str(pe)}
-            result.update({
-                "success": True,
-                "file": rel,
-                "message": "Recorded deletion (Python primary).",
-                "barrel_prune": prune_stats,
-            })
-    except Exception as e:
-        result["error"] = str(e)
+        if not file or str(file).startswith("-"):
+            raise ProjectPathError("file must be a project path, not a flag or empty string")
+        root = resolve_root(project_root)
+        result["project_root"] = str(root)
+        rel = to_rel(root, file)
+        result["file"] = rel
+        with locking.file_lock(root, timeout=timeout):
+            journal_mod.append_entry(root, "record-deletion", rel, reason)
+            health_mod._do_upsert_entry(root, rel, RED, f"DELETED — {reason}")
+            health_mod._do_add_to_pending(root, rel, f"File was deleted. Archive or remove its wiki. {reason}")
+            graph = {"removed_entry": False}
+            if cs.backend_name(root) != "none":
+                cache = ic.load_cache(root)
+                graph = ic.remove_file_from_graph(cache, rel)
+                if graph["removed_entry"]:
+                    ic.save_cache(root, cache)
+        result.update({
+            "success": True,
+            "still_exists_on_disk": (root / rel).exists(),
+            "graph_cleanup": graph,
+            "barrel_prune": ic.prune_barrel_resolutions(root, deleted_files=[rel]) or {},
+            "message": f"Recorded deletion of {rel}.",
+        })
+    except Exception as exc:
+        _fail(result, exc)
     return result
 
 
 def mark_green(
     file: str,
     reason: str = "",
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     timeout: Optional[float] = None,
+    force: bool = False,
 ) -> Dict[str, Any]:
-    """Python-primary mark_green (completes the edit→record→wiki→green ritual).
+    """Mark ``file`` Green after its wiki is refreshed (captures content baselines).
 
-    Captures source_content_hash baseline (via health.mark_green when available)
-    so subsequent mtime-only thrash does not re-Yellow content-clean files.
+    The wiki is first checked against the code (see ``health_pkg.verify``): if
+    the public surface changed and the wiki does not reflect it, the call fails
+    with ``error_type: "WikiVerificationError"`` and ``issues``. ``force=True``
+    overrides with an explicit ``reason`` and records ``verification: "forced"``.
     """
-    root = _get_effective_root(project_root)
-    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(root)}
-    rsn = reason or "Summary updated and verified accurate."
+    explicit = " ".join(str(reason or "").split())
+    reason = explicit or "Summary updated and verified accurate."
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(project_root or "")}
     try:
-        lock_ctx = _project_lock(root, timeout=timeout)
-        with lock_ctx:
-            if _health_mod is not None and hasattr(_health_mod, "mark_green"):
-                # Prefer health.mark_green (wiki hash + source_content_hash)
-                if hasattr(_health_mod, "_do_mark_green"):
-                    _health_mod._do_mark_green(root, file, rsn)
-                else:
-                    _health_mod.mark_green(root, file, rsn)
-            elif _health_mod is not None:
-                _health_mod.upsert_entry(root, file, "🟢 Green", rsn)
-                # Best-effort source baseline without full health.mark_green
-                try:
-                    compute = getattr(_health_mod, "compute_source_content_hash", None)
-                    if compute:
-                        src = root / file
-                        h = compute(src if src.is_file() else Path(file))
-                        if h:
-                            data = _health_mod.load_health(root)
-                            ent = data.setdefault("entries", {}).get(file) or {}
-                            if isinstance(ent, dict):
-                                ent["status"] = "🟢 Green"
-                                ent["reason"] = rsn
-                                ent["source_content_hash"] = h
-                                data["entries"][file] = ent
-                                _health_mod.save_health(root, data)
-                except Exception:
-                    pass
-            _remove_from_pending(root, file)
-            result.update({"success": True, "message": f"Marked 🟢 Green (Python primary). {rsn}"})
-    except Exception as e:
-        if locking is not None and isinstance(e, getattr(locking, "LockTimeoutError", ())):
-            return _lock_timeout_result(result, e)
-        result["error"] = str(e)
+        root = resolve_root(project_root)
+        result["project_root"] = str(root)
+        rel = to_rel(root, file)
+        result["file"] = rel
+        if force and not explicit:
+            raise ValueError("force=True needs a reason explaining why the wiki is still accurate")
+        with locking.file_lock(root, timeout=timeout):
+            check = health_mod._do_mark_green_checked(root, rel, reason, force=force)
+        result.update({
+            "success": True,
+            "verification": check["verification"],
+            "warnings": check["warnings"],
+            "symbol_coverage": check["coverage"],
+            "message": f"Marked {rel} 🟢 Green ({check['verification']}). {reason}",
+        })
+        if check["verification"] == health_mod.verify.FORCED:
+            result["overridden_issues"] = check["issues"]
+    except health_mod.WikiVerificationError as exc:
+        _fail(result, exc)
+        result.update({
+            "issues": exc.check["issues"],
+            "warnings": exc.check["warnings"],
+            "wiki_file": exc.check["wiki_file"],
+            "hint": "Update the wiki for the listed symbols, then mark_green again "
+                    "(or force=True with a reason if the wiki is already accurate).",
+        })
+    except Exception as exc:
+        _fail(result, exc)
     return result
 
 
-def suggest_next_actions(
-    project_root: Optional[Union[str, Path]] = None,
-    directory: Optional[str] = None,
-    format: Literal["text", "json"] = "text"
-) -> Union[str, Dict[str, Any]]:
-    """
-    Python-primary suggest_next_actions (covers mandatory guidance).
+def _batch_skip(rel: str) -> bool:
+    """Wikifier artifacts and wiki files are documentation, not changes to record."""
+    return _is_wikifier_artifact(rel) or rel.endswith(".wiki.md")
 
-    Uses health summary + import_cache ACS low-conf integration for actionable output.
-    Structured in json; text for human. Cross-refs protocol.
 
-    G3: Prioritize 🔴 then 🟡 only — never suggest re-wiki of green or full-tree
-    re-summarize. G4: ACS suggestions use actionable_low_conf_edges (excludes
-    stdlib/external bare noise).
+def _reason_for(rel: str, reasons: Dict[str, str], used: set) -> Optional[str]:
+    """Exact path first, then the longest matching glob or ``dir/`` prefix."""
+    if reasons.get(rel):
+        used.add(rel)
+        return reasons[rel]
+    best = None
+    for pattern, why in reasons.items():
+        if not why:
+            continue
+        hit = (pattern.endswith("/") and rel.startswith(pattern)) or (
+            any(ch in pattern for ch in "*?[") and fnmatch.fnmatchcase(rel, pattern)
+        )
+        if hit and (best is None or len(pattern) > len(best)):
+            best = pattern
+    if best is None:
+        return None
+    used.add(best)
+    return reasons[best]
+
+
+def record_changes(
+    reasons: Optional[Dict[str, str]] = None,
+    default_reason: Optional[str] = None,
+    since: Optional[str] = None,
+    green: bool = False,
+    dry_run: bool = False,
+    project_root: Optional[PathArg] = None,
+    timeout: Optional[float] = None,
+    only: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Record every file git reports as changed, in one call.
+
+    ``reasons`` maps a path, a glob (``tests/*.py``) or a ``dir/`` prefix to a
+    reason; exact paths win, then the longest pattern. ``default_reason`` covers
+    the rest. If any file is left without a reason nothing is written and the
+    result lists ``missing_reasons`` with a fill-in ``template`` — reasons stay
+    specific. Deleted and renamed-away files go through ``record_deletion``.
+
+    ``green=True`` then marks each changed file Green through the normal
+    wiki verification; files whose wiki does not match stay Yellow and are listed
+    in ``verification_failed``. Deleted files whose wiki is gone are retired from
+    the health matrix (the journal keeps the deletion).
+
+    ``only`` limits the batch to matching paths (same path / glob / ``dir/``
+    rules) — for a working tree that also holds changes you did not make.
     """
-    root = _get_effective_root(project_root)
+    from .gitchanges import changed_files
+
+    result: Dict[str, Any] = {"success": False, "project_root": str(project_root or ""), "dry_run": dry_run}
     try:
-        red = yellow = stub_y = action_y = 0
-        health_sum: Dict[str, Any] = {}
-        if _health_mod is not None:
-            health_sum = _health_mod.get_summary(root, directory) or {}
-            red = int(health_sum.get("red", 0) or 0)
-            yellow = int(health_sum.get("yellow", 0) or 0)
-            stub_y = int(health_sum.get("stub_yellow", 0) or 0)
-            action_y = int(health_sum.get("actionable_yellow", yellow - stub_y) or 0)
+        root = resolve_root(project_root)
+        result["project_root"] = str(root)
+        reasons = {str(k).strip(): " ".join(str(v or "").split()) for k, v in (reasons or {}).items()}
+        default_reason = " ".join(str(default_reason or "").split()) or None
+        diff = changed_files(root, since)
+        result["base"] = diff["base"]
 
+        plan: List[Dict[str, Any]] = []
+        skipped: List[str] = []
+        used: set = set()
+
+        only_patterns = {str(p).strip(): "x" for p in (only or []) if str(p).strip()}
+
+        def add(rel: str, action: str, status: str, note: str = "") -> None:
+            if only_patterns and _reason_for(rel, only_patterns, set()) is None:
+                return
+            if _batch_skip(rel) or (action == "change" and not (root / rel).is_file()):
+                skipped.append(rel)
+                return
+            why = _reason_for(rel, reasons, used) or default_reason
+            plan.append({"file": rel, "action": action, "git_status": status,
+                         "reason": (why + note) if why else None})
+
+        for change in diff["changes"]:
+            if change["status"] == "deleted":
+                add(change["path"], "deletion", "deleted")
+            else:
+                add(change["path"], "change", change["status"])
+            if change["status"] == "renamed":
+                add(change["old_path"], "deletion", "renamed", f" (renamed to {change['path']})")
+
+        missing = [p["file"] for p in plan if not p["reason"]]
+        result.update({
+            "files": len(plan),
+            "plan": plan,
+            "skipped": skipped,
+            "unused_reasons": sorted(k for k in reasons if k not in used),
+            "missing_reasons": missing,
+        })
+        if missing:
+            result["template"] = {rel: "" for rel in missing}
+        if dry_run:
+            result["success"] = True
+            result["message"] = f"{len(plan)} file(s) would be recorded; {len(missing)} without a reason."
+            return result
+        if missing:
+            raise ValueError(
+                f"{len(missing)} changed file(s) have no reason; pass reasons (path or glob → reason) "
+                "or default_reason. Nothing was recorded."
+            )
+
+        recorded: List[str] = []
+        deleted: List[str] = []
+        errors: List[Dict[str, Any]] = []
+        greened: List[Dict[str, Any]] = []
+        failed: List[Dict[str, Any]] = []
+        retired: List[str] = []
+        with locking.file_lock(root, timeout=timeout):
+            for item in plan:
+                fn = record_deletion if item["action"] == "deletion" else record_change
+                res = fn(item["file"], item["reason"], project_root=root)
+                if not res.get("success"):
+                    errors.append({"file": item["file"], "error": res.get("error")})
+                elif item["action"] == "deletion":
+                    deleted.append(res["file"])
+                else:
+                    recorded.append(res["file"])
+            if green:
+                for rel in recorded:
+                    reason = next(p["reason"] for p in plan if p["file"] == rel)
+                    res = mark_green(rel, f"Wiki checked after: {reason}", project_root=root)
+                    if res.get("success"):
+                        greened.append({"file": rel, "verification": res["verification"]})
+                    else:
+                        failed.append({"file": rel, "error_type": res.get("error_type"),
+                                       "issues": res.get("issues"), "error": res.get("error")})
+                health = health_mod.load_health(root)
+                entries = health.get("entries", {})
+                for rel in deleted:
+                    if rel in entries and not (root / rel).exists() and health_mod._find_existing_wiki_file(root, rel) is None:
+                        entries.pop(rel, None)
+                        health_mod._do_remove_from_pending(root, rel)
+                        retired.append(rel)
+                if retired:
+                    health_mod._do_save_health(root, health)
+        result.update({
+            "success": not errors,
+            "recorded": recorded,
+            "deleted": deleted,
+            "errors": errors,
+            "marked_green": greened,
+            "verification_failed": failed,
+            "retired_deletions": retired,
+            "message": (
+                f"Recorded {len(recorded)} change(s) and {len(deleted)} deletion(s)"
+                + (f"; {len(greened)} marked Green, {len(failed)} need wiki updates" if green else "")
+                + (f"; {len(errors)} error(s)" if errors else "") + "."
+            ),
+        })
+    except Exception as exc:
+        _fail(result, exc)
+    return result
+
+
+def verify_wikis(
+    project_root: Optional[PathArg] = None,
+    directory: Optional[str] = None,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    """Audit Green files' wikis against their code (read-only): failing files,
+    Green breakdown by verification kind, average symbol coverage."""
+    result: Dict[str, Any] = {"success": False, "project_root": str(project_root or "")}
+    try:
+        root = resolve_root(project_root)
+        result = health_mod.verify_wikis(root, directory=directory, limit=limit)
+        result["project_root"] = str(root)
+    except Exception as exc:
+        _fail(result, exc)
+    return result
+
+
+# =============================================================================
+# Lookup / guidance
+# =============================================================================
+
+def suggest_next_actions(
+    project_root: Optional[PathArg] = None,
+    directory: Optional[str] = None,
+    format: Literal["text", "json"] = "text",
+) -> Union[str, Dict[str, Any]]:
+    """Selective next steps: 🔴 then actionable 🟡 only, plus map/ACS hygiene."""
+    try:
+        root = resolve_root(project_root)
+        summary = health_mod.get_summary(root, directory)
+        red = int(summary.get("red", 0))
+        yellow = int(summary.get("yellow", 0))
+        stub_y = int(summary.get("stub_yellow", 0))
+        action_y = int(summary.get("actionable_yellow", 0))
         suggestions: List[str] = []
-        n = 1
-        if red > 0:
+        if red:
+            suggestions.append(f"Tackle the {red} 🔴 Red file(s) first. Do not re-wiki 🟢 Green files.")
+        if action_y:
             suggestions.append(
-                f"{n}. Tackle the {red} 🔴 Red file(s) first (get_files_needing_attention status=red). "
-                "Do not re-wiki 🟢 Green files."
+                f"Review {action_y} actionable 🟡 Yellow file(s): refresh the wiki for each, then mark-green."
             )
-            n += 1
-        if action_y > 0:
+        if stub_y and not action_y and not red:
             suggestions.append(
-                f"{n}. Review {action_y} *actionable* 🟡 Yellow file(s) "
-                "(content/record-change/barrel — not Initial stubs). "
-                "record-change → wiki that file → mark-green. Skip green."
+                f"Map-first OK: {stub_y} 🟡 Initial stubs mean 'on the map', not 'wiki this now'. "
+                "Write prose only when you edit a file."
             )
-            n += 1
-        if stub_y > 0 and action_y == 0 and red == 0:
-            suggestions.append(
-                f"{n}. Map-first OK: {stub_y} 🟡 Initial stubs mean \"on the map\", "
-                "NOT \"wiki this tree now\". Lookup via prepare_edit/get_file_wiki; "
-                "write prose only when you edit a file, then mark-green."
-            )
-            n += 1
-        elif stub_y > 0 and action_y > 0:
-            suggestions.append(
-                f"{n}. Ignore {stub_y} map-first stubs for bulk work; only actionable yellows need wiki."
-            )
-            n += 1
-        if red == 0 and yellow == 0:
-            suggestions.append(
-                f"{n}. Health is clean (no red/yellow). Do not re-summarize the tree; use the map for lookup only."
-            )
-            n += 1
-        # Scope hygiene
-        scope_warnings: List[str] = []
-        if _health_mod is not None and hasattr(_health_mod, "detect_scope_risks"):
-            try:
-                scope = _health_mod.detect_scope_risks(root) or {}
-                scope_warnings = list(scope.get("warnings") or [])
-                for w in scope_warnings[:2]:
-                    suggestions.append(f"{n}. SCOPE: {w}")
-                    n += 1
-            except Exception:
-                pass
-        suggestions.append(
-            f"{n}. Run `update_maps(directory=...)` only if imports/structure changed (not for wiki-only edits)."
-        )
-        n += 1
-        suggestions.append(
-            f"{n}. On yellow/red hotspots, prepare_edit(file) / dependents before editing callers."
-        )
-        n += 1
-        suggestions.append(
-            f"{n}. Long-horizon: `wikifier autonomous-status` before unattended daemon; "
-            "lean monitored_paths; never parent multi-repo folders as project_root."
-        )
+        elif stub_y and action_y:
+            suggestions.append(f"Ignore {stub_y} map-first stubs; only actionable yellows need wiki work.")
+        if not red and not yellow:
+            suggestions.append("Health is clean. Use the map for lookup; do not re-summarize the tree.")
+        scope = health_mod.detect_scope_risks(root)
+        scope_warnings = list(scope.get("warnings") or [])
+        suggestions.extend(f"SCOPE: {w}" for w in scope_warnings[:2])
 
+        meta = cs.load_meta(root, keys=("_acs_summary", "_map_coverage"))
+        acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
+        coverage = meta.get("_map_coverage") if isinstance(meta.get("_map_coverage"), dict) else {}
+        actionable = int(acs.get("actionable_low_conf_edges", 0) or 0)
+        raw_low = int(acs.get("low_conf_edges", 0) or 0)
+        remaining = int(coverage.get("files_remaining_dirty") or 0)
+        if coverage.get("complete") is False or remaining:
+            suggestions.append(
+                f"MAP INCOMPLETE ({remaining} files remaining): re-run update_maps with the same "
+                "scope until map_coverage.complete is true."
+            )
         acs_note = ""
-        actionable = 0
-        map_coverage: Dict[str, Any] = {}
-        if _ic_mod is not None:
-            try:
-                # Prefer light meta (sqlite) over full pair deserialize
-                try:
-                    from . import cache_store as cs
-                    meta = cs.load_meta(root, keys=("_acs_summary", "_map_coverage"))
-                    acs = meta.get("_acs_summary") if isinstance(meta.get("_acs_summary"), dict) else {}
-                    map_coverage = (
-                        meta.get("_map_coverage")
-                        if isinstance(meta.get("_map_coverage"), dict)
-                        else {}
-                    )
-                except Exception:
-                    acs = {}
-                if not acs or "actionable_low_conf_edges" not in acs:
-                    cache = _ic_mod.load_cache(root) or {}
-                    acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
-                    if not map_coverage and isinstance(cache.get("_map_coverage"), dict):
-                        map_coverage = cache["_map_coverage"]
-                actionable = int(acs.get("actionable_low_conf_edges", 0) or 0)
-                raw_low = int(acs.get("low_conf_edges", 0) or 0)
-                noise = int(acs.get("external_noise_edges", 0) or 0)
-                rem = int(map_coverage.get("files_remaining_dirty") or 0)
-                if map_coverage.get("complete") is False or rem > 0:
-                    n += 1
-                    suggestions.append(
-                        f"{n}. MAP INCOMPLETE: files_remaining_dirty={rem}, "
-                        f"complete={map_coverage.get('complete')}. "
-                        "Re-run update_maps (same directory/max_files) until "
-                        "map_coverage.complete=true — success alone is not done."
-                    )
-                if actionable > 0:
-                    n += 1
-                    suggestions.append(
-                        f"{n}. Review {actionable} actionable low-confidence *project* edges "
-                        f"(prefer actionable_low_conf_edges + reason_code_counts; "
-                        f"raw low_conf={raw_low} includes noise)."
-                    )
-                    acs_note = (
-                        f" ACS actionable_low={actionable} (raw_low={raw_low}, external_noise={noise}, "
-                        f"avg={acs.get('avg_confidence')})."
-                    )
-                elif raw_low > 0:
-                    acs_note = (
-                        f" ACS: {raw_low} low-conf edges are mostly external/stdlib noise "
-                        f"(actionable=0); no agent action required for those."
-                    )
-            except Exception:
-                pass
+        if actionable:
+            suggestions.append(f"Review {actionable} actionable low-confidence project edges (get_dependencies).")
+            acs_note = f" ACS actionable_low={actionable} (raw_low={raw_low}, avg={acs.get('avg_confidence')})."
+        elif raw_low:
+            acs_note = f" ACS: {raw_low} low-confidence edges are external/stdlib noise; no action needed."
+        suggestions.append("Run update_maps only when imports or structure changed (not for wiki-only edits).")
+        suggestions.append("Before editing a hotspot, call prepare_edit(file) to see its dependents.")
+        suggestions = [f"{i}. {s}" for i, s in enumerate(suggestions, 1)]
 
-        # Dispatchable structured actions (agent-first)
         red_files: List[str] = []
         action_yellow_files: List[str] = []
-        try:
-            from .agent_loop import build_structured_actions
-            if _health_mod is not None:
-                data = _health_mod.load_health(root)
-                for f, e in (data.get("entries") or {}).items():
-                    if directory and not str(f).startswith(str(directory).rstrip("/") + "/"):
-                        continue
-                    st = str((e or {}).get("status") or "")
-                    reason = str((e or {}).get("reason") or "")
-                    if "Red" in st or "🔴" in st:
-                        red_files.append(f)
-                    elif ("Yellow" in st or "🟡" in st) and "Initial stub" not in reason:
-                        action_yellow_files.append(f)
-            actions = build_structured_actions(
-                red_files=red_files,
-                actionable_yellow_files=action_yellow_files,
-                stub_yellow=stub_y,
-                actionable_yellow=action_y,
-                red=red,
-                acs_actionable=actionable,
-                scope_warnings=scope_warnings,
-                clean=(red == 0 and yellow == 0),
-                map_coverage=map_coverage,
-            )
-        except Exception:
-            actions = []
+        for path, entry in health_mod.load_health(root).get("entries", {}).items():
+            if not _in_directory(path, directory):
+                continue
+            status = str(entry.get("status") or "")
+            if "🔴" in status:
+                red_files.append(path)
+            elif "🟡" in status and not health_mod.summary._is_map_first_stub_entry(entry):
+                action_yellow_files.append(path)
+        from .agent_loop import build_structured_actions
 
+        actions = build_structured_actions(
+            red_files=red_files,
+            actionable_yellow_files=action_yellow_files,
+            stub_yellow=stub_y,
+            actionable_yellow=action_y,
+            red=red,
+            acs_actionable=actionable,
+            scope_warnings=scope_warnings,
+            clean=(red == 0 and yellow == 0),
+            map_coverage=coverage,
+        )
         if format == "json":
             return {
                 "success": True,
@@ -1532,285 +1075,474 @@ def suggest_next_actions(
                 "yellow": yellow,
                 "stub_yellow": stub_y,
                 "actionable_yellow": action_y,
-                "health_score": health_sum.get("health_score"),
+                "health_score": summary.get("health_score"),
                 "suggestions": suggestions,
                 "actions": actions,
-                "health_summary": health_sum,
+                "health_summary": summary,
                 "acs_note": acs_note,
-                "map_coverage": map_coverage,
+                "map_coverage": coverage,
                 "selective_work": True,
                 "map_first": True,
             }
-        # Text: prose + compact action lines
         lines = list(suggestions)
-        if map_coverage:
-            lines.append(
-                f"map_coverage: complete={map_coverage.get('complete')} "
-                f"remaining_dirty={map_coverage.get('files_remaining_dirty')}"
-            )
         if actions:
-            lines.append("Actions (dispatchable):")
-            for a in actions[:12]:
-                tgt = a.get("file") or "—"
-                lines.append(f"  [{a.get('priority')}] {a.get('action')} {tgt}: {a.get('reason')}")
-        return "\n".join(lines) + (acs_note or "")
-    except Exception as e:
-        if format == "json":
-            return {"success": False, "error": str(e), "project_root": str(root)}
-        return f"suggest_next_actions error (Python): {e}"
+            lines.append("Actions:")
+            for action in actions[:12]:
+                lines.append(f"  [{action.get('priority')}] {action.get('action')} {action.get('file') or '—'}: {action.get('reason')}")
+        return "\n".join(lines) + acs_note
+    except Exception as exc:
+        failure = _fail({"project_root": str(project_root or "")}, exc)
+        return failure if format == "json" else f"suggest_next_actions error: {failure['error']}"
 
 
 def session_bootstrap(
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     directory: Optional[str] = None,
     map_index_file_budget: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """One-shot agent session start (delegates to agent_loop.session_bootstrap)."""
-    from .agent_loop import session_bootstrap as _sb
-    return _sb(
-        project_root=project_root,
-        directory=directory,
-        map_index_file_budget=map_index_file_budget,
-    )
+    """One-shot session start: root, readiness, health, attention, actions[], folder map."""
+    from .agent_loop import session_bootstrap as _bootstrap
+
+    return _bootstrap(project_root=project_root, directory=directory, map_index_file_budget=map_index_file_budget)
 
 
 def list_paths(
     prefix: Optional[str] = None,
     directory: Optional[str] = None,
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     max_files: Optional[int] = None,
     depth: int = 1,
 ) -> Dict[str, Any]:
     """Names-only folder card (depth=1) or recursive listing (depth=0)."""
-    root = _get_effective_root(project_root)
-    from .map_index import list_paths as _lp
-    return _lp(
-        root,
-        prefix=prefix or directory,
-        max_files=max_files,
-        depth=depth,
-    )
+    try:
+        root = resolve_root(project_root)
+    except ProjectRootError as exc:
+        return _fail({"project_root": str(project_root)}, exc)
+    from .map_index import list_paths as _list_paths
+
+    return _list_paths(root, prefix=prefix or directory, max_files=max_files, depth=depth)
 
 
-def prepare_edit(
-    file: str,
-    project_root: Optional[Union[str, Path]] = None,
-) -> Dict[str, Any]:
-    """Single-file preflight lookup (wiki/status/deps/dependents)."""
-    from .agent_loop import prepare_edit as _pe
-    return _pe(file, project_root=project_root)
+def prepare_edit(file: str, project_root: Optional[PathArg] = None) -> Dict[str, Any]:
+    """Single-file preflight: status, wiki, dependencies, dependents, cycle flag."""
+    from .agent_loop import prepare_edit as _prepare_edit
+
+    return _prepare_edit(file, project_root=project_root)
 
 
 def search_journal(
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     query: Optional[str] = None,
     file: Optional[str] = None,
     max_results: int = 20,
 ) -> Dict[str, Any]:
-    """Search journal semantic trail."""
-    from .agent_loop import search_journal as _sj
-    return _sj(project_root=project_root, query=query, file=file, max_results=max_results)
+    """Search the journal by text and/or file."""
+    from .agent_loop import search_journal as _search
+
+    return _search(project_root=project_root, query=query, file=file, max_results=max_results)
 
 
-def why_file(
+def why_file(file: str, project_root: Optional[PathArg] = None, max_results: int = 10) -> Dict[str, Any]:
+    """Health reason + recent journal entries for ``file``."""
+    from .agent_loop import why_file as _why
+
+    return _why(file, project_root=project_root, max_results=max_results)
+
+
+def _compact_imports(imports: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Token-lean view of per-edge records: internal targets with only the flags
+    that are set, external modules as one name list, and unresolved-but-internal
+    looking imports to review."""
+    internal: List[Dict[str, Any]] = []
+    external: set = set()
+    review: List[Dict[str, Any]] = []
+    for item in imports:
+        raw = item.get("raw") or ""
+        if item.get("resolved"):
+            edge: Dict[str, Any] = {"path": item["resolved"], "line": item.get("line")}
+            if item.get("imported_names"):
+                edge["names"] = item["imported_names"]
+            if item.get("is_conditional"):
+                edge["conditional"] = True
+            if item.get("is_dynamic"):
+                edge["dynamic"] = item.get("dynamic_type") or True
+            if item.get("via_barrel"):
+                edge["via_barrel"] = True
+            score = item.get("confidence_score")
+            if isinstance(score, (int, float)) and score < 0.65:
+                edge["confidence"] = score
+            if item.get("in_cycle"):
+                edge["in_cycle"] = True
+            internal.append(edge)
+            continue
+        diagnostic = item.get("diagnostic") if isinstance(item.get("diagnostic"), dict) else {}
+        category = diagnostic.get("category")
+        if category in (None, "external_or_bare") and not raw.startswith("."):
+            external.add(raw)
+        else:
+            review.append({"raw": raw, "line": item.get("line"), "category": category or "unresolved",
+                           "suggestion": diagnostic.get("suggestion_for_agent")})
+    return {"internal": internal, "external": sorted(external), "needs_review": review}
+
+
+def get_dependencies(
     file: str,
-    project_root: Optional[Union[str, Path]] = None,
-    max_results: int = 10,
+    project_root: Optional[PathArg] = None,
+    detail: Literal["compact", "full"] = "compact",
 ) -> Dict[str, Any]:
-    """Why is this file yellow/red — health reason + journal matches."""
-    from .agent_loop import why_file as _wf
-    return _wf(file, project_root=project_root, max_results=max_results)
+    """What ``file`` imports (indexed lookup).
+
+    ``detail="compact"`` (default): ``internal`` edges (path, line, names and only
+    the flags that apply), ``external`` module names, ``needs_review``.
+    ``detail="full"``: ``imports`` — every per-edge record with confidence
+    explanation, resolution metadata and diagnostics (several times larger).
+    """
+    if detail not in ("compact", "full"):
+        raise ValueError("detail must be 'compact' or 'full'")
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(project_root or "")}
+    try:
+        root = resolve_root(project_root)
+        rel = to_rel(root, file)
+        entry = cs.load_file_entry(root, rel)
+        cycles = cs.load_meta(root, keys=("_cycles",)).get("_cycles") or {}
+        in_cycle = set(cycles.get("all_cycle_files") or [])
+        imports = []
+        for pair in (entry or {}).get("resolved_pairs") or []:
+            if not isinstance(pair, dict):
+                continue
+            item = dict(pair)
+            item["resolved_path"] = pair.get("resolved") or None
+            item["in_cycle"] = bool(pair.get("resolved") and pair["resolved"] in in_cycle and rel in in_cycle)
+            imports.append(item)
+        result.update({
+            "success": True,
+            "project_root": str(root),
+            "file": rel,
+            "mapped": entry is not None,
+            "detail": detail,
+            "count": len(imports),
+            "internal_count": sum(1 for i in imports if i.get("resolved")),
+            "file_in_cycle": rel in in_cycle,
+        })
+        if detail == "full":
+            result["imports"] = imports
+        else:
+            result.update(_compact_imports(imports))
+    except Exception as exc:
+        _fail(result, exc)
+    return result
+
+
+def get_dependents(file: str, project_root: Optional[PathArg] = None) -> Dict[str, Any]:
+    """Files that import ``file`` (indexed reverse lookup)."""
+    result: Dict[str, Any] = {"success": False, "file": file, "project_root": str(project_root or "")}
+    try:
+        root = resolve_root(project_root)
+        rel = to_rel(root, file)
+        dependents = cs.load_dependents(root, rel)
+        result.update({
+            "success": True,
+            "project_root": str(root),
+            "file": rel,
+            "dependents": dependents,
+            "count": len(dependents),
+        })
+    except Exception as exc:
+        _fail(result, exc)
+    return result
+
+
+def cycles_report(
+    project_root: Optional[PathArg] = None,
+    analysis: bool = True,
+    max_items: Optional[int] = None,
+    use_canonical: bool = True,
+) -> Dict[str, Any]:
+    """Cycle clusters + (optionally) severity analyses. Computes on demand (read-only)."""
+    result: Dict[str, Any] = {"success": False, "project_root": str(project_root or "")}
+    try:
+        root = resolve_root(project_root)
+        meta = cs.load_meta(root, keys=("_cycles", "_cycle_analyses"))
+        cycles = meta.get("_cycles") or {}
+        analyses = meta.get("_cycle_analyses") or {}
+        if "sccs" not in cycles or (analysis and "analyses" not in analyses):
+            cache = ic.load_cache(root)
+            if "sccs" not in cycles:
+                cycles = ic.compute_cycles(dict(cache), root=root, use_canonical=use_canonical)
+            if analysis and "analyses" not in analyses:
+                analyses = ic.compute_cycle_analyses(cache, root=root, use_canonical=use_canonical)
+        sccs = cycles.get("sccs") or []
+        limit = max_items or (100 if analysis else 20)
+        stats = cycles.get("stats") or {}
+        result.update({
+            "success": True,
+            "project_root": str(root),
+            "count": stats.get("cyclic_scc_count", len(sccs)),
+            "stats": stats,
+            "sccs": sccs[:limit],
+            "truncated": len(sccs) > limit,
+            "integrity": ic.compute_graph_integrity({"_cycles": cycles}),
+            "graph_signature": cycles.get("graph_signature"),
+            "reused": bool(cycles.get("reused")),
+            "reuse_reason": cycles.get("reuse_reason"),
+            "cycle_analyses": analyses if analysis else None,
+            "analysis_version": analyses.get("analysis_version") if analysis else None,
+        })
+    except Exception as exc:
+        _fail(result, exc)
+    return result
+
+
+def format_cycles_report(report: Dict[str, Any]) -> str:
+    """Human/agent text rendering of :func:`cycles_report`."""
+    if not report.get("success"):
+        return f"Cycle report unavailable: {report.get('error')}. Run `wikifier update-maps` first."
+    stats = report.get("stats") or {}
+    lines = [
+        "=== Circular Dependencies ===",
+        f"Clusters: {report.get('count', 0)}   Files involved: {stats.get('total_files_in_cycles', 0)}   "
+        f"Largest: {stats.get('largest_scc_size', 0)}",
+        f"Signals in cycles: dynamic={stats.get('dynamic_edges_in_cycles', 0)} "
+        f"conditional={stats.get('conditional_edges_in_cycles', 0)} barrel={stats.get('barrel_edges_in_cycles', 0)}",
+        f"Graph signature: {report.get('graph_signature') or 'n/a'}"
+        + (" (reused: topology unchanged)" if report.get("reused") else ""),
+        "",
+    ]
+    sccs = report.get("sccs") or []
+    if not sccs:
+        lines.append("✅ No circular dependencies detected.")
+        return "\n".join(lines)
+    by_nodes = {
+        tuple(sorted(a.get("nodes", []))): a
+        for a in ((report.get("cycle_analyses") or {}).get("analyses") or [])
+    }
+    for i, scc in enumerate(sccs, 1):
+        signals = scc.get("signals") or {}
+        extra = ""
+        if signals.get("dynamic_edge_count") or signals.get("conditional_edge_count") or signals.get("barrel_edge_count"):
+            extra = (
+                f"  (dynamic={signals.get('dynamic_edge_count', 0)} conditional={signals.get('conditional_edge_count', 0)} "
+                f"barrel={signals.get('barrel_edge_count', 0)})"
+            )
+        lines.append(f"  {i}. size={scc.get('size')}: {scc.get('example_path')}{extra}")
+        analysis = by_nodes.get(tuple(sorted(scc.get("nodes", []))))
+        if analysis and analysis.get("severity"):
+            weakest = (analysis.get("weakest_links") or [{}])[0]
+            rec = (analysis.get("recommendations") or [{}])[0]
+            lines.append(
+                f"     severity={analysis.get('severity')} score={analysis.get('score')} "
+                f"blast_radius={analysis.get('external_blast_radius')} "
+                f"weakest={weakest.get('from', '?')}→{weakest.get('to', '?')}"
+            )
+            if rec.get("strategy"):
+                detail = " — ".join(x for x in (rec.get("rationale"), rec.get("hint")) if x)
+                lines.append(f"     fix: {rec.get('strategy')}" + (f" — {detail}" if detail else ""))
+    if report.get("truncated"):
+        lines.append("  … more clusters omitted (raise max_items or use JSON output)")
+    return "\n".join(lines)
 
 
 def seed_source_content_hashes(
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     only_green: bool = True,
     force: bool = False,
     directory: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Seed source_content_hash baselines without mass Yellow (migration helper)."""
-    root = _get_effective_root(project_root)
-    if _health_mod is None or not hasattr(_health_mod, "seed_source_content_hashes"):
-        return {"success": False, "project_root": str(root), "error": "health.seed_source_content_hashes unavailable"}
-    return _health_mod.seed_source_content_hashes(
-        root, only_green=only_green, force=force, directory=directory
-    )
+    """Record current source hashes as baselines without changing status (migration)."""
+    try:
+        root = resolve_root(project_root)
+        return health_mod.seed_source_content_hashes(root, only_green=only_green, force=force, directory=directory)
+    except Exception as exc:
+        return _fail({"project_root": str(project_root or "")}, exc)
 
 
 def list_core_tools() -> Dict[str, Any]:
-    """Core daily agent tool listing (prefer over full MCP catalog)."""
-    from .agent_loop import list_core_tools as _lct
-    return _lct()
+    """Core daily agent tools vs advanced intel tools."""
+    from .agent_loop import list_core_tools as _list
+
+    return _list()
 
 
-def cache_status(
-    project_root: Optional[Union[str, Path]] = None,
-) -> Dict[str, Any]:
-    """Dual-cache ops surface: backend, bytes, ACS version, map_coverage (no full pair load)."""
-    root = _get_effective_root(project_root)
+def cache_status(project_root: Optional[PathArg] = None) -> Dict[str, Any]:
+    """Cache backend, size, edge count, ACS version, map coverage (no payload load)."""
     try:
-        from . import cache_store as cs
-        out = cs.cache_status(root)
-        out["success"] = True
-        return out
-    except Exception as e:
-        return {
-            "success": False,
-            "project_root": str(root),
-            "error": str(e),
-        }
-
-
-def update_maps(
-    project_root: Optional[Union[str, Path]] = None,
-    full: bool = False,
-    directory: Optional[str] = None,
-    use_python_primary: bool = True,
-    verbose: bool = False,
-    max_files: Optional[int] = None,
-) -> Dict[str, Any]:
-    """
-    Python facade for update-maps with scoping + python-primary preference.
-
-    Delegates to the extracted run_full_update (deeper pipeline: dirty/parser/persist/barrel/ACS).
-    This advances extraction: callers (library, future thin CLI/MCP, daemon) get pure path by default.
-    """
-    root = _get_effective_root(project_root)
-    try:
-        res = run_full_update(
-            root=root,
-            force_full=full,
-            verbose=verbose,
-            use_canonical=True,
-            use_python_primary=use_python_primary,
-            directory=directory,
-            max_files=max_files,
-        )
-        res = dict(res)  # copy
-        res["library_facade"] = True
-        res["scoped_directory"] = directory
-        return res
-    except Exception as e:
-        return {
-            "success": False,
-            "project_root": str(root),
-            "error": str(e),
-            "library_facade": True,
-        }
+        return cs.cache_status(resolve_root(project_root))
+    except Exception as exc:
+        return _fail({"project_root": str(project_root or "")}, exc)
 
 
 def health(
-    project_root: Optional[Union[str, Path]] = None,
+    project_root: Optional[PathArg] = None,
     directory: Optional[str] = None,
-    format: Literal["text", "json", "summary", "healing-stats"] = "text"
+    format: Literal["text", "json", "summary", "healing-stats"] = "text",
 ) -> Union[str, Dict[str, Any]]:
-    """
-    Flat `from wikifier import health` convenience (delegates to wikifier.health module).
-
-    Preserves all rich behavior (ACS/CIABRE dep_intel attachment in json, scalable summary).
-    Part of the designed public surface.
-    """
-    root = _get_effective_root(project_root)
+    """Health matrix: ``summary`` counts, ``json`` entries (+ACS), ``text`` table, ``healing-stats``."""
     try:
-        if _health_mod is None:
-            return {"success": False, "error": "health module unavailable", "project_root": str(root)} if format == "json" else "health module unavailable"
+        root = resolve_root(project_root)
         if format == "summary":
-            return _health_mod.get_summary(root, directory)
-        # Phase 5e (66): CLI health(format=summary) + suggest/update_maps first-class default for 20k+ creative (O(k) via health.get_summary + import_cache ACS/barrel; complements 47/48/58 A3 promotion + format=summary).
+            return health_mod.get_summary(root, directory)
         if format == "healing-stats":
-            return _health_mod.get_healing_statistics(root)
+            return health_mod.get_healing_statistics(root)
+        data = health_mod.load_health(root)
+        entries = {k: v for k, v in data.get("entries", {}).items() if _in_directory(k, directory)}
         if format == "json":
-            data = _health_mod.load_health(root)
-            if directory:
-                entries = data.get("entries", {})
-                data["entries"] = {k: v for k, v in entries.items() if str(k).startswith(directory.rstrip("/") + "/")}
-            # Light dep_intel (ACS) to match MCP surfaces — pure path
-            try:
-                if _ic_mod is not None:
-                    cache = _ic_mod.load_cache(root) or {}
-                    acs = _ic_mod.ensure_acs_summary_persisted(cache, root) or {}
-                    data["dependency_intel"] = {"acs_summary": acs, "note": "via Python health() facade"}
-            except Exception:
-                pass
+            data["entries"] = entries
+            data["success"] = True
+            data["project_root"] = str(root)
+            acs = cs.load_meta(root, keys=("_acs_summary",)).get("_acs_summary")
+            if acs:
+                data["dependency_intel"] = {"acs_summary": acs}
             return data
-        # text (human)
-        data = _health_mod.load_health(root)
-        entries = data.get("entries", {})
-        lines = ["# Documentation Health Matrix (via Python library)", ""]
-        shown = 0
-        for fp, ent in entries.items():
-            if directory and not str(fp).startswith(directory.rstrip("/") + "/"):
-                continue
-            st = ent.get("status", "")
-            lu = ent.get("last_updated", "")
-            rs = (ent.get("reason") or "")[:80]
-            lines.append(f"- {fp}: {st} | {lu} | {rs}")
-            shown += 1
-            if shown >= 60:
-                break
-        if len(entries) > shown:
-            lines.append(f"... ({len(entries) - shown} more; use format='json' or health --summary for scale)")
+        lines = ["# Documentation Health Matrix", ""]
+        for path, entry in list(entries.items())[:60]:
+            lines.append(f"- {path}: {entry.get('status', '')} | {entry.get('last_updated', '')} | {(entry.get('reason') or '')[:80]}")
+        if len(entries) > 60:
+            lines.append(f"... ({len(entries) - 60} more; use --json or --summary)")
         return "\n".join(lines)
-    except Exception as e:
-        if format == "json":
-            return {"success": False, "error": str(e), "project_root": str(root)}
-        return f"health(text) error (Python library): {e}"
+    except Exception as exc:
+        failure = _fail({"project_root": str(project_root or "")}, exc)
+        return failure if format in ("json", "summary", "healing-stats") else f"health error: {failure['error']}"
 
 
-# End of Workstream E library skeleton additions.
-# (nullcontext imported at module top for use in lock_ctx defaults.)
-# Update __init__.py to surface these at package level for `from wikifier import ...`.
+def heal_stubs(
+    project_root: Optional[PathArg] = None,
+    dry_run: bool = False,
+    min_wiki_length: int = 350,
+) -> Dict[str, Any]:
+    """Promote Initial stubs whose wiki is now substantial (🟢 high quality, 🟡 medium)."""
+    try:
+        root = resolve_root(project_root)
+        res = health_mod.heal_with_policy(
+            root, policy={"targets": ["stubs"], "stub": {"min_wiki_length": min_wiki_length}}, dry_run=dry_run
+        )
+        res.update({"success": True, "project_root": str(root)})
+        return res
+    except Exception as exc:
+        return _fail({"project_root": str(project_root or "")}, exc)
 
-# Human Investigation Layer (secondary sub-project)
-# Only index.html (the clean human wiki viewer) is copied into target projects by init.
-# It provides the prominent code structure chart (Mermaid), "Files & descriptions" list with
-# short summaries, folder browser, copy buttons for tree/snapshot, a "Quick actions" toolbar
-# with copy buttons for main commands (check-changes, update-maps, monitor &), and prominent
-# buttons + session-guarded auto-copy of update-maps in empty states for easy first-run setup.
-# (data-driven from its file_health.* + library.md after check-changes + update-maps).
-# diagnostics.html is the Wikifier-specific heavy maintainer/refactor/porter hub (architecture,
-# full command map, porting checklist, this project's own source tree with purposes). It is
-# *not* copied to foreign project roots — it would point at the wrong folder and be stale for
-# the host project. Maintainers open it from the Wikifier source checkout or installed package.
-# This separation keeps the human view relevant to the project the user is actually in.
-def copy_human_dashboards(target_dir: str) -> None:
-    """Copy the static human dashboards into the target project root (if not present).
-    Works for both source runs and installed package (via importlib.resources).
-    Called by sh init; exposed for Python bootstrap too.
+
+def journal(date: Optional[str] = None, project_root: Optional[PathArg] = None) -> Dict[str, Any]:
+    """Journal entries for ``date`` (YYYY-MM-DD; default today)."""
+    try:
+        root = resolve_root(project_root)
+        res = journal_mod.read_day(root, date)
+        res["project_root"] = str(root)
+        return res
+    except Exception as exc:
+        return _fail({"project_root": str(project_root or ""), "date": date}, exc)
+
+
+def issues(severity: str = "all", project_root: Optional[PathArg] = None) -> Dict[str, Any]:
+    """Logged_issues/*.md files (optionally one severity folder)."""
+    try:
+        root = resolve_root(project_root)
+        res = journal_mod.list_issues(root, severity)
+        res["project_root"] = str(root)
+        return res
+    except Exception as exc:
+        return _fail({"project_root": str(project_root or ""), "severity": severity}, exc)
+
+
+# =============================================================================
+# Project setup
+# =============================================================================
+
+MONITORED_TEMPLATE = """\
+# monitored_paths.txt — wiki / health watch list (check-changes thrash bound)
+# Prefer lean package roots so check-changes does not thrash on target/,
+# node_modules, build/, dist/, caches, etc.
+# This is NOT the import map — see map_paths.txt for package roots used by update-maps.
+#
+# Active default: src/ (lean). Multi-crate / monorepo: replace with package roots first.
+# Tiny single-file toys only: uncomment bare "." below (explicit opt-in — not default).
+src/
+# .
+# lib/
+# crates/my_crate/src/
+# packages/core/src/
+# README.md
+# docs/
+"""
+
+MAP_PATHS_TEMPLATE = """\
+# map_paths.txt — import-map package roots for update-maps (independent of monitored_paths)
+# List directories that contain parseable source for the dependency map.
+# Do not use bare "." on large trees; do not list only wiki/docs files here.
+#
+# Active default: src/ (replace with this project's package roots).
+src/
+# crates/my_crate/src/
+# packages/core/src/
+#
+# Leave empty (comments only) to fall back to monitored directory roots / full collect.
+# After editing: wikifier update-maps  (then session-bootstrap until readiness=ready_for_daemon)
+"""
+
+EXCLUDE_TEMPLATE = "node_modules\n.git\nbuild\ndist\n__pycache__\n*.pyc\ntarget\n"
+
+DASHBOARD_FILES = ("index.html",)
+
+
+def copy_human_dashboards(target_dir: PathArg) -> List[str]:
+    """Copy the read-only dashboard (index.html) into ``target_dir`` if absent.
+
+    diagnostics.html is maintainer-only and never copied. Returns copied names.
     """
-    import shutil
-    from pathlib import Path
+    copied: List[str] = []
+    package_dir = Path(__file__).resolve().parent  # index.html ships as package data
+    for name in DASHBOARD_FILES:
+        source = package_dir / name
+        destination = Path(target_dir) / name
+        if source.is_file() and not destination.exists():
+            shutil.copyfile(source, destination)
+            copied.append(name)
+    return copied
+
+
+def init_project(target: Optional[PathArg] = None, copy_dashboards: bool = True) -> Dict[str, Any]:
+    """Bootstrap Wikifier state in ``target`` (default: the current project root).
+
+    Writes lean templates (monitored_paths.txt / map_paths.txt default to ``src/``),
+    empty health/pending/library views, the ``.wikifier/`` discovery marker and,
+    unless disabled, the read-only dashboard. Existing files are never overwritten.
+    """
     try:
-        from importlib.resources import files
-        pkg_files = files("wikifier")  # now ships index.html inside the wikifier/ package dir (Phase 2 packaging hygiene); resources finds it for installed wheels too
-        for name in ("index.html",):  # only the generic human wiki viewer for the *target*; diagnostics.html is Wikifier maintainer-only (never copied)
-            try:
-                src = pkg_files.joinpath(name)
-                if src.is_file():
-                    dst = Path(target_dir) / name
-                    if not dst.exists():
-                        shutil.copy(src, dst)
-            except Exception:
-                pass
-    except Exception:
-        pass
-    # Fallback: source tree (editable or direct); support both legacy root layout and html now under wikifier/ package dir
-    try:
-        here = Path(__file__).parent  # wikifier/ dir (preferred post-Phase2; contains index.html for proper package data)
-        for name in ("index.html",):
-            src = here / name
-            if src.exists():
-                dst = Path(target_dir) / name
-                if not dst.exists():
-                    shutil.copy(src, dst)
-                continue  # prefer the inner one if present
-        # also try grandparent for root-level copy in source tree (this project's own dashboard location)
-        here2 = Path(__file__).parent.parent
-        for name in ("index.html",):
-            src = here2 / name
-            if src.exists():
-                dst = Path(target_dir) / name
-                if not dst.exists():
-                    shutil.copy(src, dst)
-    except Exception:
-        pass
+        root = Path(target).expanduser() if target else resolve_root()
+        root.mkdir(parents=True, exist_ok=True)
+        root = root.resolve()
+        created: List[str] = []
+
+        def write_if_absent(rel: str, text: str) -> None:
+            path = root / rel
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                created.append(rel)
+
+        write_if_absent("monitored_paths.txt", MONITORED_TEMPLATE)
+        write_if_absent("map_paths.txt", MAP_PATHS_TEMPLATE)
+        write_if_absent("exclude_patterns.txt", EXCLUDE_TEMPLATE)
+        write_if_absent(
+            "file_health.md",
+            "# Documentation Health Matrix\n\n| File | Status | Last Updated | Reason / Intent |\n"
+            "|------|--------|--------------|-----------------|\n",
+        )
+        write_if_absent("pending_updates.md", "# Pending Updates\n\n(no pending items — run check-changes after making edits)\n")
+        write_if_absent("library.md", "# Library & Imports Map\n\nRun `wikifier update-maps` to populate.\n")
+        write_if_absent(".wikifier/config", f"project_root={root}\n")
+        for directory in (".wikifier_staging", "journal", "Logged_issues"):
+            (root / directory).mkdir(parents=True, exist_ok=True)
+        dashboards = copy_human_dashboards(root) if copy_dashboards else []
+        return {
+            "success": True,
+            "project_root": str(root),
+            "created": created + dashboards,
+            "next_steps": [
+                "Edit monitored_paths.txt + map_paths.txt to this project's package roots",
+                "wikifier update-maps",
+                "wikifier session-bootstrap (until readiness=ready_for_daemon)",
+                "wikifier suggest-next",
+            ],
+        }
+    except Exception as exc:
+        return _fail({"project_root": str(target or "")}, exc)

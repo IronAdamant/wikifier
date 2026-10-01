@@ -1,89 +1,82 @@
 """
-Wikifier Python Package
+Wikifier — zero-dependency, agent-to-agent codebase wiki.
 
-Zero-dependency, agent-to-agent codebase wiki. Provides:
+Library surface (preferred for agents calling from Python)::
 
-- Import parsers (Python + JavaScript/TypeScript) under `wikifier.parsers`
-- Health matrix tracking (`wikifier.health`)
-- Persistent import/dependency cache with cycle + confidence analysis
-  (`wikifier.import_cache`)
-- Central path/specifier resolution (`wikifier.resolution`)
-- Resolution failure diagnostics (`wikifier.diagnostics`)
-- Optional MCP server (`wikifier.mcp`; requires `pip install wikifier[mcp]`)
+    from wikifier import session_bootstrap, check_changes, record_change, mark_green
+    from wikifier import update_maps, prepare_edit, suggest_next_actions, health
 
-The flat library API below (check_changes, record_change, mark_green,
-health, update_maps, ...) is the preferred surface for agents calling
-Wikifier directly from Python.
+Subpackages: ``wikifier.parsers`` (import parsers), ``wikifier.health``
+(health matrix module; also ``wikifier.health_module``), ``wikifier.import_cache``
+(dependency cache + graph intelligence), ``wikifier.resolution`` (path
+resolution), ``wikifier.mcp`` (optional MCP server, ``pip install wikifier[mcp]``).
 
-**Health import hygiene (G5):** `from wikifier import health` is the *convenience
-function* (cli). The real module is always `importlib.import_module("wikifier.health")`
-or `from wikifier.health import upsert_entry, get_summary, ...`. Prefer
-`wikifier.health_module` (alias below) over `import wikifier.health as …`, which
-binds the function under CPython because the package attribute is shadowed.
+``wikifier.health`` as an *attribute* is the ``health()`` convenience function;
+``import wikifier.health`` / ``importlib.import_module("wikifier.health")``
+give the module (registered below so both spellings work).
 """
 
-from . import parsers
-# MCP extra is optional — do not boot FastMCP on `import wikifier`.
-# `import wikifier.mcp` / `wikifier-mcp` still load the server.
-try:
-    from . import mcp as mcp  # exposes wikifier.mcp.mcp (None when extra absent)
-except Exception:
-    mcp = None  # type: ignore
-from . import health_pkg as health_module  # submodule — keep this name for agents/tools
-from . import locking
-from . import import_cache
-from . import resolution
-from . import diagnostics
+__version__ = "4.7.0"
 
-# Unified project-root discovery and the Python-primary library surface.
-# These are the canonical entry points for agents (no shell required).
-from .cli import (
-    discover_project_root,
-    run_full_update,
+import sys as _sys
+
+from . import parsers  # noqa: F401
+from . import health_pkg as health_module
+from . import locking  # noqa: F401
+from . import import_cache  # noqa: F401
+from . import resolution  # noqa: F401
+from . import diagnostics  # noqa: F401
+from . import contracts  # noqa: F401
+from .api import (  # noqa: F401
+    cache_status,
     check_changes,
-    record_change,
-    record_deletion,
+    cycles_report,
+    discover_project_root,
+    get_dependencies,
+    get_dependents,
+    heal_stubs,
+    health,
+    init_project,
+    list_core_tools,
+    list_paths,
     mark_green,
+    prepare_edit,
+    record_change,
+    record_changes,
+    record_deletion,
+    run_full_update,
+    search_journal,
+    seed_source_content_hashes,
+    session_bootstrap,
     suggest_next_actions,
     update_maps,
-    health,  # flat convenience func (delegates to the health module + adds scoping)
-    session_bootstrap,
-    prepare_edit,
-    search_journal,
+    verify_wikis,
     why_file,
-    seed_source_content_hashes,
-    list_core_tools,
-    cache_status,
-    list_paths,
 )
-from . import agent_loop
-
-# Re-export module under a non-shadowed name (G5). Explicitly register health_pkg
-# as wikifier.health in sys.modules so importlib.import_module("wikifier.health")
-# gets the module, not the function.
-import sys as _sys
-_sys.modules["wikifier.health"] = health_module
-_sys.modules["wikifier.health_pkg"] = health_module
-
-# Shared frozen data contracts (single source of truth for shapes used by
-# parsers, cache, MCP, and diagnostics).
-from . import contracts
-from .contracts import (
+from .paths import ProjectPathError, ProjectRootError, resolve_root, to_rel  # noqa: F401
+from . import agent_loop  # noqa: F401
+from .contracts import (  # noqa: F401
     AnalysisTraceEntry,
     ConditionalAnalysis,
     DynamicAnalysis,
-    ResolutionMetadata,
-    encode_v1_payload,
-    decode_v1_payload,
-    pack_cdia_v1,
-    unpack_cdia_v1,
-    parse_pipeline_line,
-    RICH_KEYS,
-    RESERVED_TOP_LEVEL_KEYS,
     NODE_IDENTITY_VERSION_V0,
     NODE_IDENTITY_VERSION_V1,
-    get_contracts_info,
+    RESERVED_TOP_LEVEL_KEYS,
+    RICH_KEYS,
+    ResolutionMetadata,
     compute_acs_confidence,
+    decode_v1_payload,
+    encode_v1_payload,
+    get_contracts_info,
+    pack_cdia_v1,
+    parse_pipeline_line,
+    unpack_cdia_v1,
 )
 
-__version__ = "4.6.13"
+_sys.modules["wikifier.health"] = health_module
+_sys.modules["wikifier.health_pkg"] = health_module
+
+try:  # optional extra: never required for the core
+    from . import mcp  # noqa: F401
+except ImportError:
+    mcp = None  # type: ignore

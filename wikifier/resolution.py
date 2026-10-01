@@ -1,5 +1,5 @@
 """
-Wikifier Robust Path Normalization & Resolution Layer (Limitation #3 of Gap #1)
+Wikifier Robust Path Normalization & Resolution Layer
 
 This module is the single source of truth for all path handling, normalization,
 specifier resolution, and canonical identity across the Wikifier system.
@@ -31,7 +31,7 @@ Integration contract:
   specifier resolution and canonicalization to Python helpers for consistency.
 - All consumers (Mermaid, cycles, health, library.md) receive canonical forms.
 
-Production-grade implementation (Phase 4 of Gap #1 finisher + P4 Polish/Hardening):
+Production-grade implementation:
   - All priority strategies complete: TsPaths (complex refs+baseUrl+extends), Workspace,
     PackageImports, PackageExports (regex wildcard + advanced conditionals), Relative
     (exports probe), BareHeuristic.
@@ -42,7 +42,7 @@ Production-grade implementation (Phase 4 of Gap #1 finisher + P4 Polish/Hardenin
     exports_key, ts_alias, workspace_pkg, attempted list, symlink info, matched_condition.
   - Central helpers (resolve_exports_map, resolve_imports_map, resolve, ...) provide
     the official deprecation path for duplicated legacy resolution code in
-    javascript.py, bree.py, and wikifier.sh. R4 Legacy Deprecation Execution COMPLETE:
+    javascript.py, bree.py, and wikifier.sh. Legacy Deprecation Execution COMPLETE:
       * JS: low-level _read/_target/_pick = pure delegators (impls deleted); _resolve_from_exports
         = ultra-thin (central + BREE + 5-line main-only); removed all dupe export matching logic.
       * BREE: _read_pkg/_resolve_target/_pick_from_conditions now delegate to central _* (deduped);
@@ -51,10 +51,10 @@ Production-grade implementation (Phase 4 of Gap #1 finisher + P4 Polish/Hardenin
     All legacy emit DeprecationWarning, delegate first, fall back only on error.
   - Performance: precomputed maps in ctx, short-circuit can_handle, cache,
     pruned walks, lazy build.
-  - Deprecation status (R4 complete): legacy surface area significantly reduced for long-term
+  - Deprecation status: legacy surface area significantly reduced for long-term
     maintainability. Central `resolve()` / `resolve_exports_map()` / `build_project_context()` is
     the UNAMBIGUOUS DEFAULT everywhere. Legacy only for 2-release compat (v0.5 removal target).
-    See contracts.py, gap1_prewave0_..., 4phase roadmap, CHANGELOG.
+    See contracts.py, ..., 4phase roadmap, CHANGELOG.
 
 Public API (stable):
     get_canonical_rel(...)
@@ -73,9 +73,8 @@ import base64
 import json
 import os
 import re
-import time
 from dataclasses import dataclass, field, asdict
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -89,24 +88,17 @@ from typing import (
     Union,
 )
 
-# Pre-Wave 0 Contracts integration (FROZEN) — makes wikifier/contracts.py the
+# Contracts integration (FROZEN) — makes wikifier/contracts.py the
 # single source of truth for ResolutionMetadata shape + res_meta_* serialization.
 # The parser (javascript.py) imports encode_res_meta_v1 etc. from here; we
 # satisfy that contract by re-exporting from the authoritative module.
-try:
-    from .contracts import (
-        ResolutionMetadata as _ContractResolutionMetadata,
-        encode_res_meta_v1,
-        decode_res_meta_v1,
-        pack_res_meta_v1,
-        unpack_res_meta_v1,
-    )
-except Exception:
-    _ContractResolutionMetadata = None
-    encode_res_meta_v1 = lambda m: ""
-    decode_res_meta_v1 = lambda r: {}
-    pack_res_meta_v1 = encode_res_meta_v1
-    unpack_res_meta_v1 = decode_res_meta_v1
+from .contracts import (  # noqa: F401 — re-exported for parsers
+    ResolutionMetadata as _ContractResolutionMetadata,
+    decode_res_meta_v1,
+    encode_res_meta_v1,
+    pack_res_meta_v1,
+    unpack_res_meta_v1,
+)
 
 # =============================================================================
 # Canonical Form Helpers
@@ -162,7 +154,7 @@ def to_canonical_rel(
         if not canon:
             return None
         return canon
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         return None
 
 
@@ -193,7 +185,7 @@ def _strip_ext_for_display(canon: str) -> str:
 # Internal Helpers: Package.json exports/imports, TS paths, workspace discovery
 # (Production-grade, zero-dep, extracted/adapted for central use. These provide
 # the deprecation path for duplicated logic in javascript.py (_resolve_from_exports,
-# _try_resolve_*, etc. F4) and bree.py:DefaultExportsMapHandler. All now delegate.)
+# _try_resolve_*, etc. ) and bree.py:DefaultExportsMapHandler. All now delegate.)
 # =============================================================================
 
 def _strip_json_comments(text: str) -> str:
@@ -214,7 +206,7 @@ def _read_package_json(pkg_dir: Path) -> Optional[dict]:
         with pj.open(encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, dict) else None
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         return None
 
 
@@ -248,7 +240,7 @@ def _resolve_target_path(pkg_dir: Path, target: str) -> Optional[Path]:
                     cand = p / idx
                     if cand.exists():
                         return cand
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         pass
     return None
 
@@ -291,7 +283,7 @@ def _pick_target_from_conditions(spec: Any, pkg_dir: Path) -> Optional[Path]:
 def resolve_exports_map(pkg_dir: Path, subpath: str = ".") -> Optional[Path]:
     """
     Public helper: resolve a subpath against a package's "exports" (or legacy main).
-    P4 hardened: robust regex-based wildcard matching (supports complex patterns + conditional
+    robust regex-based wildcard matching (supports complex patterns + conditional
     dicts/arrays under * keys for "certain conditional exports" cases in monorepos).
     This is the central implementation (single source of truth) that replaces duplicated logic elsewhere.
     Returns the resolved target Path (physical) or None.
@@ -350,7 +342,7 @@ def resolve_exports_map(pkg_dir: Path, subpath: str = ".") -> Optional[Path]:
     if clean and clean in exports:
         return _pick_target_from_conditions(exports[clean], pkg_dir)
 
-    # Wildcard support (P4 hardened, regex parity with BREE for complex/conditional exports)
+    # Wildcard support
     # Supports keys with * in any position (e.g. "./*/*", "./feature-*", subpath patterns),
     # correctly substitutes even for nested condition dicts under the wildcard.
     # This closes gaps on advanced "exports" usage in real monorepo packages (barrel + conditional).
@@ -379,7 +371,7 @@ def resolve_exports_map(pkg_dir: Path, subpath: str = ".") -> Optional[Path]:
                         res = _pick_target_from_conditions(val, pkg_dir)
                         if res:
                             return res
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 continue
     return None
 
@@ -441,7 +433,7 @@ def _discover_workspaces_and_packages(
     Walk (pruned) to find all package.json, extract names for workspace_map,
     collect package root rel paths, detect monorepo flavor from presence of
     pnpm/yarn/lerna files + root workspaces field.
-    Hardened (P4): additional excludes for heavy pnpm/yarn store layouts (e.g. .pnpm virtual stores)
+    Hardened: additional excludes for heavy pnpm/yarn store layouts (e.g. .pnpm virtual stores)
     to prevent slow walks or symlink thrash on 1000+ pkg monorepos.
     """
     workspace_map: Dict[str, str] = {}
@@ -483,7 +475,7 @@ def _discover_workspaces_and_packages(
                     if name and not name.startswith("."):
                         # map name -> package root rel (for bare resolution)
                         workspace_map[name] = rel_str
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 continue
 
     if len(workspace_map) > 1 and mono_type == "single":
@@ -496,7 +488,7 @@ def _discover_ts_mappings(root: Path, excludes: Set[str]) -> List[Tuple[str, Lis
     """
     Discover tsconfig*.json (including in subdirs and via references/extends),
     collect compilerOptions.paths mappings. Supports simple extends by loading bases.
-    P4 enhanced: complex project references (str/dict forms, explicit .json or dir paths,
+    complex project references (str/dict forms, explicit .json or dir paths,
     cycle-safe via seen), and baseUrl-aware replacement strings so sub-package tsconfigs
     in monorepos with references resolve their paths correctly relative to root.
     Returns list of (alias_pattern, [replacements...])
@@ -517,7 +509,7 @@ def _discover_ts_mappings(root: Path, excludes: Set[str]) -> List[Tuple[str, Lis
             if not isinstance(data, dict):
                 return None
             return data
-        except Exception:
+        except (OSError, ValueError, RuntimeError):
             return None
 
     def collect_from_tsconfig(ts_path: Path, base_dir: Optional[Path] = None) -> None:
@@ -529,21 +521,21 @@ def _discover_ts_mappings(root: Path, excludes: Set[str]) -> List[Tuple[str, Lis
         base_url = co.get("baseUrl", ".") or "."
         # resolve base relative to tsconfig dir
         ts_dir = ts_path.parent
-        # P4 improvement for complex project refs / multi-tsconfig monorepos:
+        # improvement for complex project refs / multi-tsconfig monorepos:
         # compute effective repl prefix from this tsconfig's location + baseUrl so that
         # later `ctx.root / mapped` in TsPathsStrategy resolves correctly for sub-pkg tsconfigs
         # (previously all assumed root-level paths, breaking referenced projects)
         # safe prefix computation (handles resolved vs non-resolved Path compare)
         try:
             ts_rel = _posix_rel(ts_dir.relative_to(root))
-        except Exception:
+        except (OSError, ValueError, RuntimeError):
             ts_rel = ""
         bu = base_url or "."
         path_prefix = ts_rel
         if bu not in (".", ""):
             try:
                 path_prefix = _posix_rel( (Path(ts_rel) / bu) ) if ts_rel else bu
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 path_prefix = ts_rel or bu
         for alias, targets in paths.items():
             if not isinstance(alias, str):
@@ -567,7 +559,7 @@ def _discover_ts_mappings(root: Path, excludes: Set[str]) -> List[Tuple[str, Lis
             ext_path = (ts_dir / extends).resolve(strict=False)
             collect_from_tsconfig(ext_path, base_dir or ts_dir)
 
-        # references (project refs): follow path (P4 hardened for complex monorepo cases)
+        # references (project refs): follow path
         # Supports: array of strings, or objects {path: "..."}, path may be dir or explicit tsconfig*.json
         refs = data.get("references", []) or []
         for ref in refs:
@@ -614,7 +606,7 @@ def _find_nearest_package_dir(start: Path, root: Path, excludes: Set[str]) -> Op
     current = start if start.is_dir() else start.parent
     try:
         root = root.resolve(strict=False)
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         pass
     for _ in range(12):  # safety
         if (current / "package.json").exists():
@@ -633,13 +625,13 @@ Confidence = Literal["high", "medium", "low", "unresolved"]
 
 
 # =============================================================================
-# Rich Metadata Contract (per gap1_prewave0_shared_contracts_open.md)
+# Rich Metadata Contract
 # =============================================================================
 
 @dataclass(frozen=True)
 class ResolutionMetadata:
     """
-    Structured metadata for a Resolution result (Phase 4 contract).
+    Structured metadata for a Resolution result.
     JSON-serializable, additive, carries strategy details for explainability.
     Used inside Resolution.metadata (as .to_dict()) and for future diagnostic enrichment.
     """
@@ -700,9 +692,8 @@ class Resolution:
                     }},
                 }
                 object.__setattr__(self, "metadata", ResolutionMetadata(**known))
-            except Exception:
-                # keep as dict if conversion fails
-                pass
+            except (TypeError, ValueError):
+                pass  # unexpected metadata shape: keep the dict as-is
 
     def as_dict(self) -> Dict[str, Any]:
         """Convenience for serialization / cache persistence."""
@@ -756,7 +747,7 @@ class ProjectContext:
             try:
                 if p.exists() and p.stat().st_mtime > self.config_mtimes.get(str(p), 0):
                     return True
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 return True
         return False
 
@@ -798,7 +789,7 @@ class ResolutionStrategy(Protocol):
 
 
 # =============================================================================
-# Built-in Production Strategies (Phase 4 complete set)
+# Built-in Production Strategies
 # Priority ordering (lower number tried first): TsPaths, Workspace, PackageImports,
 # PackageExports, Relative, BareHeuristic. can_handle filters per class.
 # =============================================================================
@@ -806,7 +797,7 @@ class ResolutionStrategy(Protocol):
 class TsPathsStrategy:
     """
     Resolves TypeScript path aliases from tsconfig.json "compilerOptions.paths".
-    P4 improved support for complex monorepo cases: project references (dict/str forms,
+    project references (dict/str forms,
     explicit tsconfig.json or dir paths, cycle-safe), baseUrl handling via prefixed
     repl strings from sub-tsconfigs, extends recursion.
     High priority for alias forms like "@app/*", "~~/*", etc.
@@ -1014,11 +1005,11 @@ class PackageImportsStrategy:
 class PackageExportsStrategy:
     """
     Modern package.json "exports" map resolver + legacy main/module.
-    P4/F4 hardened: uses central resolve_exports_map with regex wildcard support for
+    uses central resolve_exports_map with regex wildcard support for
     certain complex/conditional exports (nested conditions under * patterns).
     Used for package subpath exports (e.g. "my-pkg/dist/foo" or when relative lands on pkg dir).
     Central implementation; old duplicated code in parsers/bree/javascript MUST delegate here (with warnings on legacy).
-    F4: expanded to cover bare/relative shims too.
+    expanded to cover bare/relative shims too.
     """
     name: str = "package-exports"
     priority: int = 30
@@ -1183,16 +1174,18 @@ class RelativeFilesystemStrategy:
                                 metadata={"via": "directory-index"},
                             )
 
+            # No file on disk: never report the attempted path as a resolution
+            # (that would put a nonexistent file into the dependency graph).
             attempted = to_canonical_rel(base, ctx.root, follow_symlinks=ctx.follow_symlinks)
             return Resolution(
                 raw=raw,
-                resolved_file=attempted,
+                resolved_file=None,
                 display_module=raw,
-                confidence="medium",
+                confidence="low",
                 strategy=self.name,
                 metadata={"via": "relative-unresolved", "attempted": attempted},
             )
-        except Exception as exc:
+        except (OSError, ValueError, RuntimeError) as exc:
             return Resolution(
                 raw=raw,
                 resolved_file=None,
@@ -1242,7 +1235,7 @@ class BareHeuristicStrategy:
                 canon = to_canonical_rel(cand, ctx.root, follow_symlinks=ctx.follow_symlinks)
                 if canon:
                     return Resolution(raw=raw, resolved_file=canon, display_module=raw, confidence="high", strategy=self.name, metadata={"via": "bare-exact"})
-            # R4 Legacy Deprecation Execution: probe for package.json + exports/main on the cand dir.
+            # probe for package.json + exports/main on the cand dir.
             # This covers legacy _try_resolve_bare... behavior for local dir "packages" that declare
             # "exports" or "main" (even without "name" field for workspace registration). Ensures
             # central resolve() is a full drop-in default; such cases no longer require legacy shim fallback.
@@ -1256,10 +1249,10 @@ class BareHeuristicStrategy:
                                 raw=raw, resolved_file=canon, display_module=raw, confidence="high",
                                 strategy="package-exports", metadata={"via": "bare-heuristic+exports-probe", "probed_pkg": str(cand)}
                             )
-                except Exception:
+                except (OSError, ValueError, RuntimeError):
                     pass
 
-            # R4: prefix-based pkg discovery (longest first) to match legacy _try bare behavior for
+            # prefix-based pkg discovery (longest first) to match legacy _try bare behavior for
             # "lib/utils" style where pkg root is prefix of specifier parts (e.g. pkg at "lib", sub "./utils").
             # Uses central resolve_exports_map so behavior unified, no dupe.
             for prefix_len in range(len(parts), 0, -1):
@@ -1277,7 +1270,7 @@ class BareHeuristicStrategy:
                                     raw=raw, resolved_file=canon, display_module=raw, confidence="high",
                                     strategy="package-exports", metadata={"via": "bare-heuristic+prefix-exports", "probed_pkg": str(pdir)}
                                 )
-                    except Exception:
+                    except (OSError, ValueError, RuntimeError):
                         pass
             if current.parent == current:
                 break
@@ -1342,7 +1335,7 @@ def build_project_context(
     """
     Build (or return a cached, still-valid) ProjectContext for the given root.
 
-    Robust population (Phase 4 + P4 monorepo hardening):
+    Robust population:
     - Discovers pnpm/yarn/npm workspaces + all named package roots (pruned walk, hardened excludes for .pnpm/.yarn/store layouts)
     - Collects tsconfig paths (with extends + references, improved complex ref support)
     - Records config mtimes for invalidation (package.json, tsconfig*, workspace yamls)
@@ -1366,7 +1359,7 @@ def build_project_context(
 
     EXCLUDES = {"node_modules", ".git", "dist", "build", ".next", "coverage", "__pycache__", "tmp", "temp", ".turbo", ".cache",
                 ".pnpm", ".yarn", ".store", "store", "virtual-store", ".pnp", ".pnp.cjs", ".pnp.loader.mjs",
-                "node_modules/.pnpm", "node_modules/.yarn"}  # R6: extra defense for nested pnpm/yarn Berry store symlinks in monorepos; name-based prune still catches .pnpm inside node_modules
+                "node_modules/.pnpm", "node_modules/.yarn"}  # extra defense for nested pnpm/yarn Berry store symlinks in monorepos; name-based prune still catches .pnpm inside node_modules
 
     # Robust discovery
     try:
@@ -1374,13 +1367,13 @@ def build_project_context(
         ctx.workspace_map.update(ws_map)
         ctx.package_roots.update(pkg_roots)
         ctx.detected_monorepo_type = mono
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         pass
 
     try:
         ts_maps = _discover_ts_mappings(root, EXCLUDES)
         ctx.ts_mappings.extend(ts_maps)
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         pass
 
     # Root package + common monorepo configs for mtime invalidation + package_roots
@@ -1396,7 +1389,7 @@ def build_project_context(
             try:
                 ctx.config_mtimes[str(cfg)] = cfg.stat().st_mtime
                 ctx._config_files.append(cfg)
-            except Exception:
+            except (OSError, ValueError, RuntimeError):
                 pass
 
     # Also ensure root is a package root
@@ -1519,7 +1512,7 @@ def normalize_query_file(file: str, root: Union[str, Path]) -> str:
     if p.is_absolute():
         try:
             return _posix_rel(p.relative_to(root_p))
-        except Exception:
+        except (OSError, ValueError, RuntimeError):
             pass
     return _posix_rel(p)
 
@@ -1535,7 +1528,7 @@ def clear_all_caches() -> None:
 
 
 # =============================================================================
-# Res Meta v1 Serialization Helpers (per gap1_prewave0_shared_contracts_open.md)
+# Res Meta v1 Serialization Helpers
 # Public for parsers, BREE, wikifier.sh normalizers, import_cache, MCP.
 # =============================================================================
 
@@ -1558,13 +1551,13 @@ def encode_res_meta_v1(meta: Union[Dict[str, Any], ResolutionMetadata, Resolutio
         compact = json.dumps(d, separators=(",", ":"), ensure_ascii=False)
         b = base64.urlsafe_b64encode(compact.encode("utf-8")).rstrip(b"=")
         return b.decode("ascii")
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         return ""
 
 
 def decode_res_meta_v1(raw_value: str) -> Optional[Dict[str, Any]]:
     """
-    Defensive decoder (per Pre-Wave 0 contract).
+    Defensive decoder.
     On any failure (bad b64, bad json, etc.) returns None so caller can fall back.
     """
     if not raw_value:
@@ -1573,7 +1566,7 @@ def decode_res_meta_v1(raw_value: str) -> Optional[Dict[str, Any]]:
         padded = raw_value + "=" * (-len(raw_value) % 4)
         decoded = base64.urlsafe_b64decode(padded)
         return json.loads(decoded)
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         return None
 
 

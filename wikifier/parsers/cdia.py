@@ -1,5 +1,5 @@
 """
-Conditional & Dynamic Import Analysis (CDIA) — Phase 3 of Gap #1
+Conditional & Dynamic Import Analysis (CDIA) — of
 
 Pluggable, explainable, registry-driven subsystem for detecting and classifying
 conditional and complex dynamic imports in JavaScript/TypeScript (and Python parity via mirrored LDSI/CDIA/registry calls).
@@ -13,7 +13,7 @@ Follows the exact architectural pattern established by BREE (bree.py):
 - Additive, zero-dependency, evolvable design
 - Rich explainability via AnalysisTraceEntry, detectors_fired, semantic_tags
 
-Produces the authoritative shapes for `cdia_v1` (see Pre-Wave 0 contracts):
+Produces the authoritative shapes for `cdia_v1`:
   {
     "conditional_analysis": ConditionalAnalysis(...).to_dict(),
     "dynamic_analysis": DynamicAnalysis(...).to_dict()
@@ -30,12 +30,12 @@ Hard cases and explainability are first-class: every detector contributes
 trace entries with evidence, scores, and notes. Semantic tags are normalized
 and versioned (append-only vocabulary).
 
-Initial detector set (8 core) + Phase 1 creative extensions (12 total); Layer 3.5 dataflow + Python parity exercised via harness + hardcases:
+Initial detector set (8 core) + creative extensions (12 total); Layer 3.5 dataflow + Python parity exercised via harness + hardcases:
   Conditional: ControlFlowDetector, TernaryDetector, FeatureFlagDetector,
                EnvCheckDetector, LazyWrapperDetector
-  Dynamic:     ComputedPathDetector, FrameworkMagicDetector, DataflowAliasDetector,
+  Dynamic: ComputedPathDetector, FrameworkMagicDetector, DataflowAliasDetector,
                TaggedTemplateDetector, RegistryMapDetector, MultiConditionFeatureWrapperDetector,
-               CallProducedPathDetector  (Layer 3.5 alias CFG + Python parity exercised)
+               CallProducedPathDetector (Layer 3.5 alias CFG + Python parity exercised)
 
 Future: AST-backed detectors can be registered without touching call sites.
 Policy (cost budgets, enabled_detectors) can be added via CDIAPolicy (mirrors ExpansionPolicy).
@@ -46,14 +46,12 @@ Authoritative semantic tag lists live here (cdia.py) per contracts decision.
 from __future__ import annotations
 
 import re
-import base64
 import json
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Tuple, Callable, Protocol, Set
-from pathlib import Path
 
 # =============================================================================
-# Rich Analysis Contract v1 (verbatim from Pre-Wave 0 shared contracts)
+# Rich Analysis Contract v1
 # =============================================================================
 
 @dataclass(frozen=True)
@@ -145,7 +143,7 @@ DYNAMIC_SEMANTIC_TAGS: Set[str] = {
     "react_lazy",
     "next_dynamic",
     "conditional_dynamic",
-    # Phase 1 creative extensions (LDSI + CDIA coverage for extremely creative patterns)
+    # creative extensions (LDSI + CDIA coverage for extremely creative patterns)
     "tagged_template",
     "registry_map",
     "multi_condition_feature_wrapper",
@@ -166,100 +164,113 @@ def normalize_tags(tags: List[str] | Set[str]) -> List[str]:
 
 @dataclass
 class ScopeInfo:
-    """Lightweight structural context around an import site."""
+    """Structural context of an import site: only what actually *encloses* it."""
     nesting_depth: int = 0
-    enclosing_predicates: List[str] = field(default_factory=list)  # raw predicate exprs
-    control_keywords: List[str] = field(default_factory=list)      # if, for, ?, try, etc.
-    recent_lines: List[str] = field(default_factory=list)          # context for debugging
+    enclosing_predicates: List[str] = field(default_factory=list)  # conditions of enclosing if/while/…
+    control_keywords: List[str] = field(default_factory=list)      # enclosing if/for/try/…, "ternary", "logical_guard"
+    recent_lines: List[str] = field(default_factory=list)          # debugging context only
     is_top_level: bool = True
     harvested_predicate_snippet: Optional[str] = None
+    guard_text: str = ""                                           # predicates + the import's own statement
+
+
+_JS_HEADER = re.compile(
+    r"(?:^|[;}\s])(else\s+if|if|while|for|switch|catch|try|finally|else|do)\b\s*(?:\((?P<pred>.*)\))?\s*$",
+    re.S,
+)
+_PY_HEADER = re.compile(r"^\s*(if|elif|else|try|except|finally|for|while|with)\b(?P<pred>[^:]*):")
+_GUARD_KEYWORDS = {"if", "else if", "elif", "else", "while", "for", "switch", "case", "try", "catch", "except", "finally"}
 
 
 class ScopeBuilder:
-    """
-    Builds ScopeInfo by walking the source with a simple brace stack + regex predicate harvest.
-    Far more accurate than flat 800-char lookback because it respects nesting.
-    Zero-dep, O(n) on snippet size.
+    """Finds the control structures that enclose an import site.
+
+    JS/TS: an unclosed ``{`` before the site whose header is ``if (...)``,
+    ``for``, ``try``, ``catch`` … is an enclosing guard; braceless
+    ``if (x) require(...)``, ``cond ? import(a) : …`` and ``flag && require(...)``
+    are detected within the import's own statement. Python: enclosing blocks are
+    found by indentation. Code that merely *precedes* the import never counts.
     """
 
-    CONTROL_KEYWORDS = re.compile(r'\b(if|else\s+if|else|for|while|switch|case|try|catch|finally)\b')
-    TERNARY_RE = re.compile(r'\?[^:]*:')
-    PREDICATE_PATTERNS = [
-        re.compile(r'\bif\s*\(([^)]{0,120})\)'),
-        re.compile(r'\belse\s+if\s*\(([^)]{0,120})\)'),
-        re.compile(r'\bwhile\s*\(([^)]{0,120})\)'),
-        re.compile(r'\bfor\s*\(([^)]{0,160})\)'),
-        re.compile(r'\b(?:const|let|var)\s+\w+\s*=\s*([^;]{0,120})\s*;'),
-        re.compile(r'\?\s*([^:]{0,80})\s*:'),
-    ]
-    FEATURE_LIKE = re.compile(r'(featureFlags?|flags?\.|isEnabled|useFeature|feature_?\w*)\s*[\.\[\(]?\s*[\w"\'\.]+\s*[\)\]]?')
-    ENV_LIKE = re.compile(r'(process\.env|NODE_ENV|__DEV__|__PROD__|import\.meta\.env)\s*[\.\[ ]?[\w"\'\.]+\s*')
-
-    def build(self, content: str, pos: int, window: int = 1200) -> ScopeInfo:
+    def build(self, content: str, pos: int, window: int = 4000, language: str = "js") -> ScopeInfo:
+        if language == "python":
+            return self._build_python(content, pos)
         start = max(0, pos - window)
         snippet = content[start:pos]
-        after = content[pos:pos + 300]  # small forward context
-
-        # Brace stack to compute real nesting depth at pos
-        depth = 0
-        last_open = -1
+        stack: List[int] = []
         for i, ch in enumerate(snippet):
-            if ch == '{':
-                depth += 1
-                last_open = i
-            elif ch == '}':
-                depth = max(0, depth - 1)
-
-        is_top = depth == 0 and '{' not in snippet[-200:]  # rough top-level signal
-
-        # Harvest predicates by scanning backwards for control structures
-        predicates: List[str] = []
+            if ch == "{":
+                stack.append(i)
+            elif ch == "}" and stack:
+                stack.pop()
         keywords: List[str] = []
-        lines = snippet.splitlines()
-        recent = lines[-8:] if lines else []
-
-        # Find enclosing control keywords in the snippet (most recent first)
-        for m in reversed(list(self.CONTROL_KEYWORDS.finditer(snippet))):
-            kw = m.group(1) or m.group(0)
-            keywords.append(kw.strip())
-
-        # Harvest predicate expressions
-        for pat in self.PREDICATE_PATTERNS:
-            for m in pat.finditer(snippet):
-                pred = m.group(1).strip() if m.lastindex else m.group(0).strip()
-                if pred and len(pred) > 1:
-                    predicates.append(pred[:140])
-
-        # Look for ternary in immediate context
-        if self.TERNARY_RE.search(snippet[-400:] or ''):
+        predicates: List[str] = []
+        for brace in reversed(stack):
+            header_start = max(snippet.rfind(";", 0, brace), snippet.rfind("}", 0, brace), snippet.rfind("{", 0, brace)) + 1
+            header = snippet[header_start:brace]
+            m = _JS_HEADER.search(header)
+            if m and m.group(1) in _GUARD_KEYWORDS | {"do"}:
+                kw = " ".join(m.group(1).split())
+                keywords.append(kw)
+                if m.group("pred"):
+                    predicates.append(m.group("pred").strip()[:140])
+            elif re.search(r"\bcase\b[^:]*:\s*$", header):
+                keywords.append("case")
+        statement_start = max(snippet.rfind(";"), snippet.rfind("{"), snippet.rfind("}")) + 1
+        statement = snippet[statement_start:]
+        inline_if = re.search(r"\b(?:else\s+)?if\s*\((.*)\)\s*$", statement, re.S)
+        if inline_if:
+            keywords.append("if")
+            predicates.append(inline_if.group(1).strip()[:140])
+        q = statement.rfind("?")
+        if q > 0 and statement[q + 1:q + 2] not in (".", "?") and statement[q - 1:q] != "?":
             keywords.append("ternary")
-            predicates.append("ternary_expression")
-
-        # Feature / env signals even outside full predicate (common in && guards)
-        feat = self.FEATURE_LIKE.search(snippet[-600:] or '')
-        if feat:
-            predicates.append(feat.group(0)[:100])
-            keywords.append("feature_flag")
-
-        env = self.ENV_LIKE.search(snippet[-600:] or '')
-        if env:
-            predicates.append(env.group(0)[:100])
-            keywords.append("env_check")
-
-        # Pick the best (most specific) predicate snippet for the analysis
-        predicate_snippet = None
-        if predicates:
-            # Prefer ones containing feature/env or longer ones
-            best = sorted(predicates, key=lambda p: (len(p), 1 if any(x in p.lower() for x in ("feature", "env", "flag", "dev", "prod")) else 0), reverse=True)[0]
-            predicate_snippet = best
-
+            predicates.append(statement[:q].split("=")[-1].strip()[:140] or "ternary_expression")
+        if re.search(r"(&&|\|\|)\s*(?:await\s+)?$", statement):
+            keywords.append("logical_guard")
+            predicates.append(statement.strip()[:140])
+        guard_text = " ".join(predicates + [statement.strip()])
+        predicate_snippet = max(predicates, key=len) if predicates else None
         return ScopeInfo(
-            nesting_depth=depth,
+            nesting_depth=len(stack),
             enclosing_predicates=predicates[:6],
-            control_keywords=list(dict.fromkeys(keywords))[:6],  # dedup preserve order
-            recent_lines=recent,
-            is_top_level=is_top,
+            control_keywords=list(dict.fromkeys(keywords))[:6],
+            recent_lines=snippet.splitlines()[-3:],
+            is_top_level=not stack,
             harvested_predicate_snippet=predicate_snippet,
+            guard_text=guard_text[:600],
+        )
+
+    def _build_python(self, content: str, pos: int) -> ScopeInfo:
+        lines = content[:pos].split("\n")
+        current = lines[-1] if lines else ""
+        indent = len(current) - len(current.lstrip())
+        keywords: List[str] = []
+        predicates: List[str] = []
+        for line in reversed(lines[:-1]):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            line_indent = len(line) - len(line.lstrip())
+            if line_indent >= indent:
+                continue
+            indent = line_indent
+            m = _PY_HEADER.match(line)
+            if m:
+                keywords.append(m.group(1))
+                if m.group("pred").strip():
+                    predicates.append(m.group("pred").strip()[:140])
+            if indent == 0:
+                break
+        guard_text = " ".join(predicates + [current.strip()])
+        return ScopeInfo(
+            nesting_depth=len(keywords),
+            enclosing_predicates=predicates[:6],
+            control_keywords=list(dict.fromkeys(keywords))[:6],
+            recent_lines=lines[-3:],
+            is_top_level=not keywords,
+            harvested_predicate_snippet=max(predicates, key=len) if predicates else None,
+            guard_text=guard_text[:600],
         )
 
 
@@ -301,109 +312,73 @@ class DynamicDetector(Protocol):
 # =============================================================================
 
 class ControlFlowDetector:
-    """Detects import inside if / for / while / switch / try."""
+    """Import inside an enclosing if / for / while / switch / try / catch block."""
     name = "ControlFlowDetector"
 
-    KEYWORDS = ("if", "for", "while", "switch", "case", "try", "catch")
+    KEYWORDS = ("if", "else", "elif", "for", "while", "switch", "case", "try", "catch", "except", "finally")
 
     def analyze(self, content: str, pos: int, scope: ScopeInfo, raw_module: str, **ctx) -> Optional[AnalysisTraceEntry]:
-        fired = False
-        evidence = ""
-        notes = []
-        score = 0.0
-
         for kw in scope.control_keywords:
-            if any(k in kw.lower() for k in self.KEYWORDS):
-                fired = True
-                evidence = kw
-                score = 0.78
-                notes.append(f"enclosing_{kw}")
-                break
-
-        # Also check nesting depth + recent lines as secondary signal
-        if not fired and scope.nesting_depth > 0:
-            joined = " ".join(scope.recent_lines).lower()
-            if any(k in joined for k in self.KEYWORDS):
-                fired = True
-                evidence = "nested_control_flow"
-                score = 0.55
-                notes.append("brace_nesting>0")
-
-        if not fired:
-            return AnalysisTraceEntry(self.name, False, "", 0.0, [])
-
-        tags_note = "control_flow" if any(k in ("if", "for") for k in scope.control_keywords) else ""
-        return AnalysisTraceEntry(
-            detector=self.name,
-            fired=True,
-            evidence=evidence[:120],
-            score_contrib=score,
-            notes=notes + (["control_flow"] if tags_note else []),
-        )
+            if kw.split()[-1] in self.KEYWORDS:
+                notes = [f"enclosing_{kw.replace(' ', '_')}"]
+                if kw.split()[-1] in ("if", "elif", "else", "for", "while", "switch", "case"):
+                    notes.append("control_flow")
+                return AnalysisTraceEntry(self.name, True, kw, 0.78, notes)
+        return AnalysisTraceEntry(self.name, False, "", 0.0, [])
 
 
 class TernaryDetector:
-    """Detects ternary (?:) expressions and conditional expressions around the site."""
+    """Import selected by a ternary or a logical (&& / ||) guard in its own statement."""
     name = "TernaryDetector"
 
     def analyze(self, content: str, pos: int, scope: ScopeInfo, raw_module: str, **ctx) -> Optional[AnalysisTraceEntry]:
-        # Look in harvested or immediate context
-        snippet = " ".join(scope.enclosing_predicates + scope.recent_lines)
-        if "ternary" in scope.control_keywords or re.search(r'\?[^:]{0,60}:', snippet):
-            return AnalysisTraceEntry(
-                self.name, True, "?: expression or ternary guard",
-                0.82, ["ternary", "control_flow"]
-            )
-        # Look directly around the match point in original content
-        local = content[max(0, pos-200):pos+80]
-        if re.search(r'\?\s*[^:]+:', local) or re.search(r':\s*[^;]+$', local):
-            return AnalysisTraceEntry(self.name, True, local[-80:], 0.65, ["ternary"])
+        if "ternary" in scope.control_keywords:
+            return AnalysisTraceEntry(self.name, True, "?: expression", 0.82, ["ternary", "control_flow"])
+        if "logical_guard" in scope.control_keywords:
+            return AnalysisTraceEntry(self.name, True, "&& / || guard", 0.7, ["control_flow"])
         return AnalysisTraceEntry(self.name, False, "", 0.0, [])
 
 
 class FeatureFlagDetector:
-    """Detects common feature flag / A/B / rollout patterns."""
+    """Feature-flag / rollout / experiment guard on the import."""
     name = "FeatureFlagDetector"
 
     PAT = re.compile(
         r'(featureFlags?|fflags?|flags?\.|isEnabled|useFeature|featureFlag|rollout|experiment|abTest|'
-        r'newUI|beta|alpha|darkMode|enable\w+)\s*[\.\[\(]?\s*["\']?[\w\.\-]+["\']?\s*[\)\]\.]?',
-        re.I
+        r'newUI|beta|alpha|darkMode|enable[A-Z_]\w*)\s*[\.\[\(]?\s*["\']?[\w\.\-]+["\']?\s*[\)\]\.]?'
     )
 
     def analyze(self, content: str, pos: int, scope: ScopeInfo, raw_module: str, **ctx) -> Optional[AnalysisTraceEntry]:
-        hay = " ".join(scope.enclosing_predicates + scope.recent_lines) + " " + content[max(0, pos-400):pos]
-        m = self.PAT.search(hay)
+        if not scope.enclosing_predicates:
+            return AnalysisTraceEntry(self.name, False, "", 0.0, [])
+        m = self.PAT.search(" ".join(scope.enclosing_predicates))
         if m:
-            return AnalysisTraceEntry(
-                self.name, True, m.group(0)[:110],
-                0.91, ["feature_flag", "runtime_optional"]
-            )
+            return AnalysisTraceEntry(self.name, True, m.group(0)[:110], 0.91, ["feature_flag", "runtime_optional"])
         return AnalysisTraceEntry(self.name, False, "", 0.0, [])
 
 
 class EnvCheckDetector:
-    """Detects NODE_ENV, process.env, __DEV__, import.meta.env, platform checks."""
+    """NODE_ENV / process.env / __DEV__ / import.meta.env / platform guard on the import."""
     name = "EnvCheckDetector"
 
     PAT = re.compile(
         r'(process\.env\.|NODE_ENV|__DEV__|__PROD__|import\.meta\.env|'
-        r'window\.location|navigator\.|process\.platform|os\.platform|isServer|isClient|'
-        r'__SERVER__|__BROWSER__)\s*',
-        re.I
+        r'window\.location|navigator\.|process\.platform|os\.platform|sys\.platform|isServer|isClient|'
+        r'__SERVER__|__BROWSER__)\s*'
     )
 
     def analyze(self, content: str, pos: int, scope: ScopeInfo, raw_module: str, **ctx) -> Optional[AnalysisTraceEntry]:
-        hay = " ".join(scope.enclosing_predicates) + " " + content[max(0, pos-350):pos+50]
-        m = self.PAT.search(hay)
+        if not scope.enclosing_predicates:
+            return AnalysisTraceEntry(self.name, False, "", 0.0, [])
+        m = self.PAT.search(" ".join(scope.enclosing_predicates))
         if m:
-            ev = m.group(0)[:90]
+            evidence = m.group(0)[:90]
             notes = ["env_check"]
-            if "dev" in ev.lower() or "__DEV__" in ev:
+            if "dev" in evidence.lower():
                 notes.append("dev_only")
-            if "prod" in ev.lower():
+            if "prod" in evidence.lower():
                 notes.append("prod_only")
-            return AnalysisTraceEntry(self.name, True, ev, 0.87, notes)
+            return AnalysisTraceEntry(self.name, True, evidence, 0.87, notes)
         return AnalysisTraceEntry(self.name, False, "", 0.0, [])
 
 
@@ -418,7 +393,7 @@ class LazyWrapperDetector:
     )
 
     def analyze(self, content: str, pos: int, scope: ScopeInfo, raw_module: str, **ctx) -> Optional[AnalysisTraceEntry]:
-        hay = content[max(0, pos-600):pos+200]
+        hay = scope.guard_text + " " + content[pos:pos + 120].split(";")[0]
         m = self.PAT.search(hay)
         if m:
             notes = ["lazy_loading"]
@@ -533,7 +508,7 @@ class DataflowAliasDetector:
         return AnalysisTraceEntry(self.name, False, "", 0.0, [])
 
 
-# --- Phase 1 Creative/Dynamic detectors (additive Layer 1 coverage for extremely creative patterns) ---
+# Creative/Dynamic detectors (additive Layer 1 coverage for extremely creative patterns) ---
 
 
 class TaggedTemplateDetector:
@@ -693,7 +668,7 @@ _default_dyn_detectors = [
     (ComputedPathDetector(), 100),
     (FrameworkMagicDetector(), 90),
     (DataflowAliasDetector(), 75),
-    # Phase 1: four new creative/dynamic detectors for extremely creative patterns (lower pri so core fire first)
+    # four new creative/dynamic detectors for extremely creative patterns (lower pri so core fire first)
     (TaggedTemplateDetector(), 70),
     (RegistryMapDetector(), 65),
     (MultiConditionFeatureWrapperDetector(), 60),
@@ -741,7 +716,7 @@ class CDIAEngine:
         if key in self._memo:
             return self._memo[key]
 
-        scope = self._scope_builder.build(content, match_start)
+        scope = self._scope_builder.build(content, match_start, language=context.get("language", "js"))
 
         # --- Conditional analysis ---
         cond_trace: List[AnalysisTraceEntry] = []

@@ -23,7 +23,10 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+# Filesystem/OS failures on arbitrary user trees (never programming errors).
+_FS_ERRORS = (OSError, ValueError, RuntimeError, subprocess.SubprocessError)
 
 JS_SOURCE_EXTS = (
     ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".mts", ".cts",
@@ -67,9 +70,9 @@ def _max_dir_mtime_ns(walk: Path, excludes: Optional[Set[str]] = None) -> int:
             try:
                 st = os.stat(dirpath)
                 mx = max(mx, int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1e9))))
-            except Exception:
+            except _FS_ERRORS:
                 continue
-    except Exception:
+    except _FS_ERRORS:
         pass
     return mx
 
@@ -89,7 +92,7 @@ def scope_fingerprint(root: Path, directory: Optional[str] = None) -> str:
         rp = os.path.realpath(str(walk))
         mx = _max_dir_mtime_ns(walk)
         return f"{rp}:d{mx}"
-    except Exception:
+    except _FS_ERRORS:
         return f"{walk}:0"
 
 
@@ -108,7 +111,7 @@ def _read_path_list_file(root: Path, name: str) -> List[str]:
             if p in (".", "./"):
                 continue  # bare-dot thrash
             out.append(p)
-    except Exception:
+    except _FS_ERRORS:
         return []
     return out
 
@@ -187,7 +190,7 @@ def resolve_map_scope(
     """Build MapScope from directory / map_paths / monitored / full root."""
     try:
         root_res = Path(root).resolve()
-    except Exception:
+    except _FS_ERRORS:
         root_res = Path(root)
     walk_roots = _resolve_map_walk_roots(
         root_res,
@@ -200,7 +203,7 @@ def resolve_map_scope(
     for wr in walk_roots:
         try:
             rel = os.path.relpath(str(wr), str(root_res)).replace("\\", "/")
-        except Exception:
+        except _FS_ERRORS:
             rel = "."
         if rel in (".", "", os.curdir):
             full = True
@@ -243,35 +246,6 @@ def filter_index_to_map_scope(
     return out
 
 
-def filter_index_to_scope(
-    index: Dict[str, Any],
-    directory: Optional[str] = None,
-    *,
-    root: Optional[Path] = None,
-) -> Dict[str, Any]:
-    """Filter mtime index keys to map scope.
-
-    When ``root`` is provided, honors ``map_paths`` / monitored roots (MapScope).
-    When only ``directory`` is given (legacy callers), filters by that prefix;
-    ``directory=None`` without root returns the full index (legacy behavior).
-    Prefer ``filter_index_to_map_scope`` + ``resolve_map_scope`` for new code.
-    """
-    if root is not None:
-        return filter_index_to_map_scope(index, resolve_map_scope(root, directory))
-    if not directory:
-        return dict(index or {})
-    d = directory.rstrip("/").replace("\\", "/")
-    pref = d + "/"
-    out: Dict[str, Any] = {}
-    for k, v in (index or {}).items():
-        if not isinstance(k, str):
-            continue
-        kk = k.replace("\\", "/")
-        if kk == d or kk.startswith(pref):
-            out[k] = v
-    return out
-
-
 def _load_excludes(root: Path) -> Tuple[Set[str], Set[str]]:
     excludes = set(DEFAULT_EXCLUDES)
     globs: Set[str] = set()
@@ -288,26 +262,10 @@ def _load_excludes(root: Path) -> Tuple[Set[str], Set[str]]:
                 if any(ch in p for ch in "*?["):
                     globs.add(p)
                 excludes.add(p.rstrip("/*"))
-        except Exception:
+        except _FS_ERRORS:
             pass
         break
     return excludes, globs
-
-
-def _git_scope_dirty(root: Path, directory: Optional[str]) -> Optional[bool]:
-    """True if git sees changes under scope (incl. untracked). None if not a git repo / error."""
-    if not ((root / ".git").exists() or (root / ".git" / "HEAD").exists()):
-        return None
-    try:
-        cmd = ["git", "status", "--porcelain", "-unormal", "--"]
-        if directory:
-            cmd.append(str(directory).rstrip("/") + "/")
-        else:
-            cmd.append(".")
-        out = subprocess.check_output(cmd, cwd=str(root), stderr=subprocess.DEVNULL)
-        return len(out.strip()) > 0
-    except Exception:
-        return None
 
 
 def _resolve_map_walk_roots(
@@ -326,7 +284,7 @@ def _resolve_map_walk_roots(
     """
     try:
         root = Path(root).resolve()
-    except Exception:
+    except _FS_ERRORS:
         root = Path(root)
     if directory:
         d = root / directory
@@ -384,7 +342,7 @@ def collect_candidate_source_files(
     """
     try:
         root_res = Path(root).resolve()
-    except Exception:
+    except _FS_ERRORS:
         root_res = Path(root)
     root = root_res
 
@@ -403,7 +361,7 @@ def collect_candidate_source_files(
             return False
         try:
             key = os.path.realpath(str(p))
-        except Exception:
+        except _FS_ERRORS:
             key = os.path.normpath(str(p))
         if key in seen:
             return False
@@ -415,14 +373,14 @@ def collect_candidate_source_files(
             for part in Path(relp).parts:
                 if part in excludes:
                     return False
-        except Exception:
+        except _FS_ERRORS:
             # Fallback: check file's parent directory names only
             pass
         if exclude_globs:
             name = p.name
             try:
                 relp = os.path.relpath(key, root_norm)
-            except Exception:
+            except _FS_ERRORS:
                 relp = name
             if any(fnmatch.fnmatch(name, g) or fnmatch.fnmatch(relp, g) for g in exclude_globs):
                 return False
@@ -445,9 +403,9 @@ def collect_candidate_source_files(
                             scandir_walk(Path(entry.path))
                         elif entry.is_file(follow_symlinks=False):
                             add_file(Path(entry.path))
-                    except Exception:
+                    except _FS_ERRORS:
                         continue
-        except Exception:
+        except _FS_ERRORS:
             pass
 
     git_available = (root / ".git").exists() or (root / ".git" / "HEAD").exists()
@@ -458,7 +416,7 @@ def collect_candidate_source_files(
             try:
                 try:
                     rel_scope = os.path.relpath(str(walk_root), str(root))
-                except Exception:
+                except _FS_ERRORS:
                     rel_scope = "."
                 git_cmd = [
                     "git", "ls-files", "--cached", "--others",
@@ -475,7 +433,7 @@ def collect_candidate_source_files(
                     rel = entry.decode("utf-8", "ignore")
                     add_file(root / rel)
                 used_git = True
-            except Exception:
+            except _FS_ERRORS:
                 used_git = False
         if not used_git:
             scandir_walk(walk_root)
@@ -514,7 +472,7 @@ def _live_source_count(
             if pathspec:
                 cmd.extend(["--", pathspec.rstrip("/") + "/"])
             out = subprocess.check_output(cmd, cwd=str(root), stderr=subprocess.DEVNULL)
-        except Exception:
+        except _FS_ERRORS:
             return None
         cnt = 0
         for entry in out.split(b"\0"):
@@ -547,7 +505,7 @@ def _live_source_count(
     for walk_root in walk_roots:
         try:
             rel_scope = os.path.relpath(str(walk_root), str(root))
-        except Exception:
+        except _FS_ERRORS:
             rel_scope = "."
         if rel_scope in (".", ""):
             c = _count_git(None)
@@ -717,16 +675,16 @@ def candidate_list_meta(
     root = Path(root)
     try:
         root = root.resolve()
-    except Exception:
+    except _FS_ERRORS:
         pass
     rels: List[str] = []
     for p in paths:
         try:
             rels.append(str(Path(p).resolve().relative_to(root)))
-        except Exception:
+        except _FS_ERRORS:
             try:
                 rels.append(os.path.relpath(str(p), str(root)))
-            except Exception:
+            except _FS_ERRORS:
                 continue
     return {
         "fp": scope_fingerprint(root, directory),

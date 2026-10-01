@@ -22,7 +22,7 @@ class TestLibraryImport(unittest.TestCase):
         import wikifier
         from wikifier import check_changes, health
         self.assertTrue(hasattr(wikifier, "__version__"))
-        self.assertTrue(str(wikifier.__version__).startswith("4.6."))
+        self.assertTrue(str(wikifier.__version__).startswith("4.7."))
         # health() is the convenience function
         self.assertTrue(callable(health))
         self.assertTrue(callable(check_changes))

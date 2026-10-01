@@ -242,7 +242,7 @@ def _extract_candidate_literals(arg_text: str) -> list[dict[str, Any]]:
     return unique
 
 DYNAMIC_SPECIFIER_REGISTRY: list[dict[str, Any]] = [
-    # Phase 1: seed with a few always-on creative handlers (additive, safe, zero-dep).
+    # seed with a few always-on creative handlers (additive, safe, zero-dep).
     # These complement the new CDIA detectors by also harvesting literal candidates from call/map/tagged exprs.
     {"name": "call_produced_or_registry",
      "detect": lambda t: bool(re.search(r'\b(get\w*Path|resolve\w*Path|registry|modMap|create\w*Path|pathFor)\s*[\(\[]', t or "", re.I)),
@@ -258,7 +258,7 @@ DYNAMIC_SPECIFIER_REGISTRY: list[dict[str, Any]] = [
          "tags": ["tagged_template"],
          "notes": ["tagged_template_hit"]
      }},
-    # Richer Phase 2 seeds (per creative_dynamic wave): python importlib parity + stronger map/dict lookups
+    # Richer seeds (per creative_dynamic wave): python importlib parity + stronger map/dict lookups
     # (activates for both JS and Python dynamic exprs when registry invoked from dataflow/expr paths)
     {"name": "python_importlib_creative",
      "detect": lambda t: bool(re.search(r'(import_module|__import__|importlib\.|pkgutil)', t or "", re.I)),

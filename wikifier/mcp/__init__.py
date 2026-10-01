@@ -1,17 +1,21 @@
 """
-Wikifier MCP Server Package
+Wikifier MCP server package (optional extra: ``pip install wikifier[mcp]``).
 
-This package exposes Wikifier as a Model Context Protocol (MCP) server.
-
-The MCP server requires the optional 'mcp' extra (pip install wikifier[mcp]).
-The core wikifier package is zero-dependency and must stay importable without
-it, so the server import is guarded: `wikifier.mcp.mcp` is None when the
-extra is not installed.
+Importing this package is cheap and never requires the extra; the FastMCP
+server is only constructed when ``wikifier.mcp.server`` (or the ``mcp``
+attribute below) is first accessed.
 """
 
-try:
-    from .server import mcp
-except ImportError:
-    mcp = None
+from typing import Any
 
 __all__ = ["mcp"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "mcp":
+        try:
+            from .server import mcp as server
+        except ImportError:
+            return None
+        return server
+    raise AttributeError(name)

@@ -9,17 +9,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-10-01
+
+Full-codebase review release. Details and measurements: `Findings/2026-10-01-review-4.7.0.md`;
+lookup benchmark against grep on real repositories: `Findings/2026-10-01-lookup-benchmark.md`.
+Agent protocol v0.7 (`skills/run.md`, migration notes at the end).
+
+### Breaking
+- An explicit `project_root` (argument, `--target`, or `WIKIFIER_PROJECT_ROOT`) that does not exist is now an error (`error_type: "ProjectRootError"`) instead of silently using the current directory.
+- `record_change` and `mark_green` require the file to exist (use `record_deletion` for removed files); paths outside the project are rejected.
+- `wikifier.import_cache.run_update_stream` / `generate_update_events` moved to `wikifier.streaming`.
+- `wikifier.sh`, `wikifier.ps1`, `wikifier.bat` are thin launchers for `python -m wikifier`; the shell's own `record-change`/`mark-green`/`check-changes` implementations (which only wrote `file_health.md`) are gone. `init` no longer copies the launcher into targets.
+- Health keys are canonicalized on load (absolute or `./` keys inside the project merge into their relative key).
+- `mark_green` checks the wiki against the code and fails with `WikiVerificationError` when public symbols were added without being documented, removed symbols are still referenced, or the public surface changed while the wiki file stayed identical. `force=True` (CLI `--force`) with a reason overrides and is recorded as `verification: "forced"`.
+- `get_dependencies` returns a compact shape by default (`internal`, `external`, `needs_review`; ~1/10 the size). `detail="full"` (CLI `--full`) returns the previous `imports[]` records.
+- `check_changes` watches every mapped file and every file with a Green baseline in addition to `monitored_paths.txt` (which now only adds files). Pending/health pruning keeps mapped files.
+
 ### Added
-- **Sharded agent folder maps:** `update-maps` writes `.wikifier_staging/maps/` (root `_root.json` + per-folder `_index.json`). Each card is depth-1 names only. A shard rewrites only when that folder's child set (names + child counts) changes.
-- `session_bootstrap` `map_index` is the **root card** (not a whole-tree dump). Fat roots cap immediate files only.
-- `list_paths` / CLI `list-paths [prefix]` / MCP `list_paths` default `depth=1`. `hop`: dirs → `list_paths`, files → `prepare_edit`. `depth=0` / `--recursive` for a subtree.
-- Protocol + README: walk folder cards + `prepare_edit`; do not read `library.md` mermaid.
+- `wikifier/paths.py` (`resolve_root`, `to_rel`) — one path/root normalizer for library, CLI, MCP.
+- `wikifier/journal.py`; journal writes raise on failure and de-duplicate identical retries within 120 s (`record_change` returns `journaled` / `duplicate_skipped`).
+- SQLite `edges(src, dst, …)` table with indexes: `get_dependents` / `get_dependencies` / `prepare_edit` no longer load the whole cache (existing databases are backfilled on first use).
+- Library: `get_dependencies`, `get_dependents`, `cycles_report`, `format_cycles_report`, `heal_stubs`, `journal`, `issues`, `init_project`.
+- CLI (argparse, all commands in Python): `dependencies`, `dependents`, `heal-stubs`, `healable-stubs`, `healing-stats`, `stale-wikis`, `prune-barrels`, `cycles --json`, `journal --json`, `issues --json`, `--version`; `update-maps --directory D` (space form) and `--stream`.
+- `run_full_update(time_budget_s=…, progress=…)`.
+- Parser accuracy fixtures + `scripts/parser_accuracy.py`; `tests/test_regressions_4_7.py` (one test per fix).
+- `wikifier serve` read-only JSON API at `/__wikifier/api/{bootstrap,file,dependencies,dependents,cycles,journal,diagnostics}` (paths outside the project root → 400).
+- Proposed UX pages for comparison (repo only, not deployed by `init`): `index.v2.html` (file explorer, wiki render, dependency neighbourhood graph, ⌘K palette, light/dark, responsive, no CDN) and `diagnostics.v2.html` (data-driven maintainer view replacing the hand-written module list).
+- Wiki verification (`health_pkg/verify.py`): public symbols per file (Python `__all__`/top-level, JS/TS exports) recorded at mark-green; health rows gain `public_symbols`, `verification`, `source_mtime_ns`; `health --summary` gains `green_breakdown` (verified / no_wiki / unchecked / forced / legacy). `verify_wikis` / `verify-wikis` audits every Green wiki read-only.
+- `record_changes` / `record-changes` (MCP `record_changes`): record every file git reports as changed in one call, with reasons per path, glob or `dir/` prefix, an optional default, `only=` to limit to your own files, `--dry-run`, and `--green` to mark each Green through verification. Missing reasons write nothing and return a template. New `wikifier/gitchanges.py` (git is optional; without it the call reports `GitUnavailableError`).
+- `scripts/benchmark_lookup.py`: tokens and correctness of Wikifier lookups vs grep on any Python project, scored against an independent stdlib `modulefinder` reference.
+- Sharded agent folder maps: `update-maps` writes `.wikifier_staging/maps/` (root `_root.json` + per-folder `_index.json`, depth-1 names only; a shard rewrites only when its child set changes). `session_bootstrap` `map_index` is the root card; `list_paths` / CLI `list-paths [prefix]` / MCP `list_paths` default `depth=1`.
 
 ### Changed
+- Python parser uses stdlib `ast` (regex fallback for unparseable files): absolute imports resolve against the package root, project root and `src/`; `from pkg import submodule` resolves to the submodule; imports under `if`/`try`/loops are `is_conditional`; `import_module("pkg.mod")` literals resolve.
+- JS/TS parser ignores imports in comments and string literals, emits one edge per specifier (most specific pattern wins), marks `import('./x')` as `dynamic_type="literal"`, and never tags external packages as barrels.
+- Conditional detection (CDIA) only counts guards that *enclose* the import (braces for JS/TS, indentation for Python); previously most imports after any `if`/`const`/type annotation were flagged conditional.
+- `health_impl.py` split into `health_pkg/{store,pending,freshness,scope,summary,readiness,healing}.py`; `cache/_core.py` split into `cache/{graph,cycles,acs,barrel,diagnostics}.py`.
+- Cache stores nanosecond mtimes; unchanged files are never re-hashed on warm runs.
+- `_acs_summary` and `_resolution_diagnostics` are recomputed on every update-maps; `_graph_integrity` is derived on read.
+- MCP server is a thin adapter over `wikifier.api` (no subprocess fallback); mutator timeouts report `may_still_complete`; status tools read persisted summaries instead of loading the cache.
+- Daemon: `stop` sends SIGTERM and waits; `start` refuses `readiness=blocked` unless `--force`; systemd unit pins the project root.
+- `import wikifier` no longer imports the MCP server.
+- Locking re-entrancy is per thread.
+- CI: Python 3.8 (ubuntu-22.04) through 3.14, macOS, experimental Windows; parser accuracy report; wheel + launcher smoke.
 - Zero-dirty `update-maps` reuses existing maps if the root card is present, and rebuilds shards if it is missing.
 
 ### Fixed
+- `prepare_edit` always reported `resolved_path: null` (read the wrong key).
+- `check-changes` missed edits once `update-maps` had run after them (it only looked at files the parse cache considered dirty); files with a baseline are now compared against the mtime recorded with that baseline.
+- `python -m wikifier` (and therefore every launcher) exited 0 on failure.
+- Python parser: on case-insensitive filesystems (macOS, Windows) `from pkg import ClassName` created a phantom edge to `pkg/ClassName.py` when `pkg/classname.py` existed (e.g. Airflow `from airflow.models import DagRun`). Module files must now match case exactly.
+- Incremental `update-maps` kept files deleted from disk in the graph (only `--full` dropped them); vanished files are now removed on every run (`files_removed`).
+- Resolution diagnostics ignored `max_samples_per_category`: samples were the first 50 imports, so external packages crowded out actionable ones. Samples are now capped per category and ordered actionable-first.
+- Absolute-path `record_change` → `mark_green` left a duplicate health row and a stuck pending item; `mark_green` accepted nonexistent files.
+- Pending removal matched substrings (`a.py` removed `data.py`).
+- Relative health keys starting `tmp/`, `home/`, `Users/`, `var/` were dropped as "absolute".
+- check-changes ignored non-source monitored files and deleted its own auto-detected pending items.
+- `wikifier cycles` contradicted itself (stale `_graph_integrity` written only by an MCP read tool).
+- `wikifier heal-stubs` crashed (`python -m wikifier.health` is not runnable); healing statistics always reported 0 stubs.
+- Read-only commands with `--target` copied `index.html` into the target.
+- Persistent barrel cache never loaded (`from .. import import_cache` inside `parsers/bree/`), and barrel invalidation matched basenames/substrings.
+- Unresolved relative imports appeared as phantom files in the graph.
+- `update-maps --stream` never persisted the map.
+- A failed SQLite save silently wrote a JSON file that was never read.
+- MCP `health(format="text")` always fell back to the shell; journal resource read the wrong path; `update_maps` reported success unconditionally.
+- Daemon metrics never ran (imported the `health` function instead of the module).
+- Dashboard copy failed on Python 3.8 (`importlib.resources.files`).
 - CI: install `wikifier[mcp]` only on Python ≥3.10 (`mcp` has no 3.8/3.9 wheels).
+
+### Removed
+- `wikifier/mcp/tools/` (empty stub package), the shell launcher implementation, deprecated JS resolution shims, and unreferenced private helpers.
 
 ## [4.6.13] - 2026-08-27
 

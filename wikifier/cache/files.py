@@ -48,11 +48,23 @@ def update_file_data(
 
 
 def get_mtime(file_path: Path) -> int:
-    """Get the mtime of a file (cross-platform)."""
+    """Whole-second mtime (0 when the file is missing)."""
     try:
-        return int(file_path.stat().st_mtime)
-    except Exception:
+        return int(Path(file_path).stat().st_mtime)
+    except OSError:
         return 0
+
+
+def get_mtime_ns(file_path: Path) -> int:
+    """Nanosecond mtime — what the cache stores (0 when the file is missing)."""
+    try:
+        return int(Path(file_path).stat().st_mtime_ns)
+    except OSError:
+        return 0
+
+
+# Cache rows written before nanosecond mtimes hold whole seconds (< ~1e10).
+_LEGACY_SECONDS_MAX = 10 ** 12
 
 
 def compute_file_content_hash(file_path: Path) -> Optional[str]:
@@ -73,112 +85,78 @@ def compute_files_needing_reparse(
     full_rebuild: bool = False,
     content_stable_mtime_updates: Optional[List[Tuple[str, int, str]]] = None,
 ) -> List[Path]:
-    """Light-index dirty detection (no pair-payload deserialize)."""
+    """Files whose content may have changed since they were last mapped.
+
+    Uses the light mtime index (no payload load). An unchanged nanosecond mtime
+    means clean without reading the file; a changed mtime with identical content
+    hash is recorded in ``content_stable_mtime_updates`` instead of re-parsing.
+    Indexed files that are not candidates (e.g. outside the current walk) are
+    checked too, so edits there are never missed.
+    """
+    root = Path(root).resolve()
     if full_rebuild:
-        seen: set = set()
         out: List[Path] = []
+        seen_full: set = set()
         for p in candidate_full_paths:
-            pr = Path(p).resolve() if p else None
-            if pr and pr not in seen:
-                seen.add(pr)
-                out.append(pr)
+            if not p:
+                continue
+            resolved = Path(p).resolve()
+            if resolved not in seen_full:
+                seen_full.add(resolved)
+                out.append(resolved)
         return out
 
     index = load_mtime_index(root)
-    to_reparse: List[Path] = []
+    dirty: List[Path] = []
     seen: set = set()
-    try:
-        root_res = root.resolve()
-    except Exception:
-        root_res = root
 
-    def _rel_of(p_res: Path) -> str:
-        rel = None
+    def check(path: Path, rel: str, data: Dict[str, Any]) -> None:
         try:
-            rel = str(p_res.relative_to(root_res))
-        except Exception:
-            pass
-        if rel is None:
-            try:
-                rp = str(p_res)
-                rr = str(root_res)
-                if rp.startswith(rr):
-                    rel = rp[len(rr):].lstrip("/\\")
-            except Exception:
-                pass
-        if not rel:
-            rel = p_res.name or str(p_res)
-        return rel
-
-    def _content_stable(p_res: Path, data: Dict[str, Any], rel: str, curr_mtime: int) -> bool:
-        stored = data.get("content_hash")
-        if not stored or not isinstance(stored, str):
-            return False
-        live = compute_file_content_hash(p_res)
-        if not live or live != stored:
-            return False
-        if content_stable_mtime_updates is not None:
-            content_stable_mtime_updates.append((rel, curr_mtime, live))
-        return True
+            current_ns = path.stat().st_mtime_ns
+        except OSError:
+            return
+        cached = int(data.get("mtime", 0) or 0)
+        stored_hash = data.get("content_hash")
+        if cached >= _LEGACY_SECONDS_MAX:
+            if current_ns == cached:
+                return
+        else:
+            current_s = current_ns // 1_000_000_000
+            if current_s < cached:
+                return
+            if current_s == cached and not stored_hash:
+                return
+        live_hash = compute_file_content_hash(path)
+        if stored_hash and live_hash == stored_hash:
+            if content_stable_mtime_updates is not None:
+                content_stable_mtime_updates.append((rel, current_ns, live_hash))
+            return
+        dirty.append(path)
 
     for p in candidate_full_paths:
         if not p:
             continue
+        path = Path(p).resolve()
+        if path in seen:
+            continue
+        seen.add(path)
         try:
-            p_res = Path(p).resolve()
-        except Exception:
-            p_res = Path(p)
-        if p_res in seen:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
             continue
-        seen.add(p_res)
-        rel = _rel_of(p_res)
-        data = index.get(rel) or {}
-        cached_mtime = int(data.get("mtime", 0) or 0)
-        curr_mtime = 0
-        if p_res.exists():
-            try:
-                curr_mtime = int(p_res.stat().st_mtime)
-            except Exception:
-                curr_mtime = 0
+        data = index.get(rel)
         if not data:
-            to_reparse.append(p_res)
-            continue
-        if curr_mtime > cached_mtime:
-            if _content_stable(p_res, data, rel, curr_mtime):
-                continue
-            to_reparse.append(p_res)
-        elif curr_mtime == cached_mtime:
-            # Same-second writes (tests + fast agent loops) do not bump int mtime.
-            stored = data.get("content_hash")
-            if stored:
-                live = compute_file_content_hash(p_res)
-                if live and live != stored:
-                    to_reparse.append(p_res)
+            dirty.append(path)
+        else:
+            check(path, rel, data)
 
-    for rel, data in list(index.items()):
+    for rel, data in index.items():
         if not isinstance(rel, str) or not isinstance(data, dict):
             continue
-        try:
-            full = (root / rel).resolve()
-            if full in seen:
-                continue
-            if full.exists():
-                curr = int(full.stat().st_mtime)
-                cached = int(data.get("mtime", 0) or 0)
-                if curr > cached:
-                    if _content_stable(full, data, rel, curr):
-                        seen.add(full)
-                        continue
-                    to_reparse.append(full)
-                    seen.add(full)
-                elif curr == cached:
-                    stored = data.get("content_hash")
-                    if stored:
-                        live = compute_file_content_hash(full)
-                        if live and live != stored:
-                            to_reparse.append(full)
-                            seen.add(full)
-        except Exception:
-            pass
+        path = (root / rel).resolve()
+        if path in seen or not path.exists():
+            continue
+        seen.add(path)
+        check(path, rel, data)
 
-    return to_reparse
+    return dirty

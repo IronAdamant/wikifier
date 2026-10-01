@@ -1062,3 +1062,12 @@ Full report details: packaging analysis confirmed stale state in wikifier/script
 - No rule violations, no breakage from cruft removal or packaging cleanups.
 - Historical dogfood targets (esp. RecipeLab_alt) remain fully viable for agent-to-agent use (BRC/scale/JS still shine).
 
+
+
+## Phase: 4.7.0 review (2026-10-01)
+
+- Shell retired as an implementation: every command is Python (`cli.py` argparse over `api.py`); `wikifier.sh`/`.ps1`/`.bat` are thin `python -m wikifier` launchers. The shell's own record-change/mark-green (which only wrote `file_health.md`) and the PowerShell re-implementation are gone.
+- God modules split for real: `health_impl.py` → `health_pkg/*`, `cache/_core.py` → `cache/*`; no star-import shims.
+- MCP server rewritten as a thin adapter over the library (2,048 → ~800 lines, no subprocess fallback).
+- Broad exception handlers 464 → 80; silent `except: pass` 149 → 29; package 25.7k → 20.8k lines.
+- Fixed defects and before/after measurements: `Findings/2026-10-01-review-4.7.0.md`.

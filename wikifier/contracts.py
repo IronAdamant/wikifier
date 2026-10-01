@@ -1,10 +1,10 @@
 """
 wikifier/contracts.py
 
-Gap #1 Pre-Wave 0: Shared Cross-Cutting Contracts (FROZEN)
+Shared Cross-Cutting Contracts (FROZEN)
 
 This is the single authoritative, frozen definition of all contracts that the
-four Gap #1 phases (Cycles, BREE/Barrels, CDIA, Modern Resolution) and future
+four phases (Cycles, BREE/Barrels, CDIA, Modern Resolution) and future
 work depend on.
 
 It eliminates the highest-risk areas identified across all implementation plans:
@@ -24,14 +24,14 @@ Design principles (binding):
 - Shell (wikifier.sh) treats *_vN values as opaque strings; all parsing in Python.
 
 Consumers (import from here):
-- wikifier/parsers/javascript.py, python.py (for emission shapes + pack helpers + R2 ACS canonical compute)
+- wikifier/parsers/javascript.py, python.py
 - wikifier/import_cache.py (RICH_KEYS, reserved keys, normalize)
 - wikifier.sh (via python -c "from wikifier.contracts import ...")
 - wikifier/resolution.py, diagnostics.py, parsers/bree.py
 - mcp/server.py, future cdia.py, bree extensions, etc.
 - Tests and dogfood scripts
 
-R2 ACS (compute_acs_confidence) is the single source for confidence_score/reasons/explanation across the system.
+ACS (compute_acs_confidence) is the single source for confidence_score/reasons/explanation across the system.
 
 Versioning of this contract module: see __contracts_version__
 Any shape change requires new *_vN field name + migration note here + CHANGELOG.
@@ -45,7 +45,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Literal, Optional, Tuple, Union
 from datetime import datetime, timezone
 import fnmatch
 from pathlib import Path
@@ -56,7 +56,7 @@ from pathlib import Path
 
 __contracts_version__ = "1.0.0-prewave0-frozen"
 FROZEN_DATE = "2026-05-17"
-STATUS = "FROZEN - Pre-Wave 0 complete. All phases must use these definitions."
+STATUS = "FROZEN: shared shapes; new fields are additive only."
 
 
 # =============================================================================
@@ -210,12 +210,12 @@ class DynamicAnalysis:
 @dataclass(frozen=True)
 class ResolutionMetadata:
     """
-    Rich strategy + context information attached to a Resolution (Phase 4).
+    Rich strategy + context information attached to a Resolution.
 
     Stored under resolved_pair["resolution_metadata"] (or "metadata" during early
     transition) and also inside the res_meta_v1 pipe field.
 
-    Extensible: Phase 4 and later may add fields as long as they are JSON-serializable
+    Extensible: and later may add fields as long as they are JSON-serializable
     primitives / lists / dicts of primitives. Use from_dict defensively.
     """
     strategy: str
@@ -269,7 +269,7 @@ class ResolutionMetadata:
 PIPE_FIELD_CDIA_V1 = "cdia_v1"        # carries {"conditional_analysis": {...}, "dynamic_analysis": {...}}
 PIPE_FIELD_BARREL_V2 = "barrel_v2"    # carries barrel chain, hops, detector, mtimes_sig, is_partial
 PIPE_FIELD_RES_META_V1 = "res_meta_v1"  # carries ResolutionMetadata + strategy details
-PIPE_FIELD_CYCLE_V1 = "cycle_v1"      # future (Phase 1)
+PIPE_FIELD_CYCLE_V1 = "cycle_v1"      # future
 
 RICH_PIPE_FIELDS: Tuple[str, ...] = (
     PIPE_FIELD_CDIA_V1,
@@ -363,7 +363,7 @@ def unpack_res_meta_v1(raw: str) -> Dict[str, Any]:
 
 
 # Aliases for names that some modules (javascript.py parser import sites) were
-# written against during early Phase 4 planning. They delegate to the canonical
+# written against during early planning. They delegate to the canonical
 # pack/unpack implementations above. This keeps all call sites working while
 # we finish the migration to contracts as the single source.
 encode_res_meta_v1 = pack_res_meta_v1
@@ -463,20 +463,19 @@ RICH_KEYS: Tuple[str, ...] = LEGACY_RICH_KEYS + NEW_RICH_STRUCT_KEYS
 # Reserved top-level keys in the import_cache (never collide with file relpaths).
 # All subsystems (including future phases) register here.
 RESERVED_TOP_LEVEL_KEYS: Dict[str, str] = {
-    "_reverse_dependencies": "Core reverse-dependency map (target -> [sources]). Always authoritative.",
-    "_cycles": "Phase 1: Tarjan SCC results, stats, per-cycle metadata. Must record node_identity_version (v0 raw / v1 canonical). Includes graph_signature for reuse. Wave 2: carries 'reused' (bool) + 'reuse_reason'. Wave 3: full delta short-circuit *in main update-maps 3d path* + iterative Tarjan harness-tested + reuse surfaced broadly via get_cycles_reuse_stats (health/diag/MCP/library). Canonical v1 prep: build_dependency_graph + computes support use_canonical + canonical_for_bree remap (Phase 4 flip ready, harnessed). Uses iterative (stack-sim) Tarjan.",
-    "_cycle_analyses": "P3 CIABRE v1.2 (R5): per-SCC severity (real-dogfood tuned scoring), blast radius, weakest links (risk-ranked dyn/cond/bar/low-conf), ranked practical recs with rationale/hint/safety from extensible registry. Versioned, persisted on update-maps. See import_cache.py. Wave 2/3: also carries graph_signature + reused/reuse_reason; delta short applies in update path.",
-    "_graph_integrity": "Phase 1: warnings, orphan counts, summary for health/MCP.",
-    "_graph_signature": "Phase 1 extension (cycles long-term): short stable hash of the full dependency graph adj-list (v0 or v1 canonical nodes). Enables safe skip of Tarjan/CIABRE on match (incremental/delta). Populated + guaranteed. Wave 3+: delta short in main 3d path + compute; canonical v1 graph nodes supported; broad reuse stats (get_cycles_reuse_stats) in health/diag/MCP/library; harnessed.",
-    "_barrel_resolutions": "Phase 2: persistent BarrelChainResolution / ExpandedChainResult cache (mtimes_snapshot decoupled).",
-    "_barrel_file_index": "Phase 2: barrel -> chain ids + importer reverse index for fast invalidation.",
-    "_barrel_invalidation_log": "Wave 4 audit (this continuation): lightweight bounded append-only list of recent BarrelInvalidationReport dicts (with ts) for 'why importer dirtied' traceability across daemon/check-changes/update-maps runs. Appended opportunistically on real barrel-driven invalidations (DEBUG or always in delta paths). Bounded (~100), human/JSON inspectable; never required for correctness. See import_cache.append_barrel_invalidation_log + bree reports.",
-    # Wave 2/4 observability (BRC): summary stats + get_barrel_*_reports on-demand + optional persisted _barrel_invalidation_log for audit. Reports carry importer + triggering_barrels + chain_ids + reason + detector + v1 stamp for diagnostics/health/MCP/journal "why re-parsed". Dedicated MCP get_barrel_reports(limit, include_log) now provides full rich surface for agents (complements embedded samples in get_project_status/health). See bree.py:BarrelInvalidationReport + build_* + prune + mcp/server.py:get_barrel_reports.
-    "_resolution_context": "Phase 4: ProjectContext snapshot, config mtimes, workspace/TS maps for incremental reuse.",
-    "_cdia_summary": "Phase 3: aggregate semantic tag statistics (optional, for health + MCP).",
-    "_resolution_diagnostics": "Diagnostics layer aggregate (counts + samples by category). Wave 3: get_resolution_diagnostics + ensure_diagnostics_aggregate implemented in import_cache (delegates summarize + injects cycles_reuse/graph_signature stats for unified observability). Wave 4: optional guaranteed persist now wired into update-maps 3d (both sh) via ensure_ after ACS (so library/MCP always see fresh without extra on-demand compute).",
-    "_acs_summary": "Lightweight ACS aggregates (R2 canonical): total_scored_edges, avg_confidence, low_conf_edges<0.65, top_risk_reasons counts, bounded sample_low_conf_explanations (full Recommendation text). Persisted every update-maps via import_cache.compute_acs_summary + set. Enables health/MCP/library surfacing uniformity for agents (biggest trust gap fix).",
-    "_acs_summary_version": "Companion for _acs_summary (future).",
+    "_reverse_dependencies": "Reverse dependency map (target -> [importers]); maintained incrementally by update-maps.",
+    "_cycles": "Tarjan SCC clusters with per-cluster edge signals, stats, node_identity_version and graph_signature; reused when the graph is unchanged.",
+    "_cycle_analyses": "Per-cluster severity, external blast radius, weakest links and ranked breaking recommendations (rationale/hint/safety).",
+    "_graph_integrity": "Deprecated: derived on read from _cycles; dropped from persisted caches.",
+    "_graph_signature": "Short stable hash of the dependency graph; when unchanged, cycle work is reused.",
+    "_barrel_resolutions": "Barrel re-export chains with mtime snapshots (persistent barrel resolution cache).",
+    "_barrel_file_index": "Barrel file -> chain ids + importers: reverse index for exact invalidation of importers.",
+    "_barrel_invalidation_log": "Bounded list of recent barrel invalidation reports (which importer was dirtied by which barrel, and why).",
+    "_resolution_context": "Resolution context snapshot (config mtimes, workspace/TS maps).",
+    "_cdia_summary": "Aggregate conditional/dynamic import tag statistics (optional).",
+    "_resolution_diagnostics": "Resolution diagnostics aggregate (counts + samples by category); recomputed every update-maps.",
+    "_acs_summary": "Agent confidence summary (scored edges, averages, actionable low-confidence counts, reason codes, sample explanations); recomputed every update-maps.",
+    "_acs_summary_version": "Companion for _acs_summary (reserved).",
     "_candidate_list": "Persisted scoped candidate list + fingerprint for index-first reuse.",
     "_map_coverage": "Last map_coverage snapshot (complete, dirty_total, files_remaining_dirty).",
     "_reverse_signature": "Signature of reverse-dependency map for integrity / reuse checks.",
@@ -506,7 +505,7 @@ def is_reserved_top_level_key(key: str) -> bool:
 # 4. Node Identity Versioning (Canonical Path Contract)
 # =============================================================================
 
-NODE_IDENTITY_VERSION_V0 = "v0"   # Raw "resolved" strings as emitted by old resolvers / pre-Phase 4
+NODE_IDENTITY_VERSION_V0 = "v0"   # Raw "resolved" strings as emitted by old resolvers / pre-
 NODE_IDENTITY_VERSION_V1 = "v1"   # Physical canonical via resolution.to_canonical_rel(..., follow_symlinks=True)
 NODE_IDENTITY_VERSION_CURRENT = NODE_IDENTITY_VERSION_V1
 
@@ -636,7 +635,7 @@ def get_contracts_info() -> Dict[str, Any]:
         "num_conditional_tags": len(CONDITIONAL_SEMANTIC_TAGS),
         "num_dynamic_tags": len(DYNAMIC_SEMANTIC_TAGS),
     }
-    # M2 A0+ additive extension (safe; evaluated at call time after full module load)
+    # additive extension (safe; evaluated at call time after full module load)
     try:
         base["m2_contracts_version"] = M2_CONTRACTS_VERSION
         base["m2_shapes"] = [
@@ -649,7 +648,7 @@ def get_contracts_info() -> Dict[str, Any]:
             k for k in RESERVED_TOP_LEVEL_KEYS if k.startswith("_reverse_dependency") or k.startswith("_update") or k.startswith("_partial")
         ]
     except Exception:
-        pass  # defensive: if M2 section not yet loaded (impossible post-import) or during smoke
+        pass  # defensive: if section not yet loaded (impossible post-import) or during smoke
     return base
 
 
@@ -673,7 +672,7 @@ def enrich_diagnostic_with_analysis(
 
 
 # =============================================================================
-# 8. Actionable Confidence System (ACS) Helpers — R2 Reliability & Scale Follow-up
+# 8. Actionable Confidence System (ACS) Helpers — Reliability & Scale Follow-up
 # Single source of truth for numeric score + canonical reasons + high-quality
 # decision-oriented confidence_explanation strings.
 #
@@ -682,7 +681,7 @@ def enrich_diagnostic_with_analysis(
 # evidence-backed, and prescriptive so agents can make reliable calls from
 # the string alone (e.g. "safe to auto-refactor?", "high blast-radius risk").
 #
-# Additive R2 extension (non-breaking to frozen data contracts / dataclasses).
+# Additive extension (non-breaking to frozen data contracts / dataclasses).
 # Placed in contracts per design (parsers, MCP, diagnostics all import here).
 # =============================================================================
 
@@ -695,7 +694,7 @@ def compute_acs_confidence(
     barrel_depth: int | None = None,
     via_barrel: bool = False,
     resolved_path: str | None = None,
-    # Rich signals (CDIA Phase 3, Resolution Phase 4, Cycles Phase 1)
+    # Rich signals
     conditional_analysis: dict | None = None,
     dynamic_analysis: dict | None = None,
     resolution_metadata: dict | None = None,
@@ -703,7 +702,7 @@ def compute_acs_confidence(
     in_cycle: bool = False,
 ) -> tuple[float, list[str], str]:
     """
-    Canonical ACS implementation (P2 base + F2 explanations + R2 hardening).
+    Canonical ACS implementation.
 
     - Preserves exact prior penalty math and reason tokens for backward compat
       with caches, tests, harness, library.md, and existing agent prompts.
@@ -716,7 +715,7 @@ def compute_acs_confidence(
     - Explanations are self-contained narratives + specific recommendations.
 
     Used by: parsers (via thin _compute wrapper for compat), MCP get_*, prompts,
-    gap1_validation_harness, future cdia/bree consumers.
+    future cdia/bree consumers.
     """
     base_map = {
         "high": 0.90,
@@ -759,7 +758,7 @@ def compute_acs_confidence(
             score -= 0.12
             reasons.append("no_resolved_path")
 
-    # Rich CDIA / Resolution / Cycle extensions (identical to prior F2)
+    # Rich CDIA / Resolution / Cycle extensions
     ca = conditional_analysis or {}
     da = dynamic_analysis or {}
     rm = resolution_metadata or {}
@@ -811,7 +810,7 @@ def compute_acs_confidence(
             elif tag in ("call_expression", "alias_dataflow", "path_api"):
                 pen = 0.18
             elif tag in ("tagged_template", "registry_map", "multi_condition_feature_wrapper", "call_produced_path"):
-                # Phase 1 creative signals: higher penalty for extremely creative patterns (opaque to static analysis)
+                # higher penalty for extremely creative patterns (opaque to static analysis)
                 pen = 0.25 if comp in ("high", "opaque") else 0.17
             else:
                 pen = 0.12 if comp in ("high", "opaque") else 0.08
@@ -851,7 +850,7 @@ def compute_acs_confidence(
     final = round(final, 2)
 
     # -----------------------------------------------------------------
-    # R2: Significantly improved explanation builder
+    # Significantly improved explanation builder
     # - Prioritized risk ordering (most severe first for quick scanning)
     # - Consistent, professional phrasing
     # - Evidence traces + resolution context embedded
@@ -865,7 +864,7 @@ def compute_acs_confidence(
         "tag:webpack_magic": 65, "tag:react_lazy": 60, "tag:conditional_dynamic": 60,
         "conditional_context": 50, "via_barrel": 45, "barrel_depth": 40,
         "tag:feature_flag": 35, "tag:env_check": 35,
-        # Phase 1 creative dynamic signals wired into ACS
+        # creative dynamic signals wired into ACS
         "tag:tagged_template": 55, "tag:registry_map": 52, "tag:multi_condition_feature_wrapper": 48, "tag:call_produced_path": 45,
     }
 
@@ -908,7 +907,7 @@ def compute_acs_confidence(
             elif tag in ("webpack_magic", "system_import", "require_context"):
                 expl_parts.append(f"opaque {tag} dynamic")
             elif tag in ("tagged_template", "registry_map", "multi_condition_feature_wrapper", "call_produced_path"):
-                # Phase 1: wire creative signals into explanations
+                # wire creative signals into explanations
                 expl_parts.append(f"creative {tag} (LDSI/CDIA)")
             else:
                 expl_parts.append(f"{tag} semantics")
@@ -969,11 +968,11 @@ def compute_acs_confidence(
     if len(expl_parts) <= 1:
         explanation = f"Standard {base_conf} confidence ({final:.2f}) with no special risk factors."
     else:
-        # R2: cleaner separator for readability on large result sets; factors before evidence
+        # cleaner separator for readability on large result sets; factors before evidence
         cleaned = [p.rstrip(". ") for p in expl_parts[:7]]
         explanation = cleaned[0] + (". " + "; ".join(cleaned[1:]) if len(cleaned) > 1 else "") + "."
 
-    # R2 prescriptive, decision-oriented recommendation (core deliverable) — now with barrel nuance
+    # prescriptive, decision-oriented recommendation (core deliverable) — now with barrel nuance
     rec = _action_recommendation(reasons, final, strat, rm)
     explanation = (explanation.rstrip(".") + ". Recommendation: " + rec).strip()
 
@@ -981,7 +980,7 @@ def compute_acs_confidence(
 
 
 def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm: dict | None = None) -> str:
-    """R2: Return a specific, agent-actionable recommendation string based on dominant signals.
+    """: Return a specific, agent-actionable recommendation string based on dominant signals.
     Prioritized for decision readiness on both tiny projects and 10k+ file monorepos.
     Agents should quote the full sentence after 'Recommendation:' for impact reports.
     """
@@ -1004,7 +1003,7 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
     if has_opaque_dyn:
         return "Opaque or high-complexity dynamic resolution — refactor to static import or introduce explicit runtime guard; current edge is unsuitable for static analysis tooling."
     if has_creative:
-        # Phase 1 creative signals wired: specific rec for new CDIA-covered extremely creative patterns
+        # specific rec for new CDIA-covered extremely creative patterns
         return "Extremely creative dynamic (tagged template / registry map / multi-cond feature / call-produced path) — CDIA detectors fired; supply static mappings or treat as runtime-only for dependency graphs."
     if has_weak:
         return "Weak/fragile resolution strategy — target may shift with package.json or build changes. Pin to a stronger strategy or verify stability."
@@ -1020,7 +1019,7 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
 
 
 # =============================================================================
-# 9. M2 Full Closure — Workstream A0 + early A2: Scalable Update Contracts
+# 9. Full Closure — Workstream early: Scalable Update Contracts
 # (Additive, non-breaking foundation. Long-term scalable design per plan.)
 # =============================================================================
 #
@@ -1038,11 +1037,11 @@ def _action_recommendation(reasons: list[str], final: float, strat: str = "", rm
 # - Versioning: All shapes carry explicit "version". New major via new _vN names
 #   + migration note + CHANGELOG. Dual emission supported.
 # - Observability: Events feed health, MCP streaming responses, journal (C),
-#   diagnostics, library.md summaries (A3). ACS/CIABRE always first-class citizens.
+# diagnostics, library.md summaries. ACS/CIABRE always first-class citizens.
 #
-# RESERVED keys extended below for persisted M2 structures.
+# RESERVED keys extended below for persisted structures.
 # These shapes are the contract for the minimal streaming generator skeleton
-# (in import_cache.py) and all later A1-A4 / cross workstreams.
+# (in import_cache.py) and all later -cross workstreams.
 #
 # DO NOT put engine logic or full UX here. Pure shapes + helpers only.
 # =============================================================================
@@ -1053,7 +1052,7 @@ M2_CONTRACTS_VERSION = "1.0.0-wave3-a0-finalized"
 @dataclass(frozen=True)
 class ScopeSpec_v1:
     """
-    Declarative scope for update-maps / streaming runs (A0 foundation, A2 delivery).
+    Declarative scope for update-maps / streaming runs.
 
     Applied early (dirty detection, graph build, reverse index projection) for
     true O(changed + scope) cost even on 50k+ file monorepos.
@@ -1110,8 +1109,7 @@ class ScopeSpec_v1:
 @dataclass(frozen=True)
 class ProgressEvent_v1:
     """
-    Canonical event shape yielded by the M2 streaming generator foundation.
-    (Wave 3 A0: finalized with full defensive shapes + ACS/CIABRE hooks.)
+    Canonical event shape yielded by the streaming generator foundation.
 
     EVERY milestone (parse, resolve, barrel expand, cycle, ACS, CIABRE, reverse update)
     emits one. Consumers can:
@@ -1187,7 +1185,7 @@ class UpdateRun_v1:
     - Tracking concurrent runs under locking
     - --resume from last checkpoint_token
     - Query "what is the status of the long update I started?"
-    - Correlating journal events (Workstream C) to runs
+    - Correlating journal events to runs
 
     Persisted (bounded) under _update_runs reserved key in future waves.
     """
@@ -1240,7 +1238,7 @@ class PartialResult_v1:
     Contains:
     - Counts + bounded samples (resolved_pairs, cycles)
     - ACS + CIABRE partials (hooks, never lose diagnostics)
-    - Reverse index delta (A1 tie-in)
+    - Reverse index delta
     - next_checkpoint_hint for clean resumption
     - Full diagnostics bag
 
@@ -1293,7 +1291,7 @@ class PartialResult_v1:
         return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
 
 
-# --- ReverseDependencyIndex_v1 (A0 contract, A1 implementation target) ---
+# ReverseDependencyIndex_v1 ---
 @dataclass
 class ReverseDependencyIndex_v1:
     """
@@ -1310,7 +1308,7 @@ class ReverseDependencyIndex_v1:
 
     Persisted under _reverse_dependency_index_v1 (see RESERVED_TOP_LEVEL_KEYS).
     Current flat _reverse_dependencies coexists for transition (import_cache helpers
-    will dual-write in A1).
+    will dual-write in ).
 
     Query surfaces (get_dependents, get_impact, MCP) will use this directly for
     O(k) instead of O(E) reconstruction.
@@ -1371,23 +1369,13 @@ PartialResultV1 = PartialResult_v1
 ReverseDependencyIndexV1 = ReverseDependencyIndex_v1
 
 
-# Extend RESERVED_TOP_LEVEL_KEYS (additive, documented for M2)
 RESERVED_TOP_LEVEL_KEYS["_reverse_dependency_index_v1"] = (
-    "M2 A0/A1: Structured ReverseDependencyIndex_v1 (target -> importers list). "
-    "Incrementally maintained with graph_signature delta detection + node_identity_version. "
-    "Provenance, stats, ACS low-conf ties, CIABRE blast hints, checkpoint support. "
-    "Enables O(k) dependents + impact analysis at massive scale. Coexists with legacy "
-    "_reverse_dependencies during A1 transition. Authoritative for get_dependents etc."
+    "Structured reverse dependency index (reserved; the SQLite edges table serves dependents today)."
 )
-RESERVED_TOP_LEVEL_KEYS["_update_runs"] = (
-    "M2 A0/A2: Bounded registry of UpdateRun_v1 descriptors (lifecycle + checkpoints). "
-    "Supports resumable streaming UX, concurrent agent visibility, MCP status queries. "
-    "Not a full semantic journal (see Workstream C). Retention policy + compaction future."
-)
-RESERVED_TOP_LEVEL_KEYS["_partial_results"] = (
-    "M2 A0/A2: Named or latest PartialResult_v1 snapshots from long/scoped/streaming updates. "
-    "Agents consume early results + continuation tokens safely. Bounded; ties to run_id + scope."
-)
+RESERVED_TOP_LEVEL_KEYS["_update_runs"] = "Bounded registry of update-run descriptors (reserved)."
+RESERVED_TOP_LEVEL_KEYS["_partial_results"] = "Partial update results with continuation hints (reserved)."
+RESERVED_TOP_LEVEL_KEYS["_map_coverage"] = "Last update-maps coverage snapshot (complete, files_remaining_dirty, budget)."
+RESERVED_TOP_LEVEL_KEYS["_candidate_list"] = RESERVED_TOP_LEVEL_KEYS.get("_candidate_list", "Persisted candidate list + fingerprint.")
 
 
 def create_progress_event(
@@ -1439,7 +1427,7 @@ def create_progress_event(
 
 
 # =============================================================================
-# 10. M2 Scope Projector (A0 finalized in Wave 3, A2 full engine wiring)
+# 10. Scope Projector
 # (Pure, zero-dep, long-term scalable. Lives with ScopeSpec_v1 / ScopeSpecV1 contract.)
 # =============================================================================
 #
@@ -1449,10 +1437,10 @@ def create_progress_event(
 # future daemon) use this single source — guarantees consistent semantics from
 # tiny scripts to 50k-file creative monorepos.
 #
-# Design (non-negotiable per M2 plan):
+# Design:
 # - Proportional: directory subtree + globs prune candidates early (O(candidates in scope)).
 # - Focus + transitive_closure: for "impact of X" uses reverse edges (dependents closure);
-#   seeds + their transitive importers. Requires reverse_index (A1); graceful degrade if absent.
+# seeds + their transitive importers. Requires reverse_index; graceful degrade if absent.
 # - max_depth: relative to scope.directory (or root). Prevents explosion in deep trees.
 # - Globs: stdlib fnmatch only (portable, no third-party). Normalized to / .
 # - Deterministic + defensive: never crashes on bad input; logs diagnostics in return.
@@ -1643,7 +1631,7 @@ def project_scope(
     include_focus_closure: bool = True,
 ) -> Dict[str, Any]:
     """
-    Full Scope projector (the engine-level applicator). Wave 3 A0 finalized.
+    Full Scope projector (the engine-level applicator). finalized.
 
     Pure, stdlib-only, proportional (never O(repo) for large creative monorepos).
     Supports directory subtree, portable globs (fnmatch), max_depth, focus_files +
@@ -1681,7 +1669,7 @@ def project_scope(
     fs_matched = [f for f in candidates if matches_scope(spec, f, root=root)]
 
     # 2. Focus + transitive (dependents by default for impact/partial UX)
-    # Semantics (Wave 3 A0 finalized, long-term scalable):
+    # Semantics:
     # - First apply directory + globs + max_depth FS filter (proportional prune).
     # - If focus_files + transitive_closure: compute dependents closure via reverse index (BFS, O(closure)).
     # - Then intersect: effective matched = (dir/glob/depth filtered) ∩ focus_closure (incl seeds).

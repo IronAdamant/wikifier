@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wikifier</title>
+<meta name="description" content="Read-only view of this project's agent-maintained Wikifier wiki: health, files, wiki notes and dependencies.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23157f5b'/%3E%3Cpath d='M7 10l3.2 12L13 13l3 9 2.8-9 2.9 9L25 10' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --border: #e2e5ea; --border-strong: #cfd4dc;
+  --text: #1a1f29; --text-2: #4d5665; --text-3: #7a8494;
+  --accent: #157f5b; --accent-soft: #e3f3ec; --accent-text: #0f6648; --on-accent: #ffffff;
+  --green: #1f9d66; --yellow: #c98a0c; --red: #d4473d; --stub: #a0a8b6;
+  --green-soft: #e3f5ec; --yellow-soft: #fbf1db; --red-soft: #fbe6e4;
+  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  --shadow-lg: 0 12px 32px rgba(16,24,40,.16);
+  --radius: 10px; --radius-sm: 7px;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1116; --surface: #151a21; --surface-2: #1b212a; --border: #262d38; --border-strong: #343d4b;
+    --text: #e6e9ee; --text-2: #aab2bf; --text-3: #7d8796;
+    --accent: #3ccf91; --accent-soft: #123526; --accent-text: #6fe0ae; --on-accent: #06140d;
+    --green: #3ccf91; --yellow: #f0b43c; --red: #f0685e; --stub: #6b7586;
+    --green-soft: #12301f; --yellow-soft: #33280f; --red-soft: #3a1714;
+    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 12px 32px rgba(0,0,0,.55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1116; --surface: #151a21; --surface-2: #1b212a; --border: #262d38; --border-strong: #343d4b;
+  --text: #e6e9ee; --text-2: #aab2bf; --text-3: #7d8796;
+  --accent: #3ccf91; --accent-soft: #123526; --accent-text: #6fe0ae; --on-accent: #06140d;
+  --green: #3ccf91; --yellow: #f0b43c; --red: #f0685e; --stub: #6b7586;
+  --green-soft: #12301f; --yellow-soft: #33280f; --red-soft: #3a1714;
+  --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 12px 32px rgba(0,0,0,.55);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+a { color: var(--accent-text); }
+code, pre, .mono { font-family: var(--mono); font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- shell ---------- */
+.app { display: grid; grid-template-rows: 56px 1fr; grid-template-columns: minmax(0, 1fr); height: 100vh; }
+header.top { overflow: hidden; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: relative; z-index: 5; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand svg { flex: none; }
+.brand .name { font-weight: 650; letter-spacing: -.01em; }
+.brand .proj { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spacer { flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); white-space: nowrap; }
+.chip .led { width: 7px; height: 7px; border-radius: 50%; background: var(--stub); }
+.chip.live .led { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; white-space: nowrap; transition: background .15s, border-color .15s; }
+.btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+.btn.danger { color: var(--red); }
+.btn.icon { width: 32px; padding: 0; justify-content: center; }
+.btn[disabled] { opacity: .55; cursor: progress; }
+.search-trigger { display: flex; align-items: center; gap: 8px; height: 32px; min-width: 240px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text-3); cursor: pointer; }
+.search-trigger kbd, kbd { margin-left: auto; font: 11px var(--mono); padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-3); background: var(--surface); }
+.body { display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
+
+/* ---------- sidebar ---------- */
+aside.side { border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+.side-head { padding: 12px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+.input { width: 100%; height: 32px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }
+.input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.seg button { border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: 2px 9px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+.tree { overflow: auto; padding: 6px 6px 24px; flex: 1; }
+.tree .row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 8px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; text-align: left; color: var(--text); font-size: 13px; }
+.tree .row:hover { background: var(--surface-2); }
+.tree .row.sel { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.tree .row .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.tree .caret { width: 12px; flex: none; color: var(--text-3); transition: transform .12s; }
+.tree .open > .row .caret { transform: rotate(90deg); }
+.tree .kids { margin-left: 12px; border-left: 1px solid var(--border); padding-left: 4px; display: none; }
+.tree .open > .kids { display: block; }
+.tree .badge { font-size: 11px; color: var(--text-3); }
+.tree .badge.warn { color: var(--yellow); font-weight: 600; }
+.tree .badge.bad { color: var(--red); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--stub); }
+.dot.g { background: var(--green); } .dot.y { background: var(--yellow); } .dot.r { background: var(--red); }
+.dot.s { background: transparent; border: 1.5px solid var(--stub); }
+
+/* ---------- main ---------- */
+main { overflow: auto; min-height: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 24px 28px 64px; }
+.notice { border: 1px solid var(--yellow); background: var(--yellow-soft); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; }
+h1 { font-size: 22px; letter-spacing: -.015em; margin: 0; line-height: 1.25; }
+h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -.005em; }
+h2 .sub { color: var(--text-3); font-weight: 400; font-size: 13px; margin-left: 6px; }
+.lead { color: var(--text-2); margin: 4px 0 20px; }
+.grid { display: grid; gap: 16px; }
+.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; min-width: 0; }
+.kpi .label { color: var(--text-2); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.kpi .value { font-size: 26px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kpi .foot { color: var(--text-3); font-size: 12px; }
+.score.good { color: var(--green); } .score.warn { color: var(--yellow); } .score.bad { color: var(--red); }
+.bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin: 10px 0 8px; }
+.bar span { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--text-2); font-size: 12px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.list { display: grid; }
+.list .item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 9px 4px; border-top: 1px solid var(--border); cursor: pointer; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; width: 100%; }
+.list .item:first-child { border-top: 0; }
+.list .item:hover .path { color: var(--accent-text); }
+.list .item .dot { margin-top: 6px; }
+.path { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+.why { color: var(--text-2); font-size: 13px; }
+.meta { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.empty { color: var(--text-3); padding: 18px 4px; text-align: center; }
+.empty strong { color: var(--text-2); display: block; margin-bottom: 4px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.console { margin-top: 12px; background: #0b0f14; color: #d7dde6; border-radius: var(--radius-sm); padding: 10px 12px; max-height: 260px; overflow: auto; white-space: pre-wrap; display: none; }
+.console.show { display: block; }
+.tag { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.tag.g { background: var(--green-soft); color: var(--green); } .tag.y { background: var(--yellow-soft); color: var(--yellow); }
+.tag.r { background: var(--red-soft); color: var(--red); } .tag.s { background: var(--surface-2); color: var(--text-2); }
+
+/* ---------- file view ---------- */
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px; color: var(--text-3); font-size: 13px; margin-bottom: 6px; }
+.crumbs button { background: none; border: 0; padding: 0; color: var(--text-2); cursor: pointer; }
+.crumbs button:hover { color: var(--accent-text); text-decoration: underline; }
+.file-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.file-head h1 { font-family: var(--mono); font-size: 20px; word-break: break-all; }
+.facts { display: flex; gap: 18px; flex-wrap: wrap; color: var(--text-2); font-size: 12.5px; margin-top: 6px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 18px 0 16px; }
+.tabs button { border: 0; background: none; padding: 8px 12px; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs .count { color: var(--text-3); font-weight: 400; margin-left: 4px; }
+.md { max-width: 760px; }
+.md h1, .md h2, .md h3, .md h4 { margin: 1.2em 0 .5em; line-height: 1.3; }
+.md h1 { font-size: 20px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14.5px; }
+.md p { margin: .6em 0; } .md ul, .md ol { padding-left: 1.4em; }
+.md code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.md pre { background: var(--surface-2); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius-sm); overflow: auto; }
+.md pre code { background: none; padding: 0; }
+.md table { border-collapse: collapse; margin: .8em 0; font-size: 13px; display: block; overflow: auto; }
+.md th, .md td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
+.md th { background: var(--surface-2); }
+.md blockquote { margin: .8em 0; padding: 2px 14px; border-left: 3px solid var(--border-strong); color: var(--text-2); }
+.graph-card svg { width: 100%; height: auto; display: block; }
+.graph-card .node { cursor: pointer; }
+.graph-card .node rect { fill: var(--surface); stroke: var(--border-strong); }
+.graph-card .node:hover rect { stroke: var(--accent); }
+.graph-card .node text { fill: var(--text); font: 12px var(--mono); }
+.graph-card .center rect { fill: var(--accent-soft); stroke: var(--accent); }
+.graph-card .edge { fill: none; stroke: var(--border-strong); stroke-width: 1.4; }
+.graph-card .colhead { fill: var(--text-3); font: 600 11px var(--sans); letter-spacing: .04em; text-transform: uppercase; }
+.deps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.conf { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); }
+.conf.low { background: var(--red-soft); color: var(--red); } .conf.mid { background: var(--yellow-soft); color: var(--yellow); }
+.flags { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* ---------- palette / toast ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(10,14,20,.45); display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 30; }
+.scrim.show { display: flex; }
+.palette { width: min(640px, 92vw); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.palette input { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 14px 16px; font-size: 15px; color: var(--text); }
+.palette input:focus { outline: none; }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.palette li[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.palette li .kind { margin-left: auto; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.palette mark { background: none; color: var(--accent-text); font-weight: 700; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: var(--bg); padding: 9px 14px; border-radius: 8px; opacity: 0; transition: .2s; z-index: 40; pointer-events: none; font-size: 13px; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.halt { position: fixed; inset: 0; background: rgba(10,14,20,.6); display: none; align-items: center; justify-content: center; z-index: 50; }
+.halt.show { display: flex; }
+.menu-btn { display: none; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1000px) { .cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cols-2 { grid-template-columns: 1fr; } .search-trigger { min-width: 0; } .search-trigger .txt { display: none; } }
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); }
+  aside.side { position: fixed; top: 56px; bottom: 0; left: 0; width: min(320px, 86vw); transform: translateX(-100%); transition: transform .2s; z-index: 20; box-shadow: var(--shadow-lg); }
+  aside.side.open { transform: none; }
+  .menu-btn { display: inline-flex; }
+  .wrap { padding: 16px 16px 48px; }
+  .deps { grid-template-columns: 1fr; }
+  .brand .proj, #fresh-chip, #btn-refresh .txt, #server-chip span:last-child, .brand .name { display: none; }
+  header.top { gap: 8px; padding: 0 10px; }
+  #btn-stop, .search-trigger kbd { display: none; }
+  .search-trigger { width: 32px; padding: 0; justify-content: center; }
+}
+@media (max-width: 420px) { .cols-4 { grid-template-columns: 1fr; } }
+body, .app, .body, main { min-width: 0; max-width: 100vw; overflow-x: hidden; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <button class="btn icon menu-btn" id="btn-menu" aria-label="Toggle file explorer">☰</button>
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M7 10l3.2 12L13 13l3 9 2.8-9 2.9 9L25 10" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="name">Wikifier</span>
+      <span class="proj" id="proj-name">project wiki</span>
+    </div>
+    <button class="search-trigger" id="btn-search" aria-label="Search files and commands"><span aria-hidden="true">⌕</span><span class="txt">Search files and commands</span><kbd>⌘K</kbd></button>
+    <div class="spacer"></div>
+    <span class="chip" id="fresh-chip" title="When the health matrix last changed">—</span>
+    <span class="chip" id="server-chip"><span class="led"></span><span>checking…</span></span>
+    <button class="btn" id="btn-refresh" title="Reload data (R)"><span aria-hidden="true">⟳</span><span class="txt">Refresh</span></button>
+    <button class="btn icon" id="btn-theme" aria-label="Toggle colour theme" title="Toggle theme">◐</button>
+    <button class="btn danger" id="btn-stop" hidden title="Stop the wikifier serve process">Stop server</button>
+  </header>
+  <div class="body">
+    <aside class="side" id="side" aria-label="File explorer">
+      <div class="side-head">
+        <input class="input" id="filter" type="search" placeholder="Filter files…" aria-label="Filter files">
+        <div class="seg" id="status-filter" role="group" aria-label="Status filter">
+          <button data-f="all" aria-pressed="true">All</button>
+          <button data-f="work" aria-pressed="false">Needs work</button>
+          <button data-f="stub" aria-pressed="false">Stubs</button>
+          <button data-f="g" aria-pressed="false">Green</button>
+        </div>
+      </div>
+      <nav class="tree" id="tree" aria-label="Files"></nav>
+    </aside>
+    <main id="main" tabindex="-1"><div class="wrap" id="view"></div></main>
+  </div>
+</div>
+
+<div class="scrim" id="palette-scrim" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="palette">
+    <input id="palette-input" placeholder="Jump to a file or run a command…" autocomplete="off" aria-controls="palette-list">
+    <ul id="palette-list" role="listbox"></ul>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="halt" id="halt"><div class="card" style="max-width:440px"><h2 id="halt-title">Server stopped</h2><p class="why" id="halt-msg"></p></div></div>
+
+<script>
+'use strict';
+/* Wikifier dashboard v2 — read-only view over the project's Wikifier artifacts.
+ * Static mode: file_health.json, library.md, <file>.wiki.md, journal/YYYY/MM/DD.md.
+ * `wikifier serve` mode adds /__wikifier/api/* (dependencies, dependents, history,
+ * cycles) and /__wikifier/run for the action buttons. No external scripts. */
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const state = {
+  server: null, entries: {}, healthUpdated: '', libraryMd: '', route: { view: 'overview' },
+  statusFilter: 'all', text: '', openDirs: new Set(), boot: null, cycles: null, journal: null,
+  fileCache: new Map(), healthSig: '', running: false,
+};
+const STUB_MARKERS = ['initial stub', 'seed_health_from_map', 'seed_health_for_monitored', 'present in dependency map', 'parseable source under monitored'];
+
+/* ---------- utilities ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+async function copy(text, what = 'Copied') { try { await navigator.clipboard.writeText(text); toast(what); } catch (e) { toast('Clipboard unavailable'); } }
+function store(key, value) { try { if (value === undefined) return localStorage.getItem(key); localStorage.setItem(key, value); } catch (e) { return null; } }
+async function getText(path) {
+  try { const r = await fetch(path + (path.includes('?') ? '&' : '?') + 'cb=' + Date.now(), { cache: 'no-store' }); return r.ok ? await r.text() : null; }
+  catch (e) { return null; }
+}
+async function getJson(path) { const t = await getText(path); if (t == null) return null; try { return JSON.parse(t); } catch (e) { return null; } }
+const api = (name, params = {}) => state.server ? getJson('/__wikifier/api/' + name + '?' + new URLSearchParams(params)) : Promise.resolve(null);
+function parseTs(s) { if (!s) return null; const d = new Date(String(s).replace(' ', 'T')); return isNaN(d) ? null : d; }
+function ago(s) {
+  const d = parseTs(s); if (!d) return '';
+  const sec = Math.max(0, (Date.now() - d) / 1000);
+  if (sec < 60) return 'just now'; if (sec < 3600) return Math.round(sec / 60) + ' min ago';
+  if (sec < 86400) return Math.round(sec / 3600) + ' h ago'; return Math.round(sec / 86400) + ' d ago';
+}
+function statusOf(e) {
+  const s = String(e && e.status || '');
+  if (s.includes('🔴')) return 'r';
+  if (s.includes('🟢')) return 'g';
+  const blob = (String(e && e.reason || '') + ' ' + String(e && e.freshness_provenance || '')).toLowerCase();
+  return STUB_MARKERS.some(m => blob.includes(m)) ? 's' : 'y';
+}
+const LABEL = { g: 'Green', y: 'Needs wiki', r: 'Red', s: 'Stub' };
+
+/* ---------- markdown (escaped first; small safe subset) ---------- */
+function inline(s) {
+  return s.replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\.{0,2}\/|#)[^)\s]*)\)/g, '<a href="$2" rel="noopener">$1</a>');
+}
+function markdown(src) {
+  const lines = esc(src).split('\n'); const out = []; let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) { const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); i++; out.push('<pre><code>' + buf.join('\n') + '</code></pre>'); continue; }
+    const h = line.match(/^(#{1,6})\s+(.*)$/); if (h) { const n = Math.min(4, h[1].length); out.push(`<h${n}>${inline(h[2])}</h${n}>`); i++; continue; }
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => inline(c.trim()));
+      let html = '<table><thead><tr>' + cells(line).map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>'; i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) html += '<tr>' + cells(lines[i++]).map(c => `<td>${c}</td>`).join('') + '</tr>';
+      out.push(html + '</tbody></table>'); continue;
+    }
+    if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)) {
+      const ordered = /^\s*\d+\./.test(line); const items = [];
+      while (i < lines.length && (ordered ? /^\s*\d+\.\s+/ : /^\s*[-*+]\s+/).test(lines[i])) items.push(lines[i++].replace(/^\s*(?:[-*+]|\d+\.)\s+/, ''));
+      out.push(`<${ordered ? 'ol' : 'ul'}>` + items.map(t => `<li>${inline(t)}</li>`).join('') + `</${ordered ? 'ol' : 'ul'}>`); continue;
+    }
+    if (/^&gt;\s?/.test(line)) { const buf = []; while (i < lines.length && /^&gt;\s?/.test(lines[i])) buf.push(lines[i++].replace(/^&gt;\s?/, '')); out.push('<blockquote>' + inline(buf.join(' ')) + '</blockquote>'); continue; }
+    if (!line.trim()) { i++; continue; }
+    const buf = []; while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|\s*[-*+]\s|\s*\d+\.\s|&gt;)/.test(lines[i])) buf.push(lines[i++]);
+    if (!buf.length) buf.push(lines[i++]);
+    out.push('<p>' + inline(buf.join(' ')) + '</p>');
+  }
+  return out.join('\n');
+}
+
+/* ---------- data ---------- */
+async function detectServer() {
+  const info = await getJson('/__wikifier/status');
+  state.server = info && info.wikifier_serve ? info : null;
+  const chip = $('#server-chip');
+  chip.classList.toggle('live', !!state.server);
+  chip.lastElementChild.textContent = state.server ? 'live · v' + (state.server.version || '?') : 'read-only';
+  chip.title = state.server ? 'Served by wikifier serve — actions run on this machine' : 'Static server: actions copy commands instead of running them';
+  $('#btn-stop').hidden = !state.server;
+  const project = state.server ? state.server.project : decodeURIComponent(location.pathname.split('/').filter(Boolean).slice(-2, -1)[0] || '');
+  if (project) { $('#proj-name').textContent = project; document.title = project + ' · Wikifier'; }
+}
+function parseHealthMd(md) {
+  const entries = {};
+  for (const line of md.split('\n')) {
+    const p = line.split('|').map(x => x.trim());
+    if (p.length >= 6 && p[1] && p[1] !== 'File' && !/^-+$/.test(p[1])) entries[p[1]] = { status: p[2], last_updated: p[3], reason: p[4] };
+  }
+  return entries;
+}
+async function loadHealth() {
+  const json = await getJson('file_health.json');
+  if (json && json.entries) { state.entries = json.entries; state.healthUpdated = json.last_updated || ''; }
+  else { const md = await getText('file_health.md'); state.entries = md ? parseHealthMd(md) : {}; state.healthUpdated = ''; }
+  state.healthSig = state.healthUpdated + ':' + Object.keys(state.entries).length;
+}
+async function loadAll() {
+  await loadHealth();
+  state.libraryMd = await getText('library.md') || '';
+  if (state.server) {
+    const [boot, cycles, journal] = await Promise.all([api('bootstrap'), api('cycles'), api('journal')]);
+    state.boot = boot; state.cycles = cycles; state.journal = journal;
+  } else {
+    const d = new Date(); const pad = n => String(n).padStart(2, '0');
+    const text = await getText(`journal/${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}.md`);
+    state.journal = text ? { entries: parseJournal(text) } : { entries: [] };
+  }
+  state.fileCache.clear();
+  renderFresh(); renderTree(); route();
+}
+function parseJournal(md) {
+  const out = []; const re = /^## \[([^\]]+)\] (\S+)\n\*\*File:\*\* (.*)\n\*\*Reason:\*\* (.*)$/gm; let m;
+  while ((m = re.exec(md))) out.push({ ts: m[1], action: m[2], file: m[3], reason: m[4] });
+  return out;
+}
+async function fileData(path) {
+  if (state.fileCache.has(path)) return state.fileCache.get(path);
+  let data = await api('file', { path });
+  if (!data) {
+    const wiki = await getText(path + '.wiki.md');
+    data = { file: path, wiki, wiki_path: wiki ? path + '.wiki.md' : null, dependencies: null, dependents: null, recent_why: null, health_entry: state.entries[path] || {} };
+  }
+  state.fileCache.set(path, data);
+  return data;
+}
+
+/* ---------- header ---------- */
+function renderFresh() {
+  const chip = $('#fresh-chip');
+  chip.textContent = state.healthUpdated ? 'updated ' + ago(state.healthUpdated) : 'no health data';
+  chip.title = state.healthUpdated ? 'file_health.json last written ' + state.healthUpdated : 'Run wikifier update-maps to create the health matrix';
+}
+
+/* ---------- tree ---------- */
+function matches(path, e) {
+  const st = statusOf(e);
+  if (state.statusFilter === 'work' && !(st === 'y' || st === 'r')) return false;
+  if (state.statusFilter === 'stub' && st !== 's') return false;
+  if (state.statusFilter === 'g' && st !== 'g') return false;
+  if (state.text) { const q = state.text.toLowerCase(); if (!path.toLowerCase().includes(q) && !String(e.reason || '').toLowerCase().includes(q)) return false; }
+  return true;
+}
+function buildTree() {
+  const root = { dirs: new Map(), files: [] };
+  for (const [path, e] of Object.entries(state.entries)) {
+    if (!matches(path, e)) continue;
+    const parts = path.split('/'); let node = root;
+    for (const part of parts.slice(0, -1)) { if (!node.dirs.has(part)) node.dirs.set(part, { dirs: new Map(), files: [] }); node = node.dirs.get(part); }
+    node.files.push({ path, name: parts[parts.length - 1], st: statusOf(e) });
+  }
+  return root;
+}
+function counts(node) {
+  const c = { y: 0, r: 0, n: 0 };
+  node.files.forEach(f => { c.n++; if (f.st === 'y') c.y++; if (f.st === 'r') c.r++; });
+  node.dirs.forEach(d => { const k = counts(d); c.y += k.y; c.r += k.r; c.n += k.n; });
+  return c;
+}
+function renderNode(node, prefix) {
+  let html = '';
+  [...node.dirs.keys()].sort().forEach(name => {
+    const dir = node.dirs.get(name); const full = prefix + name + '/'; const c = counts(dir);
+    const open = state.openDirs.has(full) || !!state.text || state.statusFilter !== 'all';
+    const badge = c.r ? `<span class="badge bad">${c.r} red</span>` : c.y ? `<span class="badge warn">${c.y}</span>` : `<span class="badge">${c.n}</span>`;
+    html += `<div class="dir${open ? ' open' : ''}" data-dir="${esc(full)}"><button class="row" aria-expanded="${open}"><span class="caret">▸</span><span class="lbl">${esc(name)}</span>${badge}</button><div class="kids">${renderNode(dir, full)}</div></div>`;
+  });
+  node.files.sort((a, b) => a.name.localeCompare(b.name)).forEach(f => {
+    const sel = state.route.view === 'file' && state.route.path === f.path;
+    html += `<button class="row file${sel ? ' sel' : ''}" data-file="${esc(f.path)}" title="${esc(f.path)} — ${LABEL[f.st]}"><span class="caret"></span><span class="dot ${f.st}"></span><span class="lbl">${esc(f.name)}</span></button>`;
+  });
+  return html;
+}
+function renderTree() {
+  const root = buildTree();
+  const html = renderNode(root, '');
+  $('#tree').innerHTML = html || `<div class="empty"><strong>No files</strong>${Object.keys(state.entries).length ? 'Nothing matches the filter.' : 'Run wikifier update-maps to map this project.'}</div>`;
+}
+
+/* ---------- overview ---------- */
+function stats() {
+  const c = { g: 0, y: 0, r: 0, s: 0 };
+  Object.values(state.entries).forEach(e => c[statusOf(e)]++);
+  c.total = c.g + c.y + c.r + c.s; return c;
+}
+function scoreOf(c) {
+  if (c.r >= 3) return ['Critical', 'bad']; if (c.r || c.y) return ['Needs attention', 'warn'];
+  if (c.s && !c.g) return ['Mapped', 'good']; return ['Good', 'good'];
+}
+function attentionItems() {
+  return Object.entries(state.entries).map(([path, e]) => ({ path, e, st: statusOf(e) }))
+    .filter(x => x.st === 'r' || x.st === 'y')
+    .sort((a, b) => (a.st === b.st ? String(b.e.last_updated).localeCompare(String(a.e.last_updated)) : a.st === 'r' ? -1 : 1));
+}
+function listItem(path, st, why, meta) {
+  return `<button class="item" data-file="${esc(path)}"><span class="dot ${st}"></span><span><div class="path">${esc(path)}</div>${why ? `<div class="why">${esc(why)}</div>` : ''}</span><span class="meta">${esc(meta || '')}</span></button>`;
+}
+function renderOverview() {
+  const c = stats(); const [label, cls] = scoreOf(c); const pct = n => c.total ? (100 * n / c.total) : 0;
+  const readiness = state.boot && state.boot.readiness;
+  const att = attentionItems();
+  const journal = (state.journal && (state.journal.entries || state.journal.matches)) || [];
+  const cycles = state.cycles && state.cycles.success ? state.cycles : null;
+  const offline = location.protocol === 'file:';
+  $('#view').innerHTML = `
+    ${offline ? `<div class="notice"><strong>Opened from disk.</strong> Browsers block reading project files from <code>file://</code>. Run <code>wikifier serve</code> in the project and open <a href="http://localhost:8787/index.v2.html">localhost:8787</a>.</div>` : ''}
+    <h1>Overview</h1>
+    <p class="lead">What agents have mapped and documented in this project — and what still needs attention.</p>
+    <div class="grid cols-4">
+      <div class="card kpi"><div class="label">Health</div><div class="value score ${cls}">${label}</div><div class="foot">${readiness ? 'readiness: ' + esc(readiness.replace(/_/g, ' ')) : c.total + ' files tracked'}</div></div>
+      <div class="card kpi"><div class="label"><span class="dot g"></span>Documented</div><div class="value">${c.g}</div><div class="foot">wiki verified (green)</div></div>
+      <div class="card kpi"><div class="label"><span class="dot y"></span>Needs work</div><div class="value">${c.y + c.r}</div><div class="foot">${c.r} red · ${c.y} changed since wiki</div></div>
+      <div class="card kpi"><div class="label"><span class="dot s"></span>Mapped only</div><div class="value">${c.s}</div><div class="foot">on the map, wiki written when edited</div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Coverage <span class="sub">${c.total} tracked files</span></h2>
+      <div class="bar" role="img" aria-label="${c.g} green, ${c.y} needing wiki, ${c.r} red, ${c.s} mapped only">
+        <span style="width:${pct(c.g)}%;background:var(--green)"></span><span style="width:${pct(c.y)}%;background:var(--yellow)"></span><span style="width:${pct(c.r)}%;background:var(--red)"></span><span style="width:${pct(c.s)}%;background:var(--stub);opacity:.5"></span>
+      </div>
+      <div class="legend"><span><i style="background:var(--green)"></i>Green ${c.g}</span><span><i style="background:var(--yellow)"></i>Needs wiki ${c.y}</span><span><i style="background:var(--red)"></i>Red ${c.r}</span><span><i style="background:var(--stub);opacity:.5"></i>Mapped only ${c.s}</span></div>
+    </div>
+    <div class="grid cols-2" style="margin-top:16px">
+      <div class="card"><h2>Needs attention <span class="sub">${att.length}</span></h2>
+        <div class="list">${att.slice(0, 12).map(x => listItem(x.path, x.st, x.e.reason, ago(x.e.last_updated))).join('') || '<div class="empty"><strong>Nothing to do</strong>Every changed file has a current wiki.</div>'}</div>
+        ${att.length > 12 ? `<p class="meta">+${att.length - 12} more — use the “Needs work” filter.</p>` : ''}</div>
+      <div class="card"><h2>Today's activity <span class="sub">journal</span></h2>
+        <div class="list">${journal.slice(-12).reverse().map(j => listItem(j.file, (state.entries[j.file] ? statusOf(state.entries[j.file]) : 's'), j.action + ' — ' + j.reason, String(j.ts || '').slice(11, 16))).join('') || '<div class="empty"><strong>No entries today</strong>Agents record why they changed files here.</div>'}</div></div>
+    </div>
+    <div class="grid cols-2" style="margin-top:16px">
+      <div class="card"><h2>Actions <span class="sub">${state.server ? 'run on this machine' : 'copy the command'}</span></h2>
+        <div class="actions">
+          <button class="btn primary" data-run="update-maps">Update map</button>
+          <button class="btn" data-run="check-changes">Check changes</button>
+          <button class="btn" data-run="update-maps --full">Full rebuild</button>
+          <button class="btn" id="btn-snapshot">Copy snapshot</button>
+        </div>
+        <pre class="console" id="console"></pre></div>
+      <div class="card"><h2>Dependency cycles</h2>
+        ${cycles ? (cycles.count ? `<div class="list">${(cycles.sccs || []).slice(0, 5).map(s => `<div class="item" style="cursor:default"><span class="dot r"></span><span><div class="path">${esc(s.example_path)}</div><div class="why">${s.size} files in cycle</div></span><span></span></div>`).join('')}</div>` : '<div class="empty"><strong>No cycles</strong>The import graph is acyclic.</div>')
+          : `<div class="empty">${state.server ? 'Cycle data unavailable.' : 'Shown when served by <code>wikifier serve</code>.'}</div>`}</div>
+    </div>`;
+}
+
+/* ---------- file view ---------- */
+function confClass(score) { return score == null ? '' : score < 0.55 ? 'low' : score < 0.75 ? 'mid' : ''; }
+function neighborhoodSvg(path, deps, dependents) {
+  const L = deps.slice(0, 10), R = dependents.slice(0, 10);
+  const rows = Math.max(L.length, R.length, 1); const rowH = 34, top = 36, H = top + rows * rowH + 10, W = 860;
+  const nodeW = 250, cx = W / 2, cy = top + (rows * rowH) / 2 - 4;
+  const short = p => p.length > 34 ? '…' + p.slice(-33) : p;
+  const node = (x, y, label, file, cls = '') => `<g class="node ${cls}" data-file="${esc(file)}" tabindex="0" role="link" aria-label="Open ${esc(file)}"><rect x="${x}" y="${y}" width="${nodeW}" height="26" rx="6"/><circle cx="${x + 13}" cy="${y + 13}" r="4" fill="var(--${({ g: 'green', y: 'yellow', r: 'red', s: 'stub' })[statusOf(state.entries[file] || {})]})"/><text x="${x + 24}" y="${y + 17.5}">${esc(short(label))}</text></g>`;
+  const col = (items, x) => items.map((p, i) => ({ p, x, y: top + i * rowH + (rows - items.length) * rowH / 2 }));
+  const left = col(L, 10), right = col(R, W - nodeW - 10);
+  const edge = (x1, y1, x2, y2) => `<path class="edge" d="M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}"/>`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Dependency neighbourhood of ${esc(path)}">`;
+  svg += `<text class="colhead" x="10" y="18">Imports (${deps.length})</text><text class="colhead" x="${W - nodeW - 10}" y="18">Imported by (${dependents.length})</text>`;
+  left.forEach(n => svg += edge(n.x + nodeW, n.y + 13, cx - nodeW / 2, cy + 13));
+  right.forEach(n => svg += edge(cx + nodeW / 2, cy + 13, n.x, n.y + 13));
+  left.forEach(n => svg += node(n.x, n.y, n.p, n.p)); right.forEach(n => svg += node(n.x, n.y, n.p, n.p));
+  svg += node(cx - nodeW / 2, cy, path.split('/').pop(), path, 'center');
+  return svg + '</svg>';
+}
+async function renderFile(path, tab) {
+  const e = state.entries[path] || {}; const st = statusOf(e);
+  const parts = path.split('/');
+  const crumbs = parts.slice(0, -1).map((p, i) => `<button data-dir-open="${esc(parts.slice(0, i + 1).join('/') + '/')}">${esc(p)}</button><span>/</span>`).join('');
+  $('#view').innerHTML = `
+    <nav class="crumbs" aria-label="Breadcrumb"><button data-go="overview">Overview</button><span>/</span>${crumbs}</nav>
+    <div class="file-head"><div style="flex:1;min-width:0"><h1>${esc(parts[parts.length - 1])}</h1>
+      <div class="facts"><span class="tag ${st}">${LABEL[st]}</span><span class="mono">${esc(path)}</span>${e.last_meaningful_edit ? `<span>edited ${esc(ago(e.last_meaningful_edit))}</span>` : ''}${e.last_wiki_refresh ? `<span>wiki verified ${esc(ago(e.last_wiki_refresh))}</span>` : ''}</div>
+      ${e.reason ? `<p class="why" style="margin:10px 0 0">${esc(e.reason)}</p>` : ''}</div>
+      <button class="btn" id="btn-copy-path">Copy path</button></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="wiki" aria-selected="${tab === 'wiki'}">Wiki</button>
+      <button role="tab" data-tab="deps" aria-selected="${tab === 'deps'}">Dependencies <span class="count" id="deps-count"></span></button>
+      <button role="tab" data-tab="history" aria-selected="${tab === 'history'}">History <span class="count" id="hist-count"></span></button>
+    </div>
+    <section id="tab-body" role="tabpanel"><div class="empty">Loading…</div></section>`;
+  const data = await fileData(path);
+  if (state.route.path !== path) return;
+  const deps = (data.dependencies || []).filter(d => d.resolved_path).map(d => d.resolved_path);
+  const dependents = data.dependents || [];
+  if (data.dependencies) $('#deps-count').textContent = deps.length + ' / ' + dependents.length;
+  if (data.recent_why) $('#hist-count').textContent = data.recent_why.length;
+  const body = $('#tab-body');
+  if (tab === 'wiki') {
+    body.innerHTML = data.wiki
+      ? `<article class="md">${markdown(data.wiki)}</article><p class="meta" style="margin-top:20px">Source: <span class="mono">${esc(data.wiki_path || '')}</span></p>`
+      : `<div class="card empty"><strong>No wiki yet</strong>${st === 's' ? 'This file is mapped but not documented. Agents write <code>' + esc(path) + '.wiki.md</code> when they edit it.' : 'No <code>' + esc(path) + '.wiki.md</code> found.'}</div>`;
+  } else if (tab === 'deps') {
+    if (!data.dependencies) { body.innerHTML = '<div class="card empty"><strong>Dependencies need the live server</strong>Run <code>wikifier serve</code> to see imports and importers for each file.</div>'; return; }
+    const internal = (data.dependencies || []).filter(d => d.resolved_path);
+    const external = [...new Set((data.dependencies || []).filter(d => !d.resolved_path).map(d => d.raw))];
+    const rows = internal.map(d => `<div class="item" style="cursor:${d.resolved_path ? 'pointer' : 'default'}" ${d.resolved_path ? `data-file="${esc(d.resolved_path)}"` : ''}><span class="dot ${d.resolved_path ? statusOf(state.entries[d.resolved_path] || {}) : 's'}"></span><span><div class="path">${esc(d.resolved_path || d.raw)}</div>${d.resolved_path ? `<div class="why mono">${esc(d.raw)}</div>` : '<div class="why">external / unresolved</div>'}</span><span class="conf ${confClass(d.confidence_score)}" title="Resolution confidence">${d.confidence_score != null ? Number(d.confidence_score).toFixed(2) : '—'}</span></div>`).join('')
+      + (external.length ? `<div class="item" style="cursor:default"><span class="dot s"></span><span><div class="why">External (stdlib / packages)</div><div class="path">${external.map(esc).join(', ')}</div></span><span></span></div>` : '');
+    body.innerHTML = `<div class="card graph-card">${deps.length || dependents.length ? neighborhoodSvg(path, deps, dependents) : '<div class="empty"><strong>Isolated</strong>No internal imports or importers.</div>'}</div>
+      <div class="deps"><div class="card"><h2>Imports <span class="sub">${internal.length} internal · ${external.length} external</span></h2><div class="list">${rows || '<div class="empty">None</div>'}</div></div>
+      <div class="card"><h2>Imported by <span class="sub">${dependents.length}</span></h2><div class="list">${dependents.map(p => listItem(p, statusOf(state.entries[p] || {}), '', '')).join('') || '<div class="empty">No mapped file imports this one.</div>'}</div></div></div>`;
+  } else {
+    const hist = data.recent_why;
+    body.innerHTML = hist == null ? '<div class="card empty"><strong>History needs the live server</strong>Run <code>wikifier serve</code> to search the journal per file.</div>'
+      : `<div class="card"><div class="list">${hist.map(h => `<div class="item" style="cursor:default"><span class="dot ${h.action === 'record-deletion' ? 'r' : h.action === 'auto-detected' ? 'y' : 'g'}"></span><span><div><strong>${esc(h.action)}</strong></div><div class="why">${esc(h.reason)}</div></span><span class="meta">${esc((h.snippet || '').match(/\[([^\]]+)\]/)?.[1] || '')}</span></div>`).join('') || '<div class="empty">No recorded changes for this file.</div>'}</div></div>`;
+  }
+}
+
+/* ---------- routing ---------- */
+function parseRoute() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  const m = h.match(/^\/file\/(.+?)(?:\?tab=(\w+))?$/);
+  return m ? { view: 'file', path: m[1], tab: m[2] || 'wiki' } : { view: 'overview' };
+}
+function go(view, path, tab) { location.hash = view === 'file' ? '/file/' + encodeURIComponent(path).replace(/%2F/g, '/') + (tab && tab !== 'wiki' ? '?tab=' + tab : '') : ''; }
+function route() {
+  state.route = parseRoute();
+  if (state.route.view === 'file') {
+    const parts = state.route.path.split('/'); for (let i = 1; i < parts.length; i++) state.openDirs.add(parts.slice(0, i).join('/') + '/');
+    renderTree(); renderFile(state.route.path, state.route.tab);
+    $('#side').classList.remove('open');
+  } else { renderTree(); renderOverview(); }
+  $('#main').scrollTop = 0;
+}
+
+/* ---------- actions ---------- */
+async function run(cmd, btn) {
+  if (!state.server) { copy('wikifier ' + cmd, 'Copied — run it in a terminal; this page refreshes when data changes'); return; }
+  if (state.running) return; state.running = true; btn.disabled = true;
+  const con = $('#console'); con.classList.add('show'); con.textContent = '$ wikifier ' + cmd + '\nrunning…';
+  try {
+    const r = await fetch('/__wikifier/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd }) });
+    const out = await r.json();
+    con.textContent = '$ wikifier ' + cmd + '\n' + (out.output || out.error || '') + '\n— ' + (out.ok ? 'done' : 'failed') + ' in ' + (out.duration_s ?? '?') + 's';
+    toast(out.ok ? cmd + ' finished' : cmd + ' failed'); await loadAll();
+  } catch (e) { con.textContent += '\nrequest failed: ' + e.message; }
+  finally { state.running = false; btn.disabled = false; }
+}
+function snapshot() {
+  const c = stats(); const lines = ['# Project snapshot (Wikifier)', `${c.g} green · ${c.y} need wiki · ${c.r} red · ${c.s} mapped only`, '', '## Files'];
+  Object.entries(state.entries).sort().forEach(([p, e]) => lines.push(`- ${({ g: '🟢', y: '🟡', r: '🔴', s: '⚪' })[statusOf(e)]} ${p} — ${e.reason || ''}`));
+  const tree = (state.libraryMd.match(/## File Tree[\s\S]*?```text\n([\s\S]*?)```/) || [])[1];
+  if (tree) lines.push('', '## Structure', '```text', tree.trimEnd(), '```');
+  return lines.join('\n');
+}
+async function stopServer() {
+  if (!confirm('Stop the wikifier serve process? This page will go offline.')) return;
+  try { await fetch('/__wikifier/shutdown', { method: 'POST' }); } catch (e) { /* connection drop = stopped */ }
+  $('#halt-msg').innerHTML = 'Run <code>wikifier serve</code> in the project folder again, then reload.'; $('#halt').classList.add('show');
+}
+
+/* ---------- command palette ---------- */
+const COMMANDS = [
+  { label: 'Go to overview', run: () => go('overview') },
+  { label: 'Update map', run: () => run('update-maps', $('[data-run="update-maps"]') || document.body) },
+  { label: 'Check changes', run: () => run('check-changes', $('[data-run="check-changes"]') || document.body) },
+  { label: 'Copy project snapshot', run: () => copy(snapshot(), 'Snapshot copied') },
+  { label: 'Toggle colour theme', run: () => toggleTheme() },
+  { label: 'Stop server', when: () => !!state.server, run: () => stopServer() },
+  { label: 'Show files that need work', run: () => setFilter('work') },
+];
+let palItems = [], palSel = 0;
+function fuzzy(q, s) {
+  if (!q) return { score: 1, html: esc(s) };
+  const lower = s.toLowerCase(); let qi = 0, score = 0, last = -2, html = '';
+  for (let i = 0; i < s.length; i++) {
+    if (qi < q.length && lower[i] === q[qi]) { score += (i === last + 1 ? 3 : 1) + (i === 0 || '/._-'.includes(s[i - 1]) ? 2 : 0); last = i; qi++; html += '<mark>' + esc(s[i]) + '</mark>'; }
+    else html += esc(s[i]);
+  }
+  return qi === q.length ? { score: score - s.length * 0.01, html } : null;
+}
+function renderPalette() {
+  const q = $('#palette-input').value.trim().toLowerCase();
+  const items = [];
+  COMMANDS.forEach(c => { if (c.when && !c.when()) return; const m = fuzzy(q, c.label); if (m) items.push({ kind: 'command', html: m.html, score: m.score + (q ? 0 : 100), run: c.run }); });
+  Object.entries(state.entries).forEach(([p, e]) => { const m = fuzzy(q, p); if (m) items.push({ kind: LABEL[statusOf(e)], st: statusOf(e), html: m.html, score: m.score, run: () => go('file', p) }); });
+  palItems = items.sort((a, b) => b.score - a.score).slice(0, 40); palSel = Math.min(palSel, Math.max(0, palItems.length - 1));
+  $('#palette-list').innerHTML = palItems.map((it, i) => `<li role="option" id="pal-${i}" aria-selected="${i === palSel}" data-i="${i}">${it.st ? `<span class="dot ${it.st}"></span>` : '<span aria-hidden="true">›</span>'}<span class="${it.st ? 'mono' : ''}">${it.html}</span><span class="kind">${esc(it.kind)}</span></li>`).join('') || '<li>No matches</li>';
+  $('#palette-input').setAttribute('aria-activedescendant', 'pal-' + palSel);
+  const sel = $('#pal-' + palSel); if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+function openPalette() { $('#palette-scrim').classList.add('show'); const i = $('#palette-input'); i.value = ''; palSel = 0; renderPalette(); i.focus(); }
+function closePalette() { $('#palette-scrim').classList.remove('show'); }
+
+/* ---------- theme / filters ---------- */
+function applyTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = dark ? 'light' : 'dark'; applyTheme(next); store('wikifier-theme', next);
+}
+function setFilter(f) { state.statusFilter = f; $$('#status-filter button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === f))); renderTree(); $('#side').classList.add('open'); }
+
+/* ---------- live refresh ---------- */
+async function poll() {
+  if (document.hidden || state.running) return;
+  const json = await getJson('file_health.json');
+  if (!json) return;
+  const sig = (json.last_updated || '') + ':' + Object.keys(json.entries || {}).length;
+  if (state.healthSig && sig !== state.healthSig) { await loadAll(); toast('Wiki data changed — view updated'); }
+  else renderFresh();
+}
+
+/* ---------- wiring ---------- */
+function wire() {
+  document.addEventListener('click', ev => {
+    const t = ev.target.closest('[data-file],[data-go],[data-dir-open],[data-run],[data-tab],.dir > .row,#btn-copy-path,#btn-snapshot,#palette-list li');
+    if (!t) return;
+    if (t.matches('#palette-list li')) { const it = palItems[+t.dataset.i]; if (it) { closePalette(); it.run(); } return; }
+    if (t.matches('.dir > .row')) { const dir = t.parentElement.dataset.dir; state.openDirs.has(dir) ? state.openDirs.delete(dir) : state.openDirs.add(dir); t.parentElement.classList.toggle('open'); t.setAttribute('aria-expanded', t.parentElement.classList.contains('open')); return; }
+    if (t.dataset.file) return go('file', t.dataset.file);
+    if (t.dataset.go) return go(t.dataset.go);
+    if (t.dataset.dirOpen) { state.openDirs.add(t.dataset.dirOpen); state.text = t.dataset.dirOpen; $('#filter').value = t.dataset.dirOpen; renderTree(); $('#side').classList.add('open'); return; }
+    if (t.dataset.run) return run(t.dataset.run, t);
+    if (t.dataset.tab) return go('file', state.route.path, t.dataset.tab);
+    if (t.id === 'btn-copy-path') return copy(state.route.path, 'Path copied');
+    if (t.id === 'btn-snapshot') return copy(snapshot(), 'Snapshot copied');
+  });
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' && ev.target.matches && ev.target.matches('g.node')) { go('file', ev.target.dataset.file); return; }
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); openPalette(); return; }
+    if ($('#palette-scrim').classList.contains('show')) {
+      if (ev.key === 'Escape') closePalette();
+      else if (ev.key === 'ArrowDown') { palSel = Math.min(palItems.length - 1, palSel + 1); renderPalette(); ev.preventDefault(); }
+      else if (ev.key === 'ArrowUp') { palSel = Math.max(0, palSel - 1); renderPalette(); ev.preventDefault(); }
+      else if (ev.key === 'Enter') { const it = palItems[palSel]; if (it) { closePalette(); it.run(); } }
+      return;
+    }
+    const typing = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+    if (!typing && ev.key === '/') { ev.preventDefault(); $('#filter').focus(); }
+    if (!typing && ev.key.toLowerCase() === 'r' && !ev.metaKey && !ev.ctrlKey) loadAll();
+    if (ev.key === 'Escape' && state.route.view === 'file' && !typing) go('overview');
+  });
+  $('#palette-input').addEventListener('input', () => { palSel = 0; renderPalette(); });
+  $('#palette-scrim').addEventListener('click', ev => { if (ev.target.id === 'palette-scrim') closePalette(); });
+  $('#btn-search').onclick = openPalette;
+  $('#btn-refresh').onclick = () => { loadAll(); toast('Refreshed'); };
+  $('#btn-theme').onclick = toggleTheme;
+  $('#btn-stop').onclick = stopServer;
+  $('#btn-menu').onclick = () => $('#side').classList.toggle('open');
+  let ft; $('#filter').addEventListener('input', ev => { clearTimeout(ft); ft = setTimeout(() => { state.text = ev.target.value.trim(); renderTree(); }, 120); });
+  $$('#status-filter button').forEach(b => b.onclick = () => setFilter(b.dataset.f));
+  window.addEventListener('hashchange', route);
+}
+
+(async function boot() {
+  applyTheme(store('wikifier-theme'));
+  wire();
+  if (location.protocol === 'file:') { route(); return; }
+  await detectServer();
+  await loadAll();
+  setInterval(poll, 5000);
+})();
+</script>
+</body>
+</html>

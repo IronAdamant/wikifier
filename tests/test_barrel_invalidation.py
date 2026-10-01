@@ -1,5 +1,5 @@
 """Barrel churn invalidation tests — the E1 repro (Phase 0 of
-Findings/2026-06-10-Fix-Plan.md).
+Findings/archive/2026-06-10-Fix-Plan.md).
 
 Fixture: consumer.js imports './barrel'; barrel/index.js re-exports
 './leaf.js'. Parsing the consumer populates the BarrelResolutionCache
@@ -61,7 +61,7 @@ class TestBarrelInvalidation(TempProjectTestCase):
         self.assertIn("consumer.js", stale)
 
     def test_leaf_change_invalidates_consumer(self):
-        # Currently failing — fixed by Phase 4 of Findings/2026-06-10-Fix-Plan.md
+        # Currently failing — fixed by Phase 4 of Findings/archive/2026-06-10-Fix-Plan.md
         # (E1: the BRC reverse index / mtimes_snapshot never records the
         # re-exported leaf of the chain — mtimes_snapshot is persisted empty —
         # so a change to a mid-chain/leaf file returns no affected importers).

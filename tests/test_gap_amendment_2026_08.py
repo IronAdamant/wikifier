@@ -25,18 +25,17 @@ health_mod = importlib.import_module("wikifier.health")
 class TestProtocolVersionPointers(unittest.TestCase):
     """G1: operator package pointers match live major.minor."""
 
-    def test_version_is_4_6(self):
-        self.assertTrue(
-            __version__.startswith("4.6."),
-            f"expected 4.6.x package, got {__version__}",
-        )
+    def test_version_is_at_least_4_6(self):
+        major, minor = (int(x) for x in __version__.split(".")[:2])
+        self.assertGreaterEqual((major, minor), (4, 6), f"expected >= 4.6, got {__version__}")
 
     def test_skills_run_header_not_4_5(self):
         text = (REPO_ROOT / "skills" / "run.md").read_text(encoding="utf-8")
         # Header / package-notes must not claim current 4.5.x
         first_30 = "\n".join(text.splitlines()[:30])
+        series = ".".join(__version__.split(".")[:2]) + ".x"
         self.assertNotIn("package current **4.5.x**", first_30)
-        self.assertIn("4.6.x", first_30)
+        self.assertIn(series, first_30, "protocol header must name the current package series")
         # SELECTIVE WORK excludes Initial stubs (G3)
         self.assertIn("actionable", text)
         self.assertIn("Initial", text)
@@ -57,7 +56,7 @@ class TestProtocolVersionPointers(unittest.TestCase):
                 continue
             t = p.read_text(encoding="utf-8")
             self.assertNotIn("currently 4.5.x", t)
-            self.assertIn("4.6.x", t)
+            self.assertIn(".".join(__version__.split(".")[:2]) + ".x", t)
 
 
 class TestBootstrapMessageAndActions(TempProjectTestCase):

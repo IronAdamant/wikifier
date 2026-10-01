@@ -1,3 +1,3 @@
 # wikifier/mcp/status_ops.py
 
-Library health/cache work for MCP get_project_status and get_files_needing_attention, wrapped in call_with_deadline so a 60s default actually bounds the scan.
+**Purpose:** `get_project_status` / `get_files_needing_attention` work under the in-process deadline. Dependency intel comes from persisted meta keys (ACS, cycle analyses, barrel cache, resolution diagnostics) — the full cache is never loaded on the status path.

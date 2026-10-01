@@ -1,97 +1,61 @@
 """
-Wikifier Daemon (Gap #1 long-running health + dependency intelligence).
+Background daemon: keeps health and the dependency map fresh on long-running projects.
 
-Provides `wikifier daemon start|stop|status|logs|restart|run|install-service|uninstall-service`.
+  wikifier daemon start|stop|restart|status|logs [-f]|run|install-service|uninstall-service
 
-Key features:
-- Double-fork background daemonization (cmd_start).
-- Sleep/laptop lid/wake detection: if the poll gap exceeds SLEEP_THRESHOLD_SECONDS,
-  forces an immediate `check-changes` on resume before resuming normal periodic work.
-- Robust `check-changes` runner with timeout and error logging.
-- Systemd user service generator (survives reboots and sleep on laptops).
-- All state (pid, logs) lives under the *discovered project root* /.wikifier_staging (Wave 3: full discover_project_root ...; Wave 5: run_full_update wired for direct pure-Py periodic/post-sleep update-maps calls without sh).
-
-Designed to keep the Health Matrix, journal, and (future) incremental update-maps
-fresh with minimal manual intervention on long-running projects.
+- Every ``WIKIFIER_POLL_INTERVAL`` seconds (default 30): check-changes.
+- update-maps at start, on wake from sleep, and at most every
+  ``WIKIFIER_DAEMON_MAPS_INTERVAL`` seconds (default 600; 0 = start/wake only).
+  ``WIKIFIER_DAEMON_MAPS=0`` disables background update-maps entirely.
+- A poll gap longer than ``SLEEP_THRESHOLD_SECONDS`` is treated as wake-from-sleep.
+- ``start`` refuses projects whose readiness is ``blocked`` (pass ``--force``).
+- ``stop`` sends SIGTERM and waits; SIGKILL only if the loop does not exit.
+- State (pid, log, heartbeat) lives in ``<project>/.wikifier_staging``.
 """
-# Phase 5e (66): daemon + journal paths now note health summaries / ACS/barrel / format=summary as first-class default for 20k+ creative (O(k) bounded ACS/CIABRE per 48/58/50; for long-running Gate4 hygiene).
 
 from __future__ import annotations
 
+import json
 import os
-import sys
-import time
-import signal
 import platform
-import subprocess
+import shutil
+import signal
+import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
-# Gap #1 Wave 3 External/Packaged: import unified discover_project_root for robust
-# state dir selection when daemon is invoked directly (python -m, systemd, subdir cwd,
-# symlink or pnpm-store cwd inside external monorepo after `pip install wikifier`).
-# Falls back gracefully; central discover now includes logical PWD hardening.
-try:
-    from .cli import discover_project_root, run_full_update
-except Exception:
-    discover_project_root = None  # type: ignore[assignment]
-    run_full_update = None  # type: ignore[assignment]
+from . import health_pkg as health_mod
+from .api import check_changes, run_full_update
+from .paths import resolve_root
 
-# =============================================================================
-# Configuration (must match wikifier.sh POLL_INTERVAL default and prior daemon)
-# =============================================================================
-
-DAEMON_NAME = "wikifier"
-POLL_INTERVAL_DEFAULT = 30  # seconds — check-changes heartbeat
-# G11: do NOT run full update-maps every poll on large monorepos (was 30s → IO bomb).
-# Override: WIKIFIER_DAEMON_MAPS_INTERVAL (seconds; 0 = never periodic maps, only start/wake).
-# WIKIFIER_DAEMON_MAPS=0 disables all background update-maps (check-changes only; like monitor).
-SLEEP_THRESHOLD_SECONDS = 120  # if sleep gap > this, treat as wake-from-sleep and force check
-
-
-def _maps_enabled() -> bool:
-    return os.environ.get("WIKIFIER_DAEMON_MAPS", "1").strip() not in ("0", "false", "no")
-
-
-def _maps_interval_sec() -> int:
-    raw = os.environ.get("WIKIFIER_DAEMON_MAPS_INTERVAL", "600")
-    try:
-        return max(0, int(raw))
-    except ValueError:
-        return 600
-
+POLL_INTERVAL_DEFAULT = int(os.environ.get("WIKIFIER_POLL_INTERVAL", "30") or "30")
+SLEEP_THRESHOLD_SECONDS = 120
+STOP_GRACE_SECONDS = 15
 LOG_DIR_NAME = ".wikifier_staging"
 LOG_FILE_NAME = "daemon.log"
 PID_FILE_NAME = "wikifier.pid"
 
 
-# =============================================================================
-# State directory helpers (respect WIKIFIER_PROJECT_ROOT for external monorepos)
-# Wave 2: now uses full discover_project_root (walk-up for .git etc markers) so that
-# `cd external-monorepo/subdir; wikifier daemon start` (post-pip) correctly targets
-# the monorepo root for .wikifier_staging/ (not the subdir). Mirrors CLI/MCP/shell.
-# =============================================================================
+def _maps_enabled() -> bool:
+    return os.environ.get("WIKIFIER_DAEMON_MAPS", "1").strip().lower() not in ("0", "false", "no")
+
+
+def _maps_interval_sec() -> int:
+    try:
+        return max(0, int(os.environ.get("WIKIFIER_DAEMON_MAPS_INTERVAL", "600")))
+    except ValueError:
+        return 600
+
+
+def project_root() -> Path:
+    return resolve_root()
+
 
 def get_state_dir() -> Path:
-    """Return the .wikifier_staging directory for the current project.
-
-    Wave 3 External improvement: prefers the canonical discover_project_root()
-    (handles subdir cwd, symlinks, pnpm/yarn store layouts via logical PWD ancestor walk,
-    markers, common project files) for packaged + external monorepo scenarios.
-    Env var still honored as highest priority via discover.
-    """
-    if discover_project_root is not None:
-        try:
-            root = discover_project_root()
-            if root and root.exists():
-                return root / LOG_DIR_NAME
-        except Exception:
-            pass  # fall through to env/cwd
-    root = os.environ.get("WIKIFIER_PROJECT_ROOT")
-    if root:
-        return Path(root).expanduser().resolve() / LOG_DIR_NAME
-    return Path.cwd().resolve() / LOG_DIR_NAME
+    return project_root() / LOG_DIR_NAME
 
 
 def get_pid_file() -> Path:
@@ -108,34 +72,26 @@ def ensure_state_dir() -> Path:
     return state
 
 
-# =============================================================================
-# PID / process helpers
-# =============================================================================
-
 def write_pid(pid: int) -> None:
     ensure_state_dir()
     get_pid_file().write_text(str(pid))
 
 
 def read_pid() -> Optional[int]:
-    pid_file = get_pid_file()
-    if not pid_file.exists():
-        return None
     try:
-        return int(pid_file.read_text().strip())
-    except Exception:
+        return int(get_pid_file().read_text().strip())
+    except (OSError, ValueError):
         return None
 
 
 def remove_pid() -> None:
     try:
-        get_pid_file().unlink(missing_ok=True)
-    except Exception:
+        get_pid_file().unlink()
+    except FileNotFoundError:
         pass
 
 
 def is_process_running(pid: int) -> bool:
-    """Return True if a process with the given PID is alive."""
     try:
         os.kill(pid, 0)
         return True
@@ -143,464 +99,316 @@ def is_process_running(pid: int) -> bool:
         return False
 
 
-# =============================================================================
-# Logging
-# =============================================================================
-
 def log(msg: str, also_to_file: bool = True) -> None:
-    """Timestamped log to stdout + (optionally) the daemon log file."""
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{ts}] {msg}"
-    print(line)
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    print(line, flush=True)
     if also_to_file:
         try:
-            log_path = get_log_file()
-            with open(log_path, "a", encoding="utf-8") as f:
+            with open(get_log_file(), "a", encoding="utf-8") as f:
                 f.write(line + "\n")
-        except Exception:
-            # Never let logging failure kill the daemon
-            pass
+        except OSError as exc:  # logging must never kill the loop
+            print(f"[daemon] log write failed: {exc}", file=sys.stderr)
 
-
-# =============================================================================
-# Core check runner (used by both initial, periodic, and post-sleep paths)
-# =============================================================================
 
 def _write_heartbeat(event: str, ok: bool, detail: str = "") -> None:
-    """Persist last daemon success/failure for autonomous-status / long-horizon ops."""
-    try:
-        import json as _json
-        path = ensure_state_dir() / "daemon_heartbeat.json"
-        prev = {}
-        if path.exists():
-            try:
-                prev = _json.loads(path.read_text(encoding="utf-8")) or {}
-            except Exception:
-                prev = {}
-        fail_streak = int(prev.get("consecutive_failures", 0) or 0)
-        if ok:
-            fail_streak = 0
-        else:
-            fail_streak += 1
-        payload = {
-            "ts": datetime.now().isoformat(timespec="seconds"),
-            "event": event,
-            "ok": ok,
-            "detail": (detail or "")[:400],
-            "consecutive_failures": fail_streak,
-            "project_root": str(
-                (discover_project_root() if discover_project_root else Path.cwd()).resolve()
-            ),
-        }
-        path.write_text(_json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        if fail_streak >= 5:
-            log(
-                f"LONG-HORIZON WARN: {fail_streak} consecutive daemon step failures — "
-                "inspect daemon.log; consider lean monitored_paths / WIKIFIER_DAEMON_MAPS=0"
-            )
-    except Exception:
-        pass
+    """Persist the last step outcome for autonomous-status."""
+    path = ensure_state_dir() / "daemon_heartbeat.json"
+    previous = {}
+    if path.exists():
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8")) or {}
+        except ValueError:
+            previous = {}
+    streak = 0 if ok else int(previous.get("consecutive_failures", 0) or 0) + 1
+    path.write_text(json.dumps({
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "event": event,
+        "ok": ok,
+        "detail": (detail or "")[:400],
+        "consecutive_failures": streak,
+        "project_root": str(project_root()),
+    }, indent=2) + "\n", encoding="utf-8")
+    if streak >= 5:
+        log(f"WARNING: {streak} consecutive daemon step failures — inspect daemon.log; "
+            "consider lean monitored_paths or WIKIFIER_DAEMON_MAPS=0")
 
 
 def _run_check_changes(reason: str) -> None:
-    """
-    Run the check-changes command in a robust way.
-
-    Uses `python -m wikifier check-changes` so it works correctly from a
-    pip-installed wikifier (no reliance on ./wikifier.sh in PATH).
-    Captures output, enforces a 5-minute timeout, and logs failures.
-    """
-    cmd = [sys.executable, "-m", "wikifier", "check-changes"]
-
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,
-            env=os.environ.copy(),
-        )
-        if result.returncode != 0:
-            msg = (result.stderr or "")[:500]
-            log(f"check-changes failed (reason={reason}): {msg}")
-            _write_heartbeat(f"check-changes:{reason}", False, msg)
-            return
-        log(f"check-changes completed (reason={reason})")
-        _write_heartbeat(f"check-changes:{reason}", True)
-    except subprocess.TimeoutExpired:
-        log(f"check-changes timed out (reason={reason})")
-        _write_heartbeat(f"check-changes:{reason}", False, "timeout")
-    except Exception as e:
-        log(f"check-changes error (reason={reason}): {e}")
-        _write_heartbeat(f"check-changes:{reason}", False, str(e))
+    res = check_changes(project_root=project_root(), timeout=300)
+    ok = bool(res.get("success"))
+    log(f"check-changes ({reason}): {res.get('message') if ok else res.get('error')}")
+    _write_heartbeat(f"check-changes:{reason}", ok, "" if ok else str(res.get("error")))
 
 
-def _run_python_primary_update(reason: str, force_full: bool = False) -> None:
-    """
-    Wave 5: Wire run_full_update direct (pure Python primary path, no sh/subprocess)
-    into daemon for External/Packaged robustness.
-
-    Called on initial, periodic, and especially post-sleep to keep dependency intel
-    fresh using the deepened pipeline (dirty + parser + persist + barrel/creative)
-    directly from Python. Best-effort, never blocks the loop; logs summary.
-    Respects discovery for external monorepos. Guarded by import success.
-    """
-    if run_full_update is None:
-        log(f"python-primary update skipped (no run_full_update import) reason={reason}")
-        return
-    try:
-        res = run_full_update(root=None, force_full=force_full, verbose=False, use_canonical=True, use_python_primary=True)
-        files = res.get("files_to_reparse", 0)
-        persisted = res.get("sample_persisted_pairs", 0)
-        tied = res.get("barrel_creative_tied_in_pure_path", False)
-        ok = bool(res.get("success", True))
-        log(
-            f"python-primary update completed (reason={reason}): "
-            f"files_to_reparse={files} persisted_pairs={persisted} barrel_creative_tied={tied} "
-            f"root={res.get('root')} success={ok}"
-        )
-        _write_heartbeat(
-            f"update-maps:{reason}",
-            ok,
-            f"parsed={res.get('files_parsed')} edges={res.get('edges_persisted')}",
-        )
-    except Exception as e:
-        log(f"python-primary update error (reason={reason}): {e}")
-        _write_heartbeat(f"update-maps:{reason}", False, str(e))
-
-
-# =============================================================================
-# The background loop (heart of the daemon)
-# =============================================================================
-
-def daemon_loop() -> None:
-    """
-    The actual background loop.
-
-    - Every POLL_INTERVAL: check-changes (health/mtime heartbeat).
-    - update-maps (run_full_update): at most every WIKIFIER_DAEMON_MAPS_INTERVAL
-      (default 600s), plus once at start and on wake — not every 30s (G11).
-    - WIKIFIER_DAEMON_MAPS=0 → check-changes only (monitor-like).
-    """
-    maps_iv = _maps_interval_sec()
-    maps_on = _maps_enabled()
+def _run_update_maps(reason: str, force_full: bool = False) -> None:
+    res = run_full_update(root=project_root(), force_full=force_full)
+    ok = bool(res.get("success"))
     log(
-        f"Wikifier daemon started (check every {POLL_INTERVAL_DEFAULT}s; "
-        f"maps={'off' if not maps_on else f'every {maps_iv}s' if maps_iv else 'start/wake only'})."
+        f"update-maps ({reason}): parsed={res.get('files_parsed')}/{res.get('files_to_reparse')} "
+        f"edges={res.get('edges_persisted')} complete={res.get('map_complete')} success={ok}"
+        + ("" if ok else f" error={res.get('error')}")
     )
-
-    last_check = time.time()
-    last_maps = 0.0
-    last_metrics = 0.0
-    # Metrics cadence (seconds); default 1h for soak growth without spam
-    try:
-        metrics_iv = max(0, int(os.environ.get("WIKIFIER_DAEMON_METRICS_INTERVAL", "3600") or "3600"))
-    except ValueError:
-        metrics_iv = 3600
-
-    def _maybe_metrics(reason: str, force: bool = False) -> None:
-        nonlocal last_metrics
-        if metrics_iv <= 0 and not force:
-            return
-        now_m = time.time()
-        if not force and metrics_iv > 0 and (now_m - last_metrics) < metrics_iv:
-            return
-        try:
-            from . import health as health_mod
-            if hasattr(health_mod, "write_metrics_snapshot"):
-                root = None
-                if discover_project_root is not None:
-                    try:
-                        root = discover_project_root()
-                    except Exception:
-                        root = None
-                snap = health_mod.write_metrics_snapshot(
-                    root or Path.cwd(),
-                    source=f"daemon:{reason}",
-                )
-                log(
-                    f"metrics-snapshot (reason={reason}): "
-                    f"staging_bytes={snap.get('staging_bytes')} "
-                    f"score={snap.get('health_score')} ok={snap.get('success')}"
-                )
-                last_metrics = now_m
-        except Exception as me:
-            log(f"metrics-snapshot error (reason={reason}): {me}")
-
-    _run_check_changes("initial start / resume")
-    if maps_on:
-        _run_python_primary_update("initial start / resume", force_full=False)
-        last_maps = time.time()
-    _maybe_metrics("initial", force=True)
-
-    while True:
-        try:
-            time.sleep(POLL_INTERVAL_DEFAULT)
-
-            now = time.time()
-            gap = now - last_check
-
-            if gap > SLEEP_THRESHOLD_SECONDS:
-                log(f"Wake detected (gap of {int(gap)}s). Forced check-changes + optional maps.")
-                _run_check_changes("post-sleep resume")
-                if maps_on:
-                    _run_python_primary_update("post-sleep resume", force_full=False)
-                    last_maps = time.time()
-                _maybe_metrics("post-sleep", force=True)
-
-            _run_check_changes("periodic")
-            if maps_on and maps_iv > 0 and (time.time() - last_maps) >= maps_iv:
-                _run_python_primary_update("periodic maps interval", force_full=False)
-                last_maps = time.time()
-            _maybe_metrics("periodic")
-            last_check = time.time()
-        except KeyboardInterrupt:
-            raise
-        except Exception as loop_err:
-            # Never die on a single cycle — long-horizon autonomous ops requirement
-            log(f"daemon loop error (continuing): {loop_err}")
-            _write_heartbeat("loop", False, str(loop_err))
-            time.sleep(POLL_INTERVAL_DEFAULT)
+    _write_heartbeat(f"update-maps:{reason}", ok, "" if ok else str(res.get("error")))
 
 
-# =============================================================================
-# Command implementations
-# =============================================================================
+_STOP_REQUESTED = False
 
-def cmd_start() -> None:
-    """Start the daemon in the background (double-fork, daemonize)."""
-    if not hasattr(os, "fork"):
-        print("The background daemon requires a Unix-like OS (os.fork is unavailable here).")
-        print("On Windows, run 'wikifier daemon run' in a terminal (foreground) or use an external process manager.")
-        sys.exit(1)
+
+def _request_stop(signum, _frame) -> None:
+    global _STOP_REQUESTED
+    _STOP_REQUESTED = True
+    log(f"received signal {signum}; stopping after the current step")
+
+
+def daemon_loop(max_cycles: Optional[int] = None) -> None:
+    """Run until SIGTERM/SIGINT (or ``max_cycles`` polls, for tests)."""
     ensure_state_dir()
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, _request_stop)
+    maps_interval = _maps_interval_sec()
+    maps_on = _maps_enabled()
+    try:
+        metrics_interval = max(0, int(os.environ.get("WIKIFIER_DAEMON_METRICS_INTERVAL", "3600") or "3600"))
+    except ValueError:
+        metrics_interval = 3600
+    log(
+        f"daemon started for {project_root()} (check every {POLL_INTERVAL_DEFAULT}s; maps="
+        + ("off" if not maps_on else f"every {maps_interval}s" if maps_interval else "start/wake only")
+        + ")"
+    )
+    last_metrics = 0.0
 
+    def metrics(reason: str, force: bool = False) -> None:
+        nonlocal last_metrics
+        now = time.time()
+        if not force and (metrics_interval <= 0 or now - last_metrics < metrics_interval):
+            return
+        snap = health_mod.write_metrics_snapshot(project_root(), source=f"daemon:{reason}")
+        log(f"metrics ({reason}): staging_bytes={snap.get('staging_bytes')} score={snap.get('health_score')}")
+        last_metrics = now
+
+    _run_check_changes("start")
+    last_maps = 0.0
+    if maps_on:
+        _run_update_maps("start")
+        last_maps = time.time()
+    metrics("start", force=True)
+    last_poll = time.time()
+    cycles = 0
+    while not _STOP_REQUESTED and (max_cycles is None or cycles < max_cycles):
+        cycles += 1
+        try:
+            time.sleep(POLL_INTERVAL_DEFAULT)
+            if _STOP_REQUESTED:
+                break
+            if time.time() - last_poll > SLEEP_THRESHOLD_SECONDS + POLL_INTERVAL_DEFAULT:
+                log("wake from sleep detected")
+                if maps_on:
+                    _run_update_maps("wake")
+                    last_maps = time.time()
+                metrics("wake", force=True)
+            _run_check_changes("periodic")
+            if maps_on and maps_interval and time.time() - last_maps >= maps_interval:
+                _run_update_maps("interval")
+                last_maps = time.time()
+            metrics("periodic")
+        except Exception as exc:  # one bad cycle must not end a long-running daemon
+            log(f"daemon loop error (continuing): {type(exc).__name__}: {exc}")
+            _write_heartbeat("loop", False, str(exc))
+        last_poll = time.time()
+    log("daemon stopped")
+
+
+def _readiness_blocked() -> Optional[str]:
+    ready = health_mod.assess_autonomous_readiness(project_root(), write_metrics=False)
+    if ready.get("readiness") == "blocked":
+        return "; ".join(ready.get("blockers") or ["readiness=blocked"])
+    return None
+
+
+def cmd_start(force: bool = False) -> int:
+    """Start the daemon in the background (fork + setsid)."""
+    if not hasattr(os, "fork"):
+        print("The background daemon needs os.fork (Unix). On Windows run `wikifier daemon run` "
+              "in a terminal or under a process manager.")
+        return 1
+    ensure_state_dir()
     pid = read_pid()
     if pid and is_process_running(pid):
         print(f"Wikifier daemon already running (PID {pid})")
-        sys.exit(0)
-
+        return 0
+    blocked = None if force else _readiness_blocked()
+    if blocked:
+        print(f"Refusing to start: project readiness is blocked ({blocked}). Fix it or pass --force.")
+        return 2
     log_file = get_log_file()
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
     pid = os.fork()
     if pid > 0:
-        # Parent: record PID and exit
         write_pid(pid)
         print(f"Wikifier daemon started (PID {pid})")
         print(f"Logs: {log_file}")
-        sys.exit(0)
-
-    # Child 1: become session leader
+        return 0
     os.setsid()
-    os.umask(0)
-
-    # Redirect stdio to the log file
     with open(log_file, "a", buffering=1, encoding="utf-8") as logf:
         os.dup2(logf.fileno(), sys.stdout.fileno())
         os.dup2(logf.fileno(), sys.stderr.fileno())
-
-    # Redirect stdin from /dev/null
     with open(os.devnull, "r") as devnull:
         os.dup2(devnull.fileno(), sys.stdin.fileno())
-
-    # Now become the real daemon
     try:
         daemon_loop()
     except KeyboardInterrupt:
-        log("Daemon received SIGINT, shutting down.")
+        log("daemon interrupted")
     finally:
         remove_pid()
+        os._exit(0)
 
 
-def cmd_stop() -> None:
-    """Stop a running daemon (SIGKILL if necessary)."""
+def cmd_stop() -> int:
+    """SIGTERM the daemon and wait; SIGKILL only if it does not exit in time."""
     pid = read_pid()
     if not pid or not is_process_running(pid):
         print("Wikifier daemon is not running.")
         remove_pid()
-        sys.exit(0)
-
-    try:
+        return 0
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.time() + STOP_GRACE_SECONDS + POLL_INTERVAL_DEFAULT
+    while time.time() < deadline and is_process_running(pid):
+        time.sleep(0.25)
+    if is_process_running(pid):
         os.kill(pid, signal.SIGKILL)
+        print(f"Daemon (PID {pid}) did not exit in time; killed.")
+    else:
         print(f"Stopped Wikifier daemon (PID {pid})")
-    except ProcessLookupError:
-        print("Process already gone.")
-    finally:
-        remove_pid()
+    remove_pid()
+    return 0
 
 
-def cmd_status() -> None:
-    """Print whether the daemon is running and where its log lives."""
+def cmd_status() -> int:
     pid = read_pid()
     if pid and is_process_running(pid):
         print(f"Wikifier daemon is running (PID {pid})")
         print(f"Log file: {get_log_file()}")
-        return
-
+        return 0
     print("Wikifier daemon is not running.")
     remove_pid()
+    return 0
 
 
-def cmd_logs(follow: bool = False) -> None:
-    """Show the last 100 lines of the daemon log (optionally follow with tail -f)."""
+def cmd_logs(follow: bool = False, lines: int = 100) -> int:
     log_file = get_log_file()
     if not log_file.exists():
         print("No daemon log file found yet.")
-        return
+        return 0
+    with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+        for line in f.readlines()[-lines:]:
+            print(line, end="")
+        if not follow:
+            return 0
+        try:
+            while True:
+                line = f.readline()
+                if line:
+                    print(line, end="", flush=True)
+                else:
+                    time.sleep(0.5)
+        except KeyboardInterrupt:
+            return 0
 
-    if follow:
-        cmd = ["tail", "-n", "100", "-f", str(log_file)]
-    else:
-        cmd = ["cat", str(log_file)]
 
-    subprocess.run(cmd)
-
-
-def cmd_restart() -> None:
-    """Stop then start the daemon."""
+def cmd_restart(force: bool = False) -> int:
     cmd_stop()
-    time.sleep(1)
-    cmd_start()
+    return cmd_start(force=force)
 
 
-def cmd_install_service() -> None:
-    """Generate and install a systemd user service unit (Linux only)."""
-    if platform.system().lower() != "linux":
-        print("systemd user services are currently only supported on Linux.")
-        print("You can still use `wikifier daemon start` with nohup/tmux/screen.")
-        return
-
-    unit_content = generate_systemd_unit()
-
-    user_systemd_dir = Path.home() / ".config" / "systemd" / "user"
-    user_systemd_dir.mkdir(parents=True, exist_ok=True)
-
-    service_file = user_systemd_dir / "wikifier.service"
-    service_file.write_text(unit_content)
-
-    print("Systemd user service written to:")
-    print(f"  {service_file}")
-    print()
-    print("To enable and start (survives laptop sleep/lid close):")
-    print("  systemctl --user daemon-reload")
-    print("  systemctl --user enable --now wikifier")
-    print()
-    print("Useful commands:")
-    print("  systemctl --user status wikifier")
-    print("  journalctl --user -u wikifier -f")
-    print("  systemctl --user restart wikifier")
-
-
-def generate_systemd_unit() -> str:
-    """Generate a systemd user service file content."""
-    # Try to find the real `wikifier` executable in PATH for the unit
-    wikifier_cmd = "wikifier"
-    try:
-        which = subprocess.run(
-            ["which", "wikifier"],
-            capture_output=True,
-            text=True,
-        )
-        if which.returncode == 0:
-            wikifier_cmd = which.stdout.strip()
-    except Exception:
-        pass
-
+def generate_systemd_unit(root: Optional[Path] = None) -> str:
+    """systemd user unit that runs the daemon in the foreground for one project."""
+    root = root or project_root()
+    executable = shutil.which("wikifier") or f"{sys.executable} -m wikifier"
+    log_path = root / LOG_DIR_NAME / LOG_FILE_NAME
     return f"""[Unit]
-Description=Wikifier Background Daemon (Gap #1 Health Matrix + Dependency Intelligence)
+Description=Wikifier daemon for {root}
 After=network.target
 
 [Service]
 Type=simple
-ExecStart={wikifier_cmd} daemon run
+WorkingDirectory={root}
+Environment=WIKIFIER_PROJECT_ROOT={root}
+ExecStart={executable} daemon run
 Restart=always
 RestartSec=10
-# Give the daemon a chance to finish current work on shutdown
-KillMode=mixed
-TimeoutStopSec=30
-
-# Nice to have on laptops
-StandardOutput=append:%h/.wikifier_staging/daemon.log
-StandardError=append:%h/.wikifier_staging/daemon.log
+KillSignal=SIGTERM
+TimeoutStopSec={STOP_GRACE_SECONDS + POLL_INTERVAL_DEFAULT}
+StandardOutput=append:{log_path}
+StandardError=append:{log_path}
 
 [Install]
 WantedBy=default.target
 """
 
 
-def cmd_uninstall_service() -> None:
-    """Remove the systemd user service unit if present."""
-    service_file = Path.home() / ".config" / "systemd" / "user" / "wikifier.service"
-    if service_file.exists():
-        service_file.unlink()
-        print("Removed wikifier.service")
-        print("Run: systemctl --user daemon-reload")
+def _service_path() -> Path:
+    return Path.home() / ".config" / "systemd" / "user" / "wikifier.service"
+
+
+def cmd_install_service() -> int:
+    if platform.system().lower() != "linux":
+        print("systemd user services are Linux-only. Use `wikifier daemon start` (or launchd/tmux) instead.")
+        return 1
+    path = _service_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_state_dir()
+    path.write_text(generate_systemd_unit())
+    print(f"Wrote {path}\nEnable with:\n  systemctl --user daemon-reload\n  systemctl --user enable --now wikifier")
+    return 0
+
+
+def cmd_uninstall_service() -> int:
+    path = _service_path()
+    if path.exists():
+        path.unlink()
+        print("Removed wikifier.service — run: systemctl --user daemon-reload")
     else:
         print("No wikifier.service found.")
+    return 0
 
 
-def cmd_run() -> None:
-    """
-    The actual foreground runner used by systemd / manual execution.
-
-    Does not double-fork; just runs the loop directly (systemd or the user
-    is responsible for keeping it alive).
-    """
+def cmd_run() -> int:
+    """Foreground loop (for systemd or a terminal)."""
     ensure_state_dir()
-    log_file = get_log_file()
-    print(f"Wikifier daemon (foreground) running. Logs: {log_file}")
-
+    print(f"Wikifier daemon (foreground). Logs: {get_log_file()}")
     try:
         daemon_loop()
     except KeyboardInterrupt:
-        log("Foreground daemon stopped by user.")
+        log("foreground daemon stopped by user")
+    return 0
 
 
-# =============================================================================
-# Main dispatcher (supports both `python -m wikifier.daemon <cmd>` and internal calls)
-# =============================================================================
+USAGE = "Usage: wikifier daemon <start [--force]|stop|restart|status|logs [-f]|run|install-service|uninstall-service>"
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print(
-            "Usage: wikifier daemon <start|stop|restart|status|logs|run|"
-            "install-service|uninstall-service>"
-        )
-        sys.exit(1)
 
-    sub = sys.argv[1]
-    args = sys.argv[2:]
-
-    if sub == "start":
-        cmd_start()
-        return
-    if sub == "stop":
-        cmd_stop()
-        return
-    if sub == "restart":
-        cmd_restart()
-        return
-    if sub == "status":
-        cmd_status()
-        return
-    if sub == "logs":
-        follow = "--follow" in args or "-f" in args
-        cmd_logs(follow=follow)
-        return
-    if sub == "run":
-        cmd_run()
-        return
-    if sub == "install-service":
-        cmd_install_service()
-        return
-    if sub == "uninstall-service":
-        cmd_uninstall_service()
-        return
-
-    print(f"Unknown daemon command: {sub}")
-    sys.exit(1)
+def main(argv: Optional[List[str]] = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:
+        print(USAGE)
+        return 1
+    action, rest = argv[0], argv[1:]
+    force = "--force" in rest
+    handlers = {
+        "start": lambda: cmd_start(force=force),
+        "stop": cmd_stop,
+        "restart": lambda: cmd_restart(force=force),
+        "status": cmd_status,
+        "logs": lambda: cmd_logs(follow="-f" in rest or "--follow" in rest),
+        "run": cmd_run,
+        "install-service": cmd_install_service,
+        "uninstall-service": cmd_uninstall_service,
+    }
+    handler = handlers.get(action)
+    if handler is None:
+        print(f"Unknown daemon command: {action}\n{USAGE}")
+        return 1
+    return int(handler() or 0)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

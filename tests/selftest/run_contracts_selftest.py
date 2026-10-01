@@ -221,7 +221,7 @@ print("M2 Scope projector smoke: PASS")
 
 # RESERVED keys present and documented
 assert "_reverse_dependency_index_v1" in RESERVED_TOP_LEVEL_KEYS
-assert "M2 A0/A1" in RESERVED_TOP_LEVEL_KEYS["_reverse_dependency_index_v1"]
+assert RESERVED_TOP_LEVEL_KEYS["_reverse_dependency_index_v1"].strip()
 assert "_update_runs" in RESERVED_TOP_LEVEL_KEYS
 assert "_partial_results" in RESERVED_TOP_LEVEL_KEYS
 

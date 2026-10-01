@@ -1,3 +1,3 @@
-# server.py
+# wikifier/mcp/server.py
 
-Installed MCP entry (`wikifier-mcp`, `python -m wikifier.mcp.server`). Re-exports `mcp` + `main` from `server_impl.py` (complete tool set). Do not register stub `mcp/tools/intel.py` as the live server.
+**Purpose:** installed MCP entry point (`wikifier-mcp`, `python -m wikifier.mcp.server`); re-exports `mcp` and `main` from `server_impl.py`. `import wikifier` never imports it (`wikifier.mcp` is lazy).

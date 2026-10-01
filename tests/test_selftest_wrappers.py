@@ -1,7 +1,9 @@
-"""G12: run extracted selftest harnesses via unittest (no harness in prod modules)."""
+"""Run the extracted self-test scripts under unittest (output captured; shown only on failure)."""
 
+import io
 import runpy
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 SELFTEST = Path(__file__).resolve().parent / "selftest"
@@ -11,12 +13,17 @@ class TestExtractedSelftests(unittest.TestCase):
     def _run(self, name: str):
         path = SELFTEST / name
         self.assertTrue(path.is_file(), f"missing {path}")
-        # Execute as __main__ so assert-based scripts raise on failure
+        # Execute as __main__ so assert-based scripts raise on failure.
+        output = io.StringIO()
         try:
-            runpy.run_path(str(path), run_name="__main__")
+            with redirect_stdout(output), redirect_stderr(output):
+                runpy.run_path(str(path), run_name="__main__")
         except SystemExit as e:
             if e.code not in (0, None):
-                self.fail(f"{name} exited with {e.code}")
+                self.fail(f"{name} exited with {e.code}\n{output.getvalue()}")
+        except Exception:
+            print(output.getvalue())
+            raise
 
     def test_contracts_selftest(self):
         self._run("run_contracts_selftest.py")

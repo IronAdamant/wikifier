@@ -11,38 +11,63 @@ on:
 
 jobs:
   test:
-    name: Test Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
-    
+        os: [ubuntu-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        experimental: [false]
+        include:
+          # ubuntu-latest (24.04) has no Python 3.8 build; 3.8 is still the declared minimum.
+          - os: ubuntu-22.04
+            python-version: '3.8'
+            experimental: false
+          - os: macos-latest
+            python-version: '3.12'
+            experimental: false
+          # Windows support (msvcrt locking, .ps1/.bat launchers) is not yet verified in CI.
+          - os: windows-latest
+            python-version: '3.12'
+            experimental: true
+
     steps:
       - uses: actions/checkout@v6
-      
-      - name: Set up Python ${{ matrix.python-version }}
+
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      
-      - name: Install dependencies
+
+      - name: Install package
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install build wheel setuptools
           pip install -e .
-          # mcp extra requires Python >=3.10 (PyPI has no mcp wheel for 3.8/3.9).
-          # Core tests still run; test_server_has_main skipTest without the extra.
+          # mcp extra requires Python >= 3.10 (no wheels for 3.8/3.9); its tests skip without it.
           if python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
             pip install -e '.[mcp]'
           fi
-      
+
+      - name: Byte-compile
+        run: python -m compileall -q wikifier tests scripts
+
       - name: Run tests
         run: python -m unittest discover tests -v
-      
-      - name: Verify package build and wheel CLI
+
+      - name: Parser accuracy report
+        run: python scripts/parser_accuracy.py
+
+      - name: Verify wheel CLI and launchers
+        shell: bash
         run: |
           python -m build --wheel --outdir dist/
-          python -m venv /tmp/wikifier-wheel
-          /tmp/wikifier-wheel/bin/pip install dist/wikifier-*.whl
-          /tmp/wikifier-wheel/bin/wikifier --help
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          if [ -x "$RUNNER_TEMP/wheel-venv/bin/python" ]; then VENV_BIN="$RUNNER_TEMP/wheel-venv/bin"; else VENV_BIN="$RUNNER_TEMP/wheel-venv/Scripts"; fi
+          "$VENV_BIN/pip" install dist/wikifier-*.whl
+          "$VENV_BIN/wikifier" --version
+          "$VENV_BIN/wikifier" --target "$RUNNER_TEMP" init --no-copy
+          WIKIFIER_PYTHON="$VENV_BIN/python" bash ./wikifier.sh --version

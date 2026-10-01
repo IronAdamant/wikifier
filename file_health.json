@@ -1,22 +1,25 @@
 {
   "version": 2,
-  "last_updated": "2026-09-14 10:02:22",
+  "last_updated": "2026-10-01 18:48:10",
   "entries": {
     "skills/run.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "wiki_content_hash": "sha256:a4b1f692772e525faee52e943761bcc9cb5d236a2653e416fc7c06bfe54e74d5",
-      "source_content_hash": "sha256:a4b1f692772e525faee52e943761bcc9cb5d236a2653e416fc7c06bfe54e74d5",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=run.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Protocol v0.7: wiki verification, record_changes, watch scope, compact get_dependencies, migration notes (subid=trust-green)",
+      "wiki_content_hash": "sha256:83b91912d7a9e671697660fb1f214c7f4efb2380a03505bbaa42abda55a5c039",
+      "source_content_hash": "sha256:83b91912d7a9e671697660fb1f214c7f4efb2380a03505bbaa42abda55a5c039",
+      "source_mtime_ns": "1790843703534148810",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=run.md"
     },
     "Findings/Milestones-Overview.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
       "source_content_hash": "sha256:f8b7030ec8980774cf3a2560ad7aee6537263eadf8374e650718f7c6793c6d50",
+      "source_mtime_ns": "1780800604000000000",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/M5-Dogfood-Progress.md": {
@@ -24,21 +27,25 @@
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
       "source_content_hash": "sha256:d49baaaebd0e901d674651c0f676598e5ccd23d559380aa46947a71c56a4484e",
+      "source_mtime_ns": "1780537002000000000",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "wikifier.sh": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:19",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "source_content_hash": "sha256:f0f4b2a6b1ab9bc0fba475da82154e0a35b7dcf2ea4269275d2e898d712e324a",
-      "last_wiki_refresh": "2026-08-01 11:25:19",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-08-01 11:25:19 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:3098c65ad62e6e73ecb2c77337b12f850a4159dc5e485a6efc9ff9b772ce074e",
+      "source_mtime_ns": "1790833253764291353",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "Findings/M5-Dogfood-Assessment-Report.md": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
       "source_content_hash": "sha256:238435188b1699e5bcf4753b62a6fe55cb064413a291259f0b696b5bd3c1692f",
+      "source_mtime_ns": "1780519956000000000",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/p6_real_world_validation_report.md": {
@@ -46,6 +53,7 @@
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
       "source_content_hash": "sha256:0468224675888f2747674324726c0ea9a5dddded39d9a1a50f22fc3357dafc0f",
+      "source_mtime_ns": "1780520008000000000",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "Findings/M5.1-cross-hardening-analysis.md": {
@@ -53,17 +61,20 @@
       "last_updated": "2026-07-09 05:02:27",
       "reason": "kept; stale yellow cleared",
       "source_content_hash": "sha256:a2c2414e5b6c9b1a802bec8734a7924850d546cd7746a8087216f3685ca36cb4",
+      "source_mtime_ns": "1780519762000000000",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
     },
     "README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "wiki_content_hash": "sha256:c2dd6ca5a5bdf1ce84f429c1c05055f8302fe266f5d6aec4d81ef74ad00fd44e",
-      "source_content_hash": "sha256:c2dd6ca5a5bdf1ce84f429c1c05055f8302fe266f5d6aec4d81ef74ad00fd44e",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Measured benchmark section, record-changes/verify-wikis commands, verification and watch-scope notes (subid=benchmark)",
+      "wiki_content_hash": "sha256:50f06bf4aea3e7019b99ff92b59e94fc81c940fa348b36ad40abc21dbd205b7f",
+      "source_content_hash": "sha256:50f06bf4aea3e7019b99ff92b59e94fc81c940fa348b36ad40abc21dbd205b7f",
+      "source_mtime_ns": "1790844289418857182",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=README.md"
     },
     "wikifier/mcp/server.py": {
       "status": "🟢 Green",
@@ -71,203 +82,249 @@
       "reason": "wikifier-mcp main restored via server_impl",
       "wiki_content_hash": "sha256:dab2865cde74d4041bb7af9434f4b1dcdfcd6ef6e2ecdc41e96073b140606694",
       "source_content_hash": "sha256:986e0d6a375f691d99b30db634f52d92885cc9d8a8b48057b15ec176bc708559",
+      "source_mtime_ns": "1790834160772892656",
       "last_meaningful_edit": "2026-08-13 16:49:54",
       "last_wiki_refresh": "2026-08-13 16:50:47",
       "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:54 | Restore wikifier-mcp main() by re-exporting complete server_impl.; mark-green:2026-08-13 16:50:24 (wiki hash captured); wiki=server.py.wiki.md; mark-green:2026-08-13 16:50:47 (wiki hash captured); wiki=server.py.wiki.md"
     },
     "wikifier/mcp/README.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "wiki_content_hash": "sha256:0802d3a8f66ea289cacda38a299ae24c307adb339ef63a8b9067ed44c48f2923",
-      "source_content_hash": "sha256:0802d3a8f66ea289cacda38a299ae24c307adb339ef63a8b9067ed44c48f2923",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=README.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Document record_changes, verify_wikis, mark_green force, get_dependencies detail (subid=batch-record)",
+      "wiki_content_hash": "sha256:5ee8c987d608a947e1021df499bdc2863611fca1a2bd8a1afa07521a418aad02",
+      "source_content_hash": "sha256:5ee8c987d608a947e1021df499bdc2863611fca1a2bd8a1afa07521a418aad02",
+      "source_mtime_ns": "1790844318112903398",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=README.md"
     },
     "wikifier/cli.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "wiki_content_hash": "sha256:54a90524f571b7e856227e7397689a30b13dd414312b988527ed9a984d4c8b78",
-      "source_content_hash": "sha256:3161c07d975bf894f6706b209bd1d7e4daf275e0de9dd50b7953d20afd4b716a",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=cli.py.wiki.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: record-changes, verify-wikis, mark-green --force/--json, dependencies --full (subid=batch-record)",
+      "wiki_content_hash": "sha256:c5e5db17244454f992bfb7564ecc86d1447b86bdb2b89a348eda183a857dc5d2",
+      "source_content_hash": "sha256:d7f19a4d6e6c6fe1e01fd260fb1d423ef470b3431b4acfc49dba15b6af081b53",
+      "source_mtime_ns": "1790843656631502481",
+      "public_symbols": "main",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=cli.py.wiki.md"
     },
     "diagnostics.html": {
       "status": "🟢 Green",
       "last_updated": "2026-06-05 08:33:20 AEST",
       "reason": "Wiki summary verified accurate after change.",
-      "source_content_hash": "sha256:ca529877892a0bfbdb1d410f16cbff05938cc9e4fe0ae0b24ca8ffa5ced03aa4"
+      "source_content_hash": "sha256:ca529877892a0bfbdb1d410f16cbff05938cc9e4fe0ae0b24ca8ffa5ced03aa4",
+      "source_mtime_ns": "1780612306000000000"
     },
     "index.html": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:20:17 AEST",
       "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges",
-      "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f"
+      "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f",
+      "source_mtime_ns": "1781100960000000000"
     },
     "wikifier/import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-04 06:16:42",
-      "reason": "wiki + baseline after shim confirmation; tests OK",
-      "wiki_content_hash": "sha256:c106a74263abfae1beb95702a62ed6f0bdddea5ce6795ecb08647b443986b82e",
-      "source_content_hash": "sha256:43ee3452c190e77a29d647c945b19b1fd033b83568985dda06d4f2266d2c2845",
-      "last_meaningful_edit": "2026-09-04 06:16:42",
-      "last_wiki_refresh": "2026-09-04 06:16:42",
-      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:16:42 | wiki refresh: shim → wikifier.cache; close stale content-hash yellow; mark-green:2026-09-04 06:16:42 (wiki hash captured); wiki=import_cache.py.wiki.md"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:495437ea6e511a3ee5843c6fef86f0cc306b91d6f0514ed11803ae6a540f6ae8",
+      "source_content_hash": "sha256:def8d3179b00bcaa393837b845994a30ad1e5225a683d41f9575de501fa49bb2",
+      "source_mtime_ns": "1790834160523057334",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=import_cache.py.wiki.md"
     },
     "wikifier/parsers/python.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:3d37bfb1ea8e4d4eb9e2af6252b3784b0e0aacdaeb6e0e432ef2b87de19d6e43",
-      "source_content_hash": "sha256:be8b29afe61c248d594ad704ab8f2a8fd63dcfc8f4e0fd73e8c5524a8ccbd0c6",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: comma import a,b; LDSI via _ldsi not javascript; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=python.py.wiki.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Module files must match case exactly: case-insensitive filesystems produced phantom edges like models/DagRun.py (found by the benchmark on Airflow) (subid=benchmark)",
+      "wiki_content_hash": "sha256:9c32a28abffc5c47ea1f442d4ecfa8e0d083adf37f00d036dc7b41342c7d20c2",
+      "source_content_hash": "sha256:473bc3a5814d6b1233f0ca7c467f2422ebfbd02aa8bfe97f6151addf40cda536",
+      "source_mtime_ns": "1790843105360599973",
+      "public_symbols": "parse_python_imports parse_python_imports_from_string",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=python.py.wiki.md"
     },
     "file_health.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-07 12:47:31 AEST",
-      "reason": "Phase 1 cruft pruning complete (bulk historical M2-M4/Logged/etc removed per audit). Survivors re-marked Green. subid=simplification-cruft-phase-1.",
-      "source_content_hash": "sha256:8a682622d385cea37701f2b238ef2cb6fbaa2094c65c33113c693cead30bede1"
+      "last_updated": "2026-10-01 18:48:10",
+      "reason": "Generated artifact; no longer watched by check-changes (subid=watch-scope)",
+      "source_content_hash": "sha256:e369a431bc9c9eaf23ead0020c71cc730f56b4dd63725d2dae442fbb05af3239",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:10; wiki=file_health.md",
+      "verification": "unchecked",
+      "last_wiki_refresh": "2026-10-01 18:48:10",
+      "wiki_content_hash": "sha256:e369a431bc9c9eaf23ead0020c71cc730f56b4dd63725d2dae442fbb05af3239",
+      "source_mtime_ns": "1790844490597837457"
     },
     "CHANGELOG.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "wiki_content_hash": "sha256:74641d30d34f2ddd9c4d91f29b667a421b54f6c5afbb5dfbbfffd98d5465f9fa",
-      "source_content_hash": "sha256:74641d30d34f2ddd9c4d91f29b667a421b54f6c5afbb5dfbbfffd98d5465f9fa",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=CHANGELOG.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: 4.7.0: verification, record_changes, compact dependencies, watch scope, benchmark, three fixes (subid=benchmark)",
+      "wiki_content_hash": "sha256:87196e1cad966546446a7897a3d9c9b52a7dac67f6a61dfc2d9d3f0f19189681",
+      "source_content_hash": "sha256:87196e1cad966546446a7897a3d9c9b52a7dac67f6a61dfc2d9d3f0f19189681",
+      "source_mtime_ns": "1790843756328555938",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=CHANGELOG.md"
     },
     "CLAUDE.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-04 06:17:32",
-      "reason": "live hash synced; case-ghost Claude.md pruned",
-      "wiki_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
-      "source_content_hash": "sha256:aa4eed92d69d7575c1d26beb9cc7852d2596cb771d65cea576374fd425856445",
-      "last_meaningful_edit": "2026-09-04 06:17:31",
-      "last_wiki_refresh": "2026-09-04 06:17:32",
-      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:17:31 | re-baseline live hash after Claude.md case-ghost retirement; mark-green:2026-09-04 06:17:32 (wiki hash captured); wiki=CLAUDE.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Workflow and architecture notes for verification, batch recording, benchmark (subid=batch-record)",
+      "wiki_content_hash": "sha256:c73125e60bd3ef2b8a0960abc2a91c265fe1e096f2b99ab4759b2137d73fccd9",
+      "source_content_hash": "sha256:c73125e60bd3ef2b8a0960abc2a91c265fe1e096f2b99ab4759b2137d73fccd9",
+      "source_mtime_ns": "1790844318112322970",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=CLAUDE.md"
     },
     "wikifier/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-13 20:18:33",
-      "reason": "wiki/reason current for map-split catalog (subid=map-split-catalog)",
-      "source_content_hash": "sha256:bdcc6675e859f90c70d5a2166fe8bf945c987cb7aa604ac8ed85d27b8222355b",
-      "last_meaningful_edit": "2026-09-13 20:18:33",
-      "last_wiki_refresh": "2026-09-13 20:18:33",
-      "freshness_provenance": "record-meaningful-edit:2026-09-13 20:18:33 | Export list_paths on public library surface (subid=map-split-catalog); mark-green:2026-09-13 20:18:33 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Export record_changes and verify_wikis (subid=batch-record)",
+      "source_content_hash": "sha256:79239d9f00fea4bc0d532bd94cdc93c38697c7b56dbc46316ed93afa85cac926",
+      "source_mtime_ns": "1790844300318422589",
+      "public_symbols": "",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
     },
     "wikifier/mcp/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 09:27:38 AEST",
-      "reason": "Refactor verified: py_compile + no-mcp/no-fcntl import sims + parser self-tests + check-changes/update-maps/health smoke all pass. Interface unchanged.",
-      "source_content_hash": "sha256:3815cbe192ece7bf7af9d11e16ecefdbac5b72b5822e3cf7b261975a0f5786d3"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:eb73f31b2f97644ba3996671cd35f9246f5a74afdf2fca2fc165c6cff93e4a8d",
+      "source_mtime_ns": "1790834160788223352",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/contracts.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:50",
-      "reason": "reserved keys _candidate_list/_map_coverage/_reverse_signature",
-      "source_content_hash": "sha256:0602fd4f92cb562ea6bc3457368337376f80f25e9f90c5c66e350be3400deb22",
-      "last_wiki_refresh": "2026-08-13 16:50:50",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-13 16:50:50 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:950a3bcdef56b50b1cf6bbbb03fc60d95dc0b120dae569a67b4970781eb21df2",
+      "source_mtime_ns": "1790834243028785503",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09"
     },
     "wikifier/locking.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:14",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "source_content_hash": "sha256:cc8b9fa422699474f8119ba88264e21562b2a6d0ea4ea42ef10873afb4bb1a66",
-      "last_wiki_refresh": "2026-08-01 11:25:14",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:14 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:538058be7c710fb23172b143e1472234395cbebf3eb954b1b5943577df5b2e69",
+      "source_content_hash": "sha256:9e5e8c741d25e216aebc17e5e1ebd698b4c06f15e8b2a111c412acb963ea50d3",
+      "source_mtime_ns": "1790834160587567305",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=locking.py.wiki.md"
     },
     "wikifier/daemon.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:58:09",
-      "reason": "mtime-only auto-yellow cleared (session tour check-changes); no content edit this session; map-first no wiki rewrite (subid=fix-yellows)",
-      "source_content_hash": "sha256:9c992ea21126ffcafd6951121123736f54a9aa2baccdbc82ed978c7232eedd58",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:d7a9893f4c3ea73b898e6f349616381bb70b79dc1488b2ac0111c52919ce500e",
+      "source_content_hash": "sha256:2f45e449b3f4217cbb59a030f6247d314f74b185c3c8e678fe162f8c53ce4929",
+      "source_mtime_ns": "1790834628270536338",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=daemon.py.wiki.md"
     },
     "wikifier/scripts/wikifier.sh": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:02:49",
-      "reason": "synced with root; portable rel paths (subid=post-assess-hygiene)",
-      "source_content_hash": "sha256:137b975181ed4329a78a54256e5f8b0ee0bff91ea5e5514a3086752bcaf959cf",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:3098c65ad62e6e73ecb2c77337b12f850a4159dc5e485a6efc9ff9b772ce074e",
+      "source_mtime_ns": "1790834126000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/index.html": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:20:18 AEST",
       "reason": "Verified: 30/30 tests; tree generated on all 9 projects (llvm 2,940 files renders as clean indented tree); headless 9/9 tree-ok + lazy graph + forced-open render + pan-zoom canvas + file:// banner; parser comment-leak repro now 0 garbage edges",
-      "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f"
+      "source_content_hash": "sha256:ce9651ec840468dcee976847362e329ba592be8148d1887f92cbe9a9fb58027f",
+      "source_mtime_ns": "1790834126000000000"
     },
     "Logged_issues/2026-06-10-js-barrel-churn-selftest-failure.md": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 14:19:50 AEST",
       "reason": "v4.2.0 fix pass verified: 28/28 unittest, parser self-tests (churn 4/4), llama_index 3837/3837 files 8.5s, Babylon 3905/3905, RecipeLab library.md recovered, redox honest reporting, health CLI flags, MCP smoke.",
-      "source_content_hash": "sha256:b1ce7664322757c13c66b1a36110c091fa508f7d6f814c374d2053507e54cceb"
-    },
-    "Findings/2026-06-10-Dogfood-Refactor-Validation.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-06-10 09:54:26 AEST",
-      "reason": "Self-describing findings doc",
-      "source_content_hash": "sha256:cbbc038682650ae53ed396971fa7f27c8ca3be099b56b81f39ed753d218b5e53"
-    },
-    "Findings/2026-06-10-Fix-Plan.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-06-10 14:20:33 AEST",
-      "reason": "Results appended, all phases verified",
-      "source_content_hash": "sha256:e3256cf869bb44bec8f9465bb07813647087ef9ace0d745706a37b1bd7b61914"
+      "source_content_hash": "sha256:b1ce7664322757c13c66b1a36110c091fa508f7d6f814c374d2053507e54cceb",
+      "source_mtime_ns": "1781065156000000000"
     },
     "wikifier/library.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:15",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "source_content_hash": "sha256:6312ddc20cd7cd1adef0ec2e5e9818c5030d57ddf1dc49e0384952cf03681ad4",
-      "last_wiki_refresh": "2026-08-01 11:25:15",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:15 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:e1b5ebbfbc6750fad5855b8b4a62d6980338f68052dd59d06783e07acbe99c07",
+      "source_mtime_ns": "1790834160537445189",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09"
     },
     "wikifier/parsers/javascript.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:cd05b0c20b9a74baeceb97fcd9d12351f46b6075e92f513976705c07cdfa11bd",
-      "source_content_hash": "sha256:dc7f9d7a228e725521f6932d70795d62d9b372adeff453a8e9264879e094c294",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: CJS destructure names; extra suffixes; LDSI import; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=javascript.py.wiki.md"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:3b8e9cc65ea794fd1d7da0d42aca9091c8dc41567efd2f44c125aeffb15346fe",
+      "source_content_hash": "sha256:86251822c147eaa976bc27717ad141cc2ed99f2760c6dcbd086ab59e4301def7",
+      "source_mtime_ns": "1790834254148596104",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=javascript.py.wiki.md"
     },
-    "tests/": {
+    "tests": {
       "status": "🟢 Green",
       "last_updated": "2026-06-10 16:59:05 AEST",
       "reason": "Verified: 30/30 unittest, exports 8/8, churn 4/4; Babylon full run 25m52s->5m52s and 417k->44k edges; worst file 990->55; RecipeLab identical 671 edges; e2e cache carries imported_names + barrel_leaf_selection"
     },
     "pyproject.toml": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 14:41:19 AEST",
-      "reason": "Build + twine check pass; clean-room wheel install verified",
-      "source_content_hash": "sha256:289387760599062aafb1e36dcccaa1a2e0b2fbaecd961026dbd68e9f51562d2e"
+      "last_updated": "2026-10-01 18:48:10",
+      "reason": "Re-baselined: content changed in an earlier commit without mark-green; surfaced by the widened watch (subid=watch-scope)",
+      "source_content_hash": "sha256:a2962aae5b9d51ef505f4c250f8a2a4a44cce206ba43b5f8b96a2a480675acae",
+      "source_mtime_ns": "1787794980731680514",
+      "verification": "no_wiki",
+      "last_wiki_refresh": "2026-10-01 18:48:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:10"
     },
     "wikifier.ps1": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 20:20:31 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
-      "source_content_hash": "sha256:931204f199f22e2c2afa96319e3ed1a413bf431c115132b259e03a2ca39d4ed2"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:60a98defe6da7aedf3c89686cea38c20dd10ba75641897d88bbd3721fe8e4e94",
+      "source_mtime_ns": "1790833253764169602",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier.bat": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 14:50:33 AEST",
-      "reason": "Verified: bash -n, dynamic banner shows v4.2.0 from package, YAML parses, 28/28 tests, packaged copies identical",
-      "source_content_hash": "sha256:2e1c5a125ac9ca03d2c06930213e87060fb5ca3388c9086c08c263f17b42885f"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:a99f7c44828a6c539db2fea68898f579c9f83c1399e17c76b2e51814d391fa33",
+      "source_mtime_ns": "1790833253764038226",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     ".github/workflows/publish.yml": {
       "status": "🟢 Green",
       "last_updated": "2026-08-27 11:15:12",
       "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
       "source_content_hash": "sha256:0df3d917ac41dcfc4459c356003c6ceb85696ce62ac486ce774d6fb7e7f94550",
+      "source_mtime_ns": "1787793065828862763",
       "last_meaningful_edit": "2026-08-27 11:14:42",
       "last_wiki_refresh": "2026-08-27 11:15:12",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 mcp extra on test job; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
@@ -276,75 +333,99 @@
       "status": "🟢 Green",
       "last_updated": "2026-06-10 19:09:35 AEST",
       "reason": "Verified: 30/30 unittest, exports 8/8, churn 4/4; sh update-maps 3m39s->2.0s + hung incremental now 1.5s; Babylon scoped re-run 75min->80.6s, cache 274MB->101MB; all 12 sh commands smoke-tested",
-      "source_content_hash": "sha256:9b676860290cb2f490f64f22c250e3ba36ff72ef6a98c365125cb18c35ed2bf2"
+      "source_content_hash": "sha256:9b676860290cb2f490f64f22c250e3ba36ff72ef6a98c365125cb18c35ed2bf2",
+      "source_mtime_ns": "1781082536000000000"
     },
     "wikifier/scripts/wikifier.ps1": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 20:20:33 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
-      "source_content_hash": "sha256:931204f199f22e2c2afa96319e3ed1a413bf431c115132b259e03a2ca39d4ed2"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:60a98defe6da7aedf3c89686cea38c20dd10ba75641897d88bbd3721fe8e4e94",
+      "source_mtime_ns": "1790834126000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/serve.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 20:20:23 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
-      "source_content_hash": "sha256:fa7b3b0f9fb94411d0bd74bc20c9e8b0492bdff5f0f130e2ba8b984c9fcb0845"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: dependencies API is compact by default, detail=full opt-in (subid=benchmark)",
+      "wiki_content_hash": "sha256:aa2b5b89f17d946cc08fad1d841a9f524e613f1fc1afc1d816aa2a297e821455",
+      "source_content_hash": "sha256:6f71eaa11474e2c51828b5b8228d1d22f1e799be7930c23abdd4edf89fda79e5",
+      "source_mtime_ns": "1790843171124402413",
+      "public_symbols": "DashboardHandler main",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=serve.py.wiki.md"
     },
     "library.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-06-10 20:20:38 AEST",
-      "reason": "Verified: endpoint whitelist + Origin/Host 403s + clean shutdown via curl; headless DOM on all 9 projects x 3 modes (exec/static/file): map renders, exec chip + Stop button, no Tailwind, no active errors; 30/30 tests",
-      "source_content_hash": "sha256:f3f717512ac8c856b79d46d5d47906fdb3f2311025be1bc65186bc3b751bbe2e"
+      "last_updated": "2026-10-01 18:48:10",
+      "reason": "Generated artifact; no longer watched by check-changes (subid=watch-scope)",
+      "wiki_content_hash": "sha256:c1741d6f79b2b981938cf1e99eb6b9c7fb43ef772569f00811618fd1e99ec8f0",
+      "source_content_hash": "sha256:c1741d6f79b2b981938cf1e99eb6b9c7fb43ef772569f00811618fd1e99ec8f0",
+      "source_mtime_ns": "1790844460163666315",
+      "verification": "unchecked",
+      "last_wiki_refresh": "2026-10-01 18:48:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:10; wiki=library.md"
     },
     "screenshot/front_page_review.png": {
       "status": "🟢 Green",
       "last_updated": "2026-06-11 00:37:47 AEST",
       "reason": "Asset referenced by README",
-      "source_content_hash": "sha256:181213c581170f8c03299834a1b12df43db6955be73d5ea48d0138f13f7ef5ee"
-    },
-    "Findings/gap-closure-report.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:10",
-      "reason": "G12 closed; 39/39 tests",
-      "source_content_hash": "sha256:3eaff9dca44108f630435c7b496c97cf6a9a479f49d1452bc3f892e22f45ccdf",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "source_content_hash": "sha256:181213c581170f8c03299834a1b12df43db6955be73d5ea48d0138f13f7ef5ee",
+      "source_mtime_ns": "1781102030000000000"
     },
     "tests/test_gap_closure.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-04 06:16:42",
-      "reason": "wiki + baseline; gap_closure tests OK",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
       "wiki_content_hash": "sha256:db99a46c4fe0b580736250e924352860543b82606d6d4156a722a6fe4675228a",
-      "source_content_hash": "sha256:2103a68526ec83c50d1e904802eb63288beafe42afff2eb137c682893e83bb01",
-      "last_meaningful_edit": "2026-09-04 06:16:42",
-      "last_wiki_refresh": "2026-09-04 06:16:42",
-      "freshness_provenance": "record-meaningful-edit:2026-09-04 06:16:42 | wiki refresh: G4/G5/G7 gap-closure suite; close stale yellow; mark-green:2026-09-04 06:16:42 (wiki hash captured); wiki=test_gap_closure.py.wiki.md"
+      "source_content_hash": "sha256:802c5d9ad8e3eb83af0a9cbdbe497b1829b77d6e480b210cbd99d8b2a7dd8266",
+      "source_mtime_ns": "1790833325727508332",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=test_gap_closure.py.wiki.md"
     },
     "wikifier/resolution.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:34",
-      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
-      "source_content_hash": "sha256:2d9471465502d41d863da7dcdcdc921f32c3e4e8e5cc89b336e62c2e6131e8bf",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:c573238c1895325c4d3dc90c43dbee8c14e8a5b3a7b47d6b1d8616181165bbd5",
+      "source_content_hash": "sha256:19650472c3bf670146c8bc217fddee96a5df0166f3a32b33ebe953307e2982e4",
+      "source_mtime_ns": "1790834254148749522",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=resolution.py.wiki.md"
     },
     "wikifier/parsers/cdia.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:13:34",
-      "reason": "mtime-only / post-4.5.x auto-yellow cleared; git content clean at mark-green (hygiene session subid=hygiene-cleanup); no wiki-prose change required (map-first)",
-      "source_content_hash": "sha256:048b517ff8ab509599dd308bf2aaf3c830f478e4d07f95c265b2c17bcb14a8d5",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:28b7980fc59f5422c2f7cdff0cb265e14e5201dc68c4625de131bf38b650341f",
+      "source_content_hash": "sha256:2e34901a2dd3b8b4304e551965ac3c66703b6062ff5653a3ebe234df289880aa",
+      "source_mtime_ns": "1790834403285231361",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=cdia.py.wiki.md"
     },
     "tests/test_selftest_wrappers.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 05:40:10",
-      "reason": "G12 closed; 39/39 tests",
-      "source_content_hash": "sha256:5b8106d4052911a994d8c0603b67c2d451593c1e76f8ddb098db19444b599471",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:ca55afcaa0e004a067f7938f998100756758652278740cb3397b795c80c9fce1",
+      "source_mtime_ns": "1790834613043706004",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/parsers/rust.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-12 11:01:26",
       "reason": "crate resolve unit tested",
       "source_content_hash": "sha256:3215c0c01e91bcb401c34ae4006b10f6b1b35297d5fd034a64fd1d85e859436c",
+      "source_mtime_ns": "1790834160711240457",
       "last_wiki_refresh": "2026-07-12 11:01:26",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:26 (wiki hash captured)"
     },
@@ -353,6 +434,7 @@
       "last_updated": "2026-07-12 11:56:21",
       "reason": "4.6.4 sqlite coverage verified 93 tests",
       "source_content_hash": "sha256:688a034340ab00ccde8729dee8e70a25195cb90122efbae4372af8277861f6a3",
+      "source_mtime_ns": "1790834160654699794",
       "last_wiki_refresh": "2026-07-12 11:56:21",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:21 (wiki hash captured)"
     },
@@ -362,6 +444,7 @@
       "reason": "wiki + baseline; C include tests OK",
       "wiki_content_hash": "sha256:5c271dfec43714c0f05f29f8c1bc57d88febf3bb5319f6ab3134580f781b6f14",
       "source_content_hash": "sha256:9eed3d0c9e3ea8f8da651f220efd91540a8d198e84fdb8f0951aa2075675ab7d",
+      "source_mtime_ns": "1790834160652004608",
       "last_meaningful_edit": "2026-09-04 06:16:42",
       "last_wiki_refresh": "2026-09-04 06:16:42",
       "freshness_provenance": "record-meaningful-edit:2026-09-04 06:16:42 | wiki refresh: C/C++ include parser AGENT MAP; close stale yellow; mark-green:2026-09-04 06:16:42 (wiki hash captured); wiki=c_cpp.py.wiki.md"
@@ -371,6 +454,7 @@
       "last_updated": "2026-07-12 12:47:37",
       "reason": "4.6.5 verified",
       "source_content_hash": "sha256:3f5b1786a0dec3b7205e94c91ecf89c70192db320ad0f5f5b26726850e3dd639",
+      "source_mtime_ns": "1790834160657168354",
       "last_wiki_refresh": "2026-07-12 12:47:37",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:37 (wiki hash captured)"
     },
@@ -379,28 +463,36 @@
       "last_updated": "2026-08-13 16:50:50",
       "reason": "lazy language imports",
       "source_content_hash": "sha256:bdf88faa242970f9f541324d87f59d9265435ec0f1f37a1e0343a1b8a523d70a",
+      "source_mtime_ns": "1790834160652372694",
       "last_wiki_refresh": "2026-08-13 16:50:50",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-13 16:50:50 (wiki hash captured)"
     },
     "tests/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:55",
-      "reason": "hygiene session complete 4.5.6; 53 tests OK",
-      "source_content_hash": "sha256:4e02b2a4a4061379d647b3055681a8edbf3f5ea3afd299565faf01b801161a1f",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:46b71f7c783334222cefdb4e64c73c8848a6e4d94489a22d550e737c53b98a66",
+      "source_mtime_ns": "1790834851021040785",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/_base.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:55",
-      "reason": "hygiene session complete 4.5.6; 53 tests OK",
-      "source_content_hash": "sha256:7c0a312caa6212a51ff7bd055438dad4faeb347c03c82a822de0baea8a25dca0",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:4ba0d72c8b4be8103a28a33861d04d30d805a4441e7ace373bd4cca91eb2d11a",
+      "source_mtime_ns": "1790834216546478772",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/run_all.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:14ae8dd0f73ea25d78b4aab786672d838dfed07f13102b00388ae2eed21323e0",
+      "source_mtime_ns": "1781049742000000000",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/__init__.py": {
@@ -408,6 +500,7 @@
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:429cfcb12c5ba881d7e14635c1b6768265f08770b7e2fb2fde883554c3157147",
+      "source_mtime_ns": "1783539450534906588",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_cdia_selftest.py": {
@@ -415,20 +508,25 @@
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:8b67e660ee0addff51905e6ecd3fc7a4e1fb7d67758cd5fe34b4d4bcacb0320b",
+      "source_mtime_ns": "1783539472832147401",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_contracts_selftest.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:55",
-      "reason": "hygiene session complete 4.5.6; 53 tests OK",
-      "source_content_hash": "sha256:999068ee715fed923d2455012f182bbe60595fe964be47f18cd800c08ec7de2c",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:9e64e96436ef364127c92d96b0f229a80425932c2f03c489a047929d25986e9e",
+      "source_mtime_ns": "1790834096439586444",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/selftest/run_javascript_selftest.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:0e13f4f410c14e42147e3e352ccd4bafb2bdb998335c882e4a047fc7cb68fdaa",
+      "source_mtime_ns": "1783539492586319560",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_python_parser_selftest.py": {
@@ -436,6 +534,7 @@
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:845605809fd1873723b4cbf48f55d72653136636b90dbd3efd38312c2981e795",
+      "source_mtime_ns": "1783539472832005275",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/selftest/run_resolution_selftest.py": {
@@ -443,67 +542,86 @@
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:bc466f4901f5ab9b0ddf3ed05f893137878df32ce1df6c15154cf213d5164d4a",
+      "source_mtime_ns": "1783539472832262944",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_barrel_invalidation.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:52",
-      "reason": "unskipped content-honest barrel tests",
-      "source_content_hash": "sha256:7b09792793bca617a5f3a489485afb6c4c87b115e0d47b5e4a5f8188e1a7736d",
-      "last_wiki_refresh": "2026-08-13 16:50:52",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-13 16:50:52 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:6a758b7b9f1fae20dcf64d1ad5fafa418a67c8754f2c3c8f4be41b9295057138",
+      "source_mtime_ns": "1790834851019420919",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/test_health.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:58d9611258cb8f6e79895e3b7592ead27dbfc951ee5c90a8f77d3c7d4612ae26",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13: drop DEADLOCK-as-known-hang narrative; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:f8d1f89445dfe83200d6125dbe5b2e38b5872f83ffe384d40ec29d18cc4496fb",
+      "source_mtime_ns": "1790834851020778495",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/test_import_cache.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 17:08:27",
-      "reason": "Persist-path reverse increment test green.",
-      "source_content_hash": "sha256:236142319f7f91f8a0b2b32e95cc1ec7e42e119ee50c079a516ce97ba3497c74",
-      "last_meaningful_edit": "2026-08-13 17:08:27",
-      "last_wiki_refresh": "2026-08-13 17:08:27",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 17:08:27 | Shipped-path test that incremental run_full_update updates reverse deps with no reverse_index_error.; mark-green:2026-08-13 17:08:27 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:ff32be30b01cac5308628c6780af2cb78bde9c229b4c6011e90ad0083848970f",
+      "source_mtime_ns": "1790834851021347575",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/test_multi_lang_parsers.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:a86b91f785291fb1ff7ac68af3e71758a5eb7889f7abe0c6965d5bcfaaf56dd3",
+      "source_mtime_ns": "1783541020773657144",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "tests/test_parsers.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:55",
-      "reason": "hygiene session complete 4.5.6; 53 tests OK",
-      "source_content_hash": "sha256:a89575527e0233fdf6c345abd8c9f506961c4e63f682bf6d1b03ebd2d4d21582",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:778a58a2a6d4950b0578d71ecc4958414a66e24dd781ad3a6fbe518cbebfc2d9",
+      "source_mtime_ns": "1790834851020378664",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/__main__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:55",
-      "reason": "hygiene session complete 4.5.6; 53 tests OK",
-      "source_content_hash": "sha256:3129adff95e0f38b87ab34cddfc27082c7892bcaec267ff5d40f160fdf55b44a",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: python -m wikifier propagated no exit code (always 0); now SystemExit(main()) (subid=batch-record)",
+      "source_content_hash": "sha256:307299fda7b77d22c64cb51430ec75e5f59d78e9c948786afb3b2544fe45e4b7",
+      "source_mtime_ns": "1790842539767615812",
+      "public_symbols": "",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
     },
     "wikifier/diagnostics.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:55",
-      "reason": "hygiene session complete 4.5.6; 53 tests OK",
-      "source_content_hash": "sha256:4c7bfe47e9eff2e24ad78a0509046dcf3cdc0101695c8a94ecbbcaae99d60389",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:4c8657b171ca5cd4ca017b4075e75248cb704a9c183f6900d99fa9cf1931243d",
+      "source_content_hash": "sha256:eeba1ba568a34bf5582527c5939034d39b34b5d6ca51ae4f36e290cce3fa773d",
+      "source_mtime_ns": "1790841677335573868",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=diagnostics.py.wiki.md"
     },
     "wikifier/parsers/_edge.py": {
       "status": "🟢 Green",
       "last_updated": "2026-08-27 11:15:12",
       "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
       "source_content_hash": "sha256:8290a865e8878ad7c77485e6eb3d711bc6738eb00c5b429648dc85f5c173d1d6",
+      "source_mtime_ns": "1790834160670522202",
       "last_meaningful_edit": "2026-08-27 11:14:41",
       "last_wiki_refresh": "2026-08-27 11:15:12",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: make_edge uses compute_acs_confidence; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
@@ -513,20 +631,7 @@
       "last_updated": "2026-07-09 06:34:55",
       "reason": "hygiene session complete 4.5.6; 53 tests OK",
       "source_content_hash": "sha256:148788ca46421df25c99e02b063536bb4f088df00d48c40053871e6c919a6898",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
-    },
-    "Findings/dogfood-hygiene-fix-2026-07-09.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
-      "source_content_hash": "sha256:c998581594efa74a9055a82c83e2871dada362ba6fbd2832a7e81888777046bb",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
-    },
-    "Findings/dogfood-hygiene-fix-2026-07-09.json": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 06:34:48",
-      "reason": "verified 53 tests; dogfood validate 0/8",
-      "source_content_hash": "sha256:191503aed6a8ed00d325e28c2d1fc6a2c8736e90fa80a913056884999c64a927",
+      "source_mtime_ns": "1790834160650742891",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "Findings/long-horizon-autonomous-ops.md": {
@@ -534,145 +639,96 @@
       "last_updated": "2026-07-09 07:07:11",
       "reason": "goal verification complete",
       "source_content_hash": "sha256:0882f6efaef73d4592dd372fcfa40065af8ebeea5005cf4b7aeb82b5445e79f4",
+      "source_mtime_ns": "1783544459256066484",
       "freshness_provenance": "upsert:🟢 Green (non-freshness path)"
-    },
-    "Findings/dogfood-goal-pass1-2026-07-09.json": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
-      "source_content_hash": "sha256:0d2588429fb45bd50469efdd97d8ef73419969f9b66d7cf05f169aad36adc9c0",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
-    },
-    "Findings/dogfood-goal-pass2-2026-07-09.json": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 07:07:11",
-      "reason": "goal verification complete",
-      "source_content_hash": "sha256:f3e2bf5a7331fa847fdbf96a43662542dc689f0e767bb74d093c00a78c030090",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
     },
     "wikifier/project_root.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:38",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "source_content_hash": "sha256:16032098c3ce7f6ba4f6e880b3a1ee88b7900446a8b95f2a72743e769761380e",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
-    },
-    "Findings/residual-1-5-closure-2026-07-09.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:07:43",
-      "reason": "residual-1-5-closure verified; tests OK (subid=residual-1-5-closure)",
-      "source_content_hash": "sha256:cf194efa91982490f020e5a6f7da873a065b51bdc4a4ce6b7bf642c6c9d115fb",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:a26bc799c1615914914d6018d2edf3fe2d3811aa6ce23a7501dc53e648f2ff88",
+      "source_mtime_ns": "1790834180299791658",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09"
     },
     "wikifier/agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "source_content_hash": "sha256:41eb715d3629eec89f02c77e00a56fb9ba22bfcf8cee849008c6cf9904cecb42",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Core tool roles mention verification/batch; record_changes and verify_wikis listed as advanced (subid=batch-record)",
+      "wiki_content_hash": "sha256:2f2667ca30b578cb76bb2b46e81efbe46c34177faa649cff6a7c91011d1b5a1c",
+      "source_content_hash": "sha256:0ecb5c9510192897cd3eeba57bfc3e5c10da7e1cc976a95ea154954de58170de",
+      "source_mtime_ns": "1790843734573409499",
+      "public_symbols": "build_structured_actions list_core_tools prepare_edit resolve_dependents_from_cache search_journal session_bootstrap why_file",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=agent_loop.py.wiki.md"
     },
     "tests/test_agent_loop.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "source_content_hash": "sha256:a22851453eecc7976831861bd43fdd7b486e25b8de0e7db5a6f7583a2e36a8b5",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); mark-green:2026-07-09 08:37:36 (wiki hash captured); mark-green:2026-07-09 08:51:23 (wiki hash captured)"
-    },
-    "Findings/agent-first-ideal-loop-2026-07-09.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:37:36",
-      "reason": "4.6.1 content-honest legacy fix verified (subid=agent-ideal-loop)",
-      "wiki_content_hash": "sha256:5f3bcca10ecfebcb5003739c9569f4288685a13663ead6eb73cc301a160dbcf8",
-      "source_content_hash": "sha256:5f3bcca10ecfebcb5003739c9569f4288685a13663ead6eb73cc301a160dbcf8",
-      "last_wiki_refresh": "2026-07-09 08:37:36",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:30:53 (wiki hash captured); wiki=agent-first-ideal-loop-2026-07-09.md; mark-green:2026-07-09 08:37:36 (wiki hash captured); wiki=agent-first-ideal-loop-2026-07-09.md"
-    },
-    "Findings/agent-ideal-loop-polish-dogfood-2026-07-09.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-09 08:51:23",
-      "reason": "4.6.2 polish+dogfood verified 74 tests (subid=agent-ideal-loop-polish)",
-      "wiki_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
-      "source_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
-      "last_wiki_refresh": "2026-07-09 08:51:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-09 08:51:23 (wiki hash captured); wiki=agent-ideal-loop-polish-dogfood-2026-07-09.md"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:97e8b971db685b21fced3626039929f075073fe7ae78f72f42b0738cb88f0b19",
+      "source_mtime_ns": "1790833336551977409",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "tests/test_agent_scale.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-12 11:06:26",
       "reason": "ACS persist regression green",
       "source_content_hash": "sha256:90fadf1ef1ee58f561dc44dae5803a8d6f387468d65ad28adaed032fed598e6c",
+      "source_mtime_ns": "1783818374607059091",
       "last_wiki_refresh": "2026-07-12 11:06:26",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:27 (wiki hash captured); mark-green:2026-07-12 11:06:26 (wiki hash captured)"
     },
-    "Findings/agent-scale-perf-accuracy-2026-07-12.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:01:28",
-      "reason": "findings recorded",
-      "wiki_content_hash": "sha256:af8612d319551b599f3001d1002f98446cc4baebd3be97a673e511343fc2c395",
-      "source_content_hash": "sha256:af8612d319551b599f3001d1002f98446cc4baebd3be97a673e511343fc2c395",
-      "last_wiki_refresh": "2026-07-12 11:01:28",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:01:28 (wiki hash captured); wiki=agent-scale-perf-accuracy-2026-07-12.md"
-    },
     "wikifier/cache_store.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:49",
-      "reason": "Incremental sqlite upsert",
-      "source_content_hash": "sha256:589f3b48f7db3ad4da53e9c08e4651dd5e0af29dcbe5ebe57125f53002067204",
-      "last_meaningful_edit": "2026-08-13 16:49:56",
-      "last_wiki_refresh": "2026-08-13 16:50:49",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:56 | Incremental SQLite upsert; barrel merge via load_meta.; mark-green:2026-08-13 16:50:49 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:6d7e5ec32c896295393fcd4d88d0e2555586cf6d058da16845eb57b36bfae10d",
+      "source_content_hash": "sha256:303549de9970fa422c3a4bd676bef82a068a84272ba687fadad298e038d0b00d",
+      "source_mtime_ns": "1790834216494409475",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=cache_store.py.wiki.md"
     },
     "tests/test_cache_store.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-12 12:00:51",
       "reason": "instrumented warm load assertion",
       "source_content_hash": "sha256:cdf369346643b5a5657d240150c7e084d31ae82d38137b1ed5d10c6f87681301",
+      "source_mtime_ns": "1783821635478611558",
       "last_wiki_refresh": "2026-07-12 12:00:51",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:22 (wiki hash captured); mark-green:2026-07-12 12:00:51 (wiki hash captured)"
     },
-    "Findings/agent-scale-sqlite-coverage-2026-07-12.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-12 11:56:23",
-      "reason": "4.6.4 sqlite coverage verified 93 tests",
-      "wiki_content_hash": "sha256:283e70c45ea99dc862121e2d0b2d07f82a2c44974576e2c7965564321a99c2fe",
-      "source_content_hash": "sha256:283e70c45ea99dc862121e2d0b2d07f82a2c44974576e2c7965564321a99c2fe",
-      "last_wiki_refresh": "2026-07-12 11:56:23",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 11:56:23 (wiki hash captured); wiki=agent-scale-sqlite-coverage-2026-07-12.md"
-    },
     "wikifier/candidates.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:11",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:a55b411c157f2390ac560b18990921ab5cbbab35520bdfd28bce7c047c98877a",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:11",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: extra JS suffixes; missing dir scope does not walk root; mark-green:2026-08-27 11:15:11 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:814c168f607271eb89eb7beeec8afc6ad0b331ed38fb54e4626f75694afcc948",
+      "source_mtime_ns": "1790834254147893599",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09"
     },
     "tests/test_walk_coverage_resolvers.py": {
       "status": "🟢 Green",
       "last_updated": "2026-07-12 12:55:37",
       "reason": "poison test green",
       "source_content_hash": "sha256:d8fdf2c35a3837d7b98c33537b3ab3353e8c9c298fc7be137a67a65882495118",
+      "source_mtime_ns": "1783824909399441229",
       "last_wiki_refresh": "2026-07-12 12:55:37",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:38 (wiki hash captured); mark-green:2026-07-12 12:52:05 (wiki hash captured); mark-green:2026-07-12 12:55:37 (wiki hash captured)"
-    },
-    "Findings/agent-walk-coverage-cache-2026-07-12.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-12 12:52:06",
-      "reason": "findings updated",
-      "wiki_content_hash": "sha256:73da61f571f906ea2692b8689ec12c779b4f66d83707b06dc6548755cfc9d75b",
-      "source_content_hash": "sha256:73da61f571f906ea2692b8689ec12c779b4f66d83707b06dc6548755cfc9d75b",
-      "last_wiki_refresh": "2026-07-12 12:52:06",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 12:47:40 (wiki hash captured); wiki=agent-walk-coverage-cache-2026-07-12.md; mark-green:2026-07-12 12:52:06 (wiki hash captured); wiki=agent-walk-coverage-cache-2026-07-12.md"
     },
     "map_paths.txt": {
       "status": "🟢 Green",
       "last_updated": "2026-07-12 13:26:29",
       "reason": "4.6.6 verified",
       "source_content_hash": "sha256:111e2bbf5299a5c4bb0615b677a7e565befdcf672c6db0bc335e79cf93290dd3",
+      "source_mtime_ns": "1783826693468142323",
       "last_wiki_refresh": "2026-07-12 13:26:29",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 13:26:29 (wiki hash captured)"
     },
@@ -681,6 +737,7 @@
       "last_updated": "2026-08-27 11:15:12",
       "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
       "source_content_hash": "sha256:5cd58f0c0687c7a13198d7f3ea287c055e6de6ea95cb383cf1405343a7cca2a9",
+      "source_mtime_ns": "1787793038788103800",
       "last_meaningful_edit": "2026-08-27 11:14:42",
       "last_wiki_refresh": "2026-08-27 11:15:12",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 relative monitors canonical; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
@@ -690,231 +747,121 @@
       "last_updated": "2026-07-12 13:41:02",
       "reason": "125 unittest OK",
       "source_content_hash": "sha256:c15aca20ff1d4a00a88f3684bcfd55c76e688c3a20f9b6233dda626ba9494cdc",
+      "source_mtime_ns": "1783827555759618398",
       "last_wiki_refresh": "2026-07-12 13:41:02",
       "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 13:26:30 (wiki hash captured); mark-green:2026-07-12 13:31:34 (wiki hash captured); mark-green:2026-07-12 13:33:35 (wiki hash captured); mark-green:2026-07-12 13:41:02 (wiki hash captured)"
     },
-    "Findings/index-first-map-paths-2026-07-12.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-07-12 13:41:19",
-      "reason": "evidence updated",
-      "wiki_content_hash": "sha256:4bf1ed144348247bbb94f0aa31abc05f46a5bcd96ed0bd4bfce91855a709e0e1",
-      "source_content_hash": "sha256:4bf1ed144348247bbb94f0aa31abc05f46a5bcd96ed0bd4bfce91855a709e0e1",
-      "last_wiki_refresh": "2026-07-12 13:41:19",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-07-12 13:26:31 (wiki hash captured); wiki=index-first-map-paths-2026-07-12.md; mark-green:2026-07-12 13:41:19 (wiki hash captured); wiki=index-first-map-paths-2026-07-12.md"
-    },
-    "Findings/gap-amendment-plan-2026-08-01.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:16",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "wiki_content_hash": "sha256:d89e585a7b68ed8cb5ed58d0630fbda8038e7bc3b6e84887eb8f090d614bec23",
-      "source_content_hash": "sha256:d89e585a7b68ed8cb5ed58d0630fbda8038e7bc3b6e84887eb8f090d614bec23",
-      "last_wiki_refresh": "2026-08-01 11:25:16",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:16 (wiki hash captured); wiki=gap-amendment-plan-2026-08-01.md"
-    },
     "tests/test_gap_amendment_2026_08.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:16",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "source_content_hash": "sha256:c4dc10fd4cc07b12637f31a07cc1f51121b4b63c44a50c8200d24ffcaa7143e8",
-      "last_wiki_refresh": "2026-08-01 11:25:16",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-01 11:25:16 (wiki hash captured)"
-    },
-    "Findings/gap-amendment-closure-2026-08-01.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-01 11:25:18",
-      "reason": "gap amendment 4.6.9 closed-when verified (subid=gap-amendment-closure)",
-      "wiki_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
-      "source_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
-      "last_wiki_refresh": "2026-08-01 11:25:18",
-      "freshness_provenance": "upsert:🟢 Green (non-freshness path); mark-green:2026-08-01 11:25:18 (wiki hash captured); wiki=gap-amendment-closure-2026-08-01.md"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:f09f838b4bfa1e18828a5e72973ea8de30d8ce58ab76507ce0cc7562b1905295",
+      "source_mtime_ns": "1790834811135386637",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/api.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:21",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "source_content_hash": "sha256:b57cfe983eaf17a9d025f3d9933899991644e84b4905ca9de9d1f59c49ef1646",
-      "last_meaningful_edit": "2026-09-14 10:02:21",
-      "last_wiki_refresh": "2026-09-14 10:02:21",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:21 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:21 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:48:00",
+      "reason": "Wiki checked after: Exclude Wikifier's own artifacts (file_health, library.md, pending, journal, staging) from the watch set; shared _is_wikifier_artifact (subid=watch-scope)",
+      "wiki_content_hash": "sha256:477f2f31a64c929cb9cf548db09bae922d26bde81aa603e37d8d033554a08fff",
+      "source_content_hash": "sha256:344467b4a2a21d55f85d661d13ad386abd01a2038b679f34e3ab7fd61df4ec54",
+      "source_mtime_ns": "1790844443542154667",
+      "public_symbols": "cache_status check_changes copy_human_dashboards cycles_report format_cycles_report get_dependencies get_dependents heal_stubs health init_project issues journal list_core_tools list_paths mark_green prepare_edit record_change record_changes record_deletion run_full_update search_journal seed_source_content_hashes session_bootstrap suggest_next_actions update_maps verify_wikis why_file",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:48:00",
+      "last_wiki_refresh": "2026-10-01 18:48:00",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:00; wiki=api.py.wiki.md"
     },
     "wikifier/cache/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:15",
-      "reason": "Named cache package exports real io/files/graph/cycles/acs/barrel.",
-      "source_content_hash": "sha256:cd928d6c10eedfe98e3a8510cfc7931da41b374044962c6da05180a9ebf1b524",
-      "last_wiki_refresh": "2026-08-13 16:51:15",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-13 16:51:15 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:161f2471612e858bb020c6da373ab0e8348c417dbd5438341927226bf5849e17",
+      "source_mtime_ns": "1790834730422851423",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09"
     },
     "wikifier/cache/files.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:48",
-      "reason": "Real file ops + same-second dirty",
-      "wiki_content_hash": "sha256:fce620399d280e6bccdab29eea8fda5e5fb744fea04fc04f75eeae6076edf1a1",
-      "source_content_hash": "sha256:fd1370d10706f7aaa349fb241d51e2fbb52d7c4d43caf61410e8e78557a8d51e",
-      "last_meaningful_edit": "2026-08-13 16:49:55",
-      "last_wiki_refresh": "2026-08-13 16:50:48",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:55 | Real file ops + sha256 hash + same-second content dirty.; mark-green:2026-08-13 16:50:48 (wiki hash captured); wiki=files.py.wiki.md"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:0986cb47c807f6de9411437c1199b1e10d21fa0111f75ea5383552e02bfcbdd8",
+      "source_content_hash": "sha256:730f3df5b5bfad6fbf58a01fc6c73793dec9da552661fccc1517f8aec1c20d81",
+      "source_mtime_ns": "1790834160713328264",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=files.py.wiki.md"
     },
     "wikifier/cache/io.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:47",
-      "reason": "Real cache I/O",
-      "wiki_content_hash": "sha256:463a26f51db83013890c75462ca1e4ec02dc6545c0e9dbf529bfe742f14c1280",
-      "source_content_hash": "sha256:6a6efa7a564c0bc5faf0b929d413e409b7e5dafc647392459794aa25eff62790",
-      "last_meaningful_edit": "2026-08-13 16:49:55",
-      "last_wiki_refresh": "2026-08-13 16:50:47",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:55 | Real SQLite-primary load/save (replaces unused stub).; mark-green:2026-08-13 16:50:47 (wiki hash captured); wiki=io.py.wiki.md"
-    },
-    "wikifier/health_impl.py": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:f38fc6d49b4dfb28522327035296ee2a1d1f969eb4e8068064a00b5cf7f04192",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: prune_deleted_missing, sqlite map, extra JS suffixes; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:19400618b4a981698d8e1c40da9e1c245106af87a1963a4188b109c64edd6989",
+      "source_content_hash": "sha256:b6cfa1d98829c44fc9594c516fbae92dadd0f77894819cbb66f2b9bf50192c79",
+      "source_mtime_ns": "1790834216497486456",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=io.py.wiki.md"
     },
     "wikifier/health_pkg/__init__.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:beca8665853d1f3d8141d1dd69641bac8717cfad5723834d452b96084cb95bc6",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: export prune_deleted_missing; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
-    },
-    "wikifier/mcp/tools/__init__.py": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:2055e8d04d7a6efb76c960657a692717f86bbe8850170ba4a5a0710321599059",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: drop unused stub registrar exports; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
-    },
-    "wikifier/mcp/tools/_common.py": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:16",
-      "reason": "Slim helpers; no second FastMCP.",
-      "source_content_hash": "sha256:72f385ede3739c362db807691cf8451d3b69b7802e1af31c27879fc5f3c20c88",
-      "last_wiki_refresh": "2026-08-13 16:51:16",
-      "freshness_provenance": "upsert:🟡 Yellow (non-freshness path); mark-green:2026-08-13 16:51:16 (wiki hash captured)"
-    },
-    "wikifier/cache/_core.py": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:d9348f79acfaab81f8e5d6b9074de45bef4004e07440b75837da868633f50b6e",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: streaming parse extra JS suffixes; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Export verify API and _do_mark_green_checked (subid=trust-green)",
+      "wiki_content_hash": "sha256:7ba82fc3f35b35025e702cac68045a2e6f030e2edc904b8bfe8f4470ba58fb4c",
+      "source_content_hash": "sha256:99288999e4e9a6c7bf36003ff764c2dd41c4fa63476f2dfbbde04dac762ba50c",
+      "source_mtime_ns": "1790842337229877087",
+      "public_symbols": "GREEN HEALTH_JSON HEALTH_MD PARSEABLE_SOURCE_SUFFIXES PENDING_MD RED WikiVerificationError YELLOW add_to_pending apply_barrel_invalidation_reports assess_autonomous_readiness classify_content_dirty compute_source_content_hash count_pending detect_scope_risks find_deleted_missing find_ghost_entries get_files_needing_attention get_healable_stubs get_healing_statistics get_stale_wikis get_summary heal_outdated_stubs heal_with_policy load_health mark_green mark_wiki_refresh normalize_entry pending_item_path prune_deleted_missing prune_health_outside_monitored prune_pending_to_monitored public_symbols read_metrics_history record_meaningful_edit remove_from_pending save_health seed_health_for_monitored_sources seed_health_from_map seed_source_content_hashes source_mtime_ns upsert_entries_batch upsert_entry validate_health verify_wiki verify_wikis write_metrics_snapshot",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=__init__.py.wiki.md"
     },
     "tests/test_agent_surface_contracts.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-13 18:39:38",
-      "reason": "PEP585 future-import scan covers javascript.py.",
-      "source_content_hash": "sha256:650fa3d97752ab96120c2263042644954476f3c943b8bbfeb0b5a4dad39f7011",
-      "last_meaningful_edit": "2026-08-13 18:39:38",
-      "last_wiki_refresh": "2026-08-13 18:39:38",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 18:39:38 | Regression: shipped modules with list[]/dict[] must postpone annotation evaluation.; mark-green:2026-08-13 18:39:38 (wiki hash captured)"
-    },
-    "Findings/2026-08-13-implementation-plan.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:50:52",
-      "reason": "implementation plan",
-      "wiki_content_hash": "sha256:c08625b11415c6a8be1d0bcf804cc232bf59e5994ab84a7ee23edb3ea6c8d5a3",
-      "source_content_hash": "sha256:c08625b11415c6a8be1d0bcf804cc232bf59e5994ab84a7ee23edb3ea6c8d5a3",
-      "last_meaningful_edit": "2026-08-13 16:49:57",
-      "last_wiki_refresh": "2026-08-13 16:50:52",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:49:57 | Agent-first implementation plan from 5 research slices.; mark-green:2026-08-13 16:50:25 (wiki hash captured); wiki=2026-08-13-implementation-plan.md; mark-green:2026-08-13 16:50:52 (wiki hash captured); wiki=2026-08-13-implementation-plan.md"
-    },
-    "Findings/2026-08-13-research-01-parsers.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:18",
-      "reason": "Research findings saved.",
-      "wiki_content_hash": "sha256:57e20637d147750368fc78351ce17325675eaeb68cefb8d44baf4c6d95a3410c",
-      "source_content_hash": "sha256:57e20637d147750368fc78351ce17325675eaeb68cefb8d44baf4c6d95a3410c",
-      "last_meaningful_edit": "2026-08-13 16:51:18",
-      "last_wiki_refresh": "2026-08-13 16:51:18",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:18 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:18 (wiki hash captured); wiki=2026-08-13-research-01-parsers.md"
-    },
-    "Findings/2026-08-13-research-02-cache-graph.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:19",
-      "reason": "Research findings saved.",
-      "wiki_content_hash": "sha256:14b9e2339e65b40e2317b3ba892aee3c744044f6244112bea1a7812b087f48d7",
-      "source_content_hash": "sha256:14b9e2339e65b40e2317b3ba892aee3c744044f6244112bea1a7812b087f48d7",
-      "last_meaningful_edit": "2026-08-13 16:51:18",
-      "last_wiki_refresh": "2026-08-13 16:51:19",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:18 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:19 (wiki hash captured); wiki=2026-08-13-research-02-cache-graph.md"
-    },
-    "Findings/2026-08-13-research-03-health-protocol.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:19",
-      "reason": "Research findings saved.",
-      "wiki_content_hash": "sha256:de36f324f7f3b2b8eaeb0204f1ceff888a6199af621da1b802e0ec781403b4ea",
-      "source_content_hash": "sha256:de36f324f7f3b2b8eaeb0204f1ceff888a6199af621da1b802e0ec781403b4ea",
-      "last_meaningful_edit": "2026-08-13 16:51:19",
-      "last_wiki_refresh": "2026-08-13 16:51:19",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:19 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:19 (wiki hash captured); wiki=2026-08-13-research-03-health-protocol.md"
-    },
-    "Findings/2026-08-13-research-04-mcp-cli.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:20",
-      "reason": "Research findings saved.",
-      "wiki_content_hash": "sha256:bdc492bb94f82cd34affe8611ec5966811415f5db4996047ca990aec1fc3e5c3",
-      "source_content_hash": "sha256:bdc492bb94f82cd34affe8611ec5966811415f5db4996047ca990aec1fc3e5c3",
-      "last_meaningful_edit": "2026-08-13 16:51:20",
-      "last_wiki_refresh": "2026-08-13 16:51:20",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:20 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:20 (wiki hash captured); wiki=2026-08-13-research-04-mcp-cli.md"
-    },
-    "Findings/2026-08-13-research-05-packaging-tests.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-13 16:51:21",
-      "reason": "Research findings saved.",
-      "wiki_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78",
-      "source_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78",
-      "last_meaningful_edit": "2026-08-13 16:51:21",
-      "last_wiki_refresh": "2026-08-13 16:51:21",
-      "freshness_provenance": "record-meaningful-edit:2026-08-13 16:51:21 | Research findings slice for 4.6.10.; mark-green:2026-08-13 16:51:21 (wiki hash captured); wiki=2026-08-13-research-05-packaging-tests.md"
-    },
-    "Findings/2026-08-27-plan.md": {
-      "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:16:03",
-      "reason": "plan executed wiki aligned",
-      "wiki_content_hash": "sha256:923cb0f88e066db0404563a9603aac12ec4d1bc8c7beb0dbb4c8c7ae33269355",
-      "source_content_hash": "sha256:923cb0f88e066db0404563a9603aac12ec4d1bc8c7beb0dbb4c8c7ae33269355",
-      "last_meaningful_edit": "2026-08-27 11:16:03",
-      "last_wiki_refresh": "2026-08-27 11:16:03",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:16:03 | 4.6.13: mark plan executed after WP0-WP7; mark-green:2026-08-27 11:16:03 (wiki hash captured); wiki=2026-08-27-plan.md"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:1c815912f74a69fe634e454a5975c2a6489cbe82f678ad3e7c3433166502827b",
+      "source_mtime_ns": "1790833325727795001",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "wikifier/mcp/server_impl.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:22",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
-      "source_content_hash": "sha256:3f87e0cb50e6fa7a35479fe5ce75f80a002f052d17250ed68839c69586d1b608",
-      "last_meaningful_edit": "2026-09-14 10:02:22",
-      "last_wiki_refresh": "2026-09-14 10:02:22",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: MCP: record_changes, verify_wikis, mark_green force, get_dependencies detail=compact default with compact text (subid=batch-record, benchmark)",
+      "wiki_content_hash": "sha256:a8b04f0e8117ec4335325563a6e6ddee44a20639d86d18649086b8f243997bdc",
+      "source_content_hash": "sha256:46a1dceea0bc31148922a24767c0b5190e8245d14082c24f83a52a1b0f248ca8",
+      "source_mtime_ns": "1790843656632133277",
+      "public_symbols": "UpdateMapsResult audit_project_health check_changes find_architectural_smells generate_project_health_report get_barrel_reports get_current_project_root get_cycles get_dependencies get_dependents get_file_wiki get_files_needing_attention get_health_matrix get_incremental_status get_journal get_library get_pending_updates get_project_status get_resolution_diagnostics heal_stubs health issues journal list_core_tools list_healable_stubs list_paths main mark_green onboard_to_module plan_refactoring prepare_edit record_change record_changes record_deletion review_pending_changes review_recent_changes search_journal seed_source_content_hashes session_bootstrap suggest_next_actions understand_codebase_structure update_maps validate verify_wikis why_file",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=server_impl.py.wiki.md"
     },
     "wikifier/parsers/bree/__init__.py": {
       "status": "🟢 Green",
       "last_updated": "2026-08-27 11:15:12",
       "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
       "source_content_hash": "sha256:6c794d876c677f05602e0aac4e55f32481974d9de84738a9c0383c9eae6f7e55",
+      "source_mtime_ns": "1790834160815736011",
       "last_meaningful_edit": "2026-08-27 11:14:41",
       "last_wiki_refresh": "2026-08-27 11:15:12",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: define follow_barrel_chain / get_barrel_cache_stats; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
     },
     "wikifier/parsers/_ldsi.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
       "wiki_content_hash": "sha256:afdbb0740dfd571d1f07424b95b07e5b7e8ba971e07cc1f57a5adad1d0269820",
-      "source_content_hash": "sha256:99c6ecb3e46554c02b0edf85c2bfbbf31aa9220e96e5aa4f2454abef00a88da4",
-      "last_meaningful_edit": "2026-08-27 11:14:41",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: shared LDSI helpers without loading JS parser; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=_ldsi.py.wiki.md"
+      "source_content_hash": "sha256:6aab0a7b64126bf45fca1d691b0dd6e3ed7adfe4444cac8c6d1d486af2e08898",
+      "source_mtime_ns": "1790834160669395193",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=_ldsi.py.wiki.md"
     },
     "wikifier/mcp/deadline.py": {
       "status": "🟢 Green",
@@ -922,72 +869,81 @@
       "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
       "wiki_content_hash": "sha256:ce19b4e8566fb53742cdc85a8c414ecb4ac5d4bb33d4a600960b060c285991d4",
       "source_content_hash": "sha256:7009d966d4737492bf39f79bd19c7996c2ff859329d6635f4665b08ec380b573",
+      "source_mtime_ns": "1790834160788813064",
       "last_meaningful_edit": "2026-08-27 11:14:41",
       "last_wiki_refresh": "2026-08-27 11:15:12",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:41 | 4.6.13: stdlib MCP wall-clock helper; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=deadline.py.wiki.md"
     },
     "tests/test_plan_2026_08_27.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:27:44",
-      "reason": "deadline tests wiki",
-      "source_content_hash": "sha256:794715ae40300ce78bacf16abbd303abb23681c06ddcd5006b3d8fe5fdc3a69e",
-      "last_meaningful_edit": "2026-08-27 11:27:44",
-      "last_wiki_refresh": "2026-08-27 11:27:44",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:27:44 | 4.6.13: drive shipped status deadline wrap; mark-green:2026-08-27 11:27:44 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:707e113aa7166e3b20c631ab4e91a78790c55ea61ba63b9a8828862ddca5d462",
+      "source_mtime_ns": "1790834851019996416",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     "CONTRIBUTING.md": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "wiki_content_hash": "sha256:3b7c5d7e227eaebefa0c997b08339e709a1bfba7ef82585305dc97c851fb08bd",
-      "source_content_hash": "sha256:3b7c5d7e227eaebefa0c997b08339e709a1bfba7ef82585305dc97c851fb08bd",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 drop Basis-v0.3.md; mark-green:2026-08-27 11:15:12 (wiki hash captured); wiki=CONTRIBUTING.md"
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Run the lookup benchmark for parser/lookup-output changes (subid=benchmark)",
+      "wiki_content_hash": "sha256:5530f555067bbde4b420db4f57cf5913cd6f2be9e849338a8ebc367423d2d562",
+      "source_content_hash": "sha256:5530f555067bbde4b420db4f57cf5913cd6f2be9e849338a8ebc367423d2d562",
+      "source_mtime_ns": "1790844318113158320",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=CONTRIBUTING.md"
     },
     ".github/workflows/ci.yml": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:15:12",
-      "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
-      "source_content_hash": "sha256:9ef99d0ff4f09c8e0f30bfee0c1d116fb4833d06021868e6ca157436c8aee16b",
-      "last_meaningful_edit": "2026-08-27 11:14:42",
-      "last_wiki_refresh": "2026-08-27 11:15:12",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 mcp extra + wheel --help; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:40ab111c4bf5fe1f9a39c8a32f9d82d37cfa10bc77b95455918149006c473358",
+      "source_mtime_ns": "1790834653522935392",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
     },
     ".github/ISSUE_TEMPLATE/config.yml": {
       "status": "🟢 Green",
       "last_updated": "2026-08-27 11:15:12",
       "reason": "4.6.13 plan WP0–WP7 wiki/protocol aligned",
       "source_content_hash": "sha256:c19faa25bc29a797233aa847b747ee5f1b7913591f38e6b41cb9fd8178ce94bf",
+      "source_mtime_ns": "1787793038788260756",
       "last_meaningful_edit": "2026-08-27 11:14:42",
       "last_wiki_refresh": "2026-08-27 11:15:12",
       "freshness_provenance": "record-meaningful-edit:2026-08-27 11:14:42 | 4.6.13 spec link docs/spec.md; mark-green:2026-08-27 11:15:12 (wiki hash captured)"
     },
     "wikifier/mcp/status_ops.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-08-27 11:27:44",
-      "reason": "status_ops deadline wrap wiki",
-      "wiki_content_hash": "sha256:12e754a53152b219835efd1e8291b095bfc6bfc06403c4a1ebc0df7f93895887",
-      "source_content_hash": "sha256:44ca94f2ce7def749f9cb6af1571e8de14cf672884c39ca8e861f2a982af6735",
-      "last_meaningful_edit": "2026-08-27 11:27:44",
-      "last_wiki_refresh": "2026-08-27 11:27:44",
-      "freshness_provenance": "record-meaningful-edit:2026-08-27 11:27:44 | 4.6.13: status tools wrap health/cache in call_with_deadline; mark-green:2026-08-27 11:27:44 (wiki hash captured); wiki=status_ops.py.wiki.md"
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:b5fa141986af3fcc2db1ccbd4047df661509eb92243eab804e6f4dba905f3a60",
+      "source_content_hash": "sha256:c72959223b3171d14bb1e60ec515dabd88c5bdfd46e4e5cf2395d3d548109472",
+      "source_mtime_ns": "1790834160775196298",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=status_ops.py.wiki.md"
     },
     "wikifier/map_index.py": {
       "status": "🟢 Green",
-      "last_updated": "2026-09-14 10:02:21",
-      "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
       "wiki_content_hash": "sha256:85dfa00ad4f7bf9ba419858db18b998e7e5808f74f9c601ce6ecb941abf62bf3",
-      "source_content_hash": "sha256:8553bdfb50f47b69f572b9e1dfde5c3d1afd78a7b17860a6f12648a03437da3d",
-      "last_meaningful_edit": "2026-09-14 10:02:21",
-      "last_wiki_refresh": "2026-09-14 10:02:21",
-      "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:21 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:21 (wiki hash captured); wiki=map_index.py.wiki.md"
+      "source_content_hash": "sha256:d845fb7bf01f54ba2fcd095e77c711c74c7dd63b8e2681b993df024c2df2e309",
+      "source_mtime_ns": "1790834216497049995",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=map_index.py.wiki.md"
     },
     "tests/test_map_index.py": {
       "status": "🟢 Green",
       "last_updated": "2026-09-14 10:02:22",
       "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
       "source_content_hash": "sha256:f125d1296bf07440ebe3fc954256af888a1c263f01e959684042555585fe415d",
+      "source_mtime_ns": "1789358921725879553",
       "last_meaningful_edit": "2026-09-14 10:02:22",
       "last_wiki_refresh": "2026-09-14 10:02:22",
       "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured)"
@@ -998,9 +954,782 @@
       "reason": "wiki/reason current for folder-shard maps (subid=map-folder-shards)",
       "wiki_content_hash": "sha256:85dfa00ad4f7bf9ba419858db18b998e7e5808f74f9c601ce6ecb941abf62bf3",
       "source_content_hash": "sha256:85dfa00ad4f7bf9ba419858db18b998e7e5808f74f9c601ce6ecb941abf62bf3",
+      "source_mtime_ns": "1790834126000000000",
       "last_meaningful_edit": "2026-09-14 10:02:22",
       "last_wiki_refresh": "2026-09-14 10:02:22",
       "freshness_provenance": "record-meaningful-edit:2026-09-14 10:02:22 | Sharded depth-1 folder maps; root-card bootstrap; list_paths hops to prepare_edit (subid=map-folder-shards); mark-green:2026-09-14 10:02:22 (wiki hash captured); wiki=map_index.py.wiki.md"
+    },
+    "wikifier/paths.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:e00bbed4efcc2886ff3024eb79201f7cf2c6b586059f4f647e3c2fe1da206b14",
+      "source_content_hash": "sha256:23e54c90867c3d7d0fbf5ecdcd8eb6f33bef562416c272c0c3163724e61852d2",
+      "source_mtime_ns": "1790834160539044867",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=paths.py.wiki.md"
+    },
+    "wikifier/journal.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:2787cd90b260cea4330dff08e7d2766bf6202be6dd9e225643c0f6bba65d878b",
+      "source_mtime_ns": "1790834160524526178",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09"
+    },
+    "wikifier/streaming.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:09",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:e6c0a6d0e69833a34203e96bcef0e4f292c8d1818f3f2eb5d8c72ce9cc99d327",
+      "source_content_hash": "sha256:2e25d389d2fab695e808b0a87500d4f02c5e87fb3ed3ee93ff7fd7abbf7a3d4a",
+      "source_mtime_ns": "1790834730422704257",
+      "last_meaningful_edit": "2026-10-01 18:05:09",
+      "last_wiki_refresh": "2026-10-01 18:05:09",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:09; wiki=streaming.py.wiki.md"
+    },
+    "wikifier/cache/graph.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:f3c61eedf378f25d313982cca456c8d71fcab6c8dd56515d96a705420d32b4b6",
+      "source_content_hash": "sha256:41d1abb49a93aa0fc80bc9b35efc8ae4e99395a2079084658c80e514398a90ec",
+      "source_mtime_ns": "1790834160722024327",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=graph.py.wiki.md"
+    },
+    "wikifier/cache/cycles.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:b7ae47a72990a16d4c71741c013ea27418bb52df4be224a453abc3179e0f4539",
+      "source_content_hash": "sha256:a69218579300c3a50e16b9638bc344594ae4018b6bf6c2df49efcb2cffbd2e9a",
+      "source_mtime_ns": "1790834160738224445",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=cycles.py.wiki.md"
+    },
+    "wikifier/cache/acs.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:828544b077e735f9d8e3667c32466593d486cd6226d36a5acccbe2bcefe7d58d",
+      "source_content_hash": "sha256:f5f79b46b4f65d510ff88249eded43df058585df0bd6d65337291fcae0ebfbd6",
+      "source_mtime_ns": "1790834160729514674",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=acs.py.wiki.md"
+    },
+    "wikifier/cache/barrel.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:805554f86d42fed26ef5a3b1f204126730b5150a64d74cd13f40b9bff03fb4d3",
+      "source_content_hash": "sha256:3b7d87bec7435f43a6e87709596be32c5b81903865e9712c3251de45b529f962",
+      "source_mtime_ns": "1790834160745538582",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=barrel.py.wiki.md"
+    },
+    "wikifier/cache/diagnostics.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:502a76355703887ef85693ec37144e1bd3b00de40b04afc27aed9b92c739bd17",
+      "source_content_hash": "sha256:09d78514746e6ea87dcb4c7e193b2e2a3e9713f3327cb0d65abe8c869818adee",
+      "source_mtime_ns": "1790834160715570530",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=diagnostics.py.wiki.md"
+    },
+    "wikifier/health_pkg/store.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Health rows keep public_symbols (empty allowed), verification and source_mtime_ns (subid=trust-green)",
+      "source_content_hash": "sha256:676343c5a9f5ade7d7a3cad927e339b06ffb9fa033a6fde34cf91bd42f5f7237",
+      "source_mtime_ns": "1790842319739589958",
+      "public_symbols": "load_health normalize_entry save_health upsert_entries_batch upsert_entry",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
+    },
+    "wikifier/health_pkg/pending.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:9139ed23b14c5f84a72cc6410ec1d4c645a7757059a87a185ac8693635145dba",
+      "source_mtime_ns": "1790834160761068654",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "wikifier/health_pkg/freshness.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:48:00",
+      "reason": "Wiki checked after: Wiki path/hash helpers moved to health_pkg/wikis.py (re-exported) to break the freshness<->verify import cycle (subid=trust-green)",
+      "source_content_hash": "sha256:66d107a291dbc5d1e793de5f59080de6d23ecd458409384d128dcb7be5e96775",
+      "source_mtime_ns": "1790844443521251739",
+      "public_symbols": "classify_content_dirty compute_source_content_hash get_stale_wikis mark_green mark_wiki_refresh record_meaningful_edit seed_source_content_hashes source_mtime_ns",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:48:00",
+      "last_wiki_refresh": "2026-10-01 18:48:00",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:00"
+    },
+    "wikifier/health_pkg/scope.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Pending/health pruning keeps mapped files and an explicit keep set, matching the widened watch scope (subid=watch-scope)",
+      "source_content_hash": "sha256:35ecb47bec05229eae4f97cc4311362ccf296c169e26055b4ef8f596a31fea3d",
+      "source_mtime_ns": "1790842379749960910",
+      "public_symbols": "detect_scope_risks find_deleted_missing find_ghost_entries prune_deleted_missing prune_health_outside_monitored prune_pending_to_monitored seed_health_for_monitored_sources seed_health_from_map validate_health",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
+    },
+    "wikifier/health_pkg/summary.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: get_summary adds green_breakdown (verified/no_wiki/unchecked/forced/legacy) (subid=trust-green)",
+      "source_content_hash": "sha256:14dcf44ead22b932801fab83ef8571171dad144737d0931d09797f105f3e3e8d",
+      "source_mtime_ns": "1790842337230556210",
+      "public_symbols": "apply_barrel_invalidation_reports get_files_needing_attention get_summary",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
+    },
+    "wikifier/health_pkg/readiness.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:1f02f2b34497c338db4c113ab9f66223b474467e3c5427dabccfcd77620bb6ee",
+      "source_mtime_ns": "1790834160767254949",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "wikifier/health_pkg/healing.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:1c82dfc0f13e3e09dcee1a475f6dee38f3e6a261c49ee1786d58008d2f5ffe5d",
+      "source_mtime_ns": "1790834160758740428",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "wikifier/parsers/bree/_bree.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:94c52c9885a74b3f232acb9271fbee56875f5a7c5cc0695f61075f058d22581a",
+      "source_content_hash": "sha256:47fab666812608eeaa350681dd07c4947fc7c61e2d6c1a7552008dab7fd24ee8",
+      "source_mtime_ns": "1790834730423547502",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=_bree.py.wiki.md"
+    },
+    "wikifier/scripts/wikifier.bat": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:a99f7c44828a6c539db2fea68898f579c9f83c1399e17c76b2e51814d391fa33",
+      "source_mtime_ns": "1790834126000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "docs/spec.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:f389e7e2eb00e8aec53b191b73ea28ae41b103c9d6952276dbb9d7dc6f4b7a19",
+      "source_content_hash": "sha256:f389e7e2eb00e8aec53b191b73ea28ae41b103c9d6952276dbb9d7dc6f4b7a19",
+      "source_mtime_ns": "1790834977537219073",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=spec.md"
+    },
+    "MODULARIZATION_PLAN.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:d7d7e687db774a91165a1d094976de4ba3abc5c0435bdaffe4d41f7b00f15e4d",
+      "source_content_hash": "sha256:d7d7e687db774a91165a1d094976de4ba3abc5c0435bdaffe4d41f7b00f15e4d",
+      "source_mtime_ns": "1790834996552709356",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=MODULARIZATION_PLAN.md"
+    },
+    "SIMPLIFICATION_PLAN_AND_LOG.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:d21fcd3d2aa3a19af713d65154d880d96cb3031cd3534197dc7c80a55bbc6fdc",
+      "source_content_hash": "sha256:d21fcd3d2aa3a19af713d65154d880d96cb3031cd3534197dc7c80a55bbc6fdc",
+      "source_mtime_ns": "1790834996555492048",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=SIMPLIFICATION_PLAN_AND_LOG.md"
+    },
+    "Findings/README.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Index the lookup benchmark findings (subid=benchmark)",
+      "wiki_content_hash": "sha256:b80f94dad96cb077089efd322b65a3890c0bd27b18ba7a2e6aeabc172045d76c",
+      "source_content_hash": "sha256:b80f94dad96cb077089efd322b65a3890c0bd27b18ba7a2e6aeabc172045d76c",
+      "source_mtime_ns": "1790844289418961518",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=README.md"
+    },
+    "Findings/2026-10-01-review-4.7.0.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:e0e69d2752a57c33b610b446a886be42e4f4f6f4aeeab2cd359da7f657d47cc5",
+      "source_content_hash": "sha256:e0e69d2752a57c33b610b446a886be42e4f4f6f4aeeab2cd359da7f657d47cc5",
+      "source_mtime_ns": "1790834886784106851",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-10-01-review-4.7.0.md"
+    },
+    "index.v2.html": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:948e5f51e40521ac7a9a8cfd11bd8f7eca6da1f82117c46b887dc3884544597b",
+      "source_mtime_ns": "1790841434549334771",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "diagnostics.v2.html": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:93311c6ff397cbc17c4b5f089dc0afa4f7482c9b042b98a74c48d58675c2762a",
+      "source_mtime_ns": "1790841683065132993",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "scripts/parser_accuracy.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:1995a26803a2f1a9755f690059d91962dbbcf3886b6c52e4fee59164bbf8e8bd",
+      "source_mtime_ns": "1790834496718378303",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "Findings/archive/2026-06-10-Dogfood-Refactor-Validation.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:cbbc038682650ae53ed396971fa7f27c8ca3be099b56b81f39ed753d218b5e53",
+      "source_content_hash": "sha256:cbbc038682650ae53ed396971fa7f27c8ca3be099b56b81f39ed753d218b5e53",
+      "source_mtime_ns": "1781049204000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-06-10-Dogfood-Refactor-Validation.md"
+    },
+    "Findings/archive/2026-06-10-Fix-Plan.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:e3256cf869bb44bec8f9465bb07813647087ef9ace0d745706a37b1bd7b61914",
+      "source_content_hash": "sha256:e3256cf869bb44bec8f9465bb07813647087ef9ace0d745706a37b1bd7b61914",
+      "source_mtime_ns": "1781065230000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-06-10-Fix-Plan.md"
+    },
+    "Findings/archive/2026-08-13-implementation-plan.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:c08625b11415c6a8be1d0bcf804cc232bf59e5994ab84a7ee23edb3ea6c8d5a3",
+      "source_content_hash": "sha256:c08625b11415c6a8be1d0bcf804cc232bf59e5994ab84a7ee23edb3ea6c8d5a3",
+      "source_mtime_ns": "1786603143151463223",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-implementation-plan.md"
+    },
+    "Findings/archive/2026-08-13-reassess.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:a6415aa7dfa4a1aba9e3f8e720d33da94904634e758f1f86e108fd0bc761d8cd",
+      "source_content_hash": "sha256:a6415aa7dfa4a1aba9e3f8e720d33da94904634e758f1f86e108fd0bc761d8cd",
+      "source_mtime_ns": "1786604190821537897",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-reassess.md"
+    },
+    "Findings/archive/2026-08-13-research-01-parsers.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:57e20637d147750368fc78351ce17325675eaeb68cefb8d44baf4c6d95a3410c",
+      "source_content_hash": "sha256:57e20637d147750368fc78351ce17325675eaeb68cefb8d44baf4c6d95a3410c",
+      "source_mtime_ns": "1786603112237864236",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-research-01-parsers.md"
+    },
+    "Findings/archive/2026-08-13-research-02-cache-graph.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:14b9e2339e65b40e2317b3ba892aee3c744044f6244112bea1a7812b087f48d7",
+      "source_content_hash": "sha256:14b9e2339e65b40e2317b3ba892aee3c744044f6244112bea1a7812b087f48d7",
+      "source_mtime_ns": "1786603112237976651",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-research-02-cache-graph.md"
+    },
+    "Findings/archive/2026-08-13-research-03-health-protocol.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:de36f324f7f3b2b8eaeb0204f1ceff888a6199af621da1b802e0ec781403b4ea",
+      "source_content_hash": "sha256:de36f324f7f3b2b8eaeb0204f1ceff888a6199af621da1b802e0ec781403b4ea",
+      "source_mtime_ns": "1786603112238113691",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-research-03-health-protocol.md"
+    },
+    "Findings/archive/2026-08-13-research-04-mcp-cli.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:bdc492bb94f82cd34affe8611ec5966811415f5db4996047ca990aec1fc3e5c3",
+      "source_content_hash": "sha256:bdc492bb94f82cd34affe8611ec5966811415f5db4996047ca990aec1fc3e5c3",
+      "source_mtime_ns": "1786603112238069317",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-research-04-mcp-cli.md"
+    },
+    "Findings/archive/2026-08-13-research-05-packaging-tests.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78",
+      "source_content_hash": "sha256:57e28c8359237a8035283129d745dc522b04dde2ecf985f50d8f847016696a78",
+      "source_mtime_ns": "1786603112238063400",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-13-research-05-packaging-tests.md"
+    },
+    "Findings/archive/2026-08-27-plan.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:923cb0f88e066db0404563a9603aac12ec4d1bc8c7beb0dbb4c8c7ae33269355",
+      "source_content_hash": "sha256:923cb0f88e066db0404563a9603aac12ec4d1bc8c7beb0dbb4c8c7ae33269355",
+      "source_mtime_ns": "1787793353989629060",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=2026-08-27-plan.md"
+    },
+    "Findings/archive/agent-first-ideal-loop-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:5f3bcca10ecfebcb5003739c9569f4288685a13663ead6eb73cc301a160dbcf8",
+      "source_content_hash": "sha256:5f3bcca10ecfebcb5003739c9569f4288685a13663ead6eb73cc301a160dbcf8",
+      "source_mtime_ns": "1783550255724502121",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=agent-first-ideal-loop-2026-07-09.md"
+    },
+    "Findings/archive/agent-ideal-loop-polish-dogfood-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
+      "source_content_hash": "sha256:19ade83d9467c67cc78dee9f477dbcbe79918e93dd39cd2810c6461f7ea643e1",
+      "source_mtime_ns": "1783551081812285369",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=agent-ideal-loop-polish-dogfood-2026-07-09.md"
+    },
+    "Findings/archive/agent-scale-perf-accuracy-2026-07-12.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:af8612d319551b599f3001d1002f98446cc4baebd3be97a673e511343fc2c395",
+      "source_content_hash": "sha256:af8612d319551b599f3001d1002f98446cc4baebd3be97a673e511343fc2c395",
+      "source_mtime_ns": "1783818082237885310",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=agent-scale-perf-accuracy-2026-07-12.md"
+    },
+    "Findings/archive/agent-scale-sqlite-coverage-2026-07-12.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:4f2ad6c15478b67d152f05ebc0d31b9f1a2b25bececa9cb8c3e52cfac705f7ee",
+      "source_content_hash": "sha256:4f2ad6c15478b67d152f05ebc0d31b9f1a2b25bececa9cb8c3e52cfac705f7ee",
+      "source_mtime_ns": "1783821657812020812",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=agent-scale-sqlite-coverage-2026-07-12.md"
+    },
+    "Findings/archive/agent-walk-coverage-cache-2026-07-12.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:1e397a8e0e04442f20af82d642e2c69387b6a40e2cc4a6d542b319edc688dc06",
+      "source_content_hash": "sha256:1e397a8e0e04442f20af82d642e2c69387b6a40e2cc4a6d542b319edc688dc06",
+      "source_mtime_ns": "1783824938038199244",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=agent-walk-coverage-cache-2026-07-12.md"
+    },
+    "Findings/archive/dogfood-all-cloned-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:460ad92b126bc512a9988940df63ed59d1f7b6bd0b394c92ffa1c14432179d9c",
+      "source_content_hash": "sha256:cde86442e2a728fc0519a91928bed6cd18ea83ffa26cdc214f8204bdd4cd8da9",
+      "source_mtime_ns": "1783542463274900578",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-all-cloned-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-all-cloned-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:460ad92b126bc512a9988940df63ed59d1f7b6bd0b394c92ffa1c14432179d9c",
+      "source_content_hash": "sha256:460ad92b126bc512a9988940df63ed59d1f7b6bd0b394c92ffa1c14432179d9c",
+      "source_mtime_ns": "1783542493303343880",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-all-cloned-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-coding-projects-8-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:7181926706ea96915228cee99dbd8ad365934da3508e4c874ceb86bc23b297fc",
+      "source_content_hash": "sha256:b044d3768a150da99cae54083abfe5d23746a51d028f6344210d1bb542ffa98c",
+      "source_mtime_ns": "1783543305112969819",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-coding-projects-8-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-coding-projects-8-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:7181926706ea96915228cee99dbd8ad365934da3508e4c874ceb86bc23b297fc",
+      "source_content_hash": "sha256:7181926706ea96915228cee99dbd8ad365934da3508e4c874ceb86bc23b297fc",
+      "source_mtime_ns": "1783543305113147362",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-coding-projects-8-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-goal-pass1-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:0d2588429fb45bd50469efdd97d8ef73419969f9b66d7cf05f169aad36adc9c0",
+      "source_mtime_ns": "1783544644151240836",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "Findings/archive/dogfood-goal-pass2-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:f3e2bf5a7331fa847fdbf96a43662542dc689f0e767bb74d093c00a78c030090",
+      "source_mtime_ns": "1783544807193115591",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "Findings/archive/dogfood-hygiene-fix-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:c998581594efa74a9055a82c83e2871dada362ba6fbd2832a7e81888777046bb",
+      "source_content_hash": "sha256:191503aed6a8ed00d325e28c2d1fc6a2c8736e90fa80a913056884999c64a927",
+      "source_mtime_ns": "1783542850469464290",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-hygiene-fix-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-hygiene-fix-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:c998581594efa74a9055a82c83e2871dada362ba6fbd2832a7e81888777046bb",
+      "source_content_hash": "sha256:c998581594efa74a9055a82c83e2871dada362ba6fbd2832a7e81888777046bb",
+      "source_mtime_ns": "1783542887452366500",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-hygiene-fix-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-multi-lang-2026-07-09.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:890825e2ea53768b29bcaaf5ec18e71733f20903eb2e0343c55f816568ad2db5",
+      "source_content_hash": "sha256:e891c2ead07df072625d33cb073874b72126fc16ad3ecb66c991caba9a65ca8e",
+      "source_mtime_ns": "1783540322818615675",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-multi-lang-2026-07-09.md"
+    },
+    "Findings/archive/dogfood-multi-lang-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:890825e2ea53768b29bcaaf5ec18e71733f20903eb2e0343c55f816568ad2db5",
+      "source_content_hash": "sha256:890825e2ea53768b29bcaaf5ec18e71733f20903eb2e0343c55f816568ad2db5",
+      "source_mtime_ns": "1783540338714039592",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=dogfood-multi-lang-2026-07-09.md"
+    },
+    "Findings/archive/dogfood_pass_4.6.7.json": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:c331d779dfcb42b45a31f6c29e2a7f383a8c212d1d2b90dc6457f65904db21fa",
+      "source_mtime_ns": "1783827687416044652",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "Findings/archive/gap-amendment-closure-2026-08-01.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
+      "source_content_hash": "sha256:8d4c94bd4750f481f18b9fa5e600a332ad8a4f1c7be7164e302299a7b1f37615",
+      "source_mtime_ns": "1785547493022435196",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=gap-amendment-closure-2026-08-01.md"
+    },
+    "Findings/archive/gap-amendment-plan-2026-08-01.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:d89e585a7b68ed8cb5ed58d0630fbda8038e7bc3b6e84887eb8f090d614bec23",
+      "source_content_hash": "sha256:d89e585a7b68ed8cb5ed58d0630fbda8038e7bc3b6e84887eb8f090d614bec23",
+      "source_mtime_ns": "1785547473349093701",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=gap-amendment-plan-2026-08-01.md"
+    },
+    "Findings/archive/gap-closure-report.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:3eaff9dca44108f630435c7b496c97cf6a9a479f49d1452bc3f892e22f45ccdf",
+      "source_content_hash": "sha256:3eaff9dca44108f630435c7b496c97cf6a9a479f49d1452bc3f892e22f45ccdf",
+      "source_mtime_ns": "1783539602183952946",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=gap-closure-report.md"
+    },
+    "Findings/archive/goal-maturity-completion-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:bebadfca26aeb840e7dd4f86df9fe628c52b91bd3c72468a8f0a664015c1a6cd",
+      "source_content_hash": "sha256:bebadfca26aeb840e7dd4f86df9fe628c52b91bd3c72468a8f0a664015c1a6cd",
+      "source_mtime_ns": "1783544831219069073",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=goal-maturity-completion-2026-07-09.md"
+    },
+    "Findings/archive/index-first-map-paths-2026-07-12.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:4bf1ed144348247bbb94f0aa31abc05f46a5bcd96ed0bd4bfce91855a709e0e1",
+      "source_content_hash": "sha256:4bf1ed144348247bbb94f0aa31abc05f46a5bcd96ed0bd4bfce91855a709e0e1",
+      "source_mtime_ns": "1783827653825169735",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=index-first-map-paths-2026-07-12.md"
+    },
+    "Findings/archive/residual-1-5-closure-2026-07-09.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:cf194efa91982490f020e5a6f7da873a065b51bdc4a4ce6b7bf642c6c9d115fb",
+      "source_content_hash": "sha256:cf194efa91982490f020e5a6f7da873a065b51bdc4a4ce6b7bf642c6c9d115fb",
+      "source_mtime_ns": "1783548464619321106",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=residual-1-5-closure-2026-07-09.md"
+    },
+    "Findings/archive/v1_visual_layer_architecture.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:31b5ec884e1ff7f289ac849e9d56bb83a0e3adfd9b97201c620c11a32ac073bf",
+      "source_content_hash": "sha256:31b5ec884e1ff7f289ac849e9d56bb83a0e3adfd9b97201c620c11a32ac073bf",
+      "source_mtime_ns": "1780291914000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=v1_visual_layer_architecture.md"
+    },
+    "Findings/archive/v1_visual_layer_wave_closure_report.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "wiki_content_hash": "sha256:d86249ac7954a31e640eb9a0649a94f67864391d0bbf9ba838361ee4ebc8d82f",
+      "source_content_hash": "sha256:d86249ac7954a31e640eb9a0649a94f67864391d0bbf9ba838361ee4ebc8d82f",
+      "source_mtime_ns": "1780291914000000000",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10; wiki=v1_visual_layer_wave_closure_report.md"
+    },
+    "tests/test_init_seed.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:f4c68628fa5030a58ddd3f16509b1d49d670f2356aa261c7375a593c1d7d5196",
+      "source_mtime_ns": "1790833349686950715",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "tests/accuracy_fixtures.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:1518499c6e2db802ed32058e19a3e0a4c3fa9a5daa745dcea25416e637aeed19",
+      "source_mtime_ns": "1790834473637496894",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "tests/test_parser_accuracy.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:05:10",
+      "reason": "Wiki/summary reviewed against the 4.7.0 change (subid=review-4.7.0)",
+      "source_content_hash": "sha256:3533a0f10c67657f2dab12137461d1ecdb22981f94a8255637869ac92c87b6f0",
+      "source_mtime_ns": "1790834496716148565",
+      "last_meaningful_edit": "2026-10-01 18:05:10",
+      "last_wiki_refresh": "2026-10-01 18:05:10",
+      "freshness_provenance": "mark-green:2026-10-01 18:05:10"
+    },
+    "tests/test_regressions_4_7.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Regression tests: python -m exit code, case-exact submodules, check-changes after update-maps, diagnostics samples (subid=benchmark)",
+      "source_content_hash": "sha256:e1a287dd675bad01c2a7d70b394da989ed692f17a6fde95135bb3f59c4662ec2",
+      "source_mtime_ns": "1790843105362994698",
+      "public_symbols": "TestBarrelCache TestCacheStore TestCheckChanges TestCheckChangesAfterUpdateMaps TestCliCommands TestCyclesConsistency TestDaemon TestDeletion TestDerivedSummariesRefresh TestDiagnosticSamples TestHealingStatistics TestIncrementalDeletion TestJavascriptParser TestJournal TestLocking TestMcpAdapter TestModuleExitCode TestPathNormalization TestPending TestPrepareEdit TestProjectRootIsStrict TestPythonCaseExactSubmodules TestPythonParser TestServeApi TestStreaming run_cli",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
+    },
+    "Findings/2026-10-01-lookup-benchmark.md": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: New: benchmark method, results, what it found and known limits (subid=benchmark)",
+      "wiki_content_hash": "sha256:e2a220185c496d4381b0ad428eea2078157505e67e64fb55e659d2016002e852",
+      "source_content_hash": "sha256:e2a220185c496d4381b0ad428eea2078157505e67e64fb55e659d2016002e852",
+      "source_mtime_ns": "1790844266003245180",
+      "verification": "unchecked",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=2026-10-01-lookup-benchmark.md"
+    },
+    "scripts/benchmark_lookup.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: New: lookup benchmark vs grep on real repos, scored against an independent modulefinder reference, with a per-question token budget (subid=benchmark)",
+      "wiki_content_hash": "sha256:95af6893fd4252fb341c0c34a1041ef1ed9b6dc443a7f995e2632bf4d5ea1294",
+      "source_content_hash": "sha256:36cf65de9283426faab8b2306f8c5dfc9adf368d6edd4dd6cb8195765e1e3b50",
+      "source_mtime_ns": "1790844055740771742",
+      "public_symbols": "build_reference_graph copy_python_tree grep_importers main render_markdown run_benchmark score tokens",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=benchmark_lookup.py.wiki.md"
+    },
+    "tests/test_benchmark_lookup.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Tests for the benchmark reference resolver and end-to-end run (subid=benchmark)",
+      "source_content_hash": "sha256:7da1769b89208c691224b765bca55e63b55080fcd7f04a1450099b231c907120",
+      "source_mtime_ns": "1790843631182488962",
+      "public_symbols": "TestBenchmarkLookup",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
+    },
+    "tests/test_verification_and_batch.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: Tests for wiki verification, watch scope and record_changes (subid=trust-green, batch-record)",
+      "source_content_hash": "sha256:83e83c080c3da668036918b9b0046846a17700f0133f2c3398a95c19f21d16e4",
+      "source_mtime_ns": "1790843656632414196",
+      "public_symbols": "TestMarkGreenVerification TestPublicSymbols TestRecordChanges TestWatchScope",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22"
+    },
+    "wikifier/gitchanges.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:46:22",
+      "reason": "Wiki checked after: New: git change set (diff vs ref + untracked, project-relative) feeding record_changes (subid=batch-record)",
+      "wiki_content_hash": "sha256:338df9995967eb0cf420293f8c73c55c4d9f0cc204d2bda6ac82015d24c86dba",
+      "source_content_hash": "sha256:5f590b18f31559f96ca24f947b468f75dac93691d986c572aed7f7678804aa97",
+      "source_mtime_ns": "1790842425360205927",
+      "public_symbols": "EMPTY_TREE GitUnavailableError changed_files",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:46:22",
+      "last_wiki_refresh": "2026-10-01 18:46:22",
+      "freshness_provenance": "mark-green:2026-10-01 18:46:22; wiki=gitchanges.py.wiki.md"
+    },
+    "wikifier/health_pkg/verify.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:48:00",
+      "reason": "Wiki checked after: Import wiki helpers from wikis.py instead of freshness (cycle) (subid=trust-green)",
+      "wiki_content_hash": "sha256:d0e8282da3dbbe4f1e8ff740131c5d669fe63f35e21c8a5a49e3e6a6b1e0c385",
+      "source_content_hash": "sha256:5c2b1718be29813bbbef830105ca1055cf94abd4b0ad028a6a7bd75e6e08421b",
+      "source_mtime_ns": "1790844431810580330",
+      "public_symbols": "FORCED NO_WIKI UNCHECKED VERIFIED WikiVerificationError public_symbols symbols_field verify_wiki verify_wikis",
+      "verification": "verified",
+      "last_meaningful_edit": "2026-10-01 18:48:00",
+      "last_wiki_refresh": "2026-10-01 18:48:00",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:00; wiki=verify.py.wiki.md"
+    },
+    "wikifier/health_pkg/wikis.py": {
+      "status": "🟢 Green",
+      "last_updated": "2026-10-01 18:48:00",
+      "reason": "Wiki checked after: New: wiki location + sha256 helpers shared by freshness and verify (subid=trust-green)",
+      "source_content_hash": "sha256:667261a6b136a71cfd8c97469dc6a315b976844a32c734e05a0cff44efdbf06a",
+      "source_mtime_ns": "1790844431810295783",
+      "public_symbols": "",
+      "verification": "no_wiki",
+      "last_meaningful_edit": "2026-10-01 18:48:00",
+      "last_wiki_refresh": "2026-10-01 18:48:00",
+      "freshness_provenance": "mark-green:2026-10-01 18:48:00"
     }
   }
 }

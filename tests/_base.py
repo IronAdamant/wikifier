@@ -54,10 +54,6 @@ class TempProjectTestCase(unittest.TestCase):
         bree.reset_bree_engine()
         js._clear_parse_cache()
         js._clear_reexport_cache()
-        try:
-            js._clear_package_marker_cache()
-        except Exception:
-            pass
 
 
 def call_with_timeout(fn, *args, timeout=8.0, **kwargs):

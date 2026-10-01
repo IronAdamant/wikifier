@@ -33,7 +33,7 @@ There should be skills, and these should be automatically run by LLMs, though hu
 ## Core Principles (v0.3 + v0.4 evolution)
 
 - **Agent-first design**: Every command and file is optimized for LLM consumption and autonomous operation. (v0.4: Python library + Protocol v0.4 as primary surfaces per skills/run.md + m2 plan Workstream E).
-- **Zero external dependencies**: Only native OS tools (bash, find, grep, stat, date, sed, etc.) + pure stdlib Python. (v0.4: library enables full agent loop with zero shell for production use).
+- **Zero external dependencies**: pure stdlib Python; the `.sh` / `.ps1` / `.bat` launchers for macOS, Linux and Windows only start `python -m wikifier`, so every OS runs the same code.
 - **Semantic change tracking**: `record-change` captures *why* a change was made, not just that it happened. (Now available as `from wikifier import record_change` with structured returns + locking.)
 - **Health Matrix driven workflow**: 🔴 Red / 🟡 Yellow files must be addressed before new work. (Library `health()` + `check_changes()` + `mark_green()` provide the clean API.)
 - **Heartbeat monitoring**: Passive background `monitor` loop keeps the wiki fresh without constant LLM attention.

@@ -1,4 +1,4 @@
-"""Health workflow tests (Phase 0 of Findings/2026-06-10-Fix-Plan.md).
+"""Health workflow tests (Phase 0 of Findings/archive/2026-06-10-Fix-Plan.md).
 
 Desired contract:
 - record-change -> 🟡 Yellow entry + pending_updates.md line + journal entry

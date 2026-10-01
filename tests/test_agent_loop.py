@@ -172,7 +172,11 @@ class TestPrepareEditAndJournal(TempProjectTestCase):
                 "confidence_score": 0.9,
             }],
         )
-        cache["_reverse_dependencies"] = {"pkg/x.py": ["pkg/z.py"]}
+        self.write("pkg/z.py", "from pkg import x\n")
+        ic.update_file_data(
+            cache, "pkg/z.py", mtime=1, imports=["pkg.x"],
+            resolved_pairs=[{"raw": "pkg.x", "resolved": "pkg/x.py", "confidence_score": 0.9}],
+        )
         ic.save_cache(self.root, cache)
         pe = prepare_edit("pkg/x.py", project_root=self.root)
         self.assertTrue(pe.get("success"))
@@ -299,7 +303,8 @@ class TestPrepareEditReverseShapes(TempProjectTestCase):
         self.assertTrue(pe.get("success"))
         self.assertIn("lib/a.py", pe.get("dependents") or [])
 
-        # Nested index shape
+        # Nested index shape (helper only: prepare_edit reads the indexed edge table,
+        # so reverse-map entries without a backing edge are not reported there)
         cache_nest = {
             "lib/t.py": {"mtime": 1, "resolved_pairs": []},
             "_reverse_dependencies": {
@@ -309,10 +314,6 @@ class TestPrepareEditReverseShapes(TempProjectTestCase):
         }
         deps2 = resolve_dependents_from_cache(cache_nest, "lib/t.py")
         self.assertEqual(set(deps2), {"lib/nested1.py", "lib/nested2.py"})
-        ic.save_cache(self.root, cache_nest)
-        pe2 = prepare_edit("lib/t.py", project_root=self.root)
-        self.assertTrue(pe2.get("success"))
-        self.assertIn("lib/nested1.py", pe2.get("dependents") or [])
 
         # Dict value shape
         cache_dict = {

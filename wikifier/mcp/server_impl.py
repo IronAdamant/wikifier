@@ -1,183 +1,83 @@
 from __future__ import annotations
 
 """
-Wikifier MCP server — agent-to-agent wiki (optional `pip install wikifier[mcp]`).
+Wikifier MCP server — thin adapter over :mod:`wikifier.api` (optional extra).
 
-AGENT MAP — Core daily surface (start here every session):
-  1. session_bootstrap      — one-shot root + health + attention + dispatchable actions
-  2. check_changes          — content-honest dirty / ghosts → yellow/red
-  3. prepare_edit           — single-file preflight (wiki/status/deps/dependents)
-  4. suggest_next_actions   — structured actions[] + selective prose (never full-tree re-wiki)
-  5. record_change          — semantic why (mandatory after edits)
-  6. mark_green             — trust baseline (captures source content hash)
+Core daily surface (start here every session):
+  session_bootstrap → check_changes → prepare_edit → (edit) → record_change → mark_green
+  suggest_next_actions for selective work.
 
-Also useful core: get_file_wiki, why_file, search_journal, get_files_needing_attention
+Every tool accepts ``project_root``; an explicit root that does not exist is an
+error (never a silent fallback). Read tools never write state. Mutating tools
+run under an in-process deadline; on ``timed_out`` the operation may still
+finish in the background — call ``why_file`` before retrying (journal writes
+de-duplicate identical retries).
 
-Advanced intel (non-core): list_paths (depth-1 folder card), get_dependencies, get_dependents,
-  get_cycles, get_barrel_reports, get_resolution_diagnostics, health(format=json) full intel
-Always pass project_root= for external trees. Deep import maps: Python + JS/TS.
-Run: WIKIFIER_PROJECT_ROOT=/path wikifier-mcp  |  python -m wikifier.mcp.server
+Run: ``WIKIFIER_PROJECT_ROOT=/path wikifier-mcp`` or ``python -m wikifier.mcp.server``.
 """
 
 try:
     from mcp.server.fastmcp import FastMCP
-    from pydantic import BaseModel, Field
-except (ImportError, ModuleNotFoundError) as _e:
+    from pydantic import BaseModel
+except ImportError as _e:  # pragma: no cover - exercised only without the extra
     raise ImportError(
         "The Wikifier MCP server requires the optional 'mcp' extra "
-        "(v1 FastMCP: pip install 'wikifier[mcp]' with mcp>=1,<2). "
-        "The core wikifier CLI and library work without it."
+        "(pip install 'wikifier[mcp]', mcp>=1,<2). The core CLI and library work without it."
     ) from _e
-import subprocess
-import re
+
 import os
-import sys
-import json
-from pathlib import Path
-from typing import Literal, Optional, List, Dict, Any
+import time
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
 
-from .deadline import (
-    MCP_INPROCESS_DEADLINE_S,
-    call_with_deadline as _call_with_deadline,
-)
+from wikifier import api
+from wikifier import cache_store as cs
+from wikifier import health_pkg as health_mod
+from wikifier import import_cache as ic
+from wikifier.paths import ProjectPathError, ProjectRootError, resolve_root, to_rel
+
+from .deadline import MCP_INPROCESS_DEADLINE_S, call_with_deadline as _call_with_deadline
 from .status_ops import run_files_needing_attention, run_project_status
-
-# R6: reuse the canonical script locator (avoids hard ./wikifier.sh assumption in external installs)
-# Gap #1 External: reuse the unified discover_project_root (CLI + shell mirrored) so MCP benefits from
-# the same robust marker/common-project logic and never falls back to package dir for PROJECT_ROOT.
-try:
-    from wikifier.cli import (
-        get_script_path as _get_wikifier_script_path,
-        discover_project_root as _cli_discover_project_root,
-        _get_effective_root as _cli_get_effective_root,  # Workstream E: central shared helper for clean API + thin MCP/CLI consumers
-    )
-except Exception:
-    _get_wikifier_script_path = None
-    _cli_discover_project_root = None
-    _cli_get_effective_root = None
 
 mcp = FastMCP("Wikifier")
 
 
 def _discover_project_root() -> Path:
-    """
-    Determine the target project root for this Wikifier MCP instance.
-
-    Delegates to the unified canonical helper in cli.py (Gap #1 External/Packaged robustness).
-    The helper implements marker-driven + common-project-root discovery and safe CWD fallback.
-    Kept for backward compat + any MCP-specific extras (e.g. .mcp.json detection).
-    """
-    if _cli_discover_project_root is not None:
-        try:
-            return _cli_discover_project_root()
-        except Exception:
-            pass  # fall through to local logic
-
-    # Local fallback (kept for resilience if cli import failed); includes the .mcp.json extra
-    # 1. Explicit override via environment variable
-    env_root = os.environ.get("WIKIFIER_PROJECT_ROOT")
-    if env_root:
-        p = Path(env_root).expanduser().resolve()
-        if p.exists():
-            return p
-
-    # 2. Walk upward from current working directory
-    cwd = Path.cwd().resolve()
-    for parent in [cwd] + list(cwd.parents):
-        if (parent / "monitored_paths.txt").exists() or (parent / ".wikifier").is_dir():
-            return parent
-
-    # 3. Try to detect from common MCP connection files (e.g. .mcp.json in project root)
-    for parent in [cwd] + list(cwd.parents):
-        mcp_config = parent / ".mcp.json"
-        if mcp_config.exists():
-            try:
-                import json
-                with open(mcp_config) as f:
-                    config = json.load(f)
-                if "wikifier" in config.get("mcpServers", {}):
-                    return parent
-            except Exception:
-                pass
-
-    # 4. Sensible default: CWD (never the old package dir for external packaged reliability)
-    return cwd
+    try:
+        return resolve_root()
+    except ProjectRootError:
+        return Path.cwd().resolve()
 
 
 WIKIFIER_ROOT = _discover_project_root()
 
 
 def _get_effective_root(project_root: Optional[str] = None) -> Path:
-    """
-    Resolve the project root to use for a given operation.
-    Workstream E (clean public API): thin delegation to shared _get_effective_root in cli.py
-    (the library implementation). Falls back to local logic only if import failed at load.
-    This eliminates duplication and ensures parity between library callers and MCP tools.
-    """
-    if _cli_get_effective_root is not None:
-        try:
-            return _cli_get_effective_root(project_root)
-        except Exception:
-            pass  # fall to local resilience
-    # Fallback (import failed or error): original MCP logic (explicit/env + startup root)
-    if project_root:
-        p = Path(project_root).expanduser().resolve()
-        if p.exists():
-            return p
-    env_root = os.environ.get("WIKIFIER_PROJECT_ROOT")
-    if env_root:
-        p = Path(env_root).expanduser().resolve()
-        if p.exists():
-            return p
-    return WIKIFIER_ROOT  # the one discovered at startup
+    """Explicit ``project_root`` (must exist) → env → the root discovered at startup."""
+    if project_root or os.environ.get("WIKIFIER_PROJECT_ROOT"):
+        return resolve_root(project_root)
+    return WIKIFIER_ROOT
 
 
-# =============================================================================
-# Pydantic Models for Structured Output
-# =============================================================================
-
-class DependencyInfo(BaseModel):
-    module: str
-    resolved_file: Optional[str] = None
-    is_resolved: bool = False
+def _root_error(exc: BaseException, project_root: Optional[str], **extra: Any) -> Dict[str, Any]:
+    out = {"success": False, "project_root": str(project_root or ""), "error": str(exc), "error_type": type(exc).__name__}
+    out.update(extra)
+    return out
 
 
-class FileDependencies(BaseModel):
-    file: str
-    dependencies: List[DependencyInfo]
-    dependents: List[str] = Field(default_factory=list)
-
-
-class ProjectHealthSummary(BaseModel):
-    total_files: int
-    green: int
-    yellow: int
-    red: int
-    pending_updates: int
-    last_check: Optional[str] = None
-    health_score: str  # e.g. "Good", "Needs Attention", "Critical"
-
-
-class ResolutionQuality(BaseModel):
-    total_internal_imports: int
-    resolved: int
-    unresolved: int
-    resolution_rate: float
-    assessment: str
+def _with_deadline(fn, timeout_s: Optional[float], **kwargs: Any) -> Dict[str, Any]:
+    t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
+    res = _call_with_deadline(fn, timeout_s=t, timeout=t, **kwargs)
+    if isinstance(res, dict) and res.get("timed_out"):
+        res.setdefault("project_root", str(kwargs.get("project_root") or ""))
+        res["may_still_complete"] = True
+        res["hint"] = "The call may finish in the background; check why_file/health before retrying."
+    return res
 
 
 class UpdateMapsResult(BaseModel):
-    """Structured result from running update_maps.
-
-    Wave 5: now supports use_python_primary for direct run_full_update (deeper pure-Py
-    pipeline + barrel/creative) without shell; falls back to sh path otherwise.
-
-    A2 early (Partial Results & UX Scaffolding): added directory + max_files passthrough
-    to python-primary path for subtree scoping + budget. Result now carries partial,
-    scope, progress, partial_reason, continuation_hint etc. when python-primary used
-    (enables trustworthy partial results even on interrupt/budget/scoped runs).
-    """
+    """Structured update_maps result (map_complete=false means re-run with the same scope)."""
     success: bool
     project_root: str
     full_rebuild: bool
@@ -185,355 +85,148 @@ class UpdateMapsResult(BaseModel):
     edges_drawn: int
     duration_seconds: Optional[float] = None
     message: str
-    incremental: bool = True  # whether it used the cache or was a full rebuild
-    used_python_primary: bool = False  # Wave 5: indicates direct pure path was taken
+    incremental: bool = True
+    used_python_primary: bool = True
     files_to_reparse: int = 0
     persist_exercised: bool = False
-    barrel_creative_tied: bool = False  # Wave 6: Gap#1 barrel + creative signals exercised under pure primary path (for ACS/CIABRE surfaces)
-    # A2 early partial/scoping UX (populated in python-primary path; defaults for sh path)
     partial: bool = False
     partial_reason: Optional[str] = None
     scope: Optional[Dict[str, Any]] = None
     progress: Optional[Dict[str, Any]] = None
     continuation_hint: Optional[str] = None
+    map_complete: Optional[bool] = None
+    error: Optional[str] = None
 
 
 # =============================================================================
-# Helper Functions
-# =============================================================================
-
-def _run_wikifier_command(cmd: str, args: list[str] | None = None, check: bool = True, root: Optional[Path] = None) -> str:
-    """
-    Run a wikifier command against a specific project root (R6 hardened for external/monorepo).
-
-    Uses the installed script path (not fragile ./wikifier.sh in cwd) + explicit
-    WIKIFIER_PROJECT_ROOT in env. This eliminates "sh-not-found" on pip-installed
-    usage against external codebases and large monorepos.
-    """
-    root = root or WIKIFIER_ROOT
-    args = args or []
-
-    # Prefer canonical installed script locator; fall back to PATH "wikifier" or python -m
-    if _get_wikifier_script_path is not None:
-        try:
-            script = str(_get_wikifier_script_path())
-            full_cmd = [script, cmd] + args
-        except Exception:
-            full_cmd = ["wikifier", cmd] + args
-    else:
-        full_cmd = ["wikifier", cmd] + args
-
-    # Always force the target project via env (sh and inner python now respect it)
-    child_env = os.environ.copy()
-    child_env["WIKIFIER_PROJECT_ROOT"] = str(root)
-
-    try:
-        result = subprocess.run(
-            full_cmd,
-            cwd=root,  # still useful for relative finds inside some commands
-            capture_output=True,
-            text=True,
-            check=check,
-            env=child_env,
-            timeout=60,  # M5.1 MCP reliability hardening (gap2): default 60s to prevent indefinite hang/6000s client timeout on large BRC (alt ~20+ yellows from AdversarialScaffoldGenerator/CrossMCPRecipeValidator/MCPOrchestrationDashboard etc w/ chains, Consistency~1k, llvm 168k u); <30s target per DoD#2; better than prior no-timeout.
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        error_msg = (e.stderr or "").strip() or str(e)
-        if check:
-            raise RuntimeError(f"Wikifier command '{cmd}' failed on {root}: {error_msg}")
-        return f"Error: {error_msg}"
-    except subprocess.TimeoutExpired as e:
-        error_msg = (
-            f"command '{cmd}' exceeded the 60s timeout on {root}. "
-            "Large or barrel-heavy projects can exceed this via the shell path; "
-            "use the Python library equivalents (e.g. update_maps with "
-            "use_python_primary=True) or scope the run with directory=/max_files="
-        )
-        if check:
-            raise RuntimeError(f"Wikifier command '{cmd}' timed out on {root}: {error_msg}")
-        return f"Error: timeout: {error_msg}"
-    except FileNotFoundError:
-        # Last resort: try python -m invocation (covers some packaged layouts)
-        try:
-            py_cmd = [sys.executable, "-m", "wikifier", cmd] + args
-            result = subprocess.run(
-                py_cmd,
-                cwd=root,
-                capture_output=True,
-                text=True,
-                check=check,
-                env=child_env,
-                timeout=60,
-            )
-            return result.stdout.strip()
-        except subprocess.TimeoutExpired as ee:
-            return f"Error: timeout after 60s (python-m fallback): {ee}"
-        except Exception as ee:
-            raise RuntimeError(f"Wikifier command failed: could not locate wikifier launcher for project {root} ({ee})")
-    except Exception as e:
-        raise RuntimeError(f"Unexpected error running '{cmd}' in {root}: {str(e)}")
-
-
-def _read_file_safe(relative_path: str, root: Optional[Path] = None) -> str:
-    """Read a file relative to a specific project root."""
-    root = root or WIKIFIER_ROOT
-    path = root / relative_path
-    if path.exists():
-        return path.read_text(encoding="utf-8")
-    return f"File not found: {relative_path}"
-
-
-def _parse_resolved_dependencies(root: Optional[Path] = None) -> dict[str, list[str]]:
-    """Parse the Resolved Internal Dependencies table from library.md."""
-    root = root or WIKIFIER_ROOT
-    library = _read_file_safe("library.md", root=root)
-    if "Resolved Internal Dependencies" not in library:
-        return {}
-
-    # Find the table section
-    match = re.search(
-        r"## Resolved Internal Dependencies.*?\n\| Source File.*?\n\|---.*?\n(.*?)(?=\n##|\Z)",
-        library,
-        re.DOTALL
-    )
-    if not match:
-        return {}
-
-    table_body = match.group(1)
-    reverse_map: dict[str, list[str]] = {}
-
-    for line in table_body.strip().splitlines():
-        if not line.strip() or not line.startswith("|"):
-            continue
-        parts = [p.strip() for p in line.split("|") if p.strip()]
-        if len(parts) < 2:
-            continue
-        source = parts[0]
-        # Format is usually: "module → target_file"
-        if "→" in parts[1]:
-            target = parts[1].split("→")[-1].strip()
-            if target not in reverse_map:
-                reverse_map[target] = []
-            reverse_map[target].append(source)
-
-    return reverse_map
-
-
-def _get_resolved_from_cache(file: str, root: Path) -> list[dict]:
-    """
-    Fallback: Get resolved dependencies for a file directly from import_cache.json.
-    R2/P2: returns the *full* rich per-edge model (ACS canonical + CDIA + Resolution + diagnostics):
-    - ACS (via contracts R2): confidence_score, confidence_reasons, confidence_explanation (prescriptive)
-    - CDIA: conditional_analysis/dynamic_analysis with tags + real analysis_trace evidence
-    - Phase 4: strategy + resolution_metadata
-    - All fields enable high-quality agent decisions at any scale.
-    """
-    try:
-        import wikifier.import_cache as import_cache
-        cache = import_cache.load_cache(root)
-        data = cache.get(file, {})
-        pairs = data.get("resolved_pairs", [])
-        if pairs:
-            rich = []
-            for p in pairs:
-                if not p.get("resolved"):
-                    continue
-                item = {
-                    "raw": p.get("raw"),
-                    "resolved": p.get("resolved"),
-                    "confidence": p.get("confidence", "medium"),
-                    "is_dynamic": p.get("is_dynamic", False),
-                    "dynamic_type": p.get("dynamic_type", "static"),
-                    "is_conditional": p.get("is_conditional", False),
-                    "conditional_context": p.get("conditional_context"),
-                    "via_barrel": p.get("via_barrel", False),
-                    "barrel_depth": p.get("barrel_depth"),
-                    "barrel_chain": p.get("barrel_chain"),
-                    # P2 ACS + rich signals (now first-class in output) + F2 explanation
-                    "confidence_score": p.get("confidence_score"),
-                    "confidence_reasons": p.get("confidence_reasons", []),
-                    "confidence_explanation": p.get("confidence_explanation"),
-                    "strategy": p.get("strategy"),
-                    "resolution_metadata": p.get("resolution_metadata"),
-                    "conditional_analysis": p.get("conditional_analysis") or (p.get("cdia", {}).get("conditional_analysis") if isinstance(p.get("cdia"), dict) else None),
-                    "dynamic_analysis": p.get("dynamic_analysis") or (p.get("cdia", {}).get("dynamic_analysis") if isinstance(p.get("cdia"), dict) else None),
-                    "diagnostic": p.get("diagnostic"),
-                    "cdia": p.get("cdia"),
-                    "expr_raw": p.get("expr_raw"),
-                    "analysis_notes": p.get("analysis_notes"),
-                }
-                rich.append(item)
-            return rich
-        # Fallback to flat list (older cache format)
-        resolved = data.get("resolved", [])
-        return [{"raw": None, "resolved": r, "confidence": "medium", "confidence_reasons": []} for r in resolved]
-    except Exception:
-        return []
-
-
-# =============================================================================
-# Core Tools
+# Core workflow
 # =============================================================================
 
 @mcp.tool()
-def check_changes(
-    project_root: Optional[str] = None,
-    timeout_s: Optional[float] = None,
-) -> dict:
-    """
-    Scan for file changes and update the health matrix (Workstream E: thin library consumer).
-
-    Delegates directly to the Python library `wikifier.check_changes` (pure primary path,
-    structured return, locking, journal/pending/health side effects). No subprocess shell
-    for this core mandatory tool. Falls back to sh only on import/runtime error.
-    """
-    root = _get_effective_root(project_root)
+def check_changes(project_root: Optional[str] = None, timeout_s: Optional[float] = None) -> dict:
+    """Detect content changes under monitored_paths; flag them Yellow (content-honest)."""
     try:
-        from wikifier.cli import check_changes as _lib_check
-        t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
-        res = _call_with_deadline(
-            _lib_check, project_root=str(root), timeout=t, timeout_s=t
-        )
-        if isinstance(res, dict) and res.get("timed_out"):
-            res.setdefault("project_root", str(root))
-            return res
-        # Enrich with MCP-specific barrel view if not present (best effort, non breaking)
-        if "barrel_invalidation_summary" not in res or not res.get("barrel_invalidation_summary"):
-            try:
-                import wikifier.import_cache as ic
-                cache = ic.load_cache(root) or {}
-                res["barrel_invalidation_summary"] = ic.get_barrel_cache_summary(cache) or {}
-            except Exception:
-                pass
-        res.setdefault("rich_auto_yellow_via", "Python library check_changes (MCP thin)")
-        return res
-    except Exception as e:
-        # Resilient fallback to previous sh path (preserves behavior if lib unavailable)
-        try:
-            output = _run_wikifier_command("check-changes", root=root)
-            return {
-                "success": True,
-                "project_root": str(root),
-                "message": output,
-                "recommendation": "Read file_health.md and pending_updates.md, then prioritize Red → Yellow files.",
-                "fallback": "sh",
-                "error_detail": str(e),
-            }
-        except Exception as e2:
-            return {"success": False, "project_root": str(root), "error": f"lib+sh failed: {e} / {e2}"}
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+    return _with_deadline(api.check_changes, timeout_s, project_root=str(root))
 
 
 @mcp.tool()
-def record_change(
-    file: str,
-    reason: str,
-    project_root: Optional[str] = None,
-    timeout_s: Optional[float] = None,
-) -> dict:
-    """Record a semantic change. Required after edits. Returns structured result.
-    (Workstream E: thin direct call to library; no shell for core mandatory workflow.)
-    """
-    root = _get_effective_root(project_root)
+def record_change(file: str, reason: str, project_root: Optional[str] = None, timeout_s: Optional[float] = None) -> dict:
+    """Record why a file was edited (journal + Yellow + pending). Required after every edit."""
     try:
-        from wikifier.cli import record_change as _lib_record
-        t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
-        res = _call_with_deadline(
-            _lib_record, file=file, reason=reason, project_root=str(root), timeout=t, timeout_s=t
-        )
-        if isinstance(res, dict):
-            return res
-        return _lib_record(file=file, reason=reason, project_root=str(root), timeout=t)
-    except Exception as e:
-        # Fallback for resilience
-        try:
-            output = _run_wikifier_command("record-change", [file, reason], root=root)
-            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh", "error_detail": str(e)}
-        except Exception as e2:
-            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file)
+    return _with_deadline(api.record_change, timeout_s, file=file, reason=reason, project_root=str(root))
 
 
 @mcp.tool()
 def record_deletion(file: str, reason: str, project_root: Optional[str] = None) -> dict:
-    """Record the deletion of a file with a reason. Returns structured result (final robustness).
-    (Workstream E thin library consumer.)
-    """
-    root = _get_effective_root(project_root)
+    """Record an intentional deletion (Red audit row, journal, graph cleanup)."""
     try:
-        from wikifier.cli import record_deletion as _lib_del
-        return _lib_del(file=file, reason=reason, project_root=str(root))
-    except Exception as e:
-        try:
-            output = _run_wikifier_command("record-deletion", [file, reason], root=root)
-            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh"}
-        except Exception as e2:
-            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file)
+    return api.record_deletion(file, reason, project_root=str(root))
 
 
 @mcp.tool()
 def mark_green(
     file: str,
     reason: str = "",
+    force: bool = False,
     project_root: Optional[str] = None,
     timeout_s: Optional[float] = None,
 ) -> dict:
-    """Mark a file as Green after updating its wiki summary. Returns structured result.
-    (Workstream E: thin library consumer.)
-    """
-    root = _get_effective_root(project_root)
+    """Mark a file Green after refreshing its wiki. The wiki is checked against the
+    code first: if public symbols were added/removed and the wiki does not reflect
+    it, this fails with issues[] (force=True + reason overrides, recorded as forced)."""
     try:
-        from wikifier.cli import mark_green as _lib_mark
-        t = MCP_INPROCESS_DEADLINE_S if timeout_s is None else timeout_s
-        res = _call_with_deadline(
-            _lib_mark, file=file, reason=reason, project_root=str(root), timeout=t, timeout_s=t
-        )
-        if isinstance(res, dict):
-            return res
-        return _lib_mark(file=file, reason=reason, project_root=str(root), timeout=t)
-    except Exception as e:
-        try:
-            args = [file, reason] if reason else [file]
-            output = _run_wikifier_command("mark-green", args, root=root)
-            return {"success": True, "file": file, "message": output, "project_root": str(root), "fallback": "sh"}
-        except Exception as e2:
-            return {"success": False, "file": file, "project_root": str(root), "error": f"lib+sh: {e}/{e2}"}
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file)
+    return _with_deadline(api.mark_green, timeout_s, file=file, reason=reason, force=force, project_root=str(root))
+
+
+@mcp.tool()
+def record_changes(
+    reasons: Optional[Dict[str, str]] = None,
+    default_reason: Optional[str] = None,
+    since: Optional[str] = None,
+    green: bool = False,
+    dry_run: bool = False,
+    only: Optional[List[str]] = None,
+    project_root: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+) -> dict:
+    """Record every file git reports as changed in one call. reasons maps a path,
+    glob (tests/*.py) or dir/ prefix to a reason; default_reason covers the rest.
+    Missing reasons → nothing written, template returned. since = git ref
+    (default HEAD). green=True then marks each Green (wiki checks apply).
+    only limits the batch to paths/globs/dir/ (skip changes you did not make)."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+    return _with_deadline(
+        api.record_changes, timeout_s, reasons=reasons, default_reason=default_reason,
+        since=since, green=green, dry_run=dry_run, only=only, project_root=str(root),
+    )
+
+
+@mcp.tool()
+def verify_wikis(directory: Optional[str] = None, limit: int = 200, project_root: Optional[str] = None) -> dict:
+    """Check Green files' wikis against their code (read-only): failing files,
+    Green breakdown (verified / no_wiki / unchecked / forced / legacy), coverage."""
+    try:
+        return api.verify_wikis(project_root=str(_get_effective_root(project_root)), directory=directory, limit=limit)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
 
 
 @mcp.tool()
 def prepare_edit(file: str, project_root: Optional[str] = None) -> dict:
-    """Single-file preflight: status, wiki snippet, deps, dependents, cycle/ACS flags.
-
-    Core daily surface — call before substantial edits instead of chaining many tools.
-    """
-    root = _get_effective_root(project_root)
+    """Single-file preflight: status, wiki, dependencies, dependents, cycle flag."""
     try:
-        from wikifier.cli import prepare_edit as _lib_pe
-        res = _lib_pe(file, project_root=root)
-        if isinstance(res, dict):
-            return res
-        return {"success": True, "file": file, "project_root": str(root), "message": str(res)}
-    except Exception as e:
-        return {
-            "success": False,
-            "file": file,
-            "error": str(e),
-            "project_root": str(root),
-        }
+        return api.prepare_edit(file, project_root=str(_get_effective_root(project_root)))
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file)
 
 
 @mcp.tool()
-def session_bootstrap(
+def session_bootstrap(project_root: Optional[str] = None, directory: Optional[str] = None) -> dict:
+    """One-shot session start: root, readiness, health, attention, actions[], folder map."""
+    try:
+        return api.session_bootstrap(project_root=str(_get_effective_root(project_root)), directory=directory)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+
+
+@mcp.tool()
+def suggest_next_actions(
     project_root: Optional[str] = None,
     directory: Optional[str] = None,
-) -> dict:
-    """One-shot agent session start: root, readiness, health taxonomy, attention, actions[], map_index."""
-    root = _get_effective_root(project_root)
+    format: Literal["text", "json"] = "json",
+) -> str | dict:
+    """Selective next steps: 🔴 then actionable 🟡 (never full-tree re-wiki); JSON has actions[]."""
     try:
-        from wikifier.cli import session_bootstrap as _lib_sb
-        return _lib_sb(project_root=root, directory=directory)
-    except Exception as e:
-        return {"success": False, "project_root": str(root), "error": str(e)}
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    return api.suggest_next_actions(project_root=str(root), directory=directory, format=format)
 
+
+@mcp.tool()
+def list_core_tools() -> dict:
+    """Core daily tools vs advanced intel (prefer Core every session)."""
+    return api.list_core_tools()
+
+
+# =============================================================================
+# Lookup
+# =============================================================================
 
 @mcp.tool()
 def list_paths(
@@ -543,25 +236,15 @@ def list_paths(
     max_files: Optional[int] = None,
     depth: int = 1,
 ) -> dict:
-    """Names-only folder map (default depth=1: immediate children).
+    """Names-only folder card (depth=1) or recursive listing (depth=0, cap with max_files).
 
-    Each directory is a small card. Pass prefix to expand one folder.
-    depth=0 lists recursively (cap with max_files). Files hop to
-    prepare_edit (deps/dependents); child folders hop to list_paths.
-    Does not parse library.md or emit mermaid.
+    Child folders hop to list_paths; files hop to prepare_edit.
     """
-    root = _get_effective_root(project_root)
     try:
-        from wikifier.cli import list_paths as _lib_lp
-        return _lib_lp(
-            prefix=prefix,
-            directory=directory,
-            project_root=root,
-            max_files=max_files,
-            depth=depth,
-        )
-    except Exception as e:
-        return {"success": False, "project_root": str(root), "error": str(e)}
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+    return api.list_paths(prefix=prefix, directory=directory, project_root=str(root), max_files=max_files, depth=depth)
 
 
 @mcp.tool()
@@ -571,755 +254,116 @@ def search_journal(
     project_root: Optional[str] = None,
     max_results: int = 20,
 ) -> dict:
-    """Search journal semantic trail by query and/or file path."""
-    root = _get_effective_root(project_root)
+    """Search the journal (semantic audit trail) by text and/or file."""
     try:
-        from wikifier.cli import search_journal as _lib_sj
-        return _lib_sj(project_root=root, query=query, file=file, max_results=max_results)
-    except Exception as e:
-        return {"success": False, "project_root": str(root), "error": str(e)}
-
-
-@mcp.tool()
-def why_file(
-    file: str,
-    project_root: Optional[str] = None,
-    max_results: int = 10,
-) -> dict:
-    """Health reason + recent journal entries explaining why a file needs attention."""
-    root = _get_effective_root(project_root)
-    try:
-        from wikifier.cli import why_file as _lib_wf
-        return _lib_wf(file, project_root=root, max_results=max_results)
-    except Exception as e:
-        return {"success": False, "file": file, "project_root": str(root), "error": str(e)}
-
-
-@mcp.tool()
-def seed_source_content_hashes(
-    project_root: Optional[str] = None,
-    only_green: bool = True,
-    force: bool = False,
-    directory: Optional[str] = None,
-) -> dict:
-    """Seed source_content_hash for Green entries without mass Yellow thrash (migration)."""
-    root = _get_effective_root(project_root)
-    try:
-        from wikifier.cli import seed_source_content_hashes as _lib_seed
-        return _lib_seed(project_root=root, only_green=only_green, force=force, directory=directory)
-    except Exception as e:
-        return {"success": False, "project_root": str(root), "error": str(e)}
-
-
-@mcp.tool()
-def list_core_tools() -> dict:
-    """List Core daily agent tools vs advanced intel (prefer Core every session)."""
-    try:
-        from wikifier.cli import list_core_tools as _lib_lct
-        return _lib_lct()
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-@mcp.tool()
-def update_maps(
-    project_root: Optional[str] = None,
-    full: bool = False,
-    use_python_primary: bool = True,
-    # A2 early Partial Results & UX Scaffolding: subtree scoping + budget passthrough to python-primary
-    directory: Optional[str] = None,
-    max_files: Optional[int] = None,
-    # Micro-step 3: explicit streaming params (additive, BC)
-    scope: Optional[Dict[str, Any]] = None,
-    resume_from: Optional[str] = None,
-    time_budget_ms: Optional[float] = None,
-) -> UpdateMapsResult:
-    """Rebuild library.md with fresh dependency analysis for the target project.
-
-    Wave 5: `use_python_primary=True` wires direct run_full_update() (deeper pipeline
-    from cli.py: dirty+parse+persist+barrel/creative tie-in, no sh) for packaged
-    external robustness. Falls back to robust _run_wikifier_command (sh) if not or error.
-    Explicit flag matches CLI --python-primary and daemon wiring.
-
-    A2 early: `directory` (subtree filter, e.g. "src/") and `max_files` (budget) are
-    forwarded only to the python-primary path. When used, result includes `partial`,
-    `scope`, `progress`, `partial_reason`, `continuation_hint` making partial results
-    trustworthy and usable even if interrupted or budget-limited. Sh path unchanged.
-    """
-    root = _get_effective_root(project_root)
-    # Micro-step 3 mapping (thin, additive)
-    if resume_from and "resume_token" not in locals():
-        resume_token = resume_from
-    if time_budget_ms is not None and "max_time" not in locals():
-        max_time = (time_budget_ms / 1000.0) if time_budget_ms > 1000 else time_budget_ms
-    if scope and isinstance(scope, dict) and not directory:
-        directory = scope.get("directory") or scope.get("dir") or directory
-
-    used_primary = False
-    files_reparse = 0
-    persist_done = False
-
-    if use_python_primary:
-        try:
-            from wikifier.cli import run_full_update
-            import time
-            start = time.time()
-            res = run_full_update(
-                root=root,
-                force_full=full,
-                verbose=False,
-                use_canonical=True,
-                use_python_primary=True,
-                directory=directory,
-                max_files=max_files,
-            )
-            duration = time.time() - start
-            used_primary = True
-            files_reparse = res.get("files_to_reparse", 0)
-            persist_done = bool(res.get("persist_pipeline_exercised"))
-            # Construct rich message from the pure path result (now includes A2 partial info)
-            partial_flag = res.get("partial", False)
-            scope = res.get("scope")
-            prog = res.get("progress")
-            hint = res.get("continuation_hint")
-            msg = f"Python-primary: success={res.get('success')} files={files_reparse} persist={persist_done} barrel_creative_tied={res.get('barrel_creative_tied_in_pure_path')} partial={partial_flag} scope={scope} note={str(res.get('note',''))[:150]}"
-            return UpdateMapsResult(
-                success=bool(res.get("success")),
-                project_root=str(root),
-                full_rebuild=full,
-                files_analyzed=files_reparse,
-                edges_drawn=0,  # full edges in library.md side effect of persist
-                duration_seconds=round(duration, 2),
-                message=msg,
-                incremental=not full,
-                used_python_primary=True,
-                files_to_reparse=files_reparse,
-                persist_exercised=persist_done,
-                barrel_creative_tied=bool(res.get("barrel_creative_tied_in_pure_path")),
-                partial=partial_flag,
-                partial_reason=res.get("partial_reason"),
-                scope=scope,
-                progress=prog,
-                continuation_hint=hint,
-            )
-        except Exception as ex:
-            # fall through to sh path (best-effort, still robust)
-            pass
-
-    # Original sh path (R6 hardened)
-    args = []
-    if full:
-        args = ["--full"]
-
-    import time
-    start = time.time()
-    output = _run_wikifier_command("update-maps", args, root=root)
-    duration = time.time() - start
-
-    # Try to extract some stats from the output
-    edges = 0
-    files_analyzed = 0
-    for line in output.splitlines():
-        if "edges drawn" in line:
-            try:
-                edges = int(line.split()[-2])
-            except (ValueError, IndexError):
-                pass
-        if "Files analyzed" in line or "Python:" in line:
-            # Rough extraction
-            pass
-
-    return UpdateMapsResult(
-        success=True,
-        project_root=str(root),
-        full_rebuild=full,
-        files_analyzed=files_analyzed or 0,
-        edges_drawn=edges,
-        duration_seconds=round(duration, 2),
-        message=output[-500:] if len(output) > 500 else output,  # last part of output
-        incremental=not full,
-        used_python_primary=False,
-        files_to_reparse=0,
-        persist_exercised=False,
-        barrel_creative_tied=False,
-        # A2 fields default for sh path (no partial info from sh yet)
-        partial=False,
-        partial_reason=None,
-        scope={"note": "sh_path_no_scope_support_yet"},
-        progress=None,
-        continuation_hint=None,
-    )
-
-
-@mcp.tool()
-def health(
-    project_root: Optional[str] = None,
-    directory: Optional[str] = None,
-    format: Literal["text", "json", "summary"] = "text"
-) -> str | dict:
-    """
-    Return the current Documentation Health Matrix.
-
-    This now uses the fast scalable Python backend (wikifier.health) for
-    large repositories.
-
-    R2 ACS + CIABRE surfacing uniformity: when format="json", includes "dependency_intel"
-    with _acs_summary (avg/low-conf + full sample confidence_explanation Recommendations)
-    + CIABRE summaries + cycles_reuse (via get_cycles_reuse_stats: graph_signature + reused/reuse_reason + node_identity_version for delta Tarjan short-circuit + canonical v1 prep).
-    Primary trust surface for agents alongside get_project_status. Wave 3 complete + canonical prep.
-
-    Args:
-        project_root: Target a different project.
-        directory: Only return health for files under this subdirectory (e.g. "src/").
-        format: "text" (default, pretty Markdown), "summary" (counts only), 
-            "healing-stats" (stub pollution + healing opportunities), or "json".
-    """
-    root = _get_effective_root(project_root)
-
-    try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-
-        if format == "summary":
-            summary = health_module.get_summary(root, directory)
-            return summary
-
-        if format == "healing-stats":
-            stats = health_module.get_healing_statistics(root)
-            return stats
-
-        if format == "json":
-            health_data = health_module.load_health(root)
-            entries = health_data.get("entries", {})
-            if directory:
-                entries = {k: v for k, v in entries.items() if k.startswith(directory.rstrip("/") + "/")}
-            # ACS+CIABRE + Wave 2 Barrel/BRC + Wave 3 cycles reuse surfacing: attach lightweight summaries to health JSON (uniformity for agents using health tool)
-            dep_intel = {}
-            try:
-                import wikifier.import_cache as ic
-                cache = ic.load_cache(root)
-                # On-demand persistence guarantee for _acs_summary (Gap #1 ACS surfacing wave; mirrors cycles)
-                acs = ic.ensure_acs_summary_persisted(cache, root)
-                cyc = ic.get_cycle_analyses(cache) or {}
-                barrel = ic.get_barrel_cache_summary(cache) or {}
-                # Use central broad surfacing helper (now includes canonical v1 prep + delta reuse)
-                cycles_reuse = ic.get_cycles_reuse_stats(cache)
-                sample_barrel_reports = []
-                if barrel.get("has_brc"):
-                    try:
-                        # Richer MCP observability (continuation wave): up to 5 samples for health(json) + get_project_status (now with detector/partial/chain details in text too).
-                        # Agents see concrete importer + barrels + reason + detector/partial/chains directly (richer structured samples + _barrel_invalidation_log awareness).
-                        reps = ic.get_barrel_invalidation_reports(cache, root, changed_files=None) or []
-                        sample_barrel_reports = reps[:5]
-                    except Exception:
-                        sample_barrel_reports = []
-                if acs or cyc or barrel.get("has_brc") or cycles_reuse.get("has_cycles"):
-                    dep_intel = {
-                        "acs_summary": acs,
-                        "ciabre_summary": cyc.get("summary") or {},
-                        "ciabre_version": cyc.get("analysis_version"),
-                        "barrel_invalidation_summary": barrel,
-                        "cycles_reuse": cycles_reuse,
-                        "sample_barrel_reports": sample_barrel_reports,  # basic observability in health(json)
-                    }
-                # M2 Workstream D: same resolution transparency in health(json) for consistency (unresolved/low-conf now first-class alongside ACS/barrel)
-                try:
-                    unresolved_samples = ic.get_unresolved_imports(cache, max_results=5) or []
-                    lowc_samples = ic.get_low_confidence_edges(cache, max_results=5) or []
-                    diag_sum = ic.ensure_diagnostics_aggregate(cache) or {}
-                    if unresolved_samples or lowc_samples or diag_sum.get("low_or_unresolved_count"):
-                        dep_intel["resolution_transparency"] = {
-                            "low_or_unresolved_count": diag_sum.get("low_or_unresolved_count", 0),
-                            "by_category": diag_sum.get("by_category", {}),
-                            "sample_unresolved_or_low_conf": unresolved_samples or lowc_samples or diag_sum.get("samples", [])[:5],
-                            "helpers": "import_cache.get_unresolved_imports / get_low_confidence_edges + get_dependencies(..., unresolved_only=True)",
-                            "parser_parity_note": "python vs JS asymmetry closed for resolved_path / diagnostics / provenance on relatives (Workstream D)",
-                        }
-                except Exception:
-                    pass
-            except Exception:
-                pass
-            return {
-                "project_root": str(root),
-                "directory": directory or ".",
-                "total_files": len(entries),
-                "entries": entries,
-                "dependency_intel": dep_intel
-            }
-
-        # Default: text output (human readable)
-        # We still return the generated Markdown for familiarity
-        return health_module._read_file_safe("file_health.md", root=root)  # type: ignore[attr-defined]
-
-    except Exception as e:
-        # Fallback to old shell behavior if Python module has issues
         root = _get_effective_root(project_root)
-        args = []
-        if directory:
-            args = ["--dir", directory]
-        output = _run_wikifier_command("health", args, root=root)
-        return output
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+    return api.search_journal(project_root=str(root), query=query, file=file, max_results=max_results)
 
 
 @mcp.tool()
-def list_healable_stubs(
-    project_root: Optional[str] = None,
-    directory: Optional[str] = None,
-    min_wiki_length: int = 350,
-    format: Literal["text", "json"] = "text"
-) -> str | dict:
-    """
-    List health entries that are still marked as 'Initial stub' but now have
-    a substantial wiki summary and are eligible for auto-healing.
-
-    Returns quality signals (headings, purpose section, length, overall score)
-    so agents can decide smart healing strategy (Yellow vs direct Green).
-
-    This helps agents discover and clean up "stub pollution".
-    """
-    root = _get_effective_root(project_root)
+def why_file(file: str, project_root: Optional[str] = None, max_results: int = 10) -> dict:
+    """Why a file is Yellow/Red: health reason + recent journal entries."""
     try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-        candidates = health_module.get_healable_stubs(
-            root, min_wiki_length=min_wiki_length, directory=directory
-        )
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file)
+    return api.why_file(file, project_root=str(root), max_results=max_results)
+
+
+def _format_edge(item: Dict[str, Any]) -> str:
+    target = item.get("resolved") or f"(unresolved: {item.get('raw')})"
+    notes = []
+    if item.get("confidence_score") is not None:
+        notes.append(f"conf={item['confidence_score']}")
+    if item.get("is_dynamic"):
+        notes.append(f"dynamic:{item.get('dynamic_type') or '?'}")
+    if item.get("is_conditional"):
+        notes.append("conditional")
+    if item.get("via_barrel"):
+        notes.append(f"via barrel depth={item.get('barrel_depth') or '?'}")
+    if item.get("in_cycle"):
+        notes.append("⚠ cycle")
+    explanation = str(item.get("confidence_explanation") or "")
+    if "Recommendation:" in explanation:
+        notes.append("rec: " + explanation.split("Recommendation:", 1)[1].strip())
+    return f"{target}" + (f" ({'; '.join(notes)})" if notes else "")
+
+
+@mcp.tool()
+def get_dependencies(
+    file: str,
+    format: Literal["text", "json"] = "text",
+    detail: Literal["compact", "full"] = "compact",
+    project_root: Optional[str] = None,
+    low_confidence_only: bool = False,
+    unresolved_only: bool = False,
+) -> str | dict:
+    """What a file imports. detail="compact" (default): project files it imports
+    (line, imported names, flags only when set), external module names, imports to
+    review. detail="full": every per-edge record (confidence explanation, metadata,
+    diagnostics) — several times larger; low_confidence_only / unresolved_only
+    imply full."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file) if format == "json" else f"Error: {exc}"
+    if low_confidence_only or unresolved_only:
+        detail = "full"
+    res = api.get_dependencies(file, project_root=str(root), detail=detail)
+    if not res.get("success"):
+        return res if format == "json" else f"Error: {res.get('error')}"
+    if not res.get("mapped") and format == "text":
+        return f"{res['file']} is not in the dependency map (run update_maps or check map_paths.txt)."
+    if detail == "compact":
         if format == "json":
-            return {
-                "project_root": str(root),
-                "count": len(candidates),
-                "healable_stubs": candidates,
-                "min_wiki_length": min_wiki_length
-            }
-        if not candidates:
-            return "No healable stub entries found."
-        lines = [f"Found {len(candidates)} healable stub entries:\n"]
-        for item in candidates:
-            q = item.get("quality", "?")
-            score = item.get("quality_score", 0)
-            lines.append(f"  {item['file']}")
-            lines.append(f"     Quality: {q} (score={score}) | Wiki: {item['wiki_size']} bytes")
-            if item.get("has_headings"):
-                lines.append("     + Has headings")
-            if item.get("has_purpose"):
-                lines.append("     + Has purpose/overview section")
-            lines.append("")
+            return res
+        lines = [f"{res['file']} imports {res['internal_count']} project file(s):"]
+        for edge in res["internal"]:
+            flags = [k if v is True else f"{k}={v}" for k, v in edge.items() if k not in ("path", "line", "names")]
+            names = f" ({', '.join(edge['names'][:8])}{', …' if len(edge.get('names', [])) > 8 else ''})" if edge.get("names") else ""
+            lines.append(f"  - {edge['path']}:{edge['line']}{names}" + (f" [{', '.join(flags)}]" if flags else ""))
+        if res["external"]:
+            lines.append("external: " + ", ".join(res["external"]))
+        for item in res["needs_review"]:
+            lines.append(f"review: {item['raw']} (line {item['line']}): {item['category']}")
+        if res.get("file_in_cycle"):
+            lines.append(f"⚠ {res['file']} participates in a dependency cycle (see get_cycles).")
         return "\n".join(lines)
-    except Exception as e:
-        if format == "json":
-            return {"error": str(e), "healable_stubs": []}
-        return f"Error listing healable stubs: {e}"
-
-
-@mcp.tool()
-def heal_stubs(
-    project_root: Optional[str] = None,
-    dry_run: bool = False,
-    min_wiki_length: int = 350,
-    format: Literal["text", "json"] = "text"
-) -> str | dict:
-    """
-    Automatically heal outdated 'Initial stub' health entries that now have
-    substantial wiki summaries.
-
-    Uses quality heuristics (headings, purpose sections, length, structure)
-    to decide whether to promote to 🟡 Yellow or directly to 🟢 Green.
-
-    This is the agent-actionable version of `wikifier heal-stubs`.
-    """
-    root = _get_effective_root(project_root)
-    try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-        count = health_module.heal_outdated_stubs(
-            root, min_wiki_length=min_wiki_length, dry_run=dry_run
-        )
-        action = "Would have healed" if dry_run else "Healed"
-        if format == "json":
-            return {
-                "project_root": str(root),
-                "healed_count": count,
-                "dry_run": dry_run,
-                "min_wiki_length": min_wiki_length,
-                "message": f"{action} {count} outdated stub entries."
-            }
-        return f"{action} {count} outdated 'Initial stub' entries."
-    except Exception as e:
-        if format == "json":
-            return {"error": str(e), "healed_count": 0}
-        return f"Error during heal_stubs: {e}"
-
-
-@mcp.tool()
-def validate(project_root: Optional[str] = None, format: Literal["text", "json"] = "text") -> str | dict:
-    """
-    Ensure every monitored file has at least a health entry.
-
-    Supports structured JSON output and targeting different projects.
-    """
-    root = _get_effective_root(project_root)
-    try:
-        import importlib
-        health_module = importlib.import_module("wikifier.health")
-        res = health_module.validate_health(root)
-        if format == "json":
-            if isinstance(res, dict):
-                res.setdefault("success", True)
-                res.setdefault("project_root", str(root))
-                res.setdefault(
-                    "action",
-                    "Run check-changes + mark-green on any newly discovered files.",
-                )
-                return res
-            return {
-                "success": True,
-                "project_root": str(root),
-                "message": res,
-                "action": "Run check-changes + mark-green on any newly discovered files.",
-            }
-        return json.dumps(res, indent=2, default=str) if isinstance(res, dict) else str(res)
-    except Exception as e:
-        if format == "json":
-            return {"success": False, "project_root": str(root), "error": str(e)}
-        return f"Error during validate: {e}"
-
-
-@mcp.tool()
-def journal(date: str = "", project_root: Optional[str] = None, format: Literal["text", "json"] = "text") -> str | dict:
-    """Read the journal for a date (YYYY-MM-DD). Defaults to today."""
-    root = _get_effective_root(project_root)
-    args = [date] if date else []
-    try:
-        output = _run_wikifier_command("journal", args, root=root)
-        if format == "json":
-            return {
-                "success": True,
-                "project_root": str(root),
-                "date": date or "today",
-                "content": output
-            }
-        return output
-    except Exception as e:
-        if format == "json":
-            return {"success": False, "project_root": str(root), "error": str(e)}
-        return f"Error reading journal: {e}"
-
-
-@mcp.tool()
-def issues(severity: str = "all", project_root: Optional[str] = None, format: Literal["text", "json"] = "text") -> str | dict:
-    """List logged issues by severity (simple|moderate|high|critical|all)."""
-    root = _get_effective_root(project_root)
-    args = [] if severity == "all" else [severity]
-    try:
-        output = _run_wikifier_command("issues", args, root=root)
-        if format == "json":
-            return {
-                "success": True,
-                "project_root": str(root),
-                "severity": severity,
-                "content": output
-            }
-        return output
-    except Exception as e:
-        if format == "json":
-            return {"success": False, "project_root": str(root), "error": str(e)}
-        return f"Error listing issues: {e}"
-
-
-# =============================================================================
-# Dependency Intelligence Tools (Structured + Text)
-# =============================================================================
-
-@mcp.tool()
-def get_dependencies(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None, low_confidence_only: bool = False, unresolved_only: bool = False) -> str | dict:
-    """
-    Get what a file imports (forward dependencies).
-    Returns either human-readable text or structured JSON.
-    Prefers the rich import_cache data (with confidence) when available.
-
-    R2 ACS Explanations Maturity (canonical single-source via contracts.compute_acs_confidence):
-    - confidence_score (0.05-0.95, 2 decimals, identical JS/Python, rich-signal aware)
-    - confidence_reasons (stable, filterable/aggregatable tokens: base:*, tag:*, detector:*, strategy:*, cycle_participant, weak/strong_*, complexity:*, barrel_depth=N, via_barrel, ...)
-    - confidence_explanation (R2: consistently excellent short narrative + full "Recommendation: ..." prescriptive sentence — PRIMARY DECISION-READY FIELD for agents. Quote verbatim in reports. Handles tiny projects to large monorepos with prioritized risks + evidence traces.)
-    - conditional_analysis / dynamic_analysis (semantic_tags, detectors_fired, analysis_trace evidence)
-    - resolution_metadata + strategy
-    - post-query cycle enrichment now produces canonical Recommendation text
-
-    Decision use: 
-      * JSON: filter confidence_score < 0.65 or high-sev reasons; read full explanation + traces + analysis.
-      * Text: "why:" lines contain ready-to-quote Recommendation (full action sentence preserved).
-    - low_confidence_only=True: server-side ACS filter (post-enrich) to return only low-trust edges (score<0.65 or low/unresolved) for direct risky-dep focus (Gap #1 surfacing polish).
-    - unresolved_only=True (M2 Workstream D Resolution Transparency): further filter to edges that are unresolved / lack resolved_path / carry diagnostic (first-class failure visibility). Combines with low_conf filter. New helpers in import_cache power this + get_project_status/ health / library.md.
-    Scalable, precomputed, trustworthy for autonomous use across all codebase sizes.
-    """
-    root = _get_effective_root(project_root)
-
-    # Preferred path: rich data from import cache (now includes confidence)
-    cached = _get_resolved_from_cache(file, root)
-    if cached:
-        # Enrich with cycle participation (cross-ref _cycles) - consistent structure handling
-        cycle_info = {}
-        try:
-            import wikifier.import_cache as import_cache
-            cache = import_cache.load_cache(root)
-            cdata = import_cache.get_cycles(cache)
-            did_compute_here = False
-            # Wave 4 on-demand canonical (after audit of get_dependencies enrichment path):
-            # honor WIKIFIER_USE_CANONICAL env (default True) for v1 physical ids + consistent reuse with get_cycles / sh 3d.
-            uc = os.environ.get("WIKIFIER_USE_CANONICAL", "1") not in ("0", "false", "False")
-            if not cdata or "sccs" not in cdata:
-                cdata = import_cache.compute_cycles(cache, root=root, use_canonical=uc)
-                did_compute_here = True
-            involved = set(cdata.get("all_cycle_files", []))
-            if did_compute_here:
-                try:
-                    import_cache.set_cycles(cache, cdata)
-                    gsig = cdata.get("graph_signature")
-                    if gsig:
-                        import_cache.set_graph_signature(cache, gsig)
-                    import_cache.save_cache(root, cache)
-                except Exception:
-                    pass
-            if not involved:
-                # fallback collect from sccs
-                for s in cdata.get("sccs", []):
-                    involved.update(s.get("nodes", []))
-            for item in cached:
-                res = item.get("resolved")
-                if res and res in involved:
-                    item["in_cycle"] = True
-                    # R2/P2: surface cycle in reasons + adjust score (parse-time enrichment impossible; query-time is authoritative)
-                    reasons = item.get("confidence_reasons") or []
-                    if isinstance(reasons, list) and "cycle_participant" not in reasons:
-                        reasons = list(reasons) + ["cycle_participant"]
-                        item["confidence_reasons"] = reasons
-                    # F2: also downgrade the numeric score so JSON consumers see consistent value
-                    cs = item.get("confidence_score")
-                    if isinstance(cs, (int, float)):
-                        new_cs = max(0.05, round(float(cs) - 0.10, 2))
-                        item["confidence_score"] = new_cs
-                    # R2: append cycle note (newer explanations already contain prescriptive cycle guidance from canonical builder)
-                    expl = item.get("confidence_explanation") or ""
-                    # R2: use canonical cycle recommendation phrasing for consistency with compute_acs_confidence
-                    cycle_rec = "Cycle participant (high refactor risk) — use get_cycles(analysis=True) to retrieve severity, blast radius and weakest-link recommendations; change requires coordinated edit across the SCC."
-                    if "cycle_participant" in (item.get("confidence_reasons") or []) and "Cycle participant" not in (expl or ""):
-                        if "Recommendation:" in expl:
-                            head = expl.split("Recommendation:", 1)[0].rstrip(". ")
-                            item["confidence_explanation"] = f"{head}. Recommendation: {cycle_rec}"
-                        else:
-                            item["confidence_explanation"] = (expl.rstrip(".") + ". Recommendation: " + cycle_rec).strip()
-                    elif expl and "cycle" not in expl.lower():
-                        # legacy append (rare path)
-                        item["confidence_explanation"] = expl.rstrip(".") + ". Cycle participation detected (score downgraded)."
-            if file in involved:
-                cycle_info["file_in_cycle"] = True
-                sccs = cdata.get("sccs", [])
-                cycle_info["cycles_count"] = sum(1 for s in sccs if file in s.get("nodes", []))
-        except Exception:
-            pass
-
-        # ACS low-conf filter (Gap #1 remaining slice + surfacing uniformity): allows direct
-        # get_dependencies(..., low_confidence_only=True) for risky edges only, using same
-        # heuristic as json low_confidence_count and ensure_acs. Additive, zero-dep on prior.
-        if low_confidence_only:
-            cached = [
-                it for it in cached
-                if (it.get("confidence_score") or 1.0) < 0.65
-                or str(it.get("confidence") or "").lower() in ("low", "unresolved")
-            ]
-
-        # M2 Workstream D: unresolved/low-conf transparency filter (additive, uses new import_cache helpers spirit + direct)
-        if unresolved_only:
-            cached = [
-                it for it in cached
-                if str(it.get("confidence") or it.get("resolution_confidence") or "").lower() in ("low", "unresolved")
-                or not it.get("resolved_path")
-                or bool(it.get("diagnostic"))
-            ]
-
-        if format == "json":
-            payload = {
-                "file": file,
-                "imports": cached,
-                "count": len(cached),
-                "source": "cache",
-                "cycle_participation": cycle_info,
-                # P2 ACS: agent-usable aggregate for quick filtering/prioritization
-                "low_confidence_count": sum(
-                    1 for it in cached
-                    if (it.get("confidence_score") or 1.0) < 0.55
-                    or (it.get("confidence") or "").lower() in ("low", "unresolved")
-                ),
-            }
-            return payload
-        resolved_list = [item.get("resolved") for item in cached if item.get("resolved")]
-        text = f"{file} imports ({len(resolved_list)}):\n" + ", ".join(resolved_list)
-
-        # R2: Surface rich actionable ACS metadata (canonical explanations from contracts).
-        # Prioritizes the prescriptive confidence_explanation (with Recommendation) for
-        # immediate agent decision use. Full structured signals always available in JSON.
-        # Truncation tuned for readability on large result sets; complete text in JSON.
-        notes = []
-        for item in cached:
-            resolved = item.get("resolved") or "?"
-            expl = item.get("confidence_explanation")
-            conf_score = item.get("confidence_score")
-            reasons = item.get("confidence_reasons") or []
-            ca = item.get("conditional_analysis") or {}
-            da = item.get("dynamic_analysis") or {}
-            rm = item.get("resolution_metadata") or {}
-            meta = []
-            if conf_score is not None:
-                meta.append(f"conf={conf_score}")
-            if expl:
-                # R2 matured: always surface the full prescriptive Recommendation (decision-critical); truncate only factor prefix for text readability on large monorepos. Full expl in JSON.
-                rec_marker = "Recommendation:"
-                if rec_marker in expl:
-                    head, rec_part = expl.split(rec_marker, 1)
-                    short_head = head[:110].rstrip(". ") + ("..." if len(head) > 110 else "")
-                    # full rec always (agents quote this verbatim); no truncation on the action sentence
-                    short_expl = f"{short_head}. {rec_marker} {rec_part.strip()}"
-                else:
-                    short_expl = expl[:220] + ("..." if len(expl) > 220 else "")
-                meta.append(f"why: {short_expl}")
-            elif reasons:
-                informative = [r for r in reasons if not str(r).startswith("base:")][:4]
-                if informative:
-                    meta.append("why:" + "|".join(str(x) for x in informative))
-            if item.get("is_conditional"):
-                meta.append("conditional")
-                tags = ca.get("semantic_tags") or []
-                if tags:
-                    meta.append("tags:" + ",".join(tags[:3]))
-            if item.get("via_barrel"):
-                depth = item.get("barrel_depth") or "?"
-                meta.append(f"via barrel depth={depth}")
-            if item.get("is_dynamic"):
-                meta.append(f"dynamic:{item.get('dynamic_type','?')}")
-            if item.get("in_cycle"):
-                meta.append("⚠️ cycle")
-            strat = item.get("strategy")
-            if strat and not str(strat).startswith(("legacy", "bare")):
-                meta.append(f"via:{strat}")
-            if isinstance(rm, dict):
-                if rm.get("matched_condition"):
-                    meta.append(f"matched:{rm.get('matched_condition')}")
-                if rm.get("workspace_pkg"):
-                    meta.append(f"pkg:{rm.get('workspace_pkg')}")
-            # Trace evidence (rich CDIA signals)
-            for analysis in (ca, da):
-                for tr in (analysis.get("analysis_trace") or [])[:1]:
-                    if isinstance(tr, dict) and tr.get("evidence"):
-                        ev = str(tr.get("evidence"))[:40]
-                        meta.append(f"ev:{ev}")
-            if meta:
-                notes.append(f"{resolved} ({', '.join(meta)})")
-
-        if notes:
-            text += "\n\nNotes (R2 canonical ACS explanations + rich signals):\n" + "\n".join(f"  - {n}" for n in notes)
-        if cycle_info.get("file_in_cycle"):
-            text += f"\n⚠️  {file} itself participates in circular dependency(ies)."
-        return text
-
-    # Fallback: parse the markdown table
-    library = _read_file_safe("library.md", root=root)
-    pattern = rf"\| {re.escape(file)} \| (.*?) \|"
-    match = re.search(pattern, library)
-
-    if match:
-        imports_str = match.group(1)
-        if format == "json":
-            return {
-                "file": file,
-                "imports": [x.strip() for x in imports_str.split(",") if x.strip()],
-                "source": "table"
-            }
-        return f"{file} imports:\n{imports_str}"
-
+    imports = res["imports"]
+    if low_confidence_only:
+        imports = [
+            i for i in imports
+            if float(i.get("confidence_score") or 1.0) < 0.65 or str(i.get("confidence") or "").lower() in ("low", "unresolved")
+        ]
+    if unresolved_only:
+        imports = [i for i in imports if not i.get("resolved") or i.get("diagnostic")]
     if format == "json":
-        return {"file": file, "imports": [], "message": "No resolved internal dependencies found.", "source": "none"}
-    return f"No resolved internal dependencies found for {file}."
+        res["imports"] = imports
+        res["count"] = len(imports)
+        res["low_confidence_count"] = sum(1 for i in imports if float(i.get("confidence_score") or 1.0) < 0.65)
+        return res
+    lines = [f"{res['file']} imports ({len(imports)} shown, {res['internal_count']} internal):"]
+    lines.extend(f"  - {_format_edge(i)}" for i in imports)
+    if res.get("file_in_cycle"):
+        lines.append(f"⚠ {res['file']} participates in a dependency cycle (see get_cycles).")
+    return "\n".join(lines)
 
 
 @mcp.tool()
 def get_dependents(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None) -> str | dict:
-    """
-    Get files that import this file (reverse dependencies).
-    One of the most valuable tools for understanding impact.
-    Now includes cache fallback (Fix 6) for resilience when the main table is sparse.
-
-    A1: Enhanced to surface first-class reverse dependency index details (signature for
-    delta detection, stats) when using the persisted _reverse_dependencies path.
-    The index is maintained incrementally (O(changed)) with its own signature parallel
-    to graph_signature. JSON responses now include "reverse_signature" + "reverse_index_stats".
-    """
-    root = _get_effective_root(project_root)
-    # Preferred fast path: use the persisted _reverse_dependencies structure (A1 first-class)
+    """Files that import this file (reverse dependencies) — the blast radius of an edit."""
     try:
-        import wikifier.import_cache as import_cache
-        cache = import_cache.load_cache(root)
-        reverse_map = import_cache.get_reverse_dependencies(cache)
-        if file in reverse_map:
-            dependents = reverse_map[file]
-            if format == "json":
-                rev_sig = import_cache.get_reverse_signature(cache)
-                rev_stats = import_cache.get_reverse_dependency_stats(cache)
-                return {
-                    "file": file,
-                    "dependents": dependents,
-                    "count": len(dependents),
-                    "source": "reverse_cache_first_class_a1",
-                    "reverse_signature": rev_sig,
-                    "reverse_index_stats": rev_stats,
-                }
-            return f"Files that import {file} ({len(dependents)}):\n" + "\n".join(f"- {d}" for d in dependents)
-    except Exception:
-        pass
-
-    # Fallback 1: Parse the markdown table
-    reverse_map = _parse_resolved_dependencies(root)
-    dependents = reverse_map.get(file, [])
-
-    if not dependents:
-        # Fallback 2: Full scan of import_cache.json (older method)
-        try:
-            import wikifier.import_cache as import_cache
-            cache = import_cache.load_cache(root)
-            for source, data in cache.items():
-                if source.startswith("_"):  # skip internal keys like _reverse_dependencies
-                    continue
-                pairs = data.get("resolved_pairs", [])
-                for p in pairs:
-                    if p.get("resolved") == file:
-                        if source not in dependents:
-                            dependents.append(source)
-        except Exception:
-            pass
-
-    if format == "json":
-        # Even on fallback, try to surface the (possibly present) A1 index signature/stats
-        rev_sig = None
-        rev_stats = {}
-        try:
-            import wikifier.import_cache as import_cache
-            c = import_cache.load_cache(root)
-            rev_sig = import_cache.get_reverse_signature(c)
-            rev_stats = import_cache.get_reverse_dependency_stats(c)
-        except Exception:
-            pass
-        return {
-            "file": file,
-            "dependents": dependents,
-            "count": len(dependents),
-            "source": "table" if reverse_map.get(file) else "cache_fallback",
-            "reverse_signature": rev_sig,
-            "reverse_index_stats": rev_stats,
-        }
-
-    if not dependents:
-        return f"No files currently import {file} (or it has not been resolved yet)."
-
-    return f"Files that import {file} ({len(dependents)}):\n" + "\n".join(f"- {d}" for d in dependents)
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root, file=file) if format == "json" else f"Error: {exc}"
+    res = api.get_dependents(file, project_root=str(root))
+    if format == "json" or not res.get("success"):
+        return res if format == "json" else f"Error: {res.get('error')}"
+    if not res["dependents"]:
+        return f"No mapped files import {res['file']}."
+    return f"Files that import {res['file']} ({res['count']}):\n" + "\n".join(f"- {d}" for d in res["dependents"])
 
 
 @mcp.tool()
@@ -1330,134 +374,20 @@ def get_cycles(
     project_root: Optional[str] = None,
     use_canonical: bool = True,
 ) -> str | dict:
-    """
-    Retrieve circular dependency (cycle) intelligence from the persisted _cycles
-    (Phase 1 of Gap #1 dependency graph integrity).
+    """Circular dependency clusters (Tarjan SCCs) with dynamic/conditional/barrel signals.
 
-    Returns rich SCC data + per-cluster signals (dynamic/conditional/barrel edges).
-    - analysis=True: returns full analyses from CIABRE v1.2 (R5): severity scoring (tuned on real dogfood dyn+barrel+blast),
-      external blast radius, weakest links (risk-ranked), and ranked practical refactoring recommendations with
-      detailed rationale/hint/safety notes tied to signals (v1.3 registry ext + hardened ACS-referencing rationales). JSON includes "cycle_analyses" + "ciabre_version". Top recs now surfaced full (no truncation) in text.
-    - format="json": full machine-readable _cycles structure (+ analyses when analysis=True); now also surfaces top-level "graph_signature", "reused", "reuse_reason" (Wave 2 delta support).
-    - use_canonical=True (default, Wave 4): requests v1 canonical physical node ids (via canonical_for_bree) for stable graphs/signatures across symlinks/workspaces. False yields v0 raw for compat. Public surface (MCP + CLI + run_full_update prep) per gap1_cycles_longterm_strategy.
-    - Integrates with library.md "Circular Dependencies" (SEVERITY + rich rec with rationale), CLI `wikifier cycles`,
-      and Mermaid cycleNode styling. Scoring + extensible registry rules in import_cache.py CIABRE section.
-    - Wave 2/3/4: graph_signature + reuse info (reused=True on match; short-circuits iterative Tarjan + CIABRE in compute + main 3d update-maps path; default now v1 in sh 3d + on-demand). Canonical v1 active. get_cycles_reuse_stats central surfacer used in health/diagnostics/MCP.
+    analysis=True adds severity, external blast radius, weakest links and ranked
+    breaking recommendations per cluster. Read-only (computes on demand if needed).
     """
-    root = _get_effective_root(project_root)
     try:
-        import wikifier.import_cache as import_cache
-        cache = import_cache.load_cache(root)
-        cdata = import_cache.get_cycles(cache)
-        did_compute_cycles = False
-        if not cdata or "sccs" not in cdata:
-            cdata = import_cache.compute_cycles(cache, root=root, use_canonical=use_canonical)
-            did_compute_cycles = True
-        integrity = cache.get("_graph_integrity") or import_cache.compute_graph_integrity(cache)
-
-        # P3 CIABRE: load (or compute on-demand) cycle analyses for severity/recommendations when requested
-        cycle_analyses = {}
-        did_compute_analyses = False
-        if analysis:
-            cycle_analyses = import_cache.get_cycle_analyses(cache)
-            if not cycle_analyses or "analyses" not in cycle_analyses:
-                cycle_analyses = import_cache.compute_cycle_analyses(cache, root=root, use_canonical=use_canonical)
-                did_compute_analyses = True
-
-        # Guaranteed persistence hardening (Gap #1 cycles area):
-        # If any on-demand compute occurred (e.g. pre-persistence cache, partial sh path,
-        # direct Python use of MCP without recent update-maps), write the results back
-        # under the reserved keys + graph_signature so that library.md, CLI `cycles`,
-        # future queries, and incremental/delta logic see them without re-work.
-        # Safe: save_cache uses the M2 locking; best-effort on error.
-        if did_compute_cycles or did_compute_analyses or not cache.get("_graph_integrity"):
-            try:
-                if did_compute_cycles:
-                    import_cache.set_cycles(cache, cdata)
-                    gsig = cdata.get("graph_signature")
-                    if gsig:
-                        import_cache.set_graph_signature(cache, gsig)
-                if integrity and not cache.get("_graph_integrity"):
-                    import_cache.set_graph_integrity(cache, integrity)
-                if did_compute_analyses:
-                    import_cache.set_cycle_analyses(cache, cycle_analyses)
-                import_cache.save_cache(root, cache)
-            except Exception:
-                pass  # never let a read/query path fail due to persist side-effect
-
-        stats = cdata.get("stats", {})
-        sccs = cdata.get("sccs", [])
-        limit = max_items or (20 if not analysis else 100)
-        items = sccs[:limit]
-
-        if format == "json":
-            payload = {
-                "count": stats.get("cyclic_scc_count", len(sccs)),
-                "cycles": cdata,  # full rich structure (now includes graph_signature + reused/reuse_reason for delta)
-                "sccs": items,
-                "integrity": integrity,
-                "analysis": analysis,
-                "source": "import_cache",
-                "stats": stats,
-                "graph_signature": cdata.get("graph_signature"),
-                "reused": cdata.get("reused", False),
-                "reuse_reason": cdata.get("reuse_reason"),
-                "cycle_analyses": cycle_analyses if analysis else None,  # CIABRE: severity, blast, weakest, ranked recs (+ reuse fields)
-                "ciabre_version": cycle_analyses.get("analysis_version") if analysis and cycle_analyses else None,
-            }
-            return payload
-
-        # Human text - polished professional formatting
-        out = []
-        cluster_count = stats.get("cyclic_scc_count", len(sccs))
-        file_count = stats.get("total_files_in_cycles", 0)
-        largest = stats.get("largest_scc_size", 0)
-        out.append("=== Circular Dependencies Report ===")
-        out.append(f"Clusters: {cluster_count}   |   Files involved: {file_count}   |   Largest: {largest}")
-        summary = integrity.get("summary", "N/A")
-        out.append(f"Graph Integrity: {summary}")
-        gsig = cdata.get("graph_signature", "N/A")
-        reused = cdata.get("reused", False)
-        reuse_note = " (reused: delta/incremental safe, no Tarjan recompute)" if reused else ""
-        out.append(f"Graph signature: {gsig}{reuse_note}")
-        out.append("")
-        if not items:
-            out.append("✅ No circular dependencies detected in the current dependency graph.")
-        else:
-            out.append("Detected cyclic clusters (rich signals):")
-            # build quick lookup for CIABRE analyses by sorted nodes tuple
-            a_map = {}
-            if analysis and cycle_analyses:
-                for aa in (cycle_analyses.get("analyses") or []):
-                    a_map[tuple(sorted(aa.get("nodes", [])))] = aa
-            for i, c in enumerate(items, 1):
-                ex = c.get("example_path") or " → ".join(c.get("nodes", [])[:5])
-                out.append(f"  {i}. size={c.get('size')}  {ex}")
-                if analysis:
-                    sig = c.get("signals", {})
-                    out.append(f"     signals: dyn={sig.get('dynamic_edge_count',0)} cond={sig.get('conditional_edge_count',0)} barrel={sig.get('barrel_edge_count',0)}  (conf: {sig.get('confidence_breakdown', {})})")
-                    # P3 CIABRE enrichment in text when analysis=True
-                    key = tuple(sorted(c.get("nodes", [])))
-                    a = a_map.get(key, {})
-                    if a.get("severity"):
-                        w = (a.get("weakest_links") or [{}])[0]
-                        rec0 = (a.get("recommendations") or [{}])[0]
-                        out.append(f"     SEVERITY: {a.get('severity')} (score={a.get('score')}, blast={a.get('external_blast_radius')}) | weakest: {w.get('from','?')}→{w.get('to','?')} (risk={w.get('risk_score','?')})")
-                        if rec0.get("strategy"):
-                            # Surfacing uniformity (ACS+CIABRE audit): full text for top rec (rationale/hint/safety) so agents quote verbatim; truncation only for huge lists
-                            rat = rec0.get("rationale") or ""
-                            hnt = rec0.get("hint") or ""
-                            saf = rec0.get("safety") or ""
-                            out.append(f"     TOP REC: {rec0.get('strategy')} — {rat} (hint: {hnt}; safety: {saf})")
-            if len(sccs) > len(items):
-                out.append(f"  ... ({len(sccs) - len(items)} more; use analysis=True or raise max_items for full list)")
-        out.append("")
-        out.append("MCP: get_cycles(format=\"json\", analysis=True) + get_project_status (ACS+CIABRE summaries)  |  CLI: wikifier cycles  |  library.md \"Circular Dependencies\" + \"ACS Risk Snapshot\" | Use full confidence_explanation Recommendation sentences as decision oracle")
-        return "\n".join(out)
-    except Exception as ex:
-        if format == "json":
-            return {"error": str(ex), "data": None, "count": 0, "sccs": []}
-        return f"get_cycles failed: {ex}. Run `wikifier update-maps` to populate intelligence."
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    report = api.cycles_report(project_root=str(root), analysis=analysis, max_items=max_items, use_canonical=use_canonical)
+    if format == "json":
+        report["analysis"] = analysis
+        return report
+    return api.format_cycles_report(report)
 
 
 @mcp.tool()
@@ -1468,238 +398,83 @@ def get_resolution_diagnostics(
     format: Literal["text", "json"] = "text",
     project_root: Optional[str] = None,
 ) -> str | dict:
-    """
-    Resolution diagnostics & failure transparency (Limitation #5 / diagnostics layer).
-    Shows why certain imports resolved to low/medium/unresolved confidence, dynamic, conditional etc.
-    Per-file or global aggregates + bounded samples. Complements library.md "Conditional & Dynamic Intelligence" and get_cycles signals.
-    """
-    root = _get_effective_root(project_root)
+    """Why imports resolved at low confidence or not at all (per file or project-wide)."""
     try:
-        import wikifier.import_cache as import_cache
-        cache = import_cache.load_cache(root)
+        root = _get_effective_root(project_root)
         if file:
-            # per-file view from its pairs
-            data = cache.get(file.lstrip("./"), {}) or {}
-            pairs = data.get("resolved_pairs", [])
-            lowish = [p for p in pairs if (p.get("confidence") or "").lower() not in ("high", "")]
-            summary = {"file": file, "total_imports": len(pairs), "non_high_count": len(lowish), "samples": lowish[:limit]}
-            if format == "json": return summary
-            # text with samples
-            lines = [f"=== Resolution Diagnostics for {file} ==="]
-            lines.append(f"Imports: {len(pairs)}  |  Non-high confidence: {len(lowish)}")
-            if lowish:
-                lines.append("Sample low/partial resolutions:")
-                for p in lowish[:min(5, limit)]:
-                    conf = p.get("confidence", "?")
-                    raw = p.get("raw", "")[:40]
-                    diag_info = p.get("diagnostic") or {}
-                    cat = diag_info.get("category") if isinstance(diag_info, dict) else "?"
-                    reason = (diag_info.get("reason") if isinstance(diag_info, dict) else "")[:60]
-                    lines.append(f"  - [{conf}] {raw} → {p.get('resolved','?')}  cat={cat}  {reason}")
-            else:
-                lines.append("All imports resolved at high confidence (no diagnostics needed).")
-            lines.append("Use format=json for full samples + details.")
+            rel = to_rel(root, file)
+            pairs = (cs.load_file_entry(root, rel) or {}).get("resolved_pairs") or []
+            weak = [p for p in pairs if str(p.get("confidence") or "").lower() != "high"]
+            if category:
+                weak = [p for p in weak if (p.get("diagnostic") or {}).get("category") == category]
+            summary = {"success": True, "file": rel, "total_imports": len(pairs), "non_high_count": len(weak), "samples": weak[:limit]}
+            if format == "json":
+                return summary
+            lines = [f"=== Resolution diagnostics: {rel} ===", f"Imports: {len(pairs)}  non-high confidence: {len(weak)}"]
+            for p in weak[: min(10, limit)]:
+                diag = p.get("diagnostic") or {}
+                lines.append(f"  - [{p.get('confidence')}] {p.get('raw')} → {p.get('resolved') or '?'}  "
+                             f"category={diag.get('category', '?')} {str(diag.get('reason', ''))[:80]}")
             return "\n".join(lines)
-        # global
-        diag = import_cache.get_resolution_diagnostics(cache)
-        if not diag or diag.get("total_imports", 0) == 0:
-            diag = import_cache.ensure_diagnostics_aggregate(cache)
-        # Wave 3+: reuse central stats helper for broader surfacing (incl. canonical v1 node_identity_version)
-        reuse_stats = import_cache.get_cycles_reuse_stats(cache)
-        gsig = reuse_stats.get("graph_signature") or "N/A"
-        c_reused = reuse_stats.get("reused", False)
-        c_gsig = reuse_stats.get("graph_signature")
-        c_ver = reuse_stats.get("node_identity_version", "v0")
-        if category:
-            # filter samples
-            cats = diag.get("by_category", {})
-            diag = {**diag, "filtered_to": category, "count_in_cat": cats.get(category, 0)}
-        if format == "json":
-            return {**diag, "graph_signature": gsig, "cycles_graph_signature": c_gsig, "cycles_reused": c_reused, "cycles_node_identity_version": c_ver}
-        # text summary - polished
-        bc = diag.get("by_category", {})
-        top = ", ".join(diag.get("top_categories", [])) or "none"
-        low = diag.get("low_or_unresolved_count", 0)
-        tot = diag.get("total_imports", 0)
-        lines = ["=== Resolution Diagnostics ==="]
-        lines.append(f"Total imports analyzed: {tot}")
-        lines.append(f"Low or unresolved: {low} ({(low/tot*100):.1f}% of total)" if tot else "Low or unresolved: 0")
-        lines.append(f"Top categories: {top}")
-        lines.append(f"Breakdown: {bc}")
-        lines.append(f"Graph structure (cycles): signature={gsig} reused={c_reused} (see get_cycles for delta details + full CIABRE)")
-        samples = diag.get("samples", [])[:5]
-        if samples:
-            lines.append("Top samples (see JSON for more):")
-            for s in samples:
-                lines.append(f"  - {s.get('src','?')} [{s.get('confidence','?')}] {s.get('raw','')[:30]} → cat={s.get('category','?')}")
-        lines.append("See also: library.md \"Conditional & Dynamic Intelligence\" + get_cycles for related signals (Wave 2: graph_signature + reuse surfaced here too).")
-        return "\n".join(lines)
-    except Exception as ex:
-        if format == "json": return {"error": str(ex)}
-        return f"Diagnostics unavailable: {ex}"
+        diag = ic.ensure_diagnostics_aggregate(ic.load_cache(root))
+    except (ProjectRootError, ProjectPathError) as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    if category:
+        diag = {**diag, "filtered_to": category, "count_in_category": (diag.get("by_category") or {}).get(category, 0)}
+    if format == "json":
+        return {"success": True, **diag}
+    total = diag.get("total_imports", 0)
+    low = diag.get("low_or_unresolved_count", 0)
+    lines = [
+        "=== Resolution diagnostics ===",
+        f"Imports analyzed: {total}",
+        f"Low or unresolved: {low}" + (f" ({low / total * 100:.1f}%)" if total else ""),
+        f"Top categories: {', '.join(diag.get('top_categories') or []) or 'none'}",
+    ]
+    for s in (diag.get("samples") or [])[:5]:
+        lines.append(f"  - {s.get('src', '?')} [{s.get('confidence', '?')}] {str(s.get('raw', ''))[:40]} → {s.get('category', '?')}")
+    return "\n".join(lines)
+
+
+_WIKI_DIRS = ("docs/wiki", "docs", "wiki", "documentation", ".wiki")
+
+
+def _wiki_candidates(rel: str) -> List[str]:
+    stem = rel.rsplit(".", 1)[0] if "." in Path(rel).name else rel
+    flat = stem.replace("/", "-")
+    out = [f"{rel}.wiki.md", f"{stem}.wiki.md", f"{rel}.md", f"{stem}.md"]
+    for d in _WIKI_DIRS:
+        out += [f"{d}/{rel}.md", f"{d}/{rel}.wiki.md", f"{d}/{stem}.md", f"{d}/{stem}.wiki.md",
+                f"{d}/{flat}.md", f"{d}/{flat}.wiki.md", f"{d}/{Path(rel).name}.md", f"{d}/{Path(rel).name}.wiki.md"]
+    seen: List[str] = []
+    for c in out:
+        if c != rel and c not in seen:
+            seen.append(c)
+    return seen
 
 
 @mcp.tool()
 def get_file_wiki(file: str, format: Literal["text", "json"] = "text", project_root: Optional[str] = None) -> str | dict:
-    """
-    Retrieve the wiki/documentation summary for a specific file.
-
-    This is a significantly hardened version designed for reliability across
-    different project layouts and large codebases.
-    """
-    root = _get_effective_root(project_root)
-    file = file.strip().lstrip("./")
-
-    # Normalize
-    base_with_ext = file
-    base_no_ext = file.rsplit('.', 1)[0] if '.' in file else file
-
-    candidates = []
-
-    # === 1. Wiki file right next to the source file (best convention) ===
-    # Try both with and without the original extension
-    candidates.extend([
-        f"{base_with_ext}.wiki.md",
-        f"{base_with_ext}.md",
-        f"{base_no_ext}.wiki.md",
-        f"{base_no_ext}.md",
-    ])
-
-    # === 2. Wiki file in the same directory as the source (very useful) ===
-    file_path = Path(file)
-    if file_path.parent != Path('.'):
-        parent = str(file_path.parent)
-        candidates.extend([
-            f"{parent}/{base_no_ext}.wiki.md",
-            f"{parent}/{base_no_ext}.md",
-            f"{parent}/{base_with_ext}.wiki.md",
-            f"{parent}/{base_with_ext}.md",
-        ])
-
-    # === 3. Standard wiki directories (with and without sanitized paths) ===
-    wiki_dirs = ["docs/wiki", "docs", "wiki", "documentation", ".wiki"]
-    for d in wiki_dirs:
-        candidates.extend([
-            f"{d}/{base_with_ext}.md",
-            f"{d}/{base_with_ext}.wiki.md",
-            f"{d}/{base_no_ext}.md",
-            f"{d}/{base_no_ext}.wiki.md",
-        ])
-        # Sanitized versions (e.g. src-services-mealPlannerService.wiki.md)
-        sanitized = base_no_ext.replace("/", "-").replace("\\", "-")
-        candidates.extend([
-            f"{d}/{sanitized}.md",
-            f"{d}/{sanitized}.wiki.md",
-        ])
-
-    # === 4. Recursive search inside wiki directories (last resort but powerful) ===
-    for d in wiki_dirs:
-        wiki_path = root / d
-        if wiki_path.exists() and wiki_path.is_dir():
-            for md_file in list(wiki_path.rglob("*.md")) + list(wiki_path.rglob("*.wiki.md")):
-                name = md_file.name.lower()
-                if base_no_ext.lower() in name or base_with_ext.lower() in name:
-                    rel_path = str(md_file.relative_to(root))
-                    if rel_path not in candidates:
-                        candidates.append(rel_path)
-
-    # === 5. Also look for any .md / .wiki.md file in the exact same directory as the source ===
-    # This is very common in real projects (people often drop descriptive .md files next to the code)
-    source_dir = root / Path(base_no_ext).parent
-    if source_dir.exists() and source_dir.is_dir():
-        for md_file in list(source_dir.glob("*.md")) + list(source_dir.glob("*.wiki.md")):
-            name = md_file.name.lower()
-            if base_no_ext.lower() in name or base_with_ext.lower() in name:
-                rel_path = str(md_file.relative_to(root))
-                if rel_path not in candidates:
-                    candidates.append(rel_path)
-
-    # Deduplicate while preserving priority order
-    seen = set()
-    final_candidates = []
-    for c in candidates:
-        if c not in seen:
-            seen.add(c)
-            final_candidates.append(c)
-
-    # === Try candidates ===
-    for candidate in final_candidates:
-        content = _read_file_safe(candidate, root=root)
-        if not content.startswith("File not found"):
+    """The wiki summary for a file (sibling ``<file>.wiki.md`` first, then docs/wiki dirs)."""
+    try:
+        root = _get_effective_root(project_root)
+        rel = to_rel(root, file)
+    except (ProjectRootError, ProjectPathError) as exc:
+        return _root_error(exc, project_root, file=file) if format == "json" else f"Error: {exc}"
+    candidates = _wiki_candidates(rel)
+    for candidate in candidates:
+        path = root / candidate
+        if path.is_file():
+            content = path.read_text(encoding="utf-8", errors="replace")
             if format == "json":
-                return {
-                    "file": file,
-                    "source": candidate,
-                    "content": content,
-                    "project_root": str(root),
-                    "confidence": "high" if "wiki" in candidate.lower() else "medium",
-                    "suggestions": []
-                }
-            return f"=== Wiki for {file} (from {candidate}) ===\n\n{content}"
-
-    # === Fallback: Smarter extraction from library.md ===
-    library = _read_file_safe("library.md", root=root)
-    search_terms = [base_no_ext, base_with_ext]
-    if file in library or any(term in library for term in search_terms):
-        lines = library.splitlines()
-        best_context = None
-        best_score = 0
-
-        for i, line in enumerate(lines):
-            score = 0
-            if any(term in line for term in search_terms):
-                score += 1
-                # Strongly prefer lines from the Resolved Internal Dependencies section
-                if "Resolved Internal Dependencies" in "\n".join(lines[max(0, i-10):i]):
-                    score += 3
-                if "→" in line:
-                    score += 2
-                # Also like lines from the Source Files table
-                if "Source File" in "\n".join(lines[max(0, i-5):i]) or "Imports" in line:
-                    score += 1
-
-                context = "\n".join(lines[max(0, i-2): min(len(lines), i+5)])
-
-                if score > best_score:
-                    best_score = score
-                    best_context = context
-
-        if best_context:
-            if format == "json":
-                return {
-                    "file": file,
-                    "source": "library.md (extracted)",
-                    "content": best_context,
-                    "project_root": str(root),
-                    "confidence": "medium" if best_score >= 3 else "low",
-                    "suggestions": []
-                }
-            return f"=== Mentions of {file} in library.md ===\n\n{best_context}"
-
-    # === Nothing found (final robustness) ===
+                return {"success": True, "file": rel, "source": candidate, "content": content, "project_root": str(root),
+                        "confidence": "high" if candidate.endswith(".wiki.md") else "medium"}
+            return f"=== Wiki for {rel} (from {candidate}) ===\n\n{content}"
+    suggestion = f"Create {rel}.wiki.md next to the source, then run mark_green on {rel}."
     if format == "json":
-        return {
-            "file": file,
-            "source": None,
-            "content": None,
-            "project_root": str(root),
-            "confidence": "none",
-            "message": "No dedicated wiki summary found for this file.",
-            "candidates_tried": final_candidates[:20],
-            "suggestions": [
-                f"Create {base_no_ext}.wiki.md right next to the source file (best practice)",
-                f"Create docs/wiki/{base_no_ext}.md or wiki/{base_no_ext}.wiki.md",
-                "After writing the summary, run mark_green on the file"
-            ]
-        }
-    return (
-        f"No dedicated wiki summary found for {file}.\n\n"
-        "Recommended locations (best to good):\n"
-        f"  1. {base_no_ext}.wiki.md or {base_with_ext}.wiki.md   (next to the source file — highest reliability)\n"
-        f"  2. docs/wiki/{base_no_ext}.md\n"
-        f"  3. wiki/{base_no_ext}.md\n\n"
-        "Using the `.wiki.md` convention right next to the source file is strongly recommended for agents."
-    )
+        return {"success": True, "file": rel, "source": None, "content": None, "project_root": str(root),
+                "confidence": "none", "candidates_tried": candidates[:20], "suggestions": [suggestion]}
+    return f"No wiki summary found for {rel}. {suggestion}"
 
 
 @mcp.tool()
@@ -1710,17 +485,13 @@ def get_files_needing_attention(
     format: Literal["text", "json"] = "text",
     timeout_s: Optional[float] = None,
 ) -> str | dict:
-    """
-    Return files that need attention (Red or Yellow).
+    """Red/Yellow files (optionally one status and/or directory)."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    return run_files_needing_attention(root, status=status, directory=directory, format=format, timeout_s=timeout_s)
 
-    Uses the fast scalable Python backend (wikifier.health).
-    Supports directory filtering — very useful on large monorepos.
-    Health/cache work runs inside call_with_deadline (default 60s).
-    """
-    root = _get_effective_root(project_root)
-    return run_files_needing_attention(
-        root, status=status, directory=directory, format=format, timeout_s=timeout_s
-    )
 
 @mcp.tool()
 def get_project_status(
@@ -1728,171 +499,249 @@ def get_project_status(
     project_root: Optional[str] = None,
     directory: Optional[str] = None,
     timeout_s: Optional[float] = None,
-) -> str | ProjectHealthSummary:
-    """Return a high-level overview of project documentation health.
-
-    Health/cache work runs inside call_with_deadline (default 60s).
-    """
-    root = _get_effective_root(project_root)
-    return run_project_status(
-        root, directory=directory, format=format, timeout_s=timeout_s
-    )
+) -> str | dict:
+    """High-level health counts + dependency intelligence summary."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    return run_project_status(root, directory=directory, format=format, timeout_s=timeout_s)
 
 
 @mcp.tool()
 def get_current_project_root(project_root: Optional[str] = None) -> str:
-    """Return the effective project root for this Wikifier MCP instance.
-
-    Like every other tool, an explicit project_root= overrides the
-    startup-time discovered root (multi-project agent support).
-    """
-    return str(_get_effective_root(project_root))
+    """The effective project root (explicit project_root overrides the startup root)."""
+    try:
+        return str(_get_effective_root(project_root))
+    except ProjectRootError as exc:
+        return f"Error: {exc}"
 
 
 @mcp.tool()
-def get_barrel_reports(
-    limit: int = 20,
-    project_root: Optional[str] = None,
-    include_log: bool = True,
-) -> dict:
-    """Dedicated MCP tool for barrel invalidation reports and audit (Gap #1 Deep Barrel Wave 4/closure).
-
-    Provides richer, on-demand access to structured BRC invalidation data beyond the bounded samples
-    embedded in get_project_status / health (where samples may be insufficient for agents debugging
-    specific barrel-driven reparse events at monorepo scale).
-
-    Returns:
-      - barrel_invalidation_summary: stats (num_chains, v1 coverage, partials, indexed barrels)
-      - recent_reports: list of rich BarrelInvalidationReport dicts (importer, triggering_barrels,
-        chain_ids, reason, detector, partial, node_identity_version, etc.) — up to `limit`
-      - barrel_invalidation_log: recent historical audit entries from _barrel_invalidation_log (if include_log)
-        (ts + report snapshots persisted across daemon/check-changes/update-maps runs)
-      - note on O(changed) delta path + pruning availability
-
-    Complements existing surfaces; zero new deps, scalable (lens + bounded), safe on missing cache.
-    Agents can now directly query "show me the last N barrel edits and exactly which importers were dirtied + why".
-    """
-    root = _get_effective_root(project_root)
-    # M5.1 code/tool hardening (targeted for gap2 MCP reliability; based ONLY on M5-Dogfood-Assessment-Report+tail Progress data: alt ~20+ BRC yellows "stale via barrel re-export" from src/services/challengeFeatures/* (AdversarialScaffoldGenerator, CrossMCPRecipeValidator, MCPOrchestrationDashboard, MultiAgentLockStorm, WorkingTreeCoverageFuzzer + models/services) w/ long hex chains detector=none/name-heuristic; Consistency ~1k; llvm 168k units/4min/1363 chains/101 BRC; MCP wikifier get_barrel/get_status/get_files/suggest timeout 6000s (shell+lib equiv reliable); current 60%, DoD#2 MCP full <30s no timeout on alt BRC~20+). #1 spectrum (JS alt stress + py llama + C++ llvm + meta servers), #2 zero-dep (no new pkgs, in-func attr cache), #8 M5 boundary (wikifier/mcp only, no target dogfood), #9 measurable (use exact #s 20+ BRC y/168k u/1363 chains/4min/84 edges/6 mismatches/7 MISSING/1-2y lean/40-65% calibs), #7 multi-agent. 8-step DF followed (review report gaps/DoD, inspect, minimal edit, hygiene, diary).
-    # Simple result caching for barrel reports (10s TTL via func attr): avoids re-compute of get_barrel_invalidation_reports + summary on repeated MCP calls for large BRC like alt (prevents contrib to timeouts). Cache per-root+params; process lifetime only.
-    if not hasattr(get_barrel_reports, "_m5_cache"):
-        get_barrel_reports._m5_cache = {}
-    ckey = (str(root), bool(include_log), int(limit))
-    import time as _time
-    _now = _time.time()
-    if ckey in get_barrel_reports._m5_cache:
-        _ent = get_barrel_reports._m5_cache[ckey]
-        if _now - _ent[0] < 10.0:
-            return _ent[1]
-    result: dict = {
+def get_barrel_reports(limit: int = 20, project_root: Optional[str] = None, include_log: bool = True) -> dict:
+    """Barrel (re-export) cache: which importers were dirtied by which barrel edits, and why."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+    meta = cs.load_meta(root, keys=("_barrel_resolutions", "_barrel_file_index", "_barrel_invalidation_log"))
+    log = meta.get("_barrel_invalidation_log") or []
+    return {
+        "success": True,
         "project_root": str(root),
-        "barrel_invalidation_summary": {"has_brc": False, "num_chains": 0},
-        "recent_reports": [],
-        "barrel_invalidation_log": [],
-        "note": "Use get_barrel_reports for full dedicated 'why via barrel' audit trail (see also check-changes + prune-barrels CLI). [M5.1 cached for reliability on large BRC per report]",
+        "barrel_invalidation_summary": ic.get_barrel_cache_summary(meta) or {},
+        "recent_reports": (ic.get_barrel_invalidation_reports(meta, root, changed_files=None) or [])[: max(1, min(limit, 100))],
+        "barrel_invalidation_log": list(reversed(log[-max(1, min(50, limit * 2)):])) if include_log else [],
+        "log_count": len(log),
     }
-    try:
-        import wikifier.import_cache as ic
-        cache = ic.load_cache(root) or {}
-        summary = ic.get_barrel_cache_summary(cache) or {}
-        result["barrel_invalidation_summary"] = summary
 
-        reps = ic.get_barrel_invalidation_reports(cache, root, changed_files=None) or []
-        result["recent_reports"] = reps[: max(1, min(limit, 100)) ]
-
-        if include_log:
-            log = cache.get("_barrel_invalidation_log") or []
-            # Return most recent first (log is append order)
-            result["barrel_invalidation_log"] = list(reversed(log[-max(1, min(50, limit * 2)):])) if log else []
-            result["log_count"] = len(log)
-    except Exception as ex:
-        result["note"] = f"barrel reports unavailable: {ex}"
-    get_barrel_reports._m5_cache[ckey] = (_now, result)
-    return result
-
-
-@mcp.tool()
-def suggest_next_actions(
-    project_root: Optional[str] = None,
-    directory: Optional[str] = None,
-    format: Literal["text", "json"] = "json"
-) -> str | dict:
-    """Suggest high-value next actions based on current state (G3/G4 selective work).
-
-    Delegates to library `wikifier.cli.suggest_next_actions`: prioritizes 🔴 then 🟡 only
-    (never full-tree re-wiki of greens). ACS suggestions use *actionable* low-conf
-    (excludes stdlib/external bare noise); full telemetry remains in dependency_intel.
-    """
-    root = _get_effective_root(project_root)
-    try:
-        from wikifier.cli import suggest_next_actions as _lib_suggest
-        return _lib_suggest(project_root=str(root), directory=directory, format=format)
-    except Exception as e:
-        if format == "json":
-            return {"success": False, "error": str(e), "project_root": str(root)}
-        return f"suggest_next_actions error: {e}"
-
-
-# =============================================================================
-# Operational / Incremental Tools
-# =============================================================================
 
 @mcp.tool()
 def get_incremental_status(project_root: Optional[str] = None) -> dict:
-    """
-    Returns the current state of the incremental update-maps system.
-    Useful for debugging and understanding cache health on large projects.
-    """
-    root = _get_effective_root(project_root)
-    cache_path = root / ".wikifier_staging/import_cache.json"
-    last_update_path = root / ".wikifier_staging/.last_update_maps"
-
+    """Cache backend, size, edge count and map coverage (debugging large projects)."""
     try:
-        import wikifier.import_cache as import_cache
-        cache = import_cache.load_cache(root)
-        cached_files = len(cache)
-    except Exception:
-        cached_files = -1
+        return api.cache_status(project_root=str(_get_effective_root(project_root)))
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
 
-    last_update = "never"
-    if last_update_path.exists():
-        try:
-            last_update = last_update_path.read_text().strip()
-        except (OSError, UnicodeDecodeError):
-            last_update = "unreadable"
 
-    return {
-        "project_root": str(root),
-        "import_cache_exists": cache_path.exists(),
-        "cached_files": cached_files,
-        "last_update_maps": last_update,
-        "cache_path": str(cache_path)
-    }
+# =============================================================================
+# Maps + health maintenance
+# =============================================================================
+
+@mcp.tool()
+def update_maps(
+    project_root: Optional[str] = None,
+    full: bool = False,
+    use_python_primary: bool = True,
+    directory: Optional[str] = None,
+    max_files: Optional[int] = None,
+    scope: Optional[Dict[str, Any]] = None,
+    resume_from: Optional[str] = None,
+    time_budget_ms: Optional[float] = None,
+) -> UpdateMapsResult:
+    """Rebuild the dependency map + library.md (incremental unless full=True).
+
+    directory scopes to a subtree; max_files caps parsing. When map_complete is
+    false, re-run with the same scope until it is true.
+    """
+    if scope and not directory:
+        directory = scope.get("directory") or scope.get("dir")
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return UpdateMapsResult(success=False, project_root=str(project_root or ""), full_rebuild=full,
+                                files_analyzed=0, edges_drawn=0, message=str(exc), error=str(exc))
+    started = time.time()
+    res = api.update_maps(project_root=str(root), full=full, directory=directory, max_files=max_files)
+    skipped = int(res.get("files_skipped") or 0)
+    return UpdateMapsResult(
+        success=bool(res.get("success")),
+        project_root=str(root),
+        full_rebuild=full,
+        files_analyzed=int(res.get("files_parsed") or 0),
+        edges_drawn=int(res.get("edges_persisted") or 0),
+        duration_seconds=round(time.time() - started, 2),
+        message=(
+            f"parsed {res.get('files_parsed')}/{res.get('files_to_reparse')} dirty files, "
+            f"{res.get('edges_persisted')} edges, map_complete={res.get('map_complete')}"
+            if res.get("success") else f"update_maps failed: {res.get('error')}"
+        ),
+        incremental=not full,
+        files_to_reparse=int(res.get("files_to_reparse") or 0),
+        persist_exercised=bool(res.get("persist_pipeline_exercised")),
+        partial=skipped > 0,
+        partial_reason=f"max_files budget: {skipped} files left" if skipped else None,
+        scope={"directory": directory, "max_files": max_files},
+        progress=res.get("map_coverage"),
+        continuation_hint="Re-run update_maps with the same directory/max_files" if skipped else None,
+        map_complete=res.get("map_complete"),
+        error=res.get("error"),
+    )
+
+
+@mcp.tool()
+def health(
+    project_root: Optional[str] = None,
+    directory: Optional[str] = None,
+    format: Literal["text", "json", "summary", "healing-stats"] = "text",
+) -> str | dict:
+    """Health matrix: text table, summary counts, full JSON entries (+ACS), or healing stats."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format != "text" else f"Error: {exc}"
+    return api.health(project_root=str(root), directory=directory, format=format)
+
+
+@mcp.tool()
+def validate(project_root: Optional[str] = None, format: Literal["text", "json"] = "text") -> str | dict:
+    """Parseable sources under monitored_paths (or mapped in scope) that lack a health row."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    res = health_mod.validate_health(root)
+    res.update({"success": True, "project_root": str(root)})
+    if format == "json":
+        return res
+    if not res["missing_count"]:
+        return f"All monitored sources have health entries ({res['total_scanned']} scanned, {res['ghost_count']} ghosts)."
+    return f"{res['missing_count']} file(s) lack health entries:\n" + "\n".join(f"- {m}" for m in res["missing"][:50])
+
+
+@mcp.tool()
+def list_healable_stubs(
+    project_root: Optional[str] = None,
+    directory: Optional[str] = None,
+    min_wiki_length: int = 350,
+    format: Literal["text", "json"] = "text",
+) -> str | dict:
+    """Initial-stub rows whose wiki is now substantial (with quality signals)."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    stubs = health_mod.get_healable_stubs(root, min_wiki_length=min_wiki_length, directory=directory)
+    if format == "json":
+        return {"success": True, "project_root": str(root), "count": len(stubs), "healable_stubs": stubs, "min_wiki_length": min_wiki_length}
+    if not stubs:
+        return "No healable stub entries found."
+    return "\n".join(f"- {s['file']}: {s['quality']} (score={s['quality_score']}, {s['wiki_size']} bytes)" for s in stubs)
+
+
+@mcp.tool()
+def heal_stubs(
+    project_root: Optional[str] = None,
+    dry_run: bool = False,
+    min_wiki_length: int = 350,
+    format: Literal["text", "json"] = "text",
+) -> str | dict:
+    """Promote Initial stubs with a real wiki: high quality → 🟢, medium → 🟡."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    res = api.heal_stubs(project_root=str(root), dry_run=dry_run, min_wiki_length=min_wiki_length)
+    if format == "json":
+        return res
+    verb = "Would heal" if dry_run else "Healed"
+    return f"{verb} {res.get('healed_count', 0)} Initial stub entries." if res.get("success") else f"Error: {res.get('error')}"
+
+
+@mcp.tool()
+def seed_source_content_hashes(
+    project_root: Optional[str] = None,
+    only_green: bool = True,
+    force: bool = False,
+    directory: Optional[str] = None,
+) -> dict:
+    """Record current source hashes as baselines without changing status (migration)."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root)
+    return api.seed_source_content_hashes(project_root=str(root), only_green=only_green, force=force, directory=directory)
+
+
+@mcp.tool()
+def journal(date: str = "", project_root: Optional[str] = None, format: Literal["text", "json"] = "text") -> str | dict:
+    """Journal entries for a date (YYYY-MM-DD; default today)."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    res = api.journal(date or None, project_root=str(root))
+    if format == "json" or not res.get("success"):
+        return res if format == "json" else f"Error: {res.get('error')}"
+    return res["content"] or f"No journal entries for {res['date']} yet."
+
+
+@mcp.tool()
+def issues(severity: str = "all", project_root: Optional[str] = None, format: Literal["text", "json"] = "text") -> str | dict:
+    """Logged_issues markdown files (simple|moderate|high|critical|all)."""
+    try:
+        root = _get_effective_root(project_root)
+    except ProjectRootError as exc:
+        return _root_error(exc, project_root) if format == "json" else f"Error: {exc}"
+    res = api.issues(severity, project_root=str(root))
+    if format == "json":
+        return res
+    return "\n".join(res.get("issues") or []) or "No logged issues."
 
 
 # =============================================================================
 # Resources
 # =============================================================================
 
+def _read_root_file(name: str) -> str:
+    path = _get_effective_root() / name
+    return path.read_text(encoding="utf-8") if path.exists() else f"File not found: {name}"
+
+
 @mcp.resource("wikifier://library")
 def get_library() -> str:
-    return _read_file_safe("library.md")
+    return _read_root_file("library.md")
 
 
 @mcp.resource("wikifier://health")
 def get_health_matrix() -> str:
-    return _read_file_safe("file_health.md")
+    return _read_root_file("file_health.md")
 
 
 @mcp.resource("wikifier://pending")
 def get_pending_updates() -> str:
-    return _read_file_safe("pending_updates.md")
+    return _read_root_file("pending_updates.md")
 
 
 @mcp.resource("wikifier://journal/{date}")
 def get_journal(date: str) -> str:
-    path = WIKIFIER_ROOT / "journal" / f"{date[:4]}/{date[5:7]}/{date}.md"
-    return path.read_text(encoding="utf-8") if path.exists() else f"No journal entry found for {date}."
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return f"Invalid date {date!r}; expected YYYY-MM-DD."
+    res = api.journal(date, project_root=str(_get_effective_root()))
+    return res.get("content") or f"No journal entries for {date}."
 
 
 # =============================================================================
@@ -1901,147 +750,103 @@ def get_journal(date: str) -> str:
 
 @mcp.prompt()
 def review_pending_changes() -> str:
-    return """You are reviewing pending changes in a Wikifier-managed project.
+    return """Review pending documentation work in this Wikifier-managed project.
 
-Recommended workflow:
-1. Call `get_pending_updates()`
-2. Call `get_files_needing_attention()`
-3. For important files, use `get_file_wiki()` and `get_dependents()`
-4. Use `record_change` + `mark_green` after updating documentation
-
-Start by understanding the current state of the health matrix and pending queue."""
+1. session_bootstrap() — attention lists and actions[]
+2. For each actionable file: prepare_edit(file), get_file_wiki(file), get_dependents(file)
+3. Refresh the wiki, then mark_green(file). Never skip record_change after code edits."""
 
 
 @mcp.prompt()
 def audit_project_health() -> str:
-    return """Perform a full documentation health audit.
+    return """Audit documentation health.
 
-Steps:
-1. Get overall project status with `get_project_status()`
-2. Identify all Red and Yellow files
-3. Review recent journal activity
-4. Suggest priority areas and next actions
-
-Use `check_changes()`, `get_files_needing_attention()`, `search_journal()`, and `suggest_next_actions()`."""
+1. get_project_status(format="json")
+2. get_files_needing_attention(status="red"), then "yellow"
+3. search_journal() for recent activity
+4. suggest_next_actions(format="json") — report priorities from actions[]"""
 
 
 @mcp.prompt()
 def plan_refactoring(target: str) -> str:
-    return f"""You are planning a refactoring of '{target}'.
+    return f"""Plan a refactoring of '{target}'.
 
-Before making changes (R2 ACS Explanations Maturity — canonical via contracts.compute_acs_confidence; excellent, consistent, decision-ready across scales):
-1. Use `get_dependents("{target}")` for blast radius.
-2. Use `get_dependencies("{target}", format="json")` (PRIMARY) — every edge carries:
-   - confidence_score (0.05-0.95)
-   - confidence_explanation (R2 authoritative: narrative + full "Recommendation: ..." — QUOTE VERBATIM in all decisions/reports)
-   - confidence_reasons (filter: dev_only|dead_code_guard|cycle_participant|dynamic_expression|weak_resolution_strategy|complexity:opaque|complexity:high|barrel_depth=3+ )
-   - conditional_analysis/dynamic_analysis (tags, detectors, trace evidence), resolution_metadata, strategy.
-3. Decision rules (trust only these):
-   - AUTO-SAFE (no manual review needed for most refactors): score >= 0.75 AND "strong strategy" in expl AND Recommendation starts with "High-fidelity static resolution via strong strategy. Safe for automated"
-   - MANUAL-ONLY / REVIEW: Recommendation contains "Deep barrel", "Runtime conditional", "Moderate-to-high", or score in 0.55-0.74
-   - AVOID / CRITICAL: Recommendation starts with "CRITICAL:", "Cycle participant", "Opaque or high-complexity", "Weak/fragile", or score < 0.55 or has dev_only/cycle/opaque reasons.
-4. Always cross `get_cycles(analysis=True, format="json", use_canonical=True)` for participants (use severity/weakest_links + note reused/graph_signature for delta efficiency on unchanged topology).
-5. Use `get_resolution_diagnostics`, library.md, `get_file_wiki`.
-
-Return structured impact analysis. For EVERY edge quote the exact full Recommendation sentence from confidence_explanation + the triggering reasons. Explicitly flag all non-AUTO-SAFE cases."""
+1. get_dependents("{target}") — blast radius.
+2. get_dependencies("{target}", format="json") — for each edge read confidence_score and the
+   "Recommendation:" sentence in confidence_explanation.
+   - score >= 0.75 with a strong strategy: safe for automated edits
+   - 0.55–0.74, deep barrel, or runtime-conditional: review manually
+   - < 0.55, cycle participant, opaque dynamic: avoid automated edits
+3. get_cycles(analysis=True, format="json") if the file is in a cycle — use weakest_links and
+   recommendations.
+Return an impact analysis that quotes each risky edge's Recommendation sentence."""
 
 
 @mcp.prompt()
 def find_architectural_smells() -> str:
-    return """Analyze the project for architectural smells using dependency data (R2 ACS Explanations Maturity — canonical single-source compute_acs_confidence; trustworthy for autonomous agents on monorepos).
+    return """Find architectural smells from the dependency data.
 
-Look for:
-- Highly coupled / god modules via dependents counts + get_dependencies.
-- Circular risks: ALWAYS start with `get_cycles(analysis=True, format="json", use_canonical=True)` (Wave 4 default v1 canonical physical node ids for symlink-stable graphs/signatures; "reused": true + reuse_reason="graph_signature_match" signals O(1) delta short-circuit / no Tarjan work on unchanged topology, per gap1_cycles_longterm_strategy). Rank clusters by `severity` + `external_blast_radius` + weakest risk. For each high-priority, quote the *full* top `recommendations[0]` (strategy + rationale + hint + safety) — these are now high-quality, signal-specific, and actionable per R5 real-dogfood refinements.
-- **Primary actionable smells = low/fragile ACS edges** (R2): Call `get_dependencies(..., format="json")`, filter where:
-    confidence_score < 0.65 OR
-    reasons contain any of: tag:dev_only, tag:dead_code_guard, cycle_participant, dynamic_expression, weak_resolution_strategy, complexity:opaque, complexity:high, barrel_depth>=3
-  The `confidence_explanation` (R2) is ground-truth decision text — quote its *full* "Recommendation: ..." sentence verbatim for every reported smell. These are the exact files/edges to harden first.
-- Fragility via conditional_analysis + dynamic_analysis (semantic_tags + analysis_trace evidence) + resolution_metadata.
-- Deep barrel chains, weak/unknown strategies.
-
-Use `get_project_status()`, `get_cycles`, `get_dependencies` (JSON for filters + full expls), `get_resolution_diagnostics`, library.md. For each smell, cite the exact Recommendation sentence + the exact triggering reasons/tags. Prioritize by severity of the Recommendation text (CRITICAL > Cycle > Opaque > Weak > Deep barrel)."""
+- Cycles: get_cycles(analysis=True, format="json"); rank by severity and external_blast_radius,
+  quote recommendations[0] (strategy, rationale, hint, safety) for the worst clusters.
+- Fragile edges: get_dependencies(file, format="json", low_confidence_only=True) on hub files;
+  look for reasons like cycle_participant, dynamic_expression, weak_resolution_strategy,
+  complexity:opaque, barrel_depth>=3.
+- God modules: files with many get_dependents results.
+Cite the Recommendation sentence and triggering reasons for each smell."""
 
 
 @mcp.prompt()
 def understand_codebase_structure() -> str:
-    return """You are onboarding to this codebase.
+    return """Onboard to this codebase.
 
-Best first actions (R2 ACS Explanations Maturity):
-1. Read `library.md` (rich sections + Mermaid)
-2. Call `get_project_status()`
-3. Identify most depended-on via Reverse Dependencies
-4. For every key module: `get_dependencies(..., format="json")` — read *every* `confidence_explanation` (R2: full narrative + Recommendation sentence is the decision signal) + reasons + traces + conditional/dynamic_analysis. Use `get_dependents` + `get_cycles(analysis=True, use_canonical=True)` (reused signals cheap delta)
-
-Start with `get_library()` + `get_dependents` on cores. Quote Recommendation sentences for any non-"High-fidelity Safe for automated" edges. Filter low-score in JSON for quick risk map. Use resolution diagnostics for strategy quality."""
+1. session_bootstrap() and follow map_index → list_paths(prefix) for the folders you need
+2. get_project_status(format="json")
+3. For key modules: prepare_edit(file), get_dependencies(file, format="json"), get_dependents(file)
+4. get_cycles(analysis=True) for structural risks"""
 
 
 @mcp.prompt()
 def review_recent_changes(days: int = 7) -> str:
-    return f"""Review the project activity and documentation debt over the last {days} days.
+    return f"""Review activity over the last {days} days.
 
-Recommended steps:
-1. Read recent journal entries using the `journal` tool.
-2. Identify files that received `record-change` entries.
-3. Check whether those files have up-to-date wiki summaries ([GREEN] status).
-4. Flag any areas where documentation has fallen behind recent work.
-
-Provide a concise summary of recent changes and any documentation debt that should be addressed."""
+1. search_journal() / journal(date) for record-change entries
+2. For each changed file: why_file(file) — is it Green again (wiki refreshed)?
+3. Report documentation debt: files recorded but not yet mark_green'd."""
 
 
 @mcp.prompt()
 def generate_project_health_report() -> str:
-    return """Generate a clear, professional project documentation health report suitable for sharing with humans or other agents.
+    return """Write a project health report for humans or other agents.
 
-Include:
-- Overall health summary (counts of Green/Yellow/Red files)
-- Top files currently needing attention
-- Most depended-on modules (from Reverse Dependencies)
-- Areas with strong vs weak documentation
-- Notable architectural risks (cycles via `get_cycles(analysis=True, use_canonical=True)` noting reused for delta efficiency, barrel/conditional smells via diagnostics + library sections)
-- Actionable recommendations with priority
-
-Use `get_project_status()`, `get_files_needing_attention()`, `get_library()`, `get_cycles(analysis=True)`, and the Reverse Dependencies section of library.md."""
+Include: Green/Yellow/Red counts (get_project_status), top files needing attention,
+most depended-on modules (get_dependents on hubs), cycles (get_cycles(analysis=True)),
+and prioritized recommendations."""
 
 
 @mcp.prompt()
 def onboard_to_module(module_path: str) -> str:
-    return f"""You are helping an agent deeply understand the module: **{module_path}**.
+    return f"""Understand the module {module_path}.
 
-Recommended exploration order (R2 ACS Explanations Maturity — use canonical confidence_explanation as decision oracle):
-1. Read its current wiki summary using `get_file_wiki("{module_path}")`
-2. Use `get_dependencies("{module_path}", format="json")` — for EVERY outgoing edge read the full `confidence_explanation` (R2 narrative + exact "Recommendation: ..." sentence is primary) + `confidence_reasons` + `conditional_analysis`/`dynamic_analysis` traces + strategy. Filter in client for score<0.68 or high-sev reasons.
-3. Use `get_dependents("{module_path}")` for blast radius.
-4. `get_cycles(analysis=True, format="json", use_canonical=True)` (v1 default; reused field signals cheap delta short-circuit on graph_signature match per cycles long-term strategy + Wave 4 flip) + weakest links.
-5. `get_resolution_diagnostics` + health.
-
-Return structured onboarding: quote the full Recommendation sentence from each risky edge's confidence_explanation (CRITICAL/Cycle/Opaque/Deep barrel/Weak first); note dev_only/cycle/opaque/score<0.6 explicitly. Identify safe vs fragile outgoing deps using the exact rec text."""
+1. get_file_wiki("{module_path}")
+2. get_dependencies("{module_path}", format="json") — note each risky edge's Recommendation
+3. get_dependents("{module_path}") — who relies on it
+4. get_cycles(analysis=True, format="json") if it is in a cycle
+Summarize its role, safe vs fragile dependencies, and blast radius."""
 
 
-# =============================================================================
-# Main
-# =============================================================================
-
-def main():
-    """Entry point for the Wikifier MCP server."""
+def main() -> None:
+    """Entry point for ``wikifier-mcp``."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Wikifier MCP Server")
-    parser.add_argument(
-        "--project-root",
-        type=str,
-        default=None,
-        help="Target project directory (sets WIKIFIER_PROJECT_ROOT)"
-    )
+    parser = argparse.ArgumentParser(description="Wikifier MCP server")
+    parser.add_argument("--project-root", default=None, help="Target project directory (sets WIKIFIER_PROJECT_ROOT)")
     args = parser.parse_args()
-
-    if args.project_root:
-        os.environ["WIKIFIER_PROJECT_ROOT"] = args.project_root
-
-    # Re-discover root in case the env var was just set
     global WIKIFIER_ROOT
-    WIKIFIER_ROOT = _discover_project_root()
-
+    if args.project_root:
+        WIKIFIER_ROOT = resolve_root(args.project_root)
+        os.environ["WIKIFIER_PROJECT_ROOT"] = str(WIKIFIER_ROOT)
+    else:
+        WIKIFIER_ROOT = _discover_project_root()
     mcp.run()
 
 
