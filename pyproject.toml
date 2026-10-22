@@ -9,7 +9,7 @@ description = "Zero-dependency agent-to-agent codebase wiki for LLMs and AI agen
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "Aron Amos", email = "aron@example.com"}
+    {name = "Aron Amos", email = "aron.amos@ironadamant.com"}
 ]
 maintainers = [
     {name = "Aron Amos"}
