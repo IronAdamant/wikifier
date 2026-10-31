@@ -1,0 +1,13 @@
+[package]
+name = "wikifier"
+version = "4.7.0"
+edition = "2021"
+description = "Wikifier — zero-dependency agent-to-agent codebase wiki."
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "wikifier"
+path = "src/main.rs"
+
+[dependencies]

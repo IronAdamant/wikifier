@@ -25,6 +25,9 @@ Thumbs.db
 # Local MCP / analysis tools
 .chisel/
 
+# Rust build (std-only wikifier binary)
+/target/
+
 # Python packaging / build artifacts
 build/
 dist/
