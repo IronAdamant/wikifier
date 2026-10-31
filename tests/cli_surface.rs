@@ -10,8 +10,11 @@ fn bin() -> PathBuf {
 }
 
 fn project() -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
     let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let root = std::env::temp_dir().join(format!("wk-cli-{n}"));
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!("wk-cli-{}-{n}-{seq}", std::process::id()));
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("map_paths.txt"), "src\n").unwrap();
     std::fs::write(root.join("monitored_paths.txt"), "src\n").unwrap();
@@ -36,7 +39,13 @@ fn two_bootstraps_agree() {
             .args(["--target", root.to_str().unwrap(), "session-bootstrap"])
             .output()
             .unwrap();
-        assert!(out.status.success(), "stderr {}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "status {:?} stderr {} stdout {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr),
+            String::from_utf8_lossy(&out.stdout)
+        );
         String::from_utf8(out.stdout).unwrap()
     };
     let first = run();
