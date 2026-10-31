@@ -1,6 +1,6 @@
 //! The shipped binary is the entry point: version, two stable bootstraps, MCP tool names.
 
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -51,23 +51,62 @@ fn two_bootstraps_agree() {
 }
 
 #[test]
-fn mcp_lists_contract_tools() {
+fn mcp_stdio_is_newline_delimited_json() {
+    let root = project();
     let mut child = Command::new(bin())
         .arg("mcp")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     let mut stdin = child.stdin.take().unwrap();
-    let req = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
-    write!(stdin, "Content-Length: {}\r\n\r\n{req}", req.len()).unwrap();
-    drop(stdin);
-    let mut stdout = child.stdout.take().unwrap();
-    let mut buf = String::new();
-    stdout.read_to_string(&mut buf).unwrap();
-    let _ = child.wait();
-    for name in wikifier::api::MCP_TOOLS {
-        assert!(buf.contains(&format!("\"name\":\"{name}\"")), "missing tool {name}\n{buf}");
+    let stdout = child.stdout.take().unwrap();
+    let mut lines = BufReader::new(stdout);
+    let mut send = |payload: &str| {
+        writeln!(stdin, "{payload}").unwrap();
+        stdin.flush().unwrap();
+    };
+    let mut recv = || {
+        let mut line = String::new();
+        lines.read_line(&mut line).unwrap();
+        assert!(!line.to_ascii_lowercase().contains("content-length"), "{line}");
+        assert!(line.ends_with('\n'), "reply was not one JSON line: {line:?}");
+        parse_line(&line)
+    };
+
+    send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+    let init = recv();
+    assert_eq!(init.get("id").and_then(|v| match v { wikifier::Json::Int(n) => Some(*n), _ => None }), Some(1), "{init}");
+    assert_eq!(init.get("result").and_then(|v| v.get("protocolVersion")).and_then(|v| v.as_str()), Some("2024-11-05"), "{init}");
+
+    send(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+    let listed = recv();
+    let tools = listed.get("result").and_then(|v| v.get("tools")).and_then(|v| v.as_array()).unwrap_or_else(|| panic!("{listed}"));
+    assert_eq!(tools.len(), wikifier::api::MCP_TOOLS.len());
+    for tool in tools {
+        let name = tool.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let description = tool.get("description").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(description.len() > 40, "{name} description {description}");
+        assert!(!description.starts_with("Wikifier "), "{name} still has a placeholder description");
+        let required = tool.get("inputSchema").and_then(|v| v.get("required")).and_then(|v| v.as_array()).unwrap_or_else(|| panic!("{name} schema {tool}"));
+        assert!(required.iter().any(|v| v.as_str() == Some("project_root")), "{name} required {required:?}");
     }
-    assert!(buf.contains("\"success\":") || buf.contains("tools"), "{buf}");
+
+    let root_text = root.to_str().unwrap().replace('\\', "\\\\").replace('"', "\\\"");
+    send(&format!(
+        r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"get_current_project_root","arguments":{{"project_root":"{root_text}"}}}}}}"#
+    ));
+    let called = recv();
+    let text = called.to_string();
+    assert!(text.contains("\"success\":true"), "{called}");
+    assert!(text.contains(&root.file_name().unwrap().to_string_lossy().to_string()), "{called}");
+    drop(stdin);
+    let status = child.wait().unwrap();
+    assert!(status.success(), "mcp exit {status}");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+fn parse_line(line: &str) -> wikifier::Json {
+    wikifier::jsonutil::parse(line.trim()).unwrap_or_else(|err| panic!("stdio json {err}: {line}"))
 }

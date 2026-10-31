@@ -1,67 +1,238 @@
 //! Per-file payloads plus src and dst edge indexes.
-//! A one-file update rewrites that file's payload and the edge lists it touches.
+//! A run loads the index once, edits it in memory, and commits once.
 //! Lookups read one index file, not every payload.
+//! Cache file names are FNV-1a hashes so long relative paths fit on disk.
+//! The original path is stored in the payload JSON and as the `@` header of edge files.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::collections::BTreeSet;
+use std::fs::{self, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::scope::rel_of;
 
-fn cache_root(root: &Path) -> PathBuf {
+pub use crate::cache_commit::{check_consistency, rebuild, Consistency, Session};
+
+static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) const STORE_KINDS: &[(&str, &str)] = &[
+    ("payload", "json"),
+    ("by_src", "edges"),
+    ("by_dst", "edges"),
+    ("notes", "txt"),
+    ("barrels", "json"),
+];
+
+pub(crate) fn cache_root(root: &Path) -> PathBuf {
     root.join(".wikifier_staging").join("wk_cache")
 }
 
-fn enc(rel: &str) -> String {
+/// Stable FNV-1a 64. `std::hash` is keyed per process, so it cannot name cache files.
+pub(crate) fn fnv1a64(data: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in data {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+pub(crate) fn enc(rel: &str) -> String {
+    format!("{:016x}", fnv1a64(rel.as_bytes()))
+}
+
+pub(crate) fn legacy_enc(rel: &str) -> String {
     rel.replace('%', "%25").replace('/', "%2F")
 }
 
+pub(crate) fn store_file(root: &Path, sub: &str, rel: &str, ext: &str) -> PathBuf {
+    cache_root(root).join(sub).join(format!("{}.{}", enc(rel), ext))
+}
+
+pub(crate) fn legacy_file(root: &Path, sub: &str, rel: &str, ext: &str) -> PathBuf {
+    cache_root(root).join(sub).join(format!("{}.{}", legacy_enc(rel), ext))
+}
+
+fn read_file(root: &Path, sub: &str, rel: &str, ext: &str) -> PathBuf {
+    let hashed = store_file(root, sub, rel, ext);
+    if hashed.is_file() {
+        return hashed;
+    }
+    let legacy = legacy_file(root, sub, rel, ext);
+    if legacy.is_file() {
+        return legacy;
+    }
+    hashed
+}
+
 pub fn payload_path(root: &Path, rel: &str) -> PathBuf {
-    cache_root(root).join("payload").join(format!("{}.json", enc(rel)))
+    read_file(root, "payload", rel, "json")
 }
 
-fn by_src_path(root: &Path, rel: &str) -> PathBuf {
-    cache_root(root).join("by_src").join(format!("{}.edges", enc(rel)))
+pub fn by_src_path(root: &Path, rel: &str) -> PathBuf {
+    read_file(root, "by_src", rel, "edges")
 }
 
-fn by_dst_path(root: &Path, rel: &str) -> PathBuf {
-    cache_root(root).join("by_dst").join(format!("{}.edges", enc(rel)))
-}
-
-fn paths_file(root: &Path) -> PathBuf {
-    cache_root(root).join("paths.txt")
-}
-
-fn index_file(root: &Path) -> PathBuf {
+pub(crate) fn index_file(root: &Path) -> PathBuf {
     cache_root(root).join("index.tsv")
 }
 
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+pub(crate) fn paths_file(root: &Path) -> PathBuf {
+    cache_root(root).join("paths.txt")
+}
+
+pub fn commit_pending_path(root: &Path) -> PathBuf {
+    cache_root(root).join("commit.pending")
+}
+
+pub(crate) fn generation_path(root: &Path) -> PathBuf {
+    cache_root(root).join("generation")
+}
+
+pub(crate) fn names_marker(root: &Path) -> PathBuf {
+    cache_root(root).join("names-v2")
+}
+
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("cache");
+    let tmp = parent.join(format!(".{file_name}.{}.{seq}.tmp", std::process::id()));
+    let write_result = (|| {
+        let mut file = OpenOptions::new().write(true).create_new(true).open(&tmp).map_err(|e| e.to_string())?;
+        file.write_all(bytes).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if let Err(err) = write_result {
+        let _ = fs::remove_file(&tmp);
+        return Err(err);
     }
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    if let Err(err) = replace_file(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(err);
+    }
+    fsync_dir(parent);
     Ok(())
 }
 
-fn read_lines(path: &Path) -> Vec<String> {
-    fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
+pub(crate) fn write_labeled(path: &Path, rel: &str, body: &str) -> Result<(), String> {
+    let mut text = format!("@\t{rel}\n");
+    text.push_str(body);
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    atomic_write(path, text.as_bytes())
 }
 
-fn dst_of(line: &str) -> String {
+fn replace_file(from: &Path, to: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        replace_file_windows(from, to)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::rename(from, to).map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
+    }
+}
+
+#[cfg(windows)]
+fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+    }
+    fn wide(path: &Path) -> Vec<u16> {
+        let mut encoded: Vec<u16> = path.as_os_str().encode_wide().collect();
+        encoded.push(0);
+        encoded
+    }
+    let src = wide(from);
+    let dst = wide(to);
+    let ok = unsafe { MoveFileExW(src.as_ptr(), dst.as_ptr(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) };
+    if ok == 0 {
+        Err(format!("rename {} -> {}: {}", from.display(), to.display(), std::io::Error::last_os_error()))
+    } else {
+        Ok(())
+    }
+}
+
+fn fsync_dir(path: &Path) {
+    #[cfg(not(windows))]
+    {
+        if let Ok(file) = File::open(path) {
+            let _ = file.sync_all();
+        }
+    }
+    #[cfg(windows)]
+    {
+        fsync_dir_windows(path);
+    }
+}
+
+#[cfg(windows)]
+fn fsync_dir_windows(path: &Path) {
+    use std::os::windows::ffi::OsStrExt;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FILE_SHARE_READ: u32 = 0x1;
+    const FILE_SHARE_WRITE: u32 = 0x2;
+    const OPEN_EXISTING: u32 = 3;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateFileW(
+            name: *const u16,
+            access: u32,
+            share: u32,
+            security: *mut core::ffi::c_void,
+            disposition: u32,
+            flags: u32,
+            template: *mut core::ffi::c_void,
+        ) -> *mut core::ffi::c_void;
+        fn FlushFileBuffers(handle: *mut core::ffi::c_void) -> i32;
+        fn CloseHandle(handle: *mut core::ffi::c_void) -> i32;
+    }
+    let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide.push(0);
+    unsafe {
+        let handle = CreateFileW(
+            wide.as_ptr(),
+            GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            std::ptr::null_mut(),
+        );
+        if handle.is_null() || handle == (-1isize as *mut core::ffi::c_void) {
+            return;
+        }
+        FlushFileBuffers(handle);
+        CloseHandle(handle);
+    }
+}
+
+pub(crate) fn read_lines(path: &Path) -> Vec<String> {
+    fs::read_to_string(path).unwrap_or_default().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+pub(crate) fn content_lines(path: &Path) -> Vec<String> {
+    read_lines(path).into_iter().filter(|line| !line.starts_with("@\t")).collect()
+}
+
+pub(crate) fn dst_of(line: &str) -> String {
     line.split('\t').next().unwrap_or("").trim().to_string()
 }
 
 pub fn load_dependencies(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    // Index only. A corrupt sibling payload must not matter.
-    let mut dsts: Vec<String> = read_lines(&by_src_path(root, rel)).into_iter().map(|l| dst_of(&l)).filter(|s| !s.is_empty()).collect();
+    let mut dsts: Vec<String> = content_lines(&by_src_path(root, rel)).into_iter().map(|line| dst_of(&line)).filter(|s| !s.is_empty()).collect();
     dsts.sort();
     dsts.dedup();
     Ok(dsts)
@@ -82,12 +253,12 @@ pub struct DependencyView {
 }
 
 fn notes_path(root: &Path, rel: &str) -> PathBuf {
-    cache_root(root).join("notes").join(format!("{}.txt", enc(rel)))
+    read_file(root, "notes", rel, "txt")
 }
 
 pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, String> {
     let mut internal = Vec::new();
-    for line in read_lines(&by_src_path(root, rel)) {
+    for line in content_lines(&by_src_path(root, rel)) {
         let mut parts = line.split('\t');
         let path = parts.next().unwrap_or("").trim().to_string();
         if path.is_empty() {
@@ -124,7 +295,7 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
 }
 
 pub fn load_dependents(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    let mut srcs = read_lines(&by_dst_path(root, rel));
+    let mut srcs = content_lines(&read_file(root, "by_dst", rel, "edges"));
     srcs.sort();
     srcs.dedup();
     Ok(srcs)
@@ -145,62 +316,6 @@ pub fn all_paths(root: &Path) -> Vec<String> {
     read_lines(&paths_file(root))
 }
 
-#[derive(Clone, Debug)]
-struct Row {
-    rel: String,
-    mtime_ns: u128,
-    size: u64,
-    hash: String,
-    dsts: BTreeSet<String>,
-}
-
-fn load_index(root: &Path) -> BTreeMap<String, Row> {
-    let mut map = BTreeMap::new();
-    for line in read_lines(&index_file(root)) {
-        let mut parts = line.split('\t');
-        let rel = parts.next().unwrap_or("").to_string();
-        if rel.is_empty() {
-            continue;
-        }
-        let mtime_ns = parts.next().unwrap_or("0").parse().unwrap_or(0);
-        let size = parts.next().unwrap_or("0").parse().unwrap_or(0);
-        let hash = parts.next().unwrap_or("").to_string();
-        let dsts = load_dependencies(root, &rel).unwrap_or_default().into_iter().collect();
-        map.insert(rel.clone(), Row { rel, mtime_ns, size, hash, dsts });
-    }
-    map
-}
-
-fn save_index(root: &Path, rows: &BTreeMap<String, Row>) -> Result<(), String> {
-    let mut body = String::new();
-    let mut paths = String::new();
-    for (rel, row) in rows {
-        body.push_str(&format!("{rel}\t{}\t{}\t{}\n", row.mtime_ns, row.size, row.hash));
-        paths.push_str(rel);
-        paths.push('\n');
-    }
-    atomic_write(&index_file(root), body.as_bytes())?;
-    atomic_write(&paths_file(root), paths.as_bytes())?;
-    Ok(())
-}
-
-fn rewrite_dst(root: &Path, dst: &str, src: &str, add: bool) -> Result<(), String> {
-    let path = by_dst_path(root, dst);
-    let mut lines = read_lines(&path);
-    lines.retain(|s| s != src);
-    if add {
-        lines.push(src.to_string());
-    }
-    lines.sort();
-    lines.dedup();
-    if lines.is_empty() {
-        let _ = fs::remove_file(&path);
-        return Ok(());
-    }
-    atomic_write(&path, lines.join("\n").as_bytes())?;
-    Ok(())
-}
-
 pub struct FileUpdate {
     pub rel: String,
     pub mtime_ns: u128,
@@ -213,73 +328,33 @@ pub struct FileUpdate {
     pub unresolved: Vec<(String, i64)>,
 }
 
-/// Write one file's payload and patch only its src index and the dst indexes that changed.
+/// Write one file. Prefer [`Session`] when updating many files in one run.
 pub fn upsert_file(root: &Path, upd: &FileUpdate) -> Result<(), String> {
-    let mut rows = load_index(root);
-    let old_dsts = rows.get(&upd.rel).map(|r| r.dsts.clone()).unwrap_or_default();
-    let payload = format!(
-        "{{\"rel\":{},\"sha256\":{},\"imports\":{},\"resolved\":{}}}",
-        crate::jsonutil::Json::String(upd.rel.clone()),
-        crate::jsonutil::Json::String(upd.hash.clone()),
-        crate::jsonutil::Json::Array(upd.imports.iter().cloned().map(crate::jsonutil::Json::String).collect()),
-        crate::jsonutil::Json::Array(upd.dsts.iter().cloned().map(crate::jsonutil::Json::String).collect()),
-    );
-    atomic_write(&payload_path(root, &upd.rel), payload.as_bytes())?;
-    let mut src_lines = if upd.edge_lines.is_empty() {
-        upd.dsts.iter().cloned().collect::<Vec<_>>()
-    } else {
-        upd.edge_lines.clone()
-    };
-    src_lines.sort();
-    src_lines.dedup();
-    atomic_write(&by_src_path(root, &upd.rel), src_lines.join("\n").as_bytes())?;
-    let mut notes = String::new();
-    for name in &upd.external {
-        notes.push_str(&format!("E\t{name}\n"));
-    }
-    for (raw, line) in &upd.unresolved {
-        notes.push_str(&format!("U\t{raw}\t{line}\n"));
-    }
-    if notes.is_empty() {
-        let _ = fs::remove_file(notes_path(root, &upd.rel));
-    } else {
-        atomic_write(&notes_path(root, &upd.rel), notes.as_bytes())?;
-    }
-    for gone in old_dsts.difference(&upd.dsts) {
-        rewrite_dst(root, gone, &upd.rel, false)?;
-    }
-    for added in upd.dsts.difference(&old_dsts) {
-        rewrite_dst(root, added, &upd.rel, true)?;
-    }
-    rows.insert(
-        upd.rel.clone(),
-        Row {
-            rel: upd.rel.clone(),
-            mtime_ns: upd.mtime_ns,
-            size: upd.size,
-            hash: upd.hash.clone(),
-            dsts: upd.dsts.clone(),
-        },
-    );
-    save_index(root, &rows)
+    let mut session = Session::open(root)?;
+    session.upsert(upd);
+    session.commit()
 }
 
 pub fn remove_file(root: &Path, rel: &str) -> Result<(), String> {
-    let mut rows = load_index(root);
-    if let Some(row) = rows.remove(rel) {
-        for dst in &row.dsts {
-            rewrite_dst(root, dst, rel, false)?;
-        }
-    }
-    let _ = fs::remove_file(payload_path(root, rel));
-    let _ = fs::remove_file(by_src_path(root, rel));
-    save_index(root, &rows)
+    let mut session = Session::open(root)?;
+    session.remove(rel);
+    session.commit()
 }
 
 pub fn indexed_rows(root: &Path) -> Vec<(String, u128, u64, String)> {
-    load_index(root)
-        .into_values()
-        .map(|r| (r.rel, r.mtime_ns, r.size, r.hash))
+    read_lines(&index_file(root))
+        .into_iter()
+        .filter_map(|line| {
+            let mut parts = line.split('\t');
+            let rel = parts.next().unwrap_or("").to_string();
+            if rel.is_empty() {
+                return None;
+            }
+            let mtime_ns = parts.next().unwrap_or("0").parse().unwrap_or(0);
+            let size = parts.next().unwrap_or("0").parse().unwrap_or(0);
+            let hash = parts.next().unwrap_or("").to_string();
+            Some((rel, mtime_ns, size, hash))
+        })
         .collect()
 }
 
@@ -311,22 +386,20 @@ pub fn rel_string(root: &Path, path: &Path) -> String {
     rel_of(root, path)
 }
 
-fn barrel_path(root: &Path, rel: &str) -> PathBuf {
-    cache_root(root).join("barrels").join(format!("{}.json", enc(rel)))
-}
-
 pub fn write_barrel_record(root: &Path, rel: &str, dsts: &[String]) -> Result<(), String> {
+    let _lock = crate::cache_commit::LockGuard::acquire(root)?;
     let body = crate::jsonutil::Json::obj(vec![
         ("src", crate::jsonutil::Json::String(rel.to_string())),
         ("dsts", crate::jsonutil::Json::Array(dsts.iter().cloned().map(crate::jsonutil::Json::String).collect())),
     ]);
-    atomic_write(&barrel_path(root, rel), body.to_string().as_bytes())
+    atomic_write(&store_file(root, "barrels", rel, "json"), body.to_string().as_bytes())
 }
 
 pub fn prune_barrel_files(root: &Path, max_age_days: f64, dry_run: bool) -> Result<usize, String> {
+    let _lock = crate::cache_commit::LockGuard::acquire(root)?;
     let dir = cache_root(root).join("barrels");
     let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
+        Ok(entries) => entries,
         Err(_) => return Ok(0),
     };
     let now = std::time::SystemTime::now();
@@ -340,15 +413,20 @@ pub fn prune_barrel_files(root: &Path, max_age_days: f64, dry_run: bool) -> Resu
         let text = fs::read_to_string(&path).unwrap_or_default();
         let parsed = crate::jsonutil::parse(&text).ok();
         let src = parsed.as_ref().and_then(|v| v.get("src")).and_then(|s| s.as_str()).unwrap_or("");
-        let dsts: Vec<String> = parsed.as_ref()
+        let dsts: Vec<String> = parsed
+            .as_ref()
             .and_then(|v| v.get("dsts"))
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+            .map(|items| items.iter().filter_map(|item| item.as_str().map(|s| s.to_string())).collect())
             .unwrap_or_default();
-        let dangling = src.is_empty()
-            || !root.join(src).is_file()
-            || dsts.iter().any(|d| !root.join(d).is_file());
-        let aged = ent.metadata().ok().and_then(|m| m.modified().ok()).and_then(|t| now.duration_since(t).ok()).map(|age| age > max_age).unwrap_or(false);
+        let dangling = src.is_empty() || !root.join(src).is_file() || dsts.iter().any(|dst| !root.join(dst).is_file());
+        let aged = ent
+            .metadata()
+            .ok()
+            .and_then(|meta| meta.modified().ok())
+            .and_then(|t| now.duration_since(t).ok())
+            .map(|age| age > max_age)
+            .unwrap_or(false);
         if dangling || aged {
             pruned += 1;
             if !dry_run {
