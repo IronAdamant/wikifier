@@ -1,10 +1,20 @@
 # Wikifier
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://img.shields.io/pypi/v/wikifier.svg)](https://pypi.org/project/wikifier/)
 [![GitHub Stars](https://img.shields.io/github/stars/IronAdamant/wikifier?style=social)](https://github.com/IronAdamant/wikifier/stargazers)
 
-**A zero-dependency codebase wiki for AI agents** — token-efficient maps so LLMs look things up instead of re-reading full sources.
+**The PyPI package is archived.** It will not receive further uploads, and it is not the project anymore. Do not use `pip install wikifier` for new work.
+
+The replacement is this repository. Wikifier is a std-only Rust program. Build it from source:
+
+```bash
+git clone https://github.com/IronAdamant/wikifier
+cd wikifier
+cargo build --release
+./target/release/wikifier --version
+```
+
+**A zero-dependency codebase wiki for AI agents.** Token-efficient maps so LLMs look things up instead of re-reading full sources.
 
 Wikifier is an **agent-to-agent** tool: it builds a living map of a project (health matrix, dependency graph, short file summaries) and agents keep that map current as they work. Humans can peek via a small dashboard; the product is the agent loop, not a general docs site or IDE.
 
@@ -12,7 +22,7 @@ Works from small scripts to large monorepos. **Deep import/include maps** (zero-
 
 | Language | Extensions | Notes |
 |----------|------------|--------|
-| Python | `.py` | stdlib `ast`; absolute, relative and `from pkg import submodule` imports; guarded imports flagged |
+| Python | `.py` | absolute, relative and `from pkg import submodule` imports; comments and strings ignored |
 | JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts` | tsconfig paths, package `exports`, workspaces, barrel chains; comments/strings ignored |
 | Rust | `.rs` | `use` / `mod` / `extern crate` |
 | Go | `.go` | `import` / import blocks |
@@ -45,11 +55,11 @@ Context windows are finite. Re-reading a large file to answer “what is this an
 ## First run (bootstrap the map)
 
 ```bash
-pip install wikifier            # pure Python stdlib core — no runtime deps
-pip install wikifier[mcp]       # optional Model Context Protocol (MCP) server
+cargo build --release           # std-only Rust binary — no crates.io dependencies
+./target/release/wikifier --version
 
 cd /path/to/your/project
-wikifier init                   # seeds index.html + lean path-list templates
+./path/to/wikifier init         # seeds lean path-list templates
 # Edit monitored_paths.txt + map_paths.txt to package roots (not bare ".") on real trees
 wikifier update-maps            # full structural map → library.md + import cache
 wikifier health --summary       # matrix counts
@@ -100,7 +110,7 @@ Advanced intel as needed: `list_paths` (names-only folder expand), `get_dependen
 - **Scale** — indexed edge table (dependents/dependencies without loading the cache), exact barrel invalidation, nanosecond-mtime dirty checks (unchanged files are never re-read)
 - **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
 - **Zero core dependencies** — stdlib only; forks can add their own stack on top
-- **Honest failures** — a missing `project_root`, missing file or lock timeout is an error result, never a silent fallback; every command is plain Python (the shell launchers just exec `python -m wikifier`)
+- **Honest failures** — a missing `project_root`, missing file or lock timeout is an error result, never a silent fallback. The implementation is a std-only Rust binary. `wikifier.sh` launches that binary.
 
 ## Does it pay off? (measured)
 
@@ -140,7 +150,7 @@ Residual floor on large scopes is mtime/stat + live count under MapScope (not fu
 
 ### Parser accuracy
 
-`python scripts/parser_accuracy.py` measures precision/recall of internal edges on small realistic layouts (`tests/accuracy_fixtures.py`):
+`cargo test` checks internal edges on the frozen accuracy layouts:
 
 | Fixture | 4.6.13 precision / recall | 4.7.0 precision / recall |
 |---------|---------------------------|--------------------------|
@@ -149,7 +159,7 @@ Residual floor on large scopes is mtime/stat + live count under MapScope (not fu
 | TS monorepo (workspaces, paths, barrels) | 1.00 / 1.00 | 1.00 / 1.00 |
 | Comment / string / regex traps | 0.29 / 0.67 | 1.00 / 1.00 |
 
-Tests: `python -m unittest discover tests` (stdlib only; 260+ tests including one regression test per 4.7.0 fix, the accuracy fixtures and the benchmark harness).
+Tests: `cargo test` (std-only Rust; accuracy fixtures, cache lookups, and the agent-loop commands).
 
 ## Commands
 
@@ -178,7 +188,7 @@ Tests: `python -m unittest discover tests` (stdlib only; 260+ tests including on
 
 Library: `from wikifier import session_bootstrap, prepare_edit, list_paths, check_changes, record_change, record_changes, mark_green, verify_wikis, suggest_next_actions, update_maps, get_dependencies, get_dependents, cycles_report, health, init_project`.
 
-`wikifier.sh` / `wikifier.ps1` / `wikifier.bat` are thin launchers for `python -m wikifier` (set `WIKIFIER_PYTHON` to pick the interpreter).
+`wikifier.sh` / `wikifier.ps1` / `wikifier.bat` launch the Rust binary (`WIKIFIER_BIN` overrides the path). MCP is `wikifier mcp` on stdio. There is no Python package and no `mcp` extra.
 
 ## MCP
 
