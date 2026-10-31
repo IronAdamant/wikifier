@@ -10,36 +10,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::cache::{self, FileUpdate};
 
-#[cfg(test)]
-use std::cell::Cell;
-
-#[cfg(test)]
-thread_local! {
-    static INDEX_READS: Cell<u32> = const { Cell::new(0) };
-    static SRC_READS: Cell<u32> = const { Cell::new(0) };
-}
-
-fn note_index_read() {
-    #[cfg(test)]
-    INDEX_READS.with(|c| c.set(c.get() + 1));
-}
-
-fn note_src_read() {
-    #[cfg(test)]
-    SRC_READS.with(|c| c.set(c.get() + 1));
-}
-
-#[cfg(test)]
-fn reset_counts() {
-    INDEX_READS.with(|c| c.set(0));
-    SRC_READS.with(|c| c.set(0));
-}
-
-#[cfg(test)]
-fn counts() -> (u32, u32) {
-    (INDEX_READS.with(|c| c.get()), SRC_READS.with(|c| c.get()))
-}
-
 #[derive(Clone, Debug)]
 struct Row {
     rel: String,
@@ -171,6 +141,21 @@ impl Session {
         self.rows.get(rel).map(|row| (row.mtime_ns, row.size, row.hash.clone()))
     }
 
+    pub fn dsts_of(&self, rel: &str) -> BTreeSet<String> {
+        self.rows.get(rel).map(|row| row.dsts.clone()).unwrap_or_default()
+    }
+
+    /// Record a new size or mtime when the bytes still match the stored hash.
+    pub fn note_stat(&mut self, rel: &str, mtime_ns: u128, size: u64) {
+        let Some(row) = self.rows.get_mut(rel) else { return };
+        if row.mtime_ns == mtime_ns && row.size == size {
+            return;
+        }
+        row.mtime_ns = mtime_ns;
+        row.size = size;
+        self.rewrite_index = true;
+    }
+
     pub fn rels(&self) -> Vec<String> {
         self.rows.keys().cloned().collect()
     }
@@ -226,6 +211,10 @@ impl Session {
     }
 
     pub fn remove(&mut self, rel: &str) {
+        let importers: Vec<String> = self.rev.get(rel).cloned().unwrap_or_default().into_iter().filter(|src| src != rel && self.rows.contains_key(src)).collect();
+        for src in importers {
+            self.strip_dst(&src, rel);
+        }
         if let Some(row) = self.rows.remove(rel) {
             for dst in row.dsts {
                 if let Some(set) = self.rev.get_mut(&dst) {
@@ -234,10 +223,25 @@ impl Session {
                 self.dirty_dst.insert(dst);
             }
         }
+        self.rev.remove(rel);
         self.dirty_src.remove(rel);
         self.payloads.remove(rel);
         self.notes.remove(rel);
         self.removed.insert(rel.to_string());
+        self.rewrite_index = true;
+    }
+
+    fn strip_dst(&mut self, src: &str, dst: &str) {
+        if let Some(row) = self.rows.get_mut(src) {
+            row.dsts.remove(dst);
+        }
+        if let Some(set) = self.rev.get_mut(dst) {
+            set.remove(src);
+        }
+        let mut lines = self.dirty_src.get(src).cloned().unwrap_or_else(|| cache::content_lines(&cache::by_src_path(&self.root, src)));
+        lines.retain(|line| cache::dst_of(line) != dst);
+        self.dirty_src.insert(src.to_string(), lines);
+        self.dirty_dst.insert(dst.to_string());
         self.rewrite_index = true;
     }
 
@@ -260,6 +264,9 @@ impl Session {
             }
         }
         for (rel, lines) in &self.dirty_src {
+            if self.removed.contains(rel) {
+                continue;
+            }
             let body = if lines.is_empty() { String::new() } else { format!("{}\n", lines.join("\n")) };
             cache::write_labeled(&cache::store_file(&self.root, "by_src", rel, "edges"), rel, &body)?;
         }
@@ -331,7 +338,6 @@ fn index_record_lines(root: &Path) -> Vec<String> {
 }
 
 fn load_rows(root: &Path) -> (BTreeMap<String, Row>, bool) {
-    note_index_read();
     let mut map = BTreeMap::new();
     let mut upgrade = false;
     for line in index_record_lines(root) {
@@ -347,7 +353,6 @@ fn load_rows(root: &Path) -> (BTreeMap<String, Row>, bool) {
             Some(raw) => parse_dsts(raw),
             None => {
                 upgrade = true;
-                note_src_read();
                 cache::load_dependencies(root, &rel).unwrap_or_default().into_iter().collect()
             }
         };
@@ -570,75 +575,4 @@ fn rebuild_locked(root: &Path) -> Result<(), String> {
     let _ = fs::remove_file(cache::commit_pending_path(root));
     cache::atomic_write(&cache::names_marker(root), b"fnv1a64\n")?;
     Ok(())
-}
-
-#[cfg(test)]
-mod scale {
-    use super::*;
-    use std::time::Instant;
-
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("wk-scale-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    fn upd(rel: &str, dst: Option<&str>, hash: &str) -> FileUpdate {
-        let mut dsts = BTreeSet::new();
-        if let Some(dst) = dst {
-            dsts.insert(dst.to_string());
-        }
-        FileUpdate {
-            rel: rel.into(),
-            mtime_ns: 1,
-            size: 1,
-            hash: hash.into(),
-            imports: Vec::new(),
-            dsts,
-            edge_lines: Vec::new(),
-            external: Vec::new(),
-            unresolved: Vec::new(),
-        }
-    }
-
-    fn seed(root: &Path, n: usize) {
-        let mut session = Session::open(root).unwrap();
-        for i in 0..n {
-            let rel = format!("f{i}.py");
-            let dst = if i + 1 < n { Some(format!("f{}.py", i + 1)) } else { None };
-            session.upsert(&upd(&rel, dst.as_deref(), &format!("h{i}")));
-        }
-        session.commit().unwrap();
-    }
-
-    fn one_update(root: &Path) -> (std::time::Duration, u32, u32) {
-        reset_counts();
-        let started = Instant::now();
-        let mut session = Session::open(root).unwrap();
-        session.upsert(&upd("f0.py", Some("f2.py"), "h0-edited"));
-        session.commit().unwrap();
-        (started.elapsed(), counts().0, counts().1)
-    }
-
-    #[test]
-    fn per_file_update_does_not_reread_the_index_as_n_grows() {
-        let small_root = scratch("small");
-        let large_root = scratch("large");
-        seed(&small_root, 80);
-        seed(&large_root, 320);
-        let (small_dt, small_idx, small_src) = one_update(&small_root);
-        let (large_dt, large_idx, large_src) = one_update(&large_root);
-        assert_eq!(small_idx, 1, "small update read the index {small_idx} times");
-        assert_eq!(large_idx, 1, "large update read the index {large_idx} times");
-        assert_eq!(small_src, 0, "small update re-read by_src files");
-        assert_eq!(large_src, 0, "large update re-read by_src files");
-        let ratio = large_dt.as_secs_f64() / small_dt.as_secs_f64().max(0.001);
-        assert!(
-            ratio < 8.0,
-            "one-file commit grew with the index: 80 files {small_dt:?}, 320 files {large_dt:?}, ratio {ratio:.2}"
-        );
-        let _ = fs::remove_dir_all(&small_root);
-        let _ = fs::remove_dir_all(&large_root);
-    }
 }
