@@ -1,36 +1,80 @@
 //! Stdio MCP (JSON-RPC) over the same functions as the CLI.
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, Read, Write};
+use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 use crate::api::{self, MCP_TOOLS};
 use crate::jsonutil::{self, Json};
 
+fn string_prop(description: &str) -> Json {
+    Json::obj(vec![
+        ("type", Json::String("string".into())),
+        ("description", Json::String(description.into())),
+    ])
+}
+
+fn tool_spec(name: &str) -> (&'static str, &'static [&'static str], &'static [&'static str]) {
+    match name {
+        "check_changes" => ("Compare mapped files and Green baselines and report content drift.", &["project_root"], &[]),
+        "record_change" => ("Record a semantic edit against one file and mark that file actionable.", &["project_root", "file", "reason"], &[]),
+        "record_deletion" => ("Record that a mapped file was removed and should leave the health matrix.", &["project_root", "file", "reason"], &[]),
+        "mark_green" => ("Mark a file Green after its wiki names the file's public symbols.", &["project_root", "file"], &["reason"]),
+        "record_changes" => ("Record git changes in one batch. Pass per-file reasons when you have them.", &["project_root"], &[]),
+        "verify_wikis" => ("Check every Green wiki against the public symbols currently in the source.", &["project_root"], &[]),
+        "prepare_edit" => ("Look up health, wiki text, dependencies, and dependents before editing a file.", &["project_root", "file"], &[]),
+        "session_bootstrap" => ("Return readiness, health, suggested actions, and the mapped file list for this root.", &["project_root"], &[]),
+        "suggest_next_actions" => ("Return the next agent actions, highest priority first.", &["project_root"], &[]),
+        "list_core_tools" => ("List the daily core tools and the full MCP tool catalogue.", &["project_root"], &[]),
+        "list_paths" => ("List mapped files under a project-relative prefix.", &["project_root"], &["prefix"]),
+        "search_journal" => ("Search journal entries by file path or reason text.", &["project_root", "query"], &["text"]),
+        "why_file" => ("Return the journal reasons recorded for one file.", &["project_root", "file"], &[]),
+        "get_dependencies" => ("Return internal edges, external imports, and unresolved imports for one file.", &["project_root", "file"], &[]),
+        "get_dependents" => ("Return the mapped files that import a given file.", &["project_root", "file"], &[]),
+        "get_cycles" => ("Return import cycles in the mapped graph.", &["project_root"], &[]),
+        "get_resolution_diagnostics" => ("Return resolution and barrel diagnostics for the current map.", &["project_root"], &[]),
+        "get_file_wiki" => ("Return the wiki markdown stored beside a source file.", &["project_root", "file"], &[]),
+        "get_files_needing_attention" => ("Return files whose health is Red or an actionable Yellow.", &["project_root"], &[]),
+        "get_project_status" => ("Return the same readiness snapshot as session bootstrap.", &["project_root"], &[]),
+        "get_current_project_root" => ("Return the absolute project root this call is using.", &["project_root"], &[]),
+        "get_barrel_reports" => ("Return barrel and incremental-resolution status for the current map.", &["project_root"], &[]),
+        "get_incremental_status" => ("Return whether the map is incremental and which barrels are recorded.", &["project_root"], &[]),
+        "update_maps" => ("Parse the scoped tree and commit one cache generation for the whole run.", &["project_root"], &[]),
+        "health" => ("Return the health matrix entries and the green, yellow, and red counts.", &["project_root"], &[]),
+        "validate" => ("Check health coverage and that the forward and reverse cache indexes agree.", &["project_root"], &[]),
+        "list_healable_stubs" => ("List Initial-stub files whose wiki is long enough to heal.", &["project_root"], &[]),
+        "heal_stubs" => ("Promote Initial stubs that already have a long enough wiki.", &["project_root"], &[]),
+        "seed_source_content_hashes" => ("Seed health rows from the current map without rewriting wikis.", &["project_root"], &[]),
+        "journal" => ("Return journal entries, optionally for one date.", &["project_root"], &[]),
+        "issues" => ("Return the same prioritized actions as suggest_next_actions.", &["project_root"], &[]),
+        _ => ("Run one Wikifier agent operation against project_root.", &["project_root"], &[]),
+    }
+}
+
 pub fn tool_schema(name: &str) -> Json {
-    let mut props = vec![("project_root".into(), Json::obj(vec![("type", Json::String("string".into()))]))];
-    let needs_file = matches!(name,
-        "record_change" | "record_deletion" | "mark_green" | "prepare_edit" | "why_file"
-        | "get_dependencies" | "get_dependents" | "get_file_wiki");
-    if needs_file {
-        props.push(("file".into(), Json::obj(vec![("type", Json::String("string".into()))])));
-    }
-    if matches!(name, "record_change" | "record_deletion" | "mark_green") {
-        props.push(("reason".into(), Json::obj(vec![("type", Json::String("string".into()))])));
-    }
-    if name == "list_paths" {
-        props.push(("prefix".into(), Json::obj(vec![("type", Json::String("string".into()))])));
-    }
-    if name == "search_journal" {
-        props.push(("query".into(), Json::obj(vec![("type", Json::String("string".into()))])));
-        props.push(("text".into(), Json::obj(vec![("type", Json::String("string".into()))])));
+    let (description, required, optional) = tool_spec(name);
+    let mut props = vec![("project_root".into(), string_prop("Absolute project root. Pass it on every call."))];
+    let mut fields: Vec<&str> = required.iter().copied().chain(optional.iter().copied()).filter(|field| *field != "project_root").collect();
+    fields.sort();
+    fields.dedup();
+    for field in fields {
+        let desc = match field {
+            "file" => "Project-relative source path.",
+            "reason" => "Why the file changed, or why a forced mark-green is still accurate.",
+            "prefix" => "Project-relative directory prefix. Omit to list the whole map.",
+            "query" => "Substring matched against journal file paths and reasons.",
+            "text" => "Alias of query.",
+            _ => "String argument.",
+        };
+        props.push((field.into(), string_prop(desc)));
     }
     Json::obj(vec![
         ("name", Json::String(name.into())),
-        ("description", Json::String(format!("Wikifier {name}"))),
+        ("description", Json::String(description.into())),
         ("inputSchema", Json::obj(vec![
             ("type", Json::String("object".into())),
             ("properties", Json::from_pairs(props)),
+            ("required", Json::Array(required.iter().map(|field| Json::String((*field).into())).collect())),
         ])),
     ])
 }
@@ -124,24 +168,13 @@ pub fn serve_stdio() -> Result<(), String> {
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
     let mut stdout = std::io::stdout().lock();
-    let mut buffered;
     loop {
         let mut line = String::new();
         let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
         if n == 0 {
             break;
         }
-        if line.to_ascii_lowercase().starts_with("content-length:") {
-            let len: usize = line.split(':').nth(1).unwrap_or("0").trim().parse().unwrap_or(0);
-            let mut discard = String::new();
-            let _ = reader.read_line(&mut discard);
-            let mut body = vec![0u8; len];
-            reader.read_exact(&mut body).map_err(|e| e.to_string())?;
-            buffered = String::from_utf8_lossy(&body).into_owned();
-        } else {
-            buffered = line;
-        }
-        let trimmed = buffered.trim();
+        let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
@@ -150,8 +183,7 @@ pub fn serve_stdio() -> Result<(), String> {
             Err(_) => continue,
         };
         if let Some(resp) = handle_message(&msg) {
-            let bytes = resp.to_string();
-            write!(stdout, "Content-Length: {}\r\n\r\n{}", bytes.len(), bytes).map_err(|e| e.to_string())?;
+            writeln!(stdout, "{resp}").map_err(|e| e.to_string())?;
             stdout.flush().map_err(|e| e.to_string())?;
         }
     }

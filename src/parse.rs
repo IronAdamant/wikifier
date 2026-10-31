@@ -65,18 +65,55 @@ pub fn language(path: &Path) -> Option<&'static str> {
     }
 }
 
-pub fn scan_file(path: &Path) -> Scan {
-    let text = fs::read_to_string(path).unwrap_or_default();
+/// Read source as text. Invalid UTF-8 is decoded lossily so ASCII imports survive,
+/// and the warning is returned for the JSON result instead of a silent empty file.
+pub fn read_utf8(path: &Path) -> (String, Option<String>) {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) => return (String::new(), Some(format!("unreadable: {err}"))),
+    };
+    match String::from_utf8(bytes) {
+        Ok(text) => (text, None),
+        Err(err) => {
+            let text = String::from_utf8_lossy(err.as_bytes()).into_owned();
+            (text, Some("not valid UTF-8; parsed with lossy replacement so ASCII imports are kept".into()))
+        }
+    }
+}
+
+fn scan_text(path: &Path, text: &str) -> Scan {
     match language(path) {
-        Some("python") => scan_python(&text),
-        Some("javascript") => scan_js(&text),
-        Some("rust") => scan_rust(&text),
-        Some("go") => scan_go(&text),
-        Some("c") => scan_c(&text),
-        Some("csharp") => scan_csharp(&text),
-        Some("java") => scan_java(&text),
+        Some("python") => scan_python(text),
+        Some("javascript") => scan_js(text),
+        Some("rust") => scan_rust(text),
+        Some("go") => scan_go(text),
+        Some("c") => scan_c(text),
+        Some("csharp") => scan_csharp(text),
+        Some("java") => scan_java(text),
         _ => Scan::default(),
     }
+}
+
+/// Scan one file. A parser panic becomes an empty scan plus a warning so one bad file
+/// cannot abort the rest of the map.
+pub fn scan_file_warned(path: &Path) -> (Scan, String, Option<String>) {
+    let (text, warning) = read_utf8(path);
+    let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| scan_text(path, &text)));
+    match parsed {
+        Ok(scan) => (scan, text, warning),
+        Err(_) => {
+            let fail = "parser failed; file skipped so the rest of the map can continue".to_string();
+            let warning = Some(match warning {
+                Some(prev) => format!("{prev}; {fail}"),
+                None => fail,
+            });
+            (Scan::default(), text, warning)
+        }
+    }
+}
+
+pub fn scan_file(path: &Path) -> Scan {
+    scan_file_warned(path).0
 }
 
 pub fn resolve_project(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTreeSet<String>> {
@@ -479,16 +516,20 @@ fn mask_python(src: &str) -> (String, Vec<String>) {
     let mut i = 0;
     let mut code_tail = String::new();
     while i < b.len() {
+        if !src.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
         if b[i] == b'#' {
             while i < b.len() && b[i] != b'\n' {
+                let n = utf8_len(src, i);
                 out.push(' ');
-                i += 1;
+                i += n;
             }
             continue;
         }
-        if let Some(_qlen) = python_quote_at(b, i) {
-            let (q, start) = quote_span(b, i);
-            let body_start = start;
+        if python_quote_at(b, i).is_some() {
+            let (q, body_start) = quote_span(b, i);
             let mut j = body_start;
             while j + q.len() <= b.len() && &b[j..j + q.len()] != q.as_slice() {
                 if b[j] == b'\\' && q.len() == 1 {
@@ -497,8 +538,7 @@ fn mask_python(src: &str) -> (String, Vec<String>) {
                 }
                 j += 1;
             }
-            let body_end = j;
-            let body = String::from_utf8_lossy(&b[body_start..body_end]).to_string();
+            let body = String::from_utf8_lossy(&b[body_start..j]).into_owned();
             let recent = recent_call(&code_tail);
             if recent == "import_module" || recent == "__import__" {
                 let lit = body.trim();
@@ -506,10 +546,7 @@ fn mask_python(src: &str) -> (String, Vec<String>) {
                     dynamic.push(lit.to_string());
                 }
             }
-            for _ in 0..(j + q.len()).saturating_sub(i).min(b.len() - i) {
-                // filled below
-            }
-            let end = (j + q.len()).min(b.len());
+            let end = align_boundary(src, (j + q.len()).min(b.len())).max(i);
             for ch in src[i..end].chars() {
                 out.push(if ch == '\n' { '\n' } else { ' ' });
             }
@@ -517,15 +554,43 @@ fn mask_python(src: &str) -> (String, Vec<String>) {
             code_tail.clear();
             continue;
         }
-        let ch = b[i] as char;
+        let ch = src[i..].chars().next().unwrap();
         out.push(ch);
-        code_tail.push(ch);
-        if code_tail.len() > 80 {
-            code_tail = code_tail[code_tail.len() - 80..].to_string();
-        }
-        i += 1;
+        push_code_tail(&mut code_tail, ch);
+        i += ch.len_utf8();
     }
     (out, dynamic)
+}
+
+fn utf8_len(src: &str, i: usize) -> usize {
+    src[i..].chars().next().map(|ch| ch.len_utf8()).unwrap_or(1)
+}
+
+fn align_boundary(src: &str, mut end: usize) -> usize {
+    if end > src.len() {
+        end = src.len();
+    }
+    while end < src.len() && !src.is_char_boundary(end) {
+        end += 1;
+    }
+    end
+}
+
+fn push_code_tail(tail: &mut String, ch: char) {
+    tail.push(ch);
+    const MAX: usize = 80;
+    let count = tail.chars().count();
+    if count <= MAX {
+        return;
+    }
+    let mut cut = 0;
+    for (n, ch) in tail.chars().enumerate() {
+        if n == count - MAX {
+            break;
+        }
+        cut += ch.len_utf8();
+    }
+    *tail = tail[cut..].to_string();
 }
 
 fn recent_call(tail: &str) -> &str {
@@ -738,11 +803,16 @@ fn scan_js(src: &str) -> Scan {
                 }
             }
         }
-        tail.push(b[i] as char);
-        if tail.len() > 12 {
+        if !src.is_char_boundary(i) {
+            i += 1;
+            continue;
+        }
+        let ch = src[i..].chars().next().unwrap();
+        tail.push(ch);
+        while tail.chars().count() > 12 {
             tail.remove(0);
         }
-        i += 1;
+        i += ch.len_utf8();
     }
     Scan { imports, local_exports }
 }
@@ -931,17 +1001,17 @@ fn read_quoted(s: &str) -> Option<(String, usize)> {
     }
     let q = b[0];
     let mut i = 1;
-    let mut spec = String::new();
+    let mut raw = Vec::new();
     while i < b.len() {
         if b[i] == b'\\' && i + 1 < b.len() {
-            spec.push(b[i + 1] as char);
+            raw.push(b[i + 1]);
             i += 2;
             continue;
         }
         if b[i] == q {
-            return Some((spec, i + 1));
+            return Some((String::from_utf8_lossy(&raw).into_owned(), i + 1));
         }
-        spec.push(b[i] as char);
+        raw.push(b[i]);
         i += 1;
     }
     None
@@ -1281,6 +1351,33 @@ mod dbg_scan {
             scan.imports.iter().map(|i| format!("{} {:?}", i.spec, i.kind)).collect::<Vec<_>>()
         );
     }
+
+    #[test]
+    fn non_ascii_python_keeps_imports() {
+        let mut src = String::new();
+        for _ in 0..40 {
+            src.push_str("café = \"🐍漢字\"\n");
+        }
+        src.push_str("from . import b\nimport_module(\"pkg.mod\")\n");
+        let scan = super::scan_python(&src);
+        assert!(scan.imports.iter().any(|imp| imp.spec.contains("py:from") && imp.spec.contains('b')), "{:?}", scan.imports);
+        assert!(scan.imports.iter().any(|imp| imp.spec == "pkg.mod"), "{:?}", scan.imports);
+    }
+
+    #[test]
+    fn non_ascii_javascript_and_typescript_keep_imports() {
+        let mut src = String::new();
+        src.push_str("// café 🐍 漢字\n");
+        for _ in 0..30 {
+            src.push_str("const café = \"🐍漢字\";\n");
+        }
+        src.push_str("import { add } from \"./math\";\nexport const 値 = 1;\n");
+        let scan = super::scan_js(&src);
+        assert!(scan.imports.iter().any(|imp| imp.spec == "./math"), "{:?}", scan.imports);
+        let ts = "import type { 設定 } from \"./types\";\nconst emoji = \"🐍\";\nexport { 設定 };\n";
+        let scan = super::scan_js(ts);
+        assert!(scan.imports.iter().any(|imp| imp.spec == "./types"), "{:?}", scan.imports);
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1289,6 +1386,12 @@ pub struct FileFacts {
     pub internal: Vec<(String, i64, Vec<String>)>,
     pub external: Vec<String>,
     pub unresolved: Vec<(String, i64)>,
+}
+
+pub struct Analysis {
+    pub facts: BTreeMap<String, FileFacts>,
+    pub scans: HashMap<String, Scan>,
+    pub warnings: Vec<String>,
 }
 
 fn line_of(text: &str, needles: &[String]) -> i64 {
@@ -1315,13 +1418,18 @@ fn py_parts(spec: &str) -> (String, Vec<String>) {
     (spec.to_string(), Vec::new())
 }
 
-pub fn analyze_files(root: &Path, files: &[PathBuf]) -> BTreeMap<String, FileFacts> {
+pub fn analyze_files(root: &Path, files: &[PathBuf]) -> Analysis {
     let mut scans: HashMap<String, Scan> = HashMap::new();
     let mut texts: HashMap<String, String> = HashMap::new();
+    let mut warnings = Vec::new();
     let rels: Vec<String> = files.iter().map(|f| rel_of(root, f)).collect();
     for (f, rel) in files.iter().zip(rels.iter()) {
-        scans.insert(rel.clone(), scan_file(f));
-        texts.insert(rel.clone(), fs::read_to_string(f).unwrap_or_default());
+        let (scan, text, warning) = scan_file_warned(f);
+        if let Some(warning) = warning {
+            warnings.push(format!("{rel}: {warning}"));
+        }
+        scans.insert(rel.clone(), scan);
+        texts.insert(rel.clone(), text);
     }
     let mut other_files = Vec::new();
     for rel in &rels {
@@ -1417,9 +1525,9 @@ pub fn analyze_files(root: &Path, files: &[PathBuf]) -> BTreeMap<String, FileFac
         out.entry(rel.clone()).or_default();
     }
     let _ = js_edges;
-    out
+    Analysis { facts: out, scans, warnings }
 }
 
 pub fn edges_for_files(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTreeSet<String>> {
-    analyze_files(root, files).into_iter().map(|(k, v)| (k, v.dsts)).collect()
+    analyze_files(root, files).facts.into_iter().map(|(k, v)| (k, v.dsts)).collect()
 }

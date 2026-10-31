@@ -4,9 +4,11 @@
 pub mod api;
 pub mod artifacts;
 pub mod cache;
+mod cache_commit;
 pub mod jsonutil;
 pub mod mcp;
 pub mod parse;
+mod proc;
 pub mod scope;
 pub mod sha256;
 pub mod timeutil;

@@ -5,9 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::artifacts::{self, HealthRow, JournalEntry};
-use crate::cache::{self, FileUpdate};
+use crate::cache::{self, FileUpdate, Session};
 use crate::jsonutil::Json;
-use crate::parse::{self, analyze_files};
+use crate::parse::analyze_files;
 use crate::scope::{self, Scope};
 use crate::sha256::{file_sha256_prefixed, sha256_prefixed};
 use crate::timeutil::local_stamp;
@@ -145,13 +145,16 @@ pub fn update_maps(root: &Path) -> Json {
         Ok(f) => f,
         Err(e) => return fail("ScopeError", e),
     };
-    let facts = analyze_files(root, &files);
-    let edges: BTreeMap<String, BTreeSet<String>> = facts.iter().map(|(k, v)| (k.clone(), v.dsts.clone())).collect();
-    let index = cache::indexed_rows(root);
-    let mut known: BTreeMap<String, (u128, u64, String)> = BTreeMap::new();
-    for (rel, mtime, size, hash) in &index {
-        known.insert(rel.clone(), (*mtime, *size, hash.clone()));
-    }
+    let analysis = analyze_files(root, &files);
+    let warnings = analysis.warnings;
+    let edges: BTreeMap<String, BTreeSet<String>> = analysis.facts.iter().map(|(k, v)| (k.clone(), v.dsts.clone())).collect();
+    let mut session = match Session::open(root) {
+        Ok(session) => session,
+        Err(err) => {
+            let kind = if err.contains("locked") { "CacheLocked" } else { "CacheError" };
+            return fail_warnings(kind, err, &warnings);
+        }
+    };
     let mut parsed = 0i64;
     let mut edge_n = 0i64;
     let mut seen = BTreeSet::new();
@@ -161,38 +164,36 @@ pub fn update_maps(root: &Path) -> Json {
         let bytes = fs::read(file).unwrap_or_default();
         let hash = sha256_prefixed(&bytes);
         let (mtime, size) = cache::stat_ns(file).unwrap_or((0, bytes.len() as u64));
-        let fact = facts.get(&rel);
+        let fact = analysis.facts.get(&rel);
         let dsts = fact.map(|f| f.dsts.clone()).unwrap_or_default();
         edge_n += dsts.len() as i64;
-        if let Some((_, old_size, old_hash)) = known.get(&rel) {
-            if *old_size == size && old_hash == &hash {
+        if let Some((_, old_size, old_hash)) = session.known(&rel) {
+            if old_size == size && old_hash == hash {
                 continue;
             }
         }
-        let scan = parse::scan_file(file);
-        let barrel = scan.imports.iter().any(|i| matches!(i.kind, parse::Kind::ExportFrom | parse::Kind::ExportStar));
-        let imports: Vec<String> = scan.imports.iter().map(|i| i.spec.clone()).collect();
+        let scan = analysis.scans.get(&rel);
+        let barrel = scan.map(|s| s.imports.iter().any(|i| matches!(i.kind, crate::parse::Kind::ExportFrom | crate::parse::Kind::ExportStar))).unwrap_or(false);
+        let imports: Vec<String> = scan.map(|s| s.imports.iter().map(|i| i.spec.clone()).collect()).unwrap_or_default();
         let barrel_dsts: Vec<String> = dsts.iter().cloned().collect();
         let edge_lines = fact.map(|f| {
             f.internal.iter().map(|(dst, line, names)| format!("{dst}\t{line}\t{}", names.join(","))).collect()
         }).unwrap_or_default();
         let external = fact.map(|f| f.external.clone()).unwrap_or_default();
         let unresolved = fact.map(|f| f.unresolved.clone()).unwrap_or_default();
-        if cache::upsert_file(
-            root,
-            &FileUpdate { rel: rel.clone(), mtime_ns: mtime, size, hash, imports, dsts, edge_lines, external, unresolved },
-        ).is_err() {
-            return fail("CacheError", format!("failed to persist {rel}"));
-        }
+        session.upsert(&FileUpdate { rel: rel.clone(), mtime_ns: mtime, size, hash, imports, dsts, edge_lines, external, unresolved });
         if barrel {
-            let _ = cache::write_barrel_record(root, &rel, &barrel_dsts);
+            session.stage_barrel(&rel, &barrel_dsts);
         }
         parsed += 1;
     }
-    for (rel, _, _, _) in &index {
-        if !seen.contains(rel) {
-            let _ = cache::remove_file(root, rel);
-        }
+    let stale: Vec<String> = session.rels().into_iter().filter(|rel| !seen.contains(rel)).collect();
+    for rel in stale {
+        session.remove(&rel);
+    }
+    if let Err(err) = session.commit() {
+        let kind = if err.contains("locked") { "CacheLocked" } else { "CacheError" };
+        return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
     let edge_json = Json::Array(
@@ -211,7 +212,21 @@ pub fn update_maps(root: &Path) -> Json {
         ("edges", edge_json),
         ("scope", scope_json(&scope)),
         ("cache_backend", Json::String("wk_cache".into())),
+        ("warnings", Json::Array(warnings.into_iter().map(Json::String).collect())),
     ])
+}
+
+fn fail_warnings(error_type: &str, error: impl Into<String>, warnings: &[String]) -> Json {
+    let mut value = fail(error_type, error);
+    value.insert("warnings", Json::Array(warnings.iter().cloned().map(Json::String).collect()));
+    value
+}
+
+fn attach_warning(mut value: Json, warning: Option<String>) -> Json {
+    if let Some(warning) = warning {
+        value.insert("warnings", Json::Array(vec![Json::String(warning)]));
+    }
+    value
 }
 
 fn seed_health_from_map(root: &Path) -> Result<(), String> {
@@ -563,7 +578,7 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
     if force && reason.trim().is_empty() {
         return fail("ValueError", "force=True needs a reason explaining why the wiki is still accurate");
     }
-    let symbols = public_symbols(&path);
+    let (symbols, symbol_warning) = public_symbols(&path);
     let wiki = fs::read_to_string(root.join(format!("{rel}.wiki.md"))).unwrap_or_default();
     if wiki.is_empty() {
         let stamp = local_stamp();
@@ -576,7 +591,7 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
             source_hash: hash,
             verification: "no_wiki".into(),
         });
-        return ok(vec![("file", Json::String(rel.into())), ("verification", Json::String("no_wiki".into()))]);
+        return attach_warning(ok(vec![("file", Json::String(rel.into())), ("verification", Json::String("no_wiki".into()))]), symbol_warning);
     }
     let mut missing = Vec::new();
     for sym in &symbols {
@@ -585,13 +600,13 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
         }
     }
     if !missing.is_empty() && !force {
-        return Json::obj(vec![
+        return attach_warning(Json::obj(vec![
             ("success", Json::Bool(false)),
             ("error", Json::String("wiki misses public symbols".into())),
             ("error_type", Json::String("WikiVerificationError".into())),
             ("file", Json::String(rel.into())),
             ("issues", Json::Array(missing.into_iter().map(Json::String).collect())),
-        ]);
+        ]), symbol_warning);
     }
     let verification = if !missing.is_empty() && force { "forced" } else { "verified" };
     let stamp = local_stamp();
@@ -604,15 +619,15 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
         source_hash: hash,
         verification: verification.into(),
     }) {
-        return fail("HealthError", e);
+        return attach_warning(fail("HealthError", e), symbol_warning);
     }
-    ok(vec![("file", Json::String(rel.into())), ("verification", Json::String(verification.into()))])
+    attach_warning(ok(vec![("file", Json::String(rel.into())), ("verification", Json::String(verification.into()))]), symbol_warning)
 }
 
-fn public_symbols(path: &Path) -> Vec<String> {
-    let text = fs::read_to_string(path).unwrap_or_default();
+fn public_symbols(path: &Path) -> (Vec<String>, Option<String>) {
+    let (text, warning) = crate::parse::read_utf8(path);
     if path.extension().and_then(|s| s.to_str()) != Some("py") {
-        return Vec::new();
+        return (Vec::new(), warning);
     }
     let mut symbols = Vec::new();
     for line in text.lines() {
@@ -626,7 +641,7 @@ fn public_symbols(path: &Path) -> Vec<String> {
                             symbols.push(name.to_string());
                         }
                     }
-                    return symbols;
+                    return (symbols, warning);
                 }
             }
         }
@@ -640,7 +655,7 @@ fn public_symbols(path: &Path) -> Vec<String> {
             }
         }
     }
-    symbols
+    (symbols, warning)
 }
 
 pub fn health(root: &Path) -> Json {
@@ -680,10 +695,18 @@ pub fn validate(root: &Path) -> Json {
     let files = scope::collect(root, &scope).unwrap_or_default();
     let known: BTreeSet<String> = artifacts::read_health(root).into_iter().map(|r| r.file).collect();
     let missing: Vec<String> = files.iter().map(|p| scope::rel_of(root, p)).filter(|rel| !known.contains(rel)).collect();
-    ok(vec![
-        ("missing", Json::Array(missing.iter().cloned().map(Json::String).collect())),
-        ("missing_count", Json::Int(missing.len() as i64)),
-    ])
+    let check = cache::check_consistency(root);
+    let mut value = if check.consistent {
+        ok(vec![])
+    } else {
+        fail("CacheInconsistent", "forward and reverse cache indexes disagree")
+    };
+    value.insert("missing", Json::Array(missing.iter().cloned().map(Json::String).collect()));
+    value.insert("missing_count", Json::Int(missing.len() as i64));
+    value.insert("cache_consistent", Json::Bool(check.consistent));
+    value.insert("cache_incomplete", Json::Bool(check.incomplete));
+    value.insert("cache_mismatches", Json::Array(check.mismatches.into_iter().map(Json::String).collect()));
+    value
 }
 
 pub fn cycles(root: &Path) -> Json {
@@ -754,6 +777,7 @@ pub fn verify_wikis(root: &Path) -> Json {
     let rows = artifacts::read_health(root);
     let mut checked = 0i64;
     let mut failed = Vec::new();
+    let mut warnings = Vec::new();
     for row in rows {
         if !is_green(&row.status) {
             continue;
@@ -768,7 +792,11 @@ pub fn verify_wikis(root: &Path) -> Json {
         if wiki.is_empty() {
             continue;
         }
-        let missing: Vec<String> = public_symbols(&path).into_iter().filter(|s| !wiki.contains(s)).collect();
+        let (symbols, symbol_warning) = public_symbols(&path);
+        if let Some(warning) = symbol_warning {
+            warnings.push(format!("{}: {warning}", row.file));
+        }
+        let missing: Vec<String> = symbols.into_iter().filter(|s| !wiki.contains(s)).collect();
         if !missing.is_empty() {
             failed.push(Json::obj(vec![
                 ("file", Json::String(row.file)),
@@ -776,8 +804,9 @@ pub fn verify_wikis(root: &Path) -> Json {
             ]));
         }
     }
+    let warning_json = Json::Array(warnings.into_iter().map(Json::String).collect());
     if failed.is_empty() {
-        ok(vec![("checked", Json::Int(checked)), ("failed", Json::Array(vec![]))])
+        ok(vec![("checked", Json::Int(checked)), ("failed", Json::Array(vec![])), ("warnings", warning_json)])
     } else {
         Json::obj(vec![
             ("success", Json::Bool(false)),
@@ -785,6 +814,7 @@ pub fn verify_wikis(root: &Path) -> Json {
             ("error_type", Json::String("WikiVerificationError".into())),
             ("checked", Json::Int(checked)),
             ("failed", Json::Array(failed)),
+            ("warnings", warning_json),
         ])
     }
 }
@@ -1096,13 +1126,7 @@ pub fn daemon_ctl(root: &Path, action: &str) -> Json {
                 Ok(p) => p,
                 Err(e) => return fail("DaemonError", e.to_string()),
             };
-            match std::process::Command::new(exe)
-                .args(["--target", &root.display().to_string(), "daemon", "run"])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
+            match spawn_daemon(&exe, root) {
                 Ok(child) => {
                     let _ = fs::write(&pidfile, child.id().to_string());
                     ok(vec![("running", Json::Bool(true)), ("pid", Json::Int(child.id() as i64)), ("action", Json::String("start".into()))])
@@ -1117,7 +1141,7 @@ pub fn daemon_ctl(root: &Path, action: &str) -> Json {
         "stop" => {
             if let Ok(text) = fs::read_to_string(&pidfile) {
                 if let Ok(pid) = text.trim().parse::<i32>() {
-                    unsafe { libc_kill(pid, 15); }
+                    let _ = crate::proc::signal_process(pid, 15);
                 }
             }
             let _ = fs::remove_file(&pidfile);
@@ -1127,17 +1151,51 @@ pub fn daemon_ctl(root: &Path, action: &str) -> Json {
     }
 }
 
+fn spawn_daemon(exe: &Path, root: &Path) -> std::io::Result<std::process::Child> {
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(["--target", &root.display().to_string(), "daemon", "run"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    // Windows CreateProcess copies every inheritable handle, including the
+    // pipe `daemon start` is writing its JSON to. Clear that bit first so
+    // `Command::output()` returns when start exits, not when the daemon does.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        prevent_stdio_inheritance();
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW);
+    }
+    cmd.spawn()
+}
+
+#[cfg(windows)]
+fn prevent_stdio_inheritance() {
+    const STD_INPUT_HANDLE: u32 = 0xFFFF_FFF6;
+    const STD_OUTPUT_HANDLE: u32 = 0xFFFF_FFF5;
+    const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4;
+    const HANDLE_FLAG_INHERIT: u32 = 0x1;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetStdHandle(id: u32) -> *mut core::ffi::c_void;
+        fn SetHandleInformation(handle: *mut core::ffi::c_void, mask: u32, flags: u32) -> i32;
+    }
+    unsafe {
+        for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            let handle = GetStdHandle(id);
+            if !handle.is_null() && handle != (-1isize as *mut core::ffi::c_void) {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
+}
+
 fn pid_alive(pidfile: &Path) -> bool {
     let Ok(text) = fs::read_to_string(pidfile) else { return false };
     let Ok(pid) = text.trim().parse::<i32>() else { return false };
-    unsafe { libc_kill(pid, 0) == 0 }
-}
-
-unsafe fn libc_kill(pid: i32, sig: i32) -> i32 {
-    extern "C" {
-        fn kill(pid: i32, sig: i32) -> i32;
-    }
-    kill(pid, sig)
+    crate::proc::pid_alive(pid)
 }
 
 pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap<String, String>) -> Json {
@@ -1189,6 +1247,10 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
             ])).collect()))])
         }
         "validate" => validate(root),
+        "rebuild-cache" | "rebuild_cache" => match cache::rebuild(root) {
+            Ok(()) => ok(vec![("rebuilt", Json::Bool(true))]),
+            Err(err) => fail("CacheError", err),
+        },
         "issues" => suggest_next_actions(root),
         "cycles" | "get_cycles" => cycles(root),
         "verify-wikis" | "verify_wikis" => verify_wikis(root),
@@ -1241,7 +1303,7 @@ pub const CLI_COMMANDS: &[&str] = &[
     "check-changes", "record-change", "mark-green", "record-changes", "record-deletion",
     "session-bootstrap", "suggest-next", "prepare-edit", "dependencies", "dependents",
     "why-file", "search-journal", "list-paths", "cycles", "journal", "issues", "update-maps",
-    "health", "validate", "seed-health", "seed-source-hashes", "prune-pending", "prune-health",
+    "health", "validate", "rebuild-cache", "seed-health", "seed-source-hashes", "prune-pending", "prune-health",
     "heal-stubs", "healable-stubs", "healing-stats", "stale-wikis", "verify-wikis", "prune-barrels",
     "cache-status", "autonomous-status", "metrics-snapshot", "list-core-tools", "init", "monitor",
     "serve", "daemon", "help", "mcp",
