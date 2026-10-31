@@ -1157,16 +1157,39 @@ fn spawn_daemon(exe: &Path, root: &Path) -> std::io::Result<std::process::Child>
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
-    // Without this, Windows keeps the child's inherited stdout pipe open and
-    // `Command::output()` on `daemon start` waits until the daemon loop ends.
+    // Windows CreateProcess copies every inheritable handle, including the
+    // pipe `daemon start` is writing its JSON to. Clear that bit first so
+    // `Command::output()` returns when start exits, not when the daemon does.
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        prevent_stdio_inheritance();
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW);
     }
     cmd.spawn()
+}
+
+#[cfg(windows)]
+fn prevent_stdio_inheritance() {
+    const STD_INPUT_HANDLE: u32 = 0xFFFF_FFF6;
+    const STD_OUTPUT_HANDLE: u32 = 0xFFFF_FFF5;
+    const STD_ERROR_HANDLE: u32 = 0xFFFF_FFF4;
+    const HANDLE_FLAG_INHERIT: u32 = 0x1;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetStdHandle(id: u32) -> *mut core::ffi::c_void;
+        fn SetHandleInformation(handle: *mut core::ffi::c_void, mask: u32, flags: u32) -> i32;
+    }
+    unsafe {
+        for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            let handle = GetStdHandle(id);
+            if !handle.is_null() && handle != (-1isize as *mut core::ffi::c_void) {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
 }
 
 fn pid_alive(pidfile: &Path) -> bool {
