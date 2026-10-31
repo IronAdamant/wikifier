@@ -1,14 +1,10 @@
-# wikifier.ps1 — thin Windows launcher. Every command is implemented in Python:
-#   .\wikifier.ps1 <command> [args]   ==   python -m wikifier <command> [args]
-# Set $env:WIKIFIER_PYTHON to choose the interpreter.
+# Launch the Rust wikifier binary.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-foreach ($candidate in @($here, (Split-Path -Parent (Split-Path -Parent $here)))) {
-    if ($candidate -and (Test-Path (Join-Path $candidate "wikifier\__init__.py"))) {
-        $env:PYTHONPATH = if ($env:PYTHONPATH) { "$candidate;$env:PYTHONPATH" } else { $candidate }
-        break
-    }
+if ($env:WIKIFIER_BIN) { & $env:WIKIFIER_BIN @args; exit $LASTEXITCODE }
+foreach ($rel in @("target\release\wikifier.exe", "target\debug\wikifier.exe")) {
+    $cand = Join-Path $here $rel
+    if (Test-Path $cand) { & $cand @args; exit $LASTEXITCODE }
 }
-$python = if ($env:WIKIFIER_PYTHON) { $env:WIKIFIER_PYTHON } else { "python" }
-& $python -m wikifier @args
+cargo run --quiet --manifest-path (Join-Path $here "Cargo.toml") -- @args
 exit $LASTEXITCODE

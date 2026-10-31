@@ -8,11 +8,11 @@ Wikifier is a **zero-dependency, agent-to-agent codebase wiki**: it gives AI age
 
 **This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). The authoritative agent contract is `skills/run.md` (Agent Protocol v0.7 — package 4.7.x) — read it before substantive work.
 
-**USE WIKIFIER FIRST (non-negotiable in this repo, preferred on any managed target):** At session start call `session_bootstrap` (MCP or `python -m wikifier session-bootstrap`). Prefer Core daily tools (`list_core_tools`): bootstrap, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green`. Look up via map/wiki/deps before re-reading full sources. Selective work only (🔴 / actionable 🟡). Never skip `record_change` after edits.
+**USE WIKIFIER FIRST (non-negotiable in this repo, preferred on any managed target):** At session start call `session_bootstrap` (MCP or `wikifier session-bootstrap`). Prefer Core daily tools (`list_core_tools`): bootstrap, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green`. Look up via map/wiki/deps before re-reading full sources. Selective work only (🔴 / actionable 🟡). Never skip `record_change` after edits.
 
 ## Hard Constraints
 
-- **NON-NEGOTIABLE: effectively zero-dependency.** The core must run on pure Python stdlib (>=3.8) + POSIX shell alone — `pyproject.toml` declares `dependencies = []` and that stays. The reason is architectural, not stylistic: anyone forking this project must be free to bring their own third-party libraries on top of a dependency-free base. Therefore: never add a runtime dependency, never couple core logic to an optional extra (the `mcp` extra must remain strictly optional and isolated to `wikifier/mcp/`), and never make core behavior degrade when nothing beyond the stdlib is installed.
+- **NON-NEGOTIABLE: zero third-party dependencies.** The program is a Rust binary with an empty `[dependencies]` list in `Cargo.toml`. Do not add crates.io crates. POSIX shell launchers only exec that binary. MCP is `wikifier mcp` in the same binary, not a Python extra.
 - **`library.md`, `file_health.md`, `pending_updates.md` are generated/managed artifacts.** Never hand-edit `library.md` (overwritten by `update-maps`); mutate health/pending only through the official commands (they hold locks).
 - **Human-layer separation:** only `index.html` is deployed to target projects on `init`. `diagnostics.html` is maintainer-only and stays in this repo. `index.v2.html` / `diagnostics.v2.html` are proposed redesigns kept in this repo for comparison (not deployed).
 - Agent-to-agent scope only — do not grow features toward general human docs or IDE use.
@@ -39,27 +39,24 @@ The Wikifier MCP server may be connected (tools like `get_project_status`, `get_
 ## Commands
 
 ```bash
-pip install -e .                       # dev install (entry points: wikifier, wikifier-mcp)
-python -m wikifier <command>           # equivalent to the wikifier entry point
-./wikifier.sh <command>                # thin launcher: execs python -m wikifier (root copy == wikifier/scripts/ copy)
-wikifier init [--target DIR]           # bootstrap a target project (copies only index.html)
-wikifier update-maps [--full] [--directory src/] [--max-files N] [--stream]   # rebuild dependency graph + library.md
-wikifier health [--summary|--json]     # health matrix (use --summary/--json for machine consumption)
-wikifier dependencies|dependents <file>   # what a file imports (compact; --full for per-edge records) / who imports it
-wikifier record-changes [-r PATH=WHY] [--only P] [--green] [--dry-run]   # batch record from git
-wikifier verify-wikis                  # re-check Green wikis against their code
-python scripts/benchmark_lookup.py REPO   # tokens + correctness of lookups vs grep (see Findings/2026-10-01-lookup-benchmark.md)
-wikifier monitor                       # foreground check-changes loop
-wikifier daemon {start|stop|status}    # managed background maintenance
-WIKIFIER_PROJECT_ROOT=/abs/path wikifier-mcp   # MCP server (requires pip install wikifier[mcp])
-./scripts/publish.sh [test|prod]       # PyPI release (build + twine)
+cargo build --release                  # std-only binary: target/release/wikifier
+./wikifier.sh <command>                # launches that binary (or cargo run)
+wikifier init [--target DIR]           # bootstrap a target project
+wikifier update-maps [--full] [--directory src/] [--max-files N] [--stream]
+wikifier health [--summary|--json]
+wikifier dependencies|dependents <file>
+wikifier record-changes [-r PATH=WHY] [--only P] [--green] [--dry-run]
+wikifier verify-wikis
+wikifier monitor
+wikifier daemon {start|stop|status}
+wikifier mcp                           # MCP server on stdio
 ```
 
-**Tests:** `python -m unittest discover tests` (pure stdlib unittest — no pytest, per the zero-dependency rule; 260+ tests incl. `test_regressions_4_7.py`, `test_verification_and_batch.py`, the parser accuracy fixtures and the benchmark harness). Run it after any core change, plus `python scripts/parser_accuracy.py` after parser changes (must stay 1.00/1.00). Additionally verify by dogfooding: `wikifier check-changes`, `wikifier update-maps` (catches parse/pipeline errors), `wikifier health --summary`, and MCP smoke calls (`get_project_status`, `suggest_next_actions`), then confirm the artifacts (file_health.md, library.md) look right.
+**Tests:** `cargo test`. Parser changes must keep `accuracy_fixtures_match_frozen_edges` green. Also dogfood: `wikifier check-changes`, `wikifier update-maps`, `wikifier health --summary`.
 
 ## Architecture
 
-Pipeline: **scan → parse → resolve → cache → health → artifacts**, all under `wikifier/` (~21k LOC pure stdlib; package version in `wikifier/__init__.py`, currently **4.7.x**).
+Pipeline: **scan → parse → resolve → cache → health → artifacts**, implemented in Rust under `src/` (version in `Cargo.toml`, currently **4.7.x**). The former Python package has been removed.
 
 - `api.py` — the library surface (`check_changes`, `record_change`, `record_changes`, `mark_green`, `verify_wikis`, `record_deletion`, `update_maps`/`run_full_update`, `prepare_edit`, `get_dependencies`/`get_dependents`, `cycles_report`, `init_project`, …). `check_changes` watches mapped + Green + monitored files. `gitchanges.py` supplies the change set for `record_changes` (git optional). Every function returns `{"success": …}`; errors are reported, never fallen back from. `cli.py` is an argparse front end over it (every command is Python; the shell/PowerShell/batch launchers only exec `python -m wikifier`).
 - `paths.py` — `resolve_root` (explicit root → env → discovery; a missing explicit root raises `ProjectRootError`) and `to_rel` (canonical project-relative POSIX keys). All file arguments go through `to_rel`. `project_root.py` holds marker discovery.
@@ -80,7 +77,7 @@ Adding a language = new `wikifier/parsers/{lang}.py` exposing `parse_{lang}_impo
 
 ## Versioning & Releases
 
-- Version lives in `wikifier/__init__.py` (`__version__`); pyproject reads it dynamically. SemVer + Keep a Changelog format in `CHANGELOG.md`.
+- Version lives in `Cargo.toml` (`version`). SemVer + Keep a Changelog format in `CHANGELOG.md`.
 - Protocol versions (`skills/run.md`) are independent of package version; mandatory I/O changes require a protocol version bump with migration notes there.
 - Agents must tolerate additive fields in dict returns; library returns always include `"success": bool`. Operational failures return `{"success": False, "error": ...}`; contract misuse raises.
 

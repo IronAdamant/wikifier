@@ -12,7 +12,7 @@ This file is the contract for any agent operating Wikifier. Part 1 is all you ne
 
 ### Every session
 
-| Step | MCP tool | CLI (`python -m wikifier …` / `wikifier …`) |
+| Step | MCP tool | CLI (`wikifier …`) |
 |---|---|---|
 | 1. Orient | `session_bootstrap` | `session-bootstrap` |
 | 2. What changed | `check_changes` | `check-changes` |
@@ -141,22 +141,18 @@ Mutations take an advisory project lock (`.wikifier_staging/.lock`; `fcntl` on P
 | `journal [YYYY-MM-DD]`, `issues [SEVERITY]`, `list-paths [PREFIX]`, `list-core-tools` | misc |
 | `monitor`, `daemon start\|stop\|status\|logs\|run\|install-service`, `serve [PORT]` | background / human view |
 
-All commands are Python; `wikifier.sh` / `.ps1` / `.bat` only run `python -m wikifier`.
+The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` launch it. MCP is `wikifier mcp`.
 
 ### Library
 
-```python
-from wikifier import (session_bootstrap, check_changes, prepare_edit, suggest_next_actions,
-                      record_change, mark_green, record_deletion, update_maps,
-                      get_dependencies, get_dependents, cycles_report, health, init_project)
+There is no Python library. Agents call the CLI or `wikifier mcp`. The same functions live in the Rust crate (`src/api.rs`) and both fronts call them.
 
-session_bootstrap(project_root="/abs/project")
-record_change("src/api/client.py", "Switched to httpx.AsyncClient: sync requests blocked the event loop.")
+```bash
+wikifier --target /abs/project session-bootstrap
+wikifier --target /abs/project record-change src/api/client.py "Switched the client: the old one blocked the loop."
 # … refresh src/api/client.py.wiki.md …
-mark_green("src/api/client.py", "Wiki reflects httpx usage and retry policy.")
+wikifier --target /abs/project mark-green src/api/client.py "Wiki reflects the new client and retry policy."
 ```
-
-The health *module* is `importlib.import_module("wikifier.health")` (or `wikifier.health_module`); `from wikifier import health` is the convenience *function*.
 
 ### Migration v0.6 → v0.7 (package 4.7.0)
 
@@ -172,7 +168,7 @@ The health *module* is `importlib.import_module("wikifier.health")` (or `wikifie
 - `get_dependencies` returns the compact shape by default (`internal`, `external`, `needs_review`); pass `detail="full"` (CLI `--full`) for the previous `imports[]` records.
 - `check_changes` watches mapped and Green files regardless of `monitored_paths.txt`; files that were invisible before may turn Yellow on the first run.
 - New: `record_changes` / `record-changes`, `verify_wikis` / `verify-wikis`.
-- `python -m wikifier` now exits non-zero on failure (it always exited 0).
+- The CLI exits non-zero on failure.
 
 ### Human layer (secondary)
 

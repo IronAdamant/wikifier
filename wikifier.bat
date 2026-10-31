@@ -1,9 +1,9 @@
 @echo off
-REM wikifier.bat — thin Windows launcher: python -m wikifier <command> [args]
+REM Launch the Rust wikifier binary.
 setlocal
 set "HERE=%~dp0"
-if exist "%HERE%wikifier\__init__.py" set "PYTHONPATH=%HERE%;%PYTHONPATH%"
-if exist "%HERE%..\..\wikifier\__init__.py" set "PYTHONPATH=%HERE%..\..;%PYTHONPATH%"
-if "%WIKIFIER_PYTHON%"=="" (set "PY=python") else (set "PY=%WIKIFIER_PYTHON%")
-"%PY%" -m wikifier %*
+if not "%WIKIFIER_BIN%"=="" ("%WIKIFIER_BIN%" %* & exit /b %ERRORLEVEL%)
+if exist "%HERE%target\release\wikifier.exe" ("%HERE%target\release\wikifier.exe" %* & exit /b %ERRORLEVEL%)
+if exist "%HERE%target\debug\wikifier.exe" ("%HERE%target\debug\wikifier.exe" %* & exit /b %ERRORLEVEL%)
+cargo run --quiet --manifest-path "%HERE%Cargo.toml" -- %*
 exit /b %ERRORLEVEL%

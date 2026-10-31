@@ -1,93 +1,132 @@
-//! Fixture edges must match the Python 4.7 tool, which is the CPython-ast oracle.
+//! Accuracy fixtures formerly checked against the Python 4.7 parser.
+//! The expected edges are the frozen oracle. The suite no longer runs Python.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
-use wikifier::jsonutil::{parse, Json};
-use wikifier::{mapped_edges, update_maps};
+use wikifier::{mapped_edges, update_maps, Json};
+
+struct Fixture {
+    name: &'static str,
+    files: &'static [(&'static str, &'static str)],
+    edges: &'static [(&'static str, &'static str)],
+}
 
 #[test]
-fn accuracy_fixtures_match_python_oracle() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let script = r#"
-import json, sys, tempfile
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-from tests.accuracy_fixtures import FIXTURES, materialize, measure
-from wikifier import import_cache as ic
-out = []
-for name, fx in FIXTURES.items():
-    root = Path(tempfile.mkdtemp(prefix="wkfix-"))
-    materialize(root, fx)
-    result = measure(root, fx)
-    cache = ic.load_cache(root)
-    found = []
-    for src, entry in cache.items():
-        if not isinstance(src, str) or src.startswith("_") or not isinstance(entry, dict):
-            continue
-        for pair in entry.get("resolved_pairs") or []:
-            dst = pair.get("resolved")
-            if dst and dst != src:
-                found.append([src, dst])
-    expected = [[a, b] for a, b in sorted(fx["edges"])]
-    out.append({
-        "name": name,
-        "root": str(root),
-        "expected": expected,
-        "python": sorted(found),
-        "precision": result["precision"],
-        "recall": result["recall"],
-    })
-print(json.dumps(out))
-"#;
-    let output = Command::new("python3")
-        .arg("-c")
-        .arg(script)
-        .arg(repo)
-        .output()
-        .expect("python3");
-    assert!(
-        output.status.success(),
-        "python oracle failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let text = String::from_utf8(output.stdout).unwrap();
-    let fixtures = parse(&text).expect("oracle json");
-    for fx in fixtures.as_array().unwrap() {
-        let name = fx.get("name").and_then(|n| n.as_str()).unwrap();
-        let root = Path::new(fx.get("root").and_then(|n| n.as_str()).unwrap());
-        let python = edge_set(fx.get("python").unwrap());
-        let expected = edge_set(fx.get("expected").unwrap());
-        assert_eq!(python, expected, "{name}: python oracle drifted from accuracy_fixtures");
-        let built = update_maps(root);
-        assert_eq!(
-            built.get("success").and_then(|s| s.as_bool()),
-            Some(true),
-            "{name}: {built}"
-        );
-        let rust = mapped_edges(root);
-        if rust != python {
-            let missed: Vec<_> = python.difference(&rust).cloned().collect();
-            let extra: Vec<_> = rust.difference(&python).cloned().collect();
-            panic!("{name}: rust edges diverged\nmissed {missed:?}\nextra {extra:?}");
+fn accuracy_fixtures_match_frozen_edges() {
+    for fixture in FIXTURES {
+        let root = std::env::temp_dir().join(format!("wk-acc-{}-{}", fixture.name, std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for (rel, text) in fixture.files {
+            let path = root.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, text).unwrap();
         }
-        let _ = fs::remove_dir_all(root);
+        let built = update_maps(&root);
+        assert_eq!(built.get("success").and_then(|s| s.as_bool()), Some(true), "{}: {built}", fixture.name);
+        let found = mapped_edges(&root);
+        let expected: BTreeSet<(String, String)> = fixture.edges.iter().map(|(a, b)| ((*a).to_string(), (*b).to_string())).collect();
+        if found != expected {
+            let missed: Vec<_> = expected.difference(&found).cloned().collect();
+            let extra: Vec<_> = found.difference(&expected).cloned().collect();
+            panic!("{}: edges diverged\nmissed {missed:?}\nextra {extra:?}", fixture.name);
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 }
 
-fn edge_set(value: &Json) -> BTreeSet<(String, String)> {
-    let mut out = BTreeSet::new();
-    for item in value.as_array().unwrap() {
-        let pair = item.as_array().unwrap();
-        out.insert((
-            pair[0].as_str().unwrap().to_string(),
-            pair[1].as_str().unwrap().to_string(),
-        ));
-    }
-    out
-}
+const FIXTURES: &[Fixture] = &[
+    Fixture {
+        name: "django_app",
+        files: &[
+            ("manage.py", "import os\nimport sys\n\nif __name__ == '__main__':\n    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mysite.settings')\n    from django.core.management import execute_from_command_line\n    execute_from_command_line(sys.argv)\n"),
+            ("mysite/__init__.py", ""),
+            ("mysite/settings.py", "from pathlib import Path\nBASE_DIR = Path(__file__).resolve().parent.parent\nINSTALLED_APPS = ['polls']\n"),
+            ("mysite/urls.py", "from django.urls import include, path\nfrom polls import views\n\nurlpatterns = [path('', views.index)]\n"),
+            ("polls/__init__.py", ""),
+            ("polls/models.py", "from django.db import models\n\n\nclass Question(models.Model):\n    pass\n"),
+            ("polls/views.py", "from django.shortcuts import render\n\nfrom .models import Question\nfrom . import forms\n\n\ndef index(request):\n    return render(request, 'x', {'q': Question})\n"),
+            ("polls/forms.py", "from django import forms\nfrom polls.models import Question\n"),
+            ("polls/admin.py", "from django.contrib import admin\n\nfrom .models import Question\n"),
+            ("polls/tests.py", "from django.test import TestCase\n\nfrom polls.models import Question\nimport polls.views\n"),
+        ],
+        edges: &[
+            ("mysite/urls.py", "polls/views.py"),
+            ("polls/views.py", "polls/models.py"),
+            ("polls/views.py", "polls/forms.py"),
+            ("polls/forms.py", "polls/models.py"),
+            ("polls/admin.py", "polls/models.py"),
+            ("polls/tests.py", "polls/models.py"),
+            ("polls/tests.py", "polls/views.py"),
+        ],
+    },
+    Fixture {
+        name: "src_layout_package",
+        files: &[
+            ("pyproject.toml", "[project]\nname = 'pkg'\n"),
+            ("src/pkg/__init__.py", "from pkg.core import run\n\n__all__ = ['run']\n"),
+            ("src/pkg/core.py", "import json\n\nfrom pkg import utils\nfrom pkg.io.reader import read\n\n\ndef run():\n    return utils.helper(read())\n"),
+            ("src/pkg/utils.py", "try:\n    import ujson as fastjson\nexcept ImportError:\n    import json as fastjson\n\n\ndef helper(x):\n    return x\n"),
+            ("src/pkg/io/__init__.py", ""),
+            ("src/pkg/io/reader.py", "from ..utils import helper\n\n\ndef read():\n    return helper(1)\n"),
+            ("src/pkg/plugins.py", "import importlib\n\n\ndef load():\n    return importlib.import_module('pkg.utils')\n"),
+            ("tests/test_core.py", "from pkg.core import run\nfrom pkg import utils as u\n"),
+        ],
+        edges: &[
+            ("src/pkg/__init__.py", "src/pkg/core.py"),
+            ("src/pkg/core.py", "src/pkg/utils.py"),
+            ("src/pkg/core.py", "src/pkg/io/reader.py"),
+            ("src/pkg/io/reader.py", "src/pkg/utils.py"),
+            ("src/pkg/plugins.py", "src/pkg/utils.py"),
+            ("tests/test_core.py", "src/pkg/core.py"),
+            ("tests/test_core.py", "src/pkg/utils.py"),
+        ],
+    },
+    Fixture {
+        name: "ts_monorepo",
+        files: &[
+            ("package.json", "{\"name\": \"acme\", \"private\": true, \"workspaces\": [\"packages/*\"]}\n"),
+            ("tsconfig.json", "{\"compilerOptions\": {\"baseUrl\": \".\", \"paths\": {\"@app/*\": [\"packages/app/src/*\"]}}}\n"),
+            ("packages/core/package.json", "{\"name\": \"@acme/core\", \"exports\": {\".\": \"./src/index.ts\"}}\n"),
+            ("packages/core/src/index.ts", "export * from './math';\nexport { format } from './format';\n"),
+            ("packages/core/src/math.ts", "export const add = (a: number, b: number): number => a + b;\n"),
+            ("packages/core/src/format.ts", "import { add } from './math';\nexport const format = (n: number) => String(add(n, 0));\n"),
+            ("packages/app/package.json", "{\"name\": \"@acme/app\"}\n"),
+            ("packages/app/src/main.ts", "import { add } from '@acme/core';\nimport { log } from '@app/util';\nimport type { Config } from './types';\nconst lazy = () => import('./lazy');\nimport React from 'react';\nlog(add(1, 2));\n"),
+            ("packages/app/src/util.ts", "export const log = (x: unknown) => console.log(x);\n"),
+            ("packages/app/src/types.ts", "export interface Config { debug: boolean }\n"),
+            ("packages/app/src/lazy.ts", "export default 42;\n"),
+        ],
+        edges: &[
+            ("packages/core/src/index.ts", "packages/core/src/math.ts"),
+            ("packages/core/src/index.ts", "packages/core/src/format.ts"),
+            ("packages/core/src/format.ts", "packages/core/src/math.ts"),
+            ("packages/app/src/main.ts", "packages/core/src/index.ts"),
+            ("packages/app/src/main.ts", "packages/core/src/math.ts"),
+            ("packages/app/src/main.ts", "packages/app/src/util.ts"),
+            ("packages/app/src/main.ts", "packages/app/src/types.ts"),
+            ("packages/app/src/main.ts", "packages/app/src/lazy.ts"),
+        ],
+    },
+    Fixture {
+        name: "comment_and_string_traps",
+        files: &[
+            ("package.json", "{\"name\": \"traps\"}\n"),
+            ("src/real.js", "export const real = 1;\n"),
+            ("src/other.js", "export const other = 2;\n"),
+            ("src/app.js", "import { real } from './real';\n// import { fake } from './ghost-line-comment';\n/* import x from './ghost-block-comment'; */\nconst s = \"import y from './ghost-string'\";\nconst t = `prefix ${require('./other')} import z from './ghost-template'`;\nconst re = /import w from '.\\/ghost-regex'/;\n"),
+            ("lib/helpers.py", "def h():\n    return 1\n"),
+            ("lib/__init__.py", ""),
+            ("lib/use.py", "# import lib.ghost_comment\nDOC = '''import lib.ghost_docstring'''\ns = 'from lib import ghost_string'\nfrom lib import helpers\n"),
+        ],
+        edges: &[
+            ("src/app.js", "src/real.js"),
+            ("src/app.js", "src/other.js"),
+            ("lib/use.py", "lib/helpers.py"),
+        ],
+    },
+];
 
 #[test]
 fn each_parsed_language_emits_a_local_edge() {

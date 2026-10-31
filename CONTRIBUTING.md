@@ -25,19 +25,19 @@ Please use the appropriate GitHub issue template:
 1. **Fork** the repository and create a feature branch from `main`.
 2. **Follow the rules yourself**:
    ```bash
-   python -m wikifier session-bootstrap
-   python -m wikifier check-changes
+   wikifier session-bootstrap
+   wikifier check-changes
    # Prioritise 🔴 Red → actionable 🟡 Yellow
    ```
 3. For **any** code or documentation change you make:
    ```bash
-   python -m wikifier record-change "path/to/your/file" "I changed X because Y. This improves Z for agents."
+   wikifier record-change "path/to/your/file" "I changed X because Y. This improves Z for agents."
    ```
 4. After you update the corresponding wiki summary (if applicable):
    ```bash
-   python -m wikifier mark-green "path/to/your/file"
+   wikifier mark-green "path/to/your/file"
    ```
-5. Before opening a PR: `python -m unittest discover tests`, `python scripts/parser_accuracy.py` (parser changes must stay 1.00/1.00), `python -m wikifier update-maps` and `python -m wikifier validate`. For parser or lookup-output changes, also run `python scripts/benchmark_lookup.py <a real Python project>` and compare with `Findings/2026-10-01-lookup-benchmark.md`.
+5. Before opening a PR: `cargo test`, then `wikifier update-maps` and `wikifier validate` on this repo. Parser changes must keep `accuracy_fixtures_match_frozen_edges` green.
 
 ### 3. Pull Request Guidelines
 
@@ -67,12 +67,12 @@ Wikifier is self-documenting. The best documentation contributions usually come 
 When working on Wikifier itself, treat this repository as a Wikifier project:
 
 ```bash
-python -m wikifier check-changes
+wikifier check-changes
 # Work
-python -m wikifier record-change "wikifier/api.py" "Added support for X because..."
+wikifier record-change "src/api.rs" "Added support for X because..."
 # refresh wikifier/api.py.wiki.md if it exists
-python -m wikifier mark-green "wikifier/api.py"
-python -m wikifier update-maps
+wikifier mark-green "src/api.rs"
+wikifier update-maps
 ```
 
 ## Questions?

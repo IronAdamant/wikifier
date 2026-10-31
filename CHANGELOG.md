@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- The Python package is gone. Wikifier is the std-only Rust binary (`cargo build --release`). `pip install wikifier` and `python -m wikifier` are no longer the product. `wikifier.sh` / `.ps1` / `.bat` launch the Rust binary. MCP is `wikifier mcp`.
+
 ## [4.7.0] - 2026-10-01
 
 Full-codebase review release. Details and measurements: `Findings/2026-10-01-review-4.7.0.md`;
