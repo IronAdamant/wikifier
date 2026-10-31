@@ -1126,13 +1126,7 @@ pub fn daemon_ctl(root: &Path, action: &str) -> Json {
                 Ok(p) => p,
                 Err(e) => return fail("DaemonError", e.to_string()),
             };
-            match std::process::Command::new(exe)
-                .args(["--target", &root.display().to_string(), "daemon", "run"])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
+            match spawn_daemon(&exe, root) {
                 Ok(child) => {
                     let _ = fs::write(&pidfile, child.id().to_string());
                     ok(vec![("running", Json::Bool(true)), ("pid", Json::Int(child.id() as i64)), ("action", Json::String("start".into()))])
@@ -1155,6 +1149,24 @@ pub fn daemon_ctl(root: &Path, action: &str) -> Json {
         }
         other => fail("DaemonError", format!("unknown daemon action {other}")),
     }
+}
+
+fn spawn_daemon(exe: &Path, root: &Path) -> std::io::Result<std::process::Child> {
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(["--target", &root.display().to_string(), "daemon", "run"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    // Without this, Windows keeps the child's inherited stdout pipe open and
+    // `Command::output()` on `daemon start` waits until the daemon loop ends.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW);
+    }
+    cmd.spawn()
 }
 
 fn pid_alive(pidfile: &Path) -> bool {
