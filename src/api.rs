@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use crate::artifacts::{self, HealthRow, JournalEntry};
 use crate::cache::{self, FileUpdate, Session};
 use crate::jsonutil::Json;
-use crate::parse::analyze_files;
 use crate::scope::{self, Scope};
 use crate::sha256::{file_sha256_prefixed, sha256_prefixed};
 use crate::timeutil::local_stamp;
@@ -125,6 +124,12 @@ fn readiness_of(scope: &Scope, has_map: bool, rows: &[crate::artifacts::HealthRo
 }
 
 pub fn update_maps(root: &Path) -> Json {
+    update_maps_opts(root, false, false)
+}
+
+/// `full` rehashes every file, including ones whose size and mtime still match.
+/// `quiet` keeps `edges_persisted` and omits the edge list.
+pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
     let scope = scope::detect(root);
     if scope.container {
         return ok(vec![
@@ -145,34 +150,59 @@ pub fn update_maps(root: &Path) -> Json {
         Ok(f) => f,
         Err(e) => return fail("ScopeError", e),
     };
-    let analysis = analyze_files(root, &files);
-    let warnings = analysis.warnings;
-    let edges: BTreeMap<String, BTreeSet<String>> = analysis.facts.iter().map(|(k, v)| (k.clone(), v.dsts.clone())).collect();
     let mut session = match Session::open(root) {
         Ok(session) => session,
         Err(err) => {
             let kind = if err.contains("locked") { "CacheLocked" } else { "CacheError" };
-            return fail_warnings(kind, err, &warnings);
+            return fail_warnings(kind, err, &[]);
         }
     };
-    let mut parsed = 0i64;
-    let mut edge_n = 0i64;
     let mut seen = BTreeSet::new();
+    let mut skipped = 0i64;
+    let mut hashed = 0i64;
+    let mut to_parse: Vec<(PathBuf, String, u128, u64, String)> = Vec::new();
     for file in &files {
         let rel = scope::rel_of(root, file);
         seen.insert(rel.clone());
+        let (mtime, size) = cache::stat_ns(file).unwrap_or((0, 0));
+        let known = session.known(&rel);
+        let stat_hit = !full && known.as_ref().is_some_and(|(old_mtime, old_size, old_hash)| {
+            *old_mtime != 0 && *old_mtime == mtime && *old_size == size && old_hash.starts_with("sha256:")
+        });
+        if stat_hit {
+            skipped += 1;
+            continue;
+        }
         let bytes = fs::read(file).unwrap_or_default();
         let hash = sha256_prefixed(&bytes);
-        let (mtime, size) = cache::stat_ns(file).unwrap_or((0, bytes.len() as u64));
-        let fact = analysis.facts.get(&rel);
-        let dsts = fact.map(|f| f.dsts.clone()).unwrap_or_default();
-        edge_n += dsts.len() as i64;
-        if let Some((_, old_size, old_hash)) = session.known(&rel) {
-            if old_size == size && old_hash == hash {
+        let (mtime, size) = if mtime == 0 && size == 0 {
+            cache::stat_ns(file).unwrap_or((0, bytes.len() as u64))
+        } else {
+            (mtime, if size == 0 { bytes.len() as u64 } else { size })
+        };
+        hashed += 1;
+        if let Some((_, _, old_hash)) = &known {
+            if old_hash == &hash && old_hash.starts_with("sha256:") {
+                session.note_stat(&rel, mtime, size);
                 continue;
             }
         }
-        let scan = analysis.scans.get(&rel);
+        to_parse.push((file.clone(), rel, mtime, size, hash));
+    }
+    let changed_paths: Vec<PathBuf> = to_parse.iter().map(|(path, _, _, _, _)| path.clone()).collect();
+    let analysis = if to_parse.is_empty() {
+        crate::parse::Analysis { facts: BTreeMap::new(), scans: std::collections::HashMap::new(), warnings: Vec::new() }
+    } else if changed_paths.len() == files.len() {
+        crate::parse::analyze_files(root, &files)
+    } else {
+        crate::parse::analyze_changed(root, &files, &changed_paths)
+    };
+    let warnings = analysis.warnings.clone();
+    for (path, rel, mtime, size, hash) in &to_parse {
+        let _ = path;
+        let fact = analysis.facts.get(rel);
+        let dsts = fact.map(|f| f.dsts.clone()).unwrap_or_default();
+        let scan = analysis.scans.get(rel);
         let barrel = scan.map(|s| s.imports.iter().any(|i| matches!(i.kind, crate::parse::Kind::ExportFrom | crate::parse::Kind::ExportStar))).unwrap_or(false);
         let imports: Vec<String> = scan.map(|s| s.imports.iter().map(|i| i.spec.clone()).collect()).unwrap_or_default();
         let barrel_dsts: Vec<String> = dsts.iter().cloned().collect();
@@ -181,34 +211,57 @@ pub fn update_maps(root: &Path) -> Json {
         }).unwrap_or_default();
         let external = fact.map(|f| f.external.clone()).unwrap_or_default();
         let unresolved = fact.map(|f| f.unresolved.clone()).unwrap_or_default();
-        session.upsert(&FileUpdate { rel: rel.clone(), mtime_ns: mtime, size, hash, imports, dsts, edge_lines, external, unresolved });
+        session.upsert(&FileUpdate {
+            rel: rel.clone(),
+            mtime_ns: *mtime,
+            size: *size,
+            hash: hash.clone(),
+            imports,
+            dsts,
+            edge_lines,
+            external,
+            unresolved,
+        });
         if barrel {
-            session.stage_barrel(&rel, &barrel_dsts);
+            session.stage_barrel(rel, &barrel_dsts);
         }
-        parsed += 1;
     }
+    let parsed = to_parse.len() as i64;
     let stale: Vec<String> = session.rels().into_iter().filter(|rel| !seen.contains(rel)).collect();
-    for rel in stale {
-        session.remove(&rel);
+    for rel in &stale {
+        session.remove(rel);
     }
+    let mut edge_pairs: Vec<(String, String)> = Vec::new();
+    if !quiet {
+        for rel in &seen {
+            for dst in session.dsts_of(rel) {
+                edge_pairs.push((rel.clone(), dst));
+            }
+        }
+    }
+    let edge_n: i64 = if quiet {
+        seen.iter().map(|rel| session.dsts_of(rel).len() as i64).sum()
+    } else {
+        edge_pairs.len() as i64
+    };
     if let Err(err) = session.commit() {
         let kind = if err.contains("locked") { "CacheLocked" } else { "CacheError" };
         return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
-    let edge_json = Json::Array(
-        edges.iter().flat_map(|(src, dsts)| {
-            dsts.iter().map(move |dst| {
-                Json::obj(vec![("src", Json::String(src.clone())), ("dst", Json::String(dst.clone()))])
-            }).collect::<Vec<_>>()
-        }).collect(),
-    );
+    let edge_json = Json::Array(edge_pairs.into_iter().map(|(src, dst)| {
+        Json::obj(vec![("src", Json::String(src)), ("dst", Json::String(dst))])
+    }).collect());
     ok(vec![
         ("map_complete", Json::Bool(true)),
         ("full_tree", Json::Bool(scope.full_tree)),
         ("parseable_files", Json::Int(files.len() as i64)),
         ("files_parsed", Json::Int(parsed)),
+        ("files_hashed", Json::Int(hashed)),
+        ("files_skipped", Json::Int(skipped)),
+        ("rehash", Json::Bool(full)),
         ("edges_persisted", Json::Int(edge_n)),
+        ("edges_omitted", Json::Bool(quiet)),
         ("edges", edge_json),
         ("scope", scope_json(&scope)),
         ("cache_backend", Json::String("wk_cache".into())),
@@ -696,16 +749,37 @@ pub fn validate(root: &Path) -> Json {
     let known: BTreeSet<String> = artifacts::read_health(root).into_iter().map(|r| r.file).collect();
     let missing: Vec<String> = files.iter().map(|p| scope::rel_of(root, p)).filter(|rel| !known.contains(rel)).collect();
     let check = cache::check_consistency(root);
-    let mut value = if check.consistent {
-        ok(vec![])
-    } else {
+    // Size and mtime can stay put while the bytes change. Hashing here is the
+    // check that `update-maps` skips; repair with `update-maps --full`.
+    let mut drift = Vec::new();
+    for (rel, _, _, hash) in cache::indexed_rows(root) {
+        if !hash.starts_with("sha256:") {
+            continue;
+        }
+        let path = root.join(&rel);
+        if !path.is_file() {
+            continue;
+        }
+        if let Some(live) = file_sha256_prefixed(&path) {
+            if live != hash {
+                drift.push(rel);
+            }
+        }
+    }
+    let mut value = if !check.consistent {
         fail("CacheInconsistent", "forward and reverse cache indexes disagree")
+    } else if !drift.is_empty() {
+        fail("StaleMap", "cached hashes do not match file bytes; run update-maps --full")
+    } else {
+        ok(vec![])
     };
     value.insert("missing", Json::Array(missing.iter().cloned().map(Json::String).collect()));
     value.insert("missing_count", Json::Int(missing.len() as i64));
     value.insert("cache_consistent", Json::Bool(check.consistent));
     value.insert("cache_incomplete", Json::Bool(check.incomplete));
     value.insert("cache_mismatches", Json::Array(check.mismatches.into_iter().map(Json::String).collect()));
+    value.insert("content_drift", Json::Array(drift.iter().cloned().map(Json::String).collect()));
+    value.insert("content_drift_count", Json::Int(drift.len() as i64));
     value
 }
 
@@ -1215,7 +1289,11 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
         "dependencies" | "deps" | "get_dependencies" => load_dependencies(root, file),
         "dependents" | "importers" | "get_dependents" => load_dependents(root, file),
         "list-paths" | "list_paths" => list_paths(root, flags.get("prefix").map(|s| s.as_str()).unwrap_or(file)),
-        "update-maps" | "update_maps" => update_maps(root),
+        "update-maps" | "update_maps" => {
+            let full = flags.get("full").map(|s| s == "true").unwrap_or(false);
+            let quiet = flags.get("quiet").map(|s| s == "true").unwrap_or(false);
+            update_maps_opts(root, full, quiet)
+        }
         "health" => health(root),
         "cache-status" | "cache" => cache_status(root),
         "list-core-tools" | "list_core_tools" => ok(vec![

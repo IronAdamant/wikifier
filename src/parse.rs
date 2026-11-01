@@ -1419,11 +1419,25 @@ fn py_parts(spec: &str) -> (String, Vec<String>) {
 }
 
 pub fn analyze_files(root: &Path, files: &[PathBuf]) -> Analysis {
+    analyze_files_filtered(root, files, None)
+}
+
+/// Read and resolve only `changed`. `universe` is every scoped path so JS/TS
+/// resolution can still see files that were not re-read.
+pub fn analyze_changed(root: &Path, universe: &[PathBuf], changed: &[PathBuf]) -> Analysis {
+    let only: BTreeSet<String> = changed.iter().map(|f| rel_of(root, f)).collect();
+    analyze_files_filtered(root, universe, Some(only))
+}
+
+fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<String>>) -> Analysis {
     let mut scans: HashMap<String, Scan> = HashMap::new();
     let mut texts: HashMap<String, String> = HashMap::new();
     let mut warnings = Vec::new();
     let rels: Vec<String> = files.iter().map(|f| rel_of(root, f)).collect();
     for (f, rel) in files.iter().zip(rels.iter()) {
+        if only.as_ref().is_some_and(|set| !set.contains(rel)) {
+            continue;
+        }
         let (scan, text, warning) = scan_file_warned(f);
         if let Some(warning) = warning {
             warnings.push(format!("{rel}: {warning}"));
@@ -1433,14 +1447,22 @@ pub fn analyze_files(root: &Path, files: &[PathBuf]) -> Analysis {
     }
     let mut other_files = Vec::new();
     for rel in &rels {
+        if only.as_ref().is_some_and(|set| !set.contains(rel)) {
+            continue;
+        }
         if language(Path::new(rel)).is_some() && language(Path::new(rel)) != Some("python") {
             other_files.push(root.join(rel));
         }
     }
-    let js_edges = resolve_project(root, &other_files);
+    // The full-tree path keeps the second resolution pass. A partial update
+    // resolves changed files against the whole universe below.
+    let js_edges = if only.is_none() { resolve_project(root, &other_files) } else { BTreeMap::new() };
     let resolver = Resolver::build(root, &rels);
     let mut out = BTreeMap::new();
     for rel in &rels {
+        if only.as_ref().is_some_and(|set| !set.contains(rel)) {
+            continue;
+        }
         let scan = scans.get(rel).cloned().unwrap_or_default();
         let text = texts.get(rel).cloned().unwrap_or_default();
         let lang = language(Path::new(rel)).unwrap_or("");
@@ -1521,8 +1543,10 @@ pub fn analyze_files(root: &Path, files: &[PathBuf]) -> Analysis {
         facts.external.dedup();
         out.insert(rel.clone(), facts);
     }
-    for rel in &rels {
-        out.entry(rel.clone()).or_default();
+    if only.is_none() {
+        for rel in &rels {
+            out.entry(rel.clone()).or_default();
+        }
     }
     let _ = js_edges;
     Analysis { facts: out, scans, warnings }
