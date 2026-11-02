@@ -13,6 +13,7 @@ pub struct RawImport {
     pub spec: String,
     pub names: Vec<String>,
     pub kind: Kind,
+    pub conditional: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -501,7 +502,7 @@ fn scan_python(src: &str) -> Scan {
     let (masked, dynamic) = mask_python(src);
     let mut imports = Vec::new();
     for spec in dynamic {
-        imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic });
+        imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false });
     }
     for stmt in python_statements(&masked) {
         imports.push(stmt);
@@ -647,11 +648,14 @@ fn quote_span(b: &[u8], i: usize) -> (Vec<u8>, usize) {
 
 fn python_statements(masked: &str) -> Vec<RawImport> {
     // Python resolution is not a string spec. Encode statements as `py:<kind>:<level>:<module>:<names>`
+    // Indent above 0 is the conditional signal (an import inside if/try/def/class). Top-level stays unconditional.
     let mut out = Vec::new();
     let lines: Vec<&str> = masked.lines().collect();
     let mut i = 0;
     while i < lines.len() {
-        let line = lines[i].trim();
+        let raw_line = lines[i];
+        let indent = raw_line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+        let line = raw_line.trim();
         if line.starts_with("import ") || line.starts_with("from ") {
             let mut buf = line.to_string();
             let mut depth = paren_delta(line);
@@ -661,7 +665,10 @@ fn python_statements(masked: &str) -> Vec<RawImport> {
                 buf.push_str(lines[i].trim());
                 depth += paren_delta(lines[i]);
             }
-            if let Some(imp) = parse_py_stmt(&buf) {
+            if let Some(mut imp) = parse_py_stmt(&buf) {
+                if indent > 0 {
+                    imp.conditional = true;
+                }
                 out.push(imp);
             }
         }
@@ -681,7 +688,7 @@ fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
         if names.is_empty() {
             return None;
         }
-        return Some(RawImport { spec: format!("py:import:0::{names}"), names: Vec::new(), kind: Kind::Import });
+        return Some(RawImport { spec: format!("py:import:0::{names}"), names: Vec::new(), kind: Kind::Import, conditional: false });
     }
     if let Some(rest) = stmt.strip_prefix("from ") {
         let import_at = rest.find(" import ")?;
@@ -708,6 +715,7 @@ fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
             spec: format!("py:from:{level}:{module}:{}", names.join(",")),
             names,
             kind: Kind::Import,
+            conditional: false,
         });
     }
     None
@@ -762,7 +770,7 @@ fn scan_js(src: &str) -> Scan {
             let after = i + "import".len();
             if after < b.len() && b[after] == b'(' {
                 if let Some((spec, next)) = read_call_spec(src, after) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic });
+                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false });
                     i = next;
                     tail.clear();
                     continue;
@@ -796,7 +804,7 @@ fn scan_js(src: &str) -> Scan {
             let after = i + "require".len();
             if after < b.len() && b[after] == b'(' {
                 if let Some((spec, next)) = read_call_spec(src, after) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic });
+                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false });
                     i = next;
                     tail.clear();
                     continue;
@@ -942,7 +950,7 @@ fn read_import_statement(rest: &str) -> Option<(RawImport, usize)> {
     let lead = rest.len() - t.len();
     if t.starts_with('\'') || t.starts_with('"') {
         let (spec, n) = read_quoted(t)?;
-        return Some((RawImport { spec, names: Vec::new(), kind: Kind::Import }, lead + n));
+        return Some((RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false }, lead + n));
     }
     let from = t.find(" from ")?;
     let head = &t[..from];
@@ -950,7 +958,7 @@ fn read_import_statement(rest: &str) -> Option<(RawImport, usize)> {
     let ws = after.len() - after.trim_start().len();
     let (spec, n) = read_quoted(after.trim_start())?;
     let names = brace_names(head);
-    Some((RawImport { spec, names, kind: Kind::Import }, lead + from + " from ".len() + ws + n))
+    Some((RawImport { spec, names, kind: Kind::Import, conditional: false }, lead + from + " from ".len() + ws + n))
 }
 
 fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
@@ -959,7 +967,7 @@ fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
         let after = trimmed[from + " from ".len()..].trim_start();
         let (spec, n) = read_quoted(after)?;
         let consumed = from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
-        return Some((RawImport { spec, names: Vec::new(), kind: Kind::ExportStar }, consumed));
+        return Some((RawImport { spec, names: Vec::new(), kind: Kind::ExportStar, conditional: false }, consumed));
     }
     if trimmed.starts_with('{') {
         let from = trimmed.find(" from ")?;
@@ -967,7 +975,7 @@ fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
         let after = trimmed[from + " from ".len()..].trim_start();
         let (spec, n) = read_quoted(after)?;
         let consumed = from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
-        return Some((RawImport { spec, names, kind: Kind::ExportFrom }, consumed));
+        return Some((RawImport { spec, names, kind: Kind::ExportFrom, conditional: false }, consumed));
     }
     None
 }
@@ -1024,19 +1032,19 @@ fn scan_rust(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("mod ") {
             let name = rest.trim().trim_end_matches(';').split_whitespace().next().unwrap_or("");
             if is_ident(name) {
-                imports.push(RawImport { spec: format!("mod:{name}"), names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: format!("mod:{name}"), names: Vec::new(), kind: Kind::Import, conditional: false });
             }
         } else if let Some(rest) = t.strip_prefix("pub mod ") {
             let name = rest.trim().trim_end_matches(';').split_whitespace().next().unwrap_or("");
             if is_ident(name) {
-                imports.push(RawImport { spec: format!("mod:{name}"), names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: format!("mod:{name}"), names: Vec::new(), kind: Kind::Import, conditional: false });
             }
         } else if let Some(rest) = t.strip_prefix("use ") {
             let rest = rest.trim().trim_end_matches(';');
             if rest.starts_with("crate::") {
                 let path = rest.split("::").take_while(|p| !p.contains('{') && !p.contains(' ')).collect::<Vec<_>>().join("::");
                 // drop the last segment if it looks like an item (lowercase function) — keep module path
-                imports.push(RawImport { spec: path, names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: path, names: Vec::new(), kind: Kind::Import, conditional: false });
             }
         }
     }
@@ -1059,7 +1067,7 @@ fn scan_go(src: &str) -> Scan {
                 while j < bytes.len() && bytes[j] != b')' {
                     if bytes[j] == b'"' {
                         if let Some((spec, n)) = read_quoted(&text[j..]) {
-                            imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import });
+                            imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false });
                             j += n;
                             continue;
                         }
@@ -1071,7 +1079,7 @@ fn scan_go(src: &str) -> Scan {
             }
             if j < bytes.len() && bytes[j] == b'"' {
                 if let Some((spec, n)) = read_quoted(&text[j..]) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import });
+                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false });
                     i = j + n;
                     continue;
                 }
@@ -1089,9 +1097,9 @@ fn scan_c(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("#include") {
             let rest = rest.trim();
             if let Some(inner) = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
-                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
             } else if let Some(inner) = rest.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
-                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
             }
         }
     }
@@ -1105,7 +1113,7 @@ fn scan_java(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("import ") {
             let rest = rest.trim_start_matches("static ").trim();
             if !rest.is_empty() {
-                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
             }
         }
     }
@@ -1122,7 +1130,7 @@ fn scan_csharp(src: &str) -> Scan {
                 continue;
             }
             if !rest.is_empty() && !rest.starts_with('(') {
-                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import });
+                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
             }
         }
     }
@@ -1380,12 +1388,50 @@ mod dbg_scan {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct FactEdge {
+    pub dst: String,
+    pub line: i64,
+    pub names: Vec<String>,
+    pub conditional: bool,
+    pub dynamic: bool,
+    pub via_barrel: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct FileFacts {
     pub dsts: BTreeSet<String>,
-    pub internal: Vec<(String, i64, Vec<String>)>,
+    pub internal: Vec<FactEdge>,
     pub external: Vec<String>,
-    pub unresolved: Vec<(String, i64)>,
+    pub unresolved: Vec<(String, i64, String)>,
+}
+
+fn add_edge(facts: &mut FileFacts, dst: String, line: i64, names: Vec<String>, conditional: bool, dynamic: bool, via_barrel: bool) {
+    if let Some(existing) = facts.internal.iter_mut().find(|edge| edge.dst == dst) {
+        if !via_barrel {
+            existing.via_barrel = false;
+        }
+        existing.conditional |= conditional;
+        existing.dynamic |= dynamic;
+        if existing.names.is_empty() {
+            existing.names = names;
+        }
+        facts.dsts.insert(dst);
+        return;
+    }
+    facts.dsts.insert(dst.clone());
+    facts.internal.push(FactEdge { dst, line, names, conditional, dynamic, via_barrel });
+}
+
+fn note_unresolved(facts: &mut FileFacts, spec: String, line: i64, kind: Kind) {
+    let reason = if kind == Kind::Dynamic {
+        "dynamic_literal"
+    } else if spec.starts_with('.') {
+        "unresolved_relative"
+    } else {
+        "unresolved"
+    };
+    facts.unresolved.push((spec, line, reason.to_string()));
 }
 
 pub struct Analysis {
@@ -1483,13 +1529,13 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                             facts.external.push(label);
                         }
                     } else if !imp.spec.is_empty() {
-                        facts.unresolved.push((imp.spec.clone(), line));
+                        note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
                     }
                 } else {
+                    let dynamic = imp.kind == Kind::Dynamic;
                     for dst in resolved {
                         if &dst != rel {
-                            facts.dsts.insert(dst.clone());
-                            facts.internal.push((dst, line, names.clone()));
+                            add_edge(&mut facts, dst, line, names.clone(), imp.conditional, dynamic, false);
                         }
                     }
                 }
@@ -1498,10 +1544,10 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
             for imp in &scan.imports {
                 let target = resolver.resolve(rel, &imp.spec, lang);
                 let line = line_of(&text, &[imp.spec.clone()]);
+                let dynamic = imp.kind == Kind::Dynamic;
                 match target {
                     Some(dst) if dst != *rel => {
-                        facts.dsts.insert(dst.clone());
-                        facts.internal.push((dst.clone(), line, imp.names.clone()));
+                        add_edge(&mut facts, dst.clone(), line, imp.names.clone(), imp.conditional, dynamic, false);
                         if lang == "javascript" && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom) {
                             for name in &imp.names {
                                 if let Some(def) = defining_file(&resolver, &{
@@ -1512,8 +1558,7 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                                     m
                                 }, &dst, name, 0) {
                                     if def != *rel && def != dst && !facts.dsts.contains(&def) {
-                                        facts.dsts.insert(def.clone());
-                                        facts.internal.push((def, line, vec![name.clone()]));
+                                        add_edge(&mut facts, def, line, vec![name.clone()], imp.conditional, dynamic, true);
                                     }
                                 }
                             }
@@ -1521,11 +1566,11 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                     }
                     _ => {
                         if imp.spec.starts_with('.') {
-                            facts.unresolved.push((imp.spec.clone(), line));
+                            note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
                         } else if !imp.spec.is_empty() && !imp.spec.starts_with("mod:") && !imp.spec.starts_with("crate::") {
                             facts.external.push(imp.spec.clone());
                         } else if imp.spec.starts_with('.') || (target.is_none() && imp.spec.starts_with("mod:")) {
-                            facts.unresolved.push((imp.spec.clone(), line));
+                            note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
                         }
                     }
                 }
@@ -1533,8 +1578,7 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
             if let Some(dsts) = js_edges.get(rel) {
                 for dst in dsts {
                     if !facts.dsts.contains(dst) {
-                        facts.dsts.insert(dst.clone());
-                        facts.internal.push((dst.clone(), 1, Vec::new()));
+                        add_edge(&mut facts, dst.clone(), 1, Vec::new(), false, false, false);
                     }
                 }
             }

@@ -4,10 +4,10 @@ Thank you for your interest in Wikifier! This project is intentionally **agent-f
 
 ## Our Philosophy
 
-- **Zero external dependencies** is sacred. No new Python packages, Node modules, Docker images, or heavy CLIs.
+- **Zero external dependencies** is sacred. No crates.io crates, Python packages, Node modules, Docker images, or heavy CLIs. `Cargo.toml` keeps an empty `[dependencies]` list.
 - **Agent-first design** comes first. If something makes life harder for LLMs/Grok Build/Cline/etc., we probably shouldn't do it.
 - **Semantic logging** (`record-change`) is the heart of the system. Changes without intent are less valuable.
-- Keep it simple: a stdlib-Python package + Markdown artifacts, not a framework.
+- Keep it simple: a std-only Rust binary plus Markdown artifacts, not a framework.
 
 ## How to Contribute
 
@@ -43,13 +43,13 @@ Please use the appropriate GitHub issue template:
 
 - Keep PRs focused. One logical change per PR.
 - Update documentation (`README.md`, `docs/spec.md`, `skills/run.md`) when behavior changes.
-- If you add a command, implement it in `wikifier/api.py` (library) + `wikifier/cli.py` (argparse), add it to `skills/run.md`, and add a test. The launchers (`wikifier.sh`/`.ps1`/`.bat`) stay thin.
+- If you add a command, implement it in `src/api.rs` and dispatch it from `src/main.rs`, add it to `skills/run.md`, and add a test. The launchers (`wikifier.sh`/`.ps1`/`.bat`) only exec the binary.
 - Fix a bug with a regression test that fails without the fix.
 - Add yourself to the journal if you want (`wikifier record-change` is the proper way).
 
 ### 4. Code Style
 
-- **Python**: stdlib only, Python 3.8+. Catch specific exceptions; never swallow errors silently — return `{"success": False, "error": …}` at the API boundary instead.
+- **Rust**: edition 2021, std only. At the API boundary return `{"success": false, "error": …}` for an operational failure. Do not add a crate to make a command shorter.
 - **Markdown**: Short paragraphs. Use tables for commands. Use emojis sparingly and consistently.
 - **No new dependencies**. If your idea requires one, it probably doesn't belong here.
 - Test on at least one Unix-like system and (ideally) Windows.
@@ -70,7 +70,7 @@ When working on Wikifier itself, treat this repository as a Wikifier project:
 wikifier check-changes
 # Work
 wikifier record-change "src/api.rs" "Added support for X because..."
-# refresh wikifier/api.py.wiki.md if it exists
+# refresh src/api.rs.wiki.md
 wikifier mark-green "src/api.rs"
 wikifier update-maps
 ```

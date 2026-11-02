@@ -12,6 +12,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking
 - The Python package is gone. Wikifier is the std-only Rust binary (`cargo build --release`). `pip install wikifier` and `python -m wikifier` are no longer the product. `wikifier.sh` / `.ps1` / `.bat` launch the Rust binary. MCP is `wikifier mcp`.
 
+### Added
+- `update-maps` writes `library.md` (file tree, Mermaid, dependency table) and sharded folder cards under `.wikifier_staging/maps/`. `--directory`, `--max-files`, and `--stream` are honored. A `--max-files` budget leaves `map_complete=false`; the next run resumes because parsed files are stat-skipped.
+- `prune-health --deleted-missing` drops health rows whose path is no longer a file, including rows that still sit under a map root.
+- `dependencies --full` returns per-edge confidence, conditional / dynamic / via-barrel flags, and ACS reason codes. `cycles` adds `break_hint` (lowest-confidence edge in the component) and `external_edges`.
+- `mark-green` checks JS/TS exports as well as Python `def` / `class` names. A removed symbol still mentioned in wiki backticks, or a changed public surface with an unchanged wiki, is refused when a baseline exists. `health --summary` includes `green_breakdown`.
+- `record-changes` applies globs, directory prefixes, `--only`, `--green`, `--dry-run`, and deletions.
+- `record-deletion` marks the health row Red and drops the file from the graph.
+- Empty `wk_cache` can import `import_cache.sqlite` through the `sqlite3` CLI, or `import_cache.json`. A sqlite file that cannot be read is reported as `sqlite_present_unread`.
+- `serve` keeps listening and answers the read-only `/__wikifier/api/*` routes, `/__wikifier/status`, and the project files the dashboard reads. `POST /__wikifier/run` runs `update-maps` or `check-changes`. `POST /__wikifier/shutdown` stops the process. `monitor` repeats `check-changes`. `daemon run` scans and maps until the pid file is removed.
+- MCP tool errors set `isError`. `resources/read` and `prompts/get` answer. Calls use `WIKIFIER_MCP_DEADLINE_S` (default 60). Identical journal lines within 120 seconds are skipped. Mutating commands take `.wikifier_staging/.lock` before the cache lock.
+- `init` keeps existing path lists and copies `index.html` only when it is missing.
+- `prune-health` and `prune-pending` keep files listed in `monitored_paths.txt` when those files sit outside `map_paths.txt`.
+
+### Changed
+- This repo's import-map roots are `src/` and `tests/`.
+- The import scan remains comment-masked regex plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). It is not a CPython `ast` walk, and it has not been run on Babylon.js. The accuracy gate is still the four frozen fixtures.
+
 ## [4.7.0] - 2026-10-01
 
 Full-codebase review release. Details and measurements: `Findings/2026-10-01-review-4.7.0.md`;

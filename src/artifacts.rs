@@ -14,6 +14,44 @@ pub struct HealthRow {
     pub reason: String,
     pub source_hash: String,
     pub verification: String,
+    pub public_symbols: String,
+    pub wiki_hash: String,
+    pub source_mtime_ns: String,
+}
+
+impl HealthRow {
+    pub fn new(
+        file: impl Into<String>,
+        status: impl Into<String>,
+        last_updated: impl Into<String>,
+        reason: impl Into<String>,
+        source_hash: impl Into<String>,
+        verification: impl Into<String>,
+    ) -> Self {
+        Self {
+            file: file.into(),
+            status: status.into(),
+            last_updated: last_updated.into(),
+            reason: reason.into(),
+            source_hash: source_hash.into(),
+            verification: verification.into(),
+            public_symbols: String::new(),
+            wiki_hash: String::new(),
+            source_mtime_ns: String::new(),
+        }
+    }
+
+    pub fn keep_baseline_from(&mut self, old: &HealthRow) {
+        if self.public_symbols.is_empty() {
+            self.public_symbols = old.public_symbols.clone();
+        }
+        if self.wiki_hash.is_empty() {
+            self.wiki_hash = old.wiki_hash.clone();
+        }
+        if self.source_mtime_ns.is_empty() {
+            self.source_mtime_ns = old.source_mtime_ns.clone();
+        }
+    }
 }
 
 pub fn read_health(root: &Path) -> Vec<HealthRow> {
@@ -34,14 +72,18 @@ fn read_health_json(path: &Path) -> Option<Vec<HealthRow>> {
     let entries = json.get("entries")?.as_object()?;
     let mut rows = Vec::new();
     for (file, ent) in entries {
-        rows.push(HealthRow {
-            file: file.clone(),
-            status: ent.get("status").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-            last_updated: ent.get("last_updated").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-            reason: ent.get("reason").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-            source_hash: ent.get("source_content_hash").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-            verification: ent.get("verification").and_then(|s| s.as_str()).unwrap_or("").to_string(),
-        });
+        let mut row = HealthRow::new(
+            file.clone(),
+            ent.get("status").and_then(|s| s.as_str()).unwrap_or(""),
+            ent.get("last_updated").and_then(|s| s.as_str()).unwrap_or(""),
+            ent.get("reason").and_then(|s| s.as_str()).unwrap_or(""),
+            ent.get("source_content_hash").and_then(|s| s.as_str()).unwrap_or(""),
+            ent.get("verification").and_then(|s| s.as_str()).unwrap_or(""),
+        );
+        row.public_symbols = symbols_field(ent.get("public_symbols"));
+        row.wiki_hash = ent.get("wiki_hash").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        row.source_mtime_ns = ent.get("source_mtime_ns").and_then(|s| s.as_str()).unwrap_or("").to_string();
+        rows.push(row);
     }
     rows.sort_by(|a, b| a.file.cmp(&b.file));
     Some(rows)
@@ -59,14 +101,7 @@ fn read_health_md(path: &Path) -> Vec<HealthRow> {
         if cells.len() < 4 || cells[0] == "File" {
             continue;
         }
-        rows.push(HealthRow {
-            file: cells[0].to_string(),
-            status: cells[1].to_string(),
-            last_updated: cells[2].to_string(),
-            reason: cells[3].to_string(),
-            source_hash: String::new(),
-            verification: String::new(),
-        });
+        rows.push(HealthRow::new(cells[0], cells[1], cells[2], cells[3], "", ""));
     }
     rows
 }
@@ -108,6 +143,15 @@ pub fn write_health(root: &Path, rows: &[HealthRow]) -> Result<(), String> {
                     }
                     if !row.verification.is_empty() {
                         obj.push(("verification".into(), Json::String(row.verification.clone())));
+                    }
+                    if !row.public_symbols.is_empty() {
+                        obj.push(("public_symbols".into(), Json::String(row.public_symbols.clone())));
+                    }
+                    if !row.wiki_hash.is_empty() {
+                        obj.push(("wiki_hash".into(), Json::String(row.wiki_hash.clone())));
+                    }
+                    if !row.source_mtime_ns.is_empty() {
+                        obj.push(("source_mtime_ns".into(), Json::String(row.source_mtime_ns.clone())));
                     }
                     (row.file.clone(), Json::from_pairs(obj))
                 })
@@ -204,17 +248,55 @@ pub fn parse_journal(text: &str) -> Vec<JournalEntry> {
     out
 }
 
-pub fn append_journal(root: &Path, action: &str, file: &str, reason: &str) -> Result<String, String> {
+pub struct JournalWrite {
+    pub stamp: String,
+    pub journaled: bool,
+}
+
+pub fn append_journal(root: &Path, action: &str, file: &str, reason: &str) -> Result<JournalWrite, String> {
     let stamp = local_stamp();
     let path = journal_path(root, &stamp);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    let existing = fs::read_to_string(&path).unwrap_or_default();
+    if journal_duplicate(&existing, action, file, reason, &stamp) {
+        return Ok(JournalWrite { stamp, journaled: false });
+    }
     let block = format!("## [{stamp}] {action}\n**File:** {file}\n**Reason:** {reason}\n\n");
-    let mut existing = fs::read_to_string(&path).unwrap_or_default();
-    existing.push_str(&block);
-    fs::write(&path, existing).map_err(|e| e.to_string())?;
-    Ok(stamp)
+    let mut body = existing;
+    body.push_str(&block);
+    fs::write(&path, body).map_err(|e| e.to_string())?;
+    Ok(JournalWrite { stamp, journaled: true })
+}
+
+fn journal_duplicate(existing: &str, action: &str, file: &str, reason: &str, stamp: &str) -> bool {
+    let Some(now) = stamp_key(stamp) else { return false };
+    parse_journal(existing).iter().rev().any(|entry| {
+        entry.action == action && entry.file == file && entry.reason == reason && stamp_key(&entry.stamp).is_some_and(|prev| now.saturating_sub(prev) <= 120)
+    })
+}
+
+fn stamp_key(stamp: &str) -> Option<i64> {
+    if stamp.len() < 19 {
+        return None;
+    }
+    let n = |i: usize, j: usize| stamp.get(i..j)?.parse::<i64>().ok();
+    let y = n(0, 4)?;
+    let mo = n(5, 7)?;
+    let d = n(8, 10)?;
+    let h = n(11, 13)?;
+    let mi = n(14, 16)?;
+    let s = n(17, 19)?;
+    Some((((y * 366 + mo * 31 + d) * 24 + h) * 60 + mi) * 60 + s)
+}
+
+fn symbols_field(value: Option<&Json>) -> String {
+    match value {
+        Some(Json::String(text)) => text.clone(),
+        Some(Json::Array(items)) => items.iter().filter_map(|item| item.as_str()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n"),
+        _ => String::new(),
+    }
 }
 
 pub fn read_pending(root: &Path) -> String {

@@ -3,6 +3,8 @@
 use std::collections::BTreeMap;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::time::Duration;
 
 use crate::api::{self, MCP_TOOLS};
 use crate::jsonutil::{self, Json};
@@ -113,44 +115,9 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
                 "generate_project_health_report", "onboard_to_module",
             ].into_iter().map(|n| Json::obj(vec![("name", Json::String(n.into()))])).collect())),
         ]),
-        "tools/call" => {
-            let params = msg.get("params");
-            let name = params.and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
-            let args = params.and_then(|p| p.get("arguments"));
-            let root = args.and_then(|a| a.get("project_root")).and_then(|r| r.as_str()).map(PathBuf::from)
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-            let mut flags = BTreeMap::new();
-            let mut positional = Vec::new();
-            if let Some(file) = args.and_then(|a| a.get("file")).and_then(|f| f.as_str()) {
-                positional.push(file.to_string());
-            }
-            if let Some(reason) = args.and_then(|a| a.get("reason")).and_then(|f| f.as_str()) {
-                positional.push(reason.to_string());
-            }
-            if let Some(prefix) = args.and_then(|a| a.get("prefix")).and_then(|f| f.as_str()) {
-                flags.insert("prefix".into(), prefix.into());
-            }
-            if let Some(q) = args.and_then(|a| a.get("query").or_else(|| a.get("text"))).and_then(|f| f.as_str()) {
-                flags.insert("query".into(), q.into());
-            }
-            let value = if !root.is_dir() {
-                Json::obj(vec![
-                    ("success", Json::Bool(false)),
-                    ("error", Json::String("project root does not exist".into())),
-                    ("error_type", Json::String("ProjectRootError".into())),
-                ])
-            } else {
-                api::dispatch(name, &root, &positional, &flags)
-            };
-            Json::obj(vec![
-                ("content", Json::Array(vec![Json::obj(vec![
-                    ("type", Json::String("text".into())),
-                    ("text", Json::String(value.to_string())),
-                ])])),
-                ("structuredContent", value),
-                ("isError", Json::Bool(false)),
-            ])
-        }
+        "resources/read" => resource_read(msg),
+        "prompts/get" => prompt_get(msg),
+        "tools/call" => call_tool(msg),
         _ => Json::obj(vec![
             ("success", Json::Bool(false)),
             ("error", Json::String(format!("unknown method {method}"))),
@@ -162,6 +129,175 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
         ("id", id.unwrap_or(Json::Null)),
         ("result", result),
     ]))
+}
+
+fn call_tool(msg: &Json) -> Json {
+    let params = msg.get("params");
+    let name = params.and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
+    let args = params.and_then(|p| p.get("arguments")).cloned();
+    let root = args.as_ref().and_then(|a| a.get("project_root")).and_then(|r| r.as_str()).map(PathBuf::from)
+        .or_else(|| std::env::var("WIKIFIER_PROJECT_ROOT").ok().map(PathBuf::from))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let mut flags = BTreeMap::new();
+    let mut positional = Vec::new();
+    if let Some(file) = args.as_ref().and_then(|a| a.get("file")).and_then(|f| f.as_str()) {
+        positional.push(file.to_string());
+    }
+    if let Some(reason) = args.as_ref().and_then(|a| a.get("reason")).and_then(|f| f.as_str()) {
+        positional.push(reason.to_string());
+    }
+    copy_str(&args, &mut flags, "prefix");
+    if let Some(q) = args.as_ref().and_then(|a| a.get("query").or_else(|| a.get("text"))).and_then(|f| f.as_str()) {
+        flags.insert("query".into(), q.into());
+    }
+    copy_str(&args, &mut flags, "directory");
+    copy_str(&args, &mut flags, "since");
+    copy_str(&args, &mut flags, "default");
+    if let Some(max) = args.as_ref().and_then(|a| a.get("max_files").or_else(|| a.get("max-files"))) {
+        if let Some(text) = json_text(max) {
+            flags.insert("max-files".into(), text);
+        }
+    }
+    for key in ["full", "quiet", "stream", "green", "force", "dry_run", "dry-run"] {
+        if arg_on(args.as_ref(), key) {
+            let stored = if key == "dry_run" { "dry-run" } else { key };
+            flags.insert(stored.into(), "true".into());
+        }
+    }
+    if let Some(only) = args.as_ref().and_then(|a| a.get("only")) {
+        match only {
+            Json::String(text) => {
+                flags.insert("only".into(), text.clone());
+            }
+            Json::Array(items) => {
+                let joined = items.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n");
+                flags.insert("only".into(), joined);
+            }
+            _ => {}
+        }
+    }
+    if let Some(reasons) = args.as_ref().and_then(|a| a.get("reasons")) {
+        match reasons {
+            Json::String(text) => {
+                flags.insert("reasons".into(), text.clone());
+            }
+            Json::Array(items) => {
+                let joined = items.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n");
+                flags.insert("reasons".into(), joined);
+            }
+            _ => {}
+        }
+    }
+    let deadline = std::env::var("WIKIFIER_MCP_DEADLINE_S").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(60).max(1);
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let value = if !root.is_dir() {
+            Json::obj(vec![
+                ("success", Json::Bool(false)),
+                ("error", Json::String("project root does not exist".into())),
+                ("error_type", Json::String("ProjectRootError".into())),
+            ])
+        } else {
+            api::dispatch(&name, &root, &positional, &flags)
+        };
+        let _ = tx.send(value);
+    });
+    let value = match rx.recv_timeout(Duration::from_secs(deadline)) {
+        Ok(value) => value,
+        Err(_) => Json::obj(vec![
+            ("success", Json::Bool(false)),
+            ("error", Json::String(format!("mcp call exceeded {deadline}s deadline"))),
+            ("error_type", Json::String("DeadlineExceeded".into())),
+            ("timed_out", Json::Bool(true)),
+            ("may_still_complete", Json::Bool(true)),
+        ]),
+    };
+    tool_result(value)
+}
+
+fn tool_result(value: Json) -> Json {
+    let is_error = value.get("success").and_then(|s| s.as_bool()) == Some(false);
+    Json::obj(vec![
+        ("content", Json::Array(vec![Json::obj(vec![
+            ("type", Json::String("text".into())),
+            ("text", Json::String(value.to_string())),
+        ])])),
+        ("structuredContent", value),
+        ("isError", Json::Bool(is_error)),
+    ])
+}
+
+fn copy_str(args: &Option<Json>, flags: &mut BTreeMap<String, String>, key: &str) {
+    if let Some(text) = args.as_ref().and_then(|a| a.get(key)).and_then(|v| v.as_str()) {
+        flags.insert(key.into(), text.into());
+    }
+}
+
+fn json_text(value: &Json) -> Option<String> {
+    match value {
+        Json::String(text) => Some(text.clone()),
+        Json::Int(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+fn arg_on(args: Option<&Json>, key: &str) -> bool {
+    match args.and_then(|a| a.get(key)) {
+        Some(Json::Bool(v)) => *v,
+        Some(Json::String(text)) => text == "true" || text == "1",
+        _ => false,
+    }
+}
+
+fn resource_read(msg: &Json) -> Json {
+    let params = msg.get("params");
+    let uri = params.and_then(|p| p.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
+    let root = params.and_then(|p| p.get("project_root")).and_then(|r| r.as_str()).map(PathBuf::from)
+        .or_else(|| std::env::var("WIKIFIER_PROJECT_ROOT").ok().map(PathBuf::from))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let text = match uri {
+        "wikifier://library" => std::fs::read_to_string(root.join("library.md")).unwrap_or_default(),
+        "wikifier://health" => std::fs::read_to_string(root.join("file_health.md")).unwrap_or_default(),
+        "wikifier://pending" => std::fs::read_to_string(root.join("pending_updates.md")).unwrap_or_default(),
+        "wikifier://journal" => {
+            let entries = api::read_journal(&root, None);
+            entries.into_iter().map(|e| format!("## [{}] {}\n**File:** {}\n**Reason:** {}\n", e.stamp, e.action, e.file, e.reason)).collect()
+        }
+        _ => return Json::obj(vec![
+            ("success", Json::Bool(false)),
+            ("error", Json::String(format!("unknown resource {uri}"))),
+            ("error_type", Json::String("ResourceNotFound".into())),
+        ]),
+    };
+    Json::obj(vec![
+        ("contents", Json::Array(vec![Json::obj(vec![
+            ("uri", Json::String(uri.into())),
+            ("mimeType", Json::String("text/markdown".into())),
+            ("text", Json::String(text)),
+        ])])),
+    ])
+}
+
+fn prompt_get(msg: &Json) -> Json {
+    let name = msg.get("params").and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+    if name.is_empty() {
+        return Json::obj(vec![
+            ("success", Json::Bool(false)),
+            ("error", Json::String("missing prompt name".into())),
+            ("error_type", Json::String("PromptNotFound".into())),
+        ]);
+    }
+    let text = format!("Use Wikifier. Prompt {name}. Call session_bootstrap, then check_changes, then act only on Red and actionable Yellow files.");
+    Json::obj(vec![
+        ("description", Json::String(name.into())),
+        ("messages", Json::Array(vec![Json::obj(vec![
+            ("role", Json::String("user".into())),
+            ("content", Json::obj(vec![
+                ("type", Json::String("text".into())),
+                ("text", Json::String(text)),
+            ])),
+        ])])),
+    ])
 }
 
 pub fn serve_stdio() -> Result<(), String> {

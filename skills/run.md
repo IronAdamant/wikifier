@@ -1,6 +1,6 @@
 # Wikifier Agent Protocol v0.7
 
-**Package 4.7.x** (live version: `wikifier.__version__`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
+**Package 4.7.x** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
 This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference.
 
@@ -29,7 +29,7 @@ This file is the contract for any agent operating Wikifier. Part 1 is all you ne
 - `check_changes` watches every mapped file, every file ever marked Green, and `monitored_paths.txt` entries — the list only adds files (docs, scripts), it never hides mapped ones.
 - Green means the wiki was checked against the code (see *Wiki verification*). A failed check lists the symbols to document; update the wiki and retry. `force=True` with a reason overrides and is recorded as `forced`.
 - Orient with the bootstrap **root folder card** → `list_paths(prefix)` for one folder → `prepare_edit(file)` for file-to-file links. Do not read `library.md` mermaid to orient.
-- Wiki convention: `<file>.wiki.md` next to the source (e.g. `src/api.py.wiki.md`).
+- Wiki convention: `<file>.wiki.md` next to the source (e.g. `src/api.rs.wiki.md`).
 
 ### Readiness
 
@@ -99,11 +99,11 @@ A change that leaves the public surface alone (a bug fix inside a function) pass
 
 ### Dependency intelligence
 
-- `get_dependencies(file)` (default `detail="compact"`): `internal` edges (`path`, `line`, `names`, plus `conditional` / `dynamic` / `via_barrel` / `in_cycle` / `confidence` only when they apply), `external` module names, `needs_review` (unresolved imports that look internal). About 1/10 the size of `detail="full"`, which returns `imports[]` with every per-edge record — `confidence_score` 0.05–0.95, `confidence_reasons`, `confidence_explanation` (ends with a **Recommendation:** sentence), `is_dynamic`/`dynamic_type`, `is_conditional`/`conditional_context`, `via_barrel`/`barrel_depth`, `strategy`, `diagnostic`. `low_confidence_only` / `unresolved_only` (MCP) imply full.
+- `get_dependencies(file)` (default `detail="compact"`): `internal` edges (`path`, `line`, `names`, `conditional`, `dynamic`, `via_barrel`, `confidence`), `external` module names, and `needs_review` objects (`raw`, `line`, `reason`). `detail="full"` (CLI `--full`) also returns `imports[]` with `resolved_path`, `confidence_score`, `confidence_reasons`, `acs`, `is_dynamic`, `is_conditional`, and `in_cycle`.
 - `get_dependents(file)`: who imports it (indexed lookup).
 - ACS triage: work from `actionable_low_conf_edges` + `reason_code_counts`. `external_or_bare` and `dynamic_literal` edges are noise, not work items.
-- `get_cycles(analysis=True)`: SCC clusters with severity, external blast radius, weakest links and ranked breaking recommendations.
-- Parsers: Python (stdlib `ast`; absolute, relative and `from pkg import submodule` imports resolve; imports under `if`/`try` are conditional), JS/TS (comments and string literals ignored; tsconfig paths, package `exports`, workspaces, barrel re-export chains; `import()` is a dynamic literal), plus Rust, Go, C/C++, C#, Java.
+- `get_cycles`: strongly connected components of size greater than 1. Each component includes `external_edges` and `break_hint` (the lowest-confidence edge inside the component, with `src`, `dst`, `confidence`, and `reason`).
+- Parsers: comment-masked regex for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8 and stored as `via_barrel`. A Python import indented under a block is `conditional`. `import()` is `dynamic`. See *Implementation* for what this scan does and does not resolve.
 
 ### Update maps
 
@@ -122,13 +122,13 @@ On large or barrel-heavy monorepos, prefer the CLI/library for `update_maps` and
 
 ### Concurrency
 
-Mutations take an advisory project lock (`.wikifier_staging/.lock`; `fcntl` on POSIX, `msvcrt` on Windows), re-entrant within a thread, exclusive across threads and processes. Never hand-edit `file_health.json`, `pending_updates.md`, `library.md` or the cache — use the tools.
+Mutations take an advisory project lock (`.wikifier_staging/.lock`, a create-new pid file), re-entrant within a thread and exclusive across processes. Never hand-edit `file_health.json`, `pending_updates.md`, `library.md` or the cache — use the tools.
 
 ### Commands (CLI)
 
 | Command | Purpose |
 |---|---|
-| `init [DIR] [--no-copy]` | lean templates (`src/` default), `.wikifier/` marker, read-only dashboard |
+| `init [DIR]` | keeps an existing path list, seeds `src/` when that list is empty, copies `index.html` only when it is missing, writes `.wikifier/marker` |
 | `session-bootstrap`, `check-changes`, `suggest-next [--json]` | core loop |
 | `prepare-edit F`, `record-change F WHY`, `mark-green F [WHY] [--force]`, `record-deletion F [WHY]` | per-file loop |
 | `record-changes [-r PATH=WHY]… [--reasons FILE] [--default WHY] [--only P]… [--since REF] [--green] [--dry-run]` | batch loop (git) |
@@ -147,6 +147,23 @@ The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` la
 
 There is no Python library. Agents call the CLI or `wikifier mcp`. The same functions live in the Rust crate (`src/api.rs`) and both fronts call them.
 
+### Implementation (package 4.7.x, protocol stays v0.7)
+
+The program is a std-only Rust binary under `src/`. `Cargo.toml` has an empty `[dependencies]` list. Launchers exec that binary. MCP is `wikifier mcp`.
+
+- `update-maps` writes `library.md` (a file tree, a Mermaid block capped at 80 edges, and the dependency table) and `.wikifier_staging/maps/` (`_root.json` plus one `_index.json` per directory). `--directory`, `--max-files`, and `--stream` apply. A file budget returns `map_complete=false` and `files_remaining_dirty`. The next run stat-skips files already parsed, so the same command resumes. `--stream` prints JSON events on stderr and still persists the map. The result field `parser` is `regex+reexport`.
+- The cache is `.wikifier_staging/wk_cache`, a text index (payload, `by_src`, `by_dst`, notes, barrels). When that index is empty, an existing `import_cache.sqlite` is imported with the `sqlite3` CLI, and `import_cache.json` is the other fallback. Rows imported this way use hash `sha256:legacy` and mtime 0, so the next `update-maps` re-parses them. If the sqlite file is present and cannot be read, the result includes the warning `sqlite_present_unread`.
+- A resolved edge line is `dst`, `line`, `names`, then optional flag letters `c` (conditional), `d` (dynamic), and `b` (via barrel). Confidence is assigned when the edge is read: dynamic 0.4, conditional 0.55, via barrel 0.7, static 0.9. ACS reason codes are `dynamic_literal`, `conditional_guard`, `via_barrel`, and `resolved_static`. Unresolved notes use `unresolved_relative` (the specifier starts with `.`), `dynamic_literal`, or `unresolved`.
+- `dependencies --full` returns `imports[]` with `confidence_score`, `confidence_reasons`, `acs`, `is_dynamic`, `is_conditional`, and `in_cycle`. Compact rows always include `conditional`, `dynamic`, `via_barrel`, and `confidence`.
+- `record_deletion` appends the journal line, marks the health row Red, drops the file from the graph, and removes its pending line. The file does not have to exist.
+- `record_changes` matches reasons by exact path, then the longest `dir/` prefix, then the longest glob (`*` and `?`). `--only`, `--green`, `--dry-run`, and deletions are applied. `--green` lists verification failures and leaves those files Yellow.
+- `mark_green` extracts Python top-level `def`/`class` names (or `__all__`) and JS/TS `export` names, and requires each current name to appear in the wiki. With a previous baseline, a removed name still wrapped in backticks is `wiki_mentions_removed_symbols`, and a changed public surface with an unchanged wiki hash is `wiki_not_updated_for_api_change`. Rust, Go, C/C++, C#, and Java have no symbol extractor, so their rows are `unchecked`. `health --summary` includes `green_breakdown`. A successful mark removes that file's pending line.
+- The scan ignores comments and strings. It does not use CPython `ast`. It does not read tsconfig `paths`, package `exports`, or workspace maps. Named re-exports are the barrel follow. Accuracy is the four frozen fixtures (`accuracy_fixtures_match_frozen_edges`). This parser has not been run on Babylon.js.
+- MCP `tools/call` sets `isError` when the payload has `success: false`. `resources/read` and `prompts/get` answer. A call waits at most `WIKIFIER_MCP_DEADLINE_S` seconds (default 60) and then returns `timed_out` and `may_still_complete`. An identical journal action, file, and reason inside 120 seconds sets `duplicate_skipped` and does not append another line.
+- Commands that write health, pending, the map, or the cache take `.wikifier_staging/.lock` before the cache lock. The lock is re-entrant on the same thread, waits 30 seconds, and is stolen when the recorded pid is dead. A timeout returns `error_type: "LockTimeoutError"` and `timed_out: true`.
+- `init` keeps a path list that already has a non-comment entry. It seeds `src/` only when a list is empty and `src/` exists. It copies `index.html` only when that file is absent, and it writes `.wikifier/marker`.
+- `serve` listens on `127.0.0.1:8787` until stopped. It answers `/`, `/__wikifier/api/{bootstrap,file,dependencies,dependents,cycles,journal,diagnostics}`, `/__wikifier/status`, and the project files the dashboard reads (`file_health.json`, `library.md`). `POST /__wikifier/run` accepts `update-maps`, `update-maps --full`, and `check-changes`. `POST /__wikifier/shutdown` stops the process. `monitor` repeats `check-changes` (default every 30 seconds). `daemon run` runs `check-changes` and `update-maps` until the pid file disappears. `WIKIFIER_DAEMON_MAPS=0` skips the map. `daemon start` refuses readiness `blocked` or `not_ready` unless `--force`.
+
 ```bash
 wikifier --target /abs/project session-bootstrap
 wikifier --target /abs/project record-change src/api/client.py "Switched the client: the old one blocked the loop."
@@ -161,8 +178,8 @@ wikifier --target /abs/project mark-green src/api/client.py "Wiki reflects the n
 - `prepare_edit.dependencies[].resolved_path` is populated; `dependents` come from the indexed edge table.
 - Python absolute imports now resolve (Django/`src/`-layout graphs were mostly missing before); JS comment/string imports are no longer edges; duplicate edges from overlapping patterns are gone; unresolved relative imports no longer appear as phantom files. Expect more edges and different ACS numbers after the first full `update_maps`.
 - Conditional detection only counts *enclosing* guards (most top-level imports were previously flagged conditional).
-- New CLI commands: `dependencies`, `dependents`, `heal-stubs`, `healable-stubs`, `healing-stats`, `stale-wikis`, `prune-barrels`, `cycles --json`, `journal --json`, `issues --json`. Every former shell command is now Python.
-- Streaming moved: `wikifier.streaming.run_update_stream` (was `wikifier.import_cache.run_update_stream`); it now persists the map.
+- New CLI commands: `dependencies`, `dependents`, `heal-stubs`, `healable-stubs`, `healing-stats`, `stale-wikis`, `prune-barrels`, `cycles --json`, `journal --json`, `issues --json`. In the 4.7.0 package those commands lived in Python. They now live in `src/api.rs` and `src/main.rs`.
+- `update-maps --stream` persists the map and prints JSON progress on stderr. The 4.7.0 package did this from `wikifier.streaming`.
 - MCP no longer shells out; failures are reported, never retried through a second code path.
 - `mark_green` verifies the wiki against the code and can now fail (`WikiVerificationError`); pass `force=True` with a reason to override. New entry fields: `public_symbols`, `verification`, `source_mtime_ns`; `health --summary` adds `green_breakdown`.
 - `get_dependencies` returns the compact shape by default (`internal`, `external`, `needs_review`); pass `detail="full"` (CLI `--full`) for the previous `imports[]` records.

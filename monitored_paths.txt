@@ -3,21 +3,21 @@
 # One path per line. Prefer specific wiki files; no bare "." for large trees.
 # See M5.1 health pruning for external safety.
 
-# Core documented files for the agent-to-agent wiki (zero-dep, LLM-operated)
-# Specific files only: we maintain wiki summaries for these, not every source file.
+# Core documented files for the agent-to-agent wiki (zero-dep, LLM-operated).
+# Specific files only. Mapped sources under map_paths.txt are watched without being listed here.
 skills/run.md
 README.md
+CLAUDE.md
+CONTRIBUTING.md
+CHANGELOG.md
+docs/spec.md
 Findings/M5-Dogfood-Progress.md
 Findings/M5-Dogfood-Assessment-Report.md
 Findings/Milestones-Overview.md
 Findings/p6_real_world_validation_report.md
 Findings/M5.1-cross-hardening-analysis.md
 wikifier.sh
-wikifier/mcp/README.md
-wikifier/mcp/server.py
 
-# Note: No broad dirs like "wikifier/" (would require entries for all .py), no pyproject/.mcp.json unless wiki'd, no external dogfood.
 # For external dogfood: always use WIKIFIER_PROJECT_ROOT=/absolute/path/to/target
-# and put *project-relative* paths (no ../) in that target's monitored_paths.txt.
-# Foreign-FS absolute prefixes (/home vs /Users) are ignored when missing.
-# This was fixed in M5.1 to prevent pollution in main health (see health_impl._entry_is_under_root).
+# and put project-relative paths (no ../) in that target's monitored_paths.txt.
+# Foreign-FS absolute prefixes (/home vs /Users) are ignored when the file is missing.

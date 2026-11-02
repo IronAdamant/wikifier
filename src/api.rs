@@ -11,6 +11,25 @@ use crate::scope::{self, Scope};
 use crate::sha256::{file_sha256_prefixed, sha256_prefixed};
 use crate::timeutil::local_stamp;
 
+pub struct MapRun {
+    pub full: bool,
+    pub quiet: bool,
+    pub directory: Option<String>,
+    pub max_files: Option<usize>,
+    pub stream: bool,
+}
+
+fn lock_or_fail(root: &Path) -> Result<crate::project_lock::ProjectLock, Json> {
+    crate::project_lock::ProjectLock::acquire(root).map_err(|err| {
+        let kind = if err.contains("locked") { "LockTimeoutError" } else { "LockError" };
+        let mut value = fail(kind, err);
+        if kind == "LockTimeoutError" {
+            value.insert("timed_out", Json::Bool(true));
+        }
+        value
+    })
+}
+
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const MCP_TOOLS: &[&str] = &[
@@ -130,7 +149,17 @@ pub fn update_maps(root: &Path) -> Json {
 /// `full` rehashes every file, including ones whose size and mtime still match.
 /// `quiet` keeps `edges_persisted` and omits the edge list.
 pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
-    let scope = scope::detect(root);
+    update_maps_run(root, &MapRun { full, quiet, directory: None, max_files: None, stream: false })
+}
+
+pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
+    let _lock = match lock_or_fail(root) {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
+    let full = run.full;
+    let quiet = run.quiet;
+    let mut scope = scope::detect(root);
     if scope.container {
         return ok(vec![
             ("readiness", Json::String("map_ok_scope_risk".into())),
@@ -138,14 +167,26 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
             ("full_tree", Json::Bool(false)),
             ("parseable_files", Json::Int(0)),
             ("files_parsed", Json::Int(0)),
+            ("files_remaining_dirty", Json::Int(0)),
             ("edges", Json::Array(vec![])),
             ("scope", scope_json(&scope)),
             ("message", Json::String("container root refused; target one child project".into())),
         ]);
     }
+    if let Some(dir) = run.directory.as_ref().map(|s| s.trim().trim_matches('/')).filter(|s| !s.is_empty()) {
+        let path = root.join(dir);
+        if !path.is_dir() {
+            return fail("ScopeError", format!("missing map directory: {dir}"));
+        }
+        scope.prefixes = vec![dir.to_string()];
+        scope.full_tree = false;
+        scope.missing_dirs.clear();
+        scope.ok = true;
+    }
     if !scope.missing_dirs.is_empty() {
         return fail("ScopeError", format!("missing map directory: {}", scope.missing_dirs.join(", ")));
     }
+    stream_event(run.stream, Json::obj(vec![("event", Json::String("update_maps".into())), ("phase", Json::String("start".into()))]));
     let files = match scope::collect(root, &scope) {
         Ok(f) => f,
         Err(e) => return fail("ScopeError", e),
@@ -189,6 +230,13 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
         }
         to_parse.push((file.clone(), rel, mtime, size, hash));
     }
+    let mut files_remaining_dirty = 0i64;
+    if let Some(limit) = run.max_files {
+        if to_parse.len() > limit {
+            files_remaining_dirty = (to_parse.len() - limit) as i64;
+            to_parse.truncate(limit);
+        }
+    }
     let changed_paths: Vec<PathBuf> = to_parse.iter().map(|(path, _, _, _, _)| path.clone()).collect();
     let analysis = if to_parse.is_empty() {
         crate::parse::Analysis { facts: BTreeMap::new(), scans: std::collections::HashMap::new(), warnings: Vec::new() }
@@ -197,7 +245,7 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
     } else {
         crate::parse::analyze_changed(root, &files, &changed_paths)
     };
-    let warnings = analysis.warnings.clone();
+    let mut warnings = analysis.warnings.clone();
     for (path, rel, mtime, size, hash) in &to_parse {
         let _ = path;
         let fact = analysis.facts.get(rel);
@@ -207,10 +255,17 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
         let imports: Vec<String> = scan.map(|s| s.imports.iter().map(|i| i.spec.clone()).collect()).unwrap_or_default();
         let barrel_dsts: Vec<String> = dsts.iter().cloned().collect();
         let edge_lines = fact.map(|f| {
-            f.internal.iter().map(|(dst, line, names)| format!("{dst}\t{line}\t{}", names.join(","))).collect()
+            f.internal.iter().map(|edge| cache::format_edge_line(&edge.dst, edge.line, &edge.names, edge.conditional, edge.dynamic, edge.via_barrel)).collect()
         }).unwrap_or_default();
         let external = fact.map(|f| f.external.clone()).unwrap_or_default();
         let unresolved = fact.map(|f| f.unresolved.clone()).unwrap_or_default();
+        if run.stream {
+            stream_event(true, Json::obj(vec![
+                ("event", Json::String("update_maps".into())),
+                ("phase", Json::String("parsed".into())),
+                ("file", Json::String(rel.clone())),
+            ]));
+        }
         session.upsert(&FileUpdate {
             rel: rel.clone(),
             mtime_ns: *mtime,
@@ -249,11 +304,33 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
         return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
+    if let Err(err) = crate::maps_out::write(root) {
+        warnings.push(format!("map artifacts: {err}"));
+    }
+    let map_complete = files_remaining_dirty == 0;
+    let status = Json::obj(vec![
+        ("map_complete", Json::Bool(map_complete)),
+        ("files_remaining_dirty", Json::Int(files_remaining_dirty)),
+        ("files_parsed", Json::Int(parsed)),
+        ("files_skipped", Json::Int(skipped)),
+        ("directory", Json::String(run.directory.clone().unwrap_or_default())),
+        ("parser", Json::String("regex+reexport".into())),
+    ]);
+    if let Err(err) = crate::maps_out::write_status(root, &status) {
+        warnings.push(format!("incremental status: {err}"));
+    }
     let edge_json = Json::Array(edge_pairs.into_iter().map(|(src, dst)| {
         Json::obj(vec![("src", Json::String(src)), ("dst", Json::String(dst))])
     }).collect());
+    stream_event(run.stream, Json::obj(vec![
+        ("event", Json::String("update_maps".into())),
+        ("phase", Json::String("done".into())),
+        ("map_complete", Json::Bool(map_complete)),
+        ("files_remaining_dirty", Json::Int(files_remaining_dirty)),
+    ]));
     ok(vec![
-        ("map_complete", Json::Bool(true)),
+        ("map_complete", Json::Bool(map_complete)),
+        ("files_remaining_dirty", Json::Int(files_remaining_dirty)),
         ("full_tree", Json::Bool(scope.full_tree)),
         ("parseable_files", Json::Int(files.len() as i64)),
         ("files_parsed", Json::Int(parsed)),
@@ -265,8 +342,15 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
         ("edges", edge_json),
         ("scope", scope_json(&scope)),
         ("cache_backend", Json::String("wk_cache".into())),
+        ("parser", Json::String("regex+reexport".into())),
         ("warnings", Json::Array(warnings.into_iter().map(Json::String).collect())),
     ])
+}
+
+fn stream_event(stream: bool, value: Json) {
+    if stream {
+        eprintln!("{value}");
+    }
 }
 
 fn fail_warnings(error_type: &str, error: impl Into<String>, warnings: &[String]) -> Json {
@@ -292,14 +376,7 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
             continue;
         }
         let hash = file_sha256_prefixed(&root.join(&rel)).unwrap_or_default();
-        rows.push(HealthRow {
-            file: rel,
-            status: "🟡 Yellow".into(),
-            last_updated: stamp.clone(),
-            reason: "Initial stub".into(),
-            source_hash: hash,
-            verification: "no_wiki".into(),
-        });
+        rows.push(HealthRow::new(rel, "🟡 Yellow", stamp.clone(), "Initial stub", hash, "no_wiki"));
         changed = true;
     }
     if changed || !root.join("file_health.json").is_file() && !rows.is_empty() {
@@ -313,26 +390,60 @@ pub fn mapped_edges(root: &Path) -> BTreeSet<(String, String)> {
 }
 
 pub fn load_dependencies(root: &Path, rel: &str) -> Json {
+    dependency_report(root, rel, false)
+}
+
+pub fn dependency_report(root: &Path, rel: &str, full: bool) -> Json {
+    let _ = crate::legacy_cache::import_if_empty(root);
+    let rel = rel.trim_start_matches("./");
     match cache::load_dependency_view(root, rel) {
-        Ok(view) => ok(vec![
-            ("file", Json::String(rel.into())),
-            ("detail", Json::String("compact".into())),
-            ("internal", Json::Array(view.internal.into_iter().map(|e| Json::obj(vec![
-                ("path", Json::String(e.path)),
-                ("line", Json::Int(e.line)),
-                ("names", Json::Array(e.names.into_iter().map(Json::String).collect())),
-            ])).collect())),
-            ("external", Json::Array(view.external.into_iter().map(Json::String).collect())),
-            ("needs_review", Json::Array(view.unresolved.into_iter().map(|(raw, line)| Json::obj(vec![
-                ("raw", Json::String(raw)),
-                ("line", Json::Int(line)),
-            ])).collect())),
-        ]),
+        Ok(view) => {
+            let cycled = if full { cycle_pairs(root) } else { BTreeSet::new() };
+            let internal: Vec<Json> = view.internal.iter().map(|edge| edge_record(edge, full, cycled.contains(&(rel.to_string(), edge.path.clone())))).collect();
+            let mut pairs = vec![
+                ("file", Json::String(rel.into())),
+                ("detail", Json::String(if full { "full" } else { "compact" }.into())),
+                ("internal", Json::Array(internal.clone())),
+                ("external", Json::Array(view.external.iter().cloned().map(Json::String).collect())),
+                ("needs_review", Json::Array(view.unresolved.iter().cloned().map(|(raw, line, reason)| Json::obj(vec![
+                    ("raw", Json::String(raw)),
+                    ("line", Json::Int(line)),
+                    ("reason", Json::String(reason)),
+                ])).collect())),
+            ];
+            if full {
+                pairs.push(("imports", Json::Array(internal)));
+            }
+            ok(pairs)
+        }
         Err(e) => fail("CacheError", e),
     }
 }
 
+fn edge_record(edge: &cache::InternalEdge, full: bool, in_cycle: bool) -> Json {
+    let mut pairs = vec![
+        ("path".into(), Json::String(edge.path.clone())),
+        ("line".into(), Json::Int(edge.line)),
+        ("names".into(), Json::Array(edge.names.iter().cloned().map(Json::String).collect())),
+        ("conditional".into(), Json::Bool(edge.conditional)),
+        ("dynamic".into(), Json::Bool(edge.dynamic)),
+        ("via_barrel".into(), Json::Bool(edge.via_barrel)),
+        ("confidence".into(), Json::Float(edge.confidence())),
+    ];
+    if full {
+        pairs.push(("resolved_path".into(), Json::String(edge.path.clone())));
+        pairs.push(("confidence_score".into(), Json::Float(edge.confidence())));
+        pairs.push(("confidence_reasons".into(), Json::Array(vec![Json::String(edge.acs_reason().into())])));
+        pairs.push(("acs".into(), Json::String(edge.acs_reason().into())));
+        pairs.push(("is_dynamic".into(), Json::Bool(edge.dynamic)));
+        pairs.push(("is_conditional".into(), Json::Bool(edge.conditional)));
+        pairs.push(("in_cycle".into(), Json::Bool(in_cycle)));
+    }
+    Json::from_pairs(pairs)
+}
+
 pub fn load_dependents(root: &Path, rel: &str) -> Json {
+    let _ = crate::legacy_cache::import_if_empty(root);
     match cache::load_dependents(root, rel) {
         Ok(srcs) => ok(vec![
             ("file", Json::String(rel.into())),
@@ -343,6 +454,7 @@ pub fn load_dependents(root: &Path, rel: &str) -> Json {
 }
 
 pub fn list_paths(root: &Path, prefix: &str) -> Json {
+    let _ = crate::legacy_cache::import_if_empty(root);
     let paths = cache::list_prefix(root, prefix).unwrap_or_default();
     let pref = prefix.trim_matches('/');
     let mut dirs: BTreeMap<String, i64> = BTreeMap::new();
@@ -409,25 +521,44 @@ pub fn session_bootstrap(root: &Path) -> Json {
             ("scope", scope_json(&scope)),
         ]);
     }
+    let legacy_warning = crate::legacy_cache::import_if_empty(root).ok().flatten();
     if cache::all_paths(root).is_empty() {
         let built = update_maps(root);
         if built.get("success").and_then(|s| s.as_bool()) != Some(true) {
             return built;
         }
     }
+    if artifacts::folder_card(root, "").is_none() && !cache::all_paths(root).is_empty() {
+        let _ = crate::maps_out::write(root);
+    }
     let files: Vec<Json> = cache::all_paths(root).into_iter().map(Json::String).collect();
     let rows = artifacts::read_health(root);
     let actions = suggest_next_actions(root);
     let action_list = actions.get("actions").cloned().unwrap_or(Json::Array(vec![]));
-    ok(vec![
+    let map_index = artifacts::folder_card(root, "")
+        .and_then(|text| crate::jsonutil::parse(&text).ok())
+        .unwrap_or_else(|| Json::obj(vec![]));
+    let mut value = ok(vec![
         ("version", Json::String(VERSION.into())),
         ("readiness", Json::String(readiness_of(&scope, !files.is_empty(), &rows, health_file_present(root)).into())),
         ("health_summary", health_summary(root)),
         ("actions", action_list),
         ("files", Json::Array(files)),
+        ("map_index", map_index),
         ("map_complete", Json::Bool(scope.missing_dirs.is_empty() && !scope.container)),
         ("scope", scope_json(&scope)),
-    ])
+    ]);
+    if let Some(warning) = legacy_warning {
+        value.insert("warnings", Json::Array(vec![Json::String(warning)]));
+    }
+    let status = crate::maps_out::read_status(root);
+    if let Some(Json::Int(n)) = status.get("files_remaining_dirty") {
+        value.insert("files_remaining_dirty", Json::Int(*n));
+        if *n > 0 {
+            value.insert("map_complete", Json::Bool(false));
+        }
+    }
+    value
 }
 
 fn health_summary(root: &Path) -> Json {
@@ -444,11 +575,38 @@ fn health_summary(root: &Path) -> Json {
             yellow += 1;
         }
     }
+    let mut verified = 0i64;
+    let mut forced = 0i64;
+    let mut no_wiki = 0i64;
+    let mut unchecked = 0i64;
+    let mut legacy = 0i64;
+    let mut other = 0i64;
+    for row in &rows {
+        if !is_green(&row.status) {
+            continue;
+        }
+        match row.verification.as_str() {
+            "verified" => verified += 1,
+            "forced" => forced += 1,
+            "no_wiki" => no_wiki += 1,
+            "unchecked" => unchecked += 1,
+            "legacy" => legacy += 1,
+            _ => other += 1,
+        }
+    }
     Json::obj(vec![
         ("total", Json::Int(rows.len() as i64)),
         ("green", Json::Int(green)),
         ("yellow", Json::Int(yellow)),
         ("red", Json::Int(red)),
+        ("green_breakdown", Json::obj(vec![
+            ("verified", Json::Int(verified)),
+            ("forced", Json::Int(forced)),
+            ("no_wiki", Json::Int(no_wiki)),
+            ("unchecked", Json::Int(unchecked)),
+            ("legacy", Json::Int(legacy)),
+            ("other", Json::Int(other)),
+        ])),
     ])
 }
 
@@ -491,6 +649,10 @@ pub fn suggest_next_actions(root: &Path) -> Json {
 }
 
 pub fn check_changes(root: &Path) -> Json {
+    let _lock = match lock_or_fail(root) {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
     let scope = scope::detect(root);
     if scope.container {
         return ok(vec![
@@ -505,6 +667,18 @@ pub fn check_changes(root: &Path) -> Json {
     for rel in cache::all_paths(root) {
         watched.insert(rel);
     }
+    for entry in scope::read_path_list(root, "monitored_paths.txt") {
+        if root.join(&entry).is_file() {
+            watched.insert(entry);
+        }
+    }
+    let cap = std::env::var("WIKIFIER_CHECK_CHANGES_MAX").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(2000);
+    let mut watched: Vec<String> = watched.into_iter().collect();
+    watched.sort();
+    let truncated = watched.len() > cap;
+    if truncated {
+        watched.truncate(cap);
+    }
     let reason = "content changed since last mark-green (check-changes)";
     let mut dirty = Vec::new();
     let mut changed_rows = false;
@@ -515,14 +689,17 @@ pub fn check_changes(root: &Path) -> Json {
             dirty.push(rel.clone());
             let already = idx.map(|i| is_red(&rows[i].status)).unwrap_or(false);
             if !already {
-                let row = HealthRow {
-                    file: rel.clone(),
-                    status: "🔴 Red".into(),
-                    last_updated: local_stamp(),
-                    reason: "missing on disk (check-changes)".into(),
-                    source_hash: idx.and_then(|i| Some(rows[i].source_hash.clone())).unwrap_or_default(),
-                    verification: idx.map(|i| rows[i].verification.clone()).unwrap_or_default(),
-                };
+                let mut row = HealthRow::new(
+                    rel.clone(),
+                    "🔴 Red",
+                    local_stamp(),
+                    "missing on disk (check-changes)",
+                    idx.map(|i| rows[i].source_hash.clone()).unwrap_or_default(),
+                    idx.map(|i| rows[i].verification.clone()).unwrap_or_default(),
+                );
+                if let Some(i) = idx {
+                    row.keep_baseline_from(&rows[i]);
+                }
                 if let Some(i) = idx { rows[i] = row; } else { rows.push(row); }
                 let _ = artifacts::append_journal(root, "check-changes", &rel, "missing on disk");
                 changed_rows = true;
@@ -546,14 +723,10 @@ pub fn check_changes(root: &Path) -> Json {
         if !already {
             let keep_hash = baseline.unwrap_or(live);
             let verification = idx.map(|i| rows[i].verification.clone()).unwrap_or_default();
-            let row = HealthRow {
-                file: rel.clone(),
-                status: "🟡 Yellow".into(),
-                last_updated: local_stamp(),
-                reason: reason.into(),
-                source_hash: keep_hash,
-                verification,
-            };
+            let mut row = HealthRow::new(rel.clone(), "🟡 Yellow", local_stamp(), reason, keep_hash, verification);
+            if let Some(i) = idx {
+                row.keep_baseline_from(&rows[i]);
+            }
             if let Some(i) = idx { rows[i] = row; } else { rows.push(row); }
             let _ = artifacts::append_journal(root, "check-changes", &rel, reason);
             let pending = root.join("pending_updates.md");
@@ -568,47 +741,57 @@ pub fn check_changes(root: &Path) -> Json {
     if changed_rows {
         let _ = artifacts::write_health(root, &rows);
     }
-    ok(vec![
+    let mut value = ok(vec![
         ("dirty_total", Json::Int(dirty.len() as i64)),
         ("changes_detected", Json::Int(dirty.len() as i64)),
         ("files", Json::Array(dirty.into_iter().map(Json::String).collect())),
         ("scope", scope_json(&scope)),
-    ])
+    ]);
+    if truncated {
+        value.insert("truncated", Json::Bool(true));
+        value.insert("warnings", Json::Array(vec![Json::String(format!("check-changes stopped at {cap} files (WIKIFIER_CHECK_CHANGES_MAX)"))]));
+    }
+    value
 }
 
 pub fn prepare_edit(root: &Path, file: &str) -> Json {
     let rel = file.trim_start_matches("./");
+    let _ = crate::legacy_cache::import_if_empty(root);
     let deps = cache::load_dependencies(root, rel).unwrap_or_default();
     let importers = cache::load_dependents(root, rel).unwrap_or_default();
     let row = artifacts::read_health(root).into_iter().find(|r| r.file == rel);
     ok(vec![
         ("file", Json::String(rel.into())),
         ("status", Json::String(row.as_ref().map(|r| r.status.clone()).unwrap_or_default())),
-        ("dependencies", Json::Array(deps.into_iter().map(Json::String).collect())),
+        ("dependencies", Json::Array(deps.into_iter().map(|path| Json::obj(vec![
+            ("path", Json::String(path.clone())),
+            ("resolved_path", Json::String(path)),
+        ])).collect())),
         ("dependents", Json::Array(importers.into_iter().map(Json::String).collect())),
         ("wiki", Json::String(fs::read_to_string(root.join(format!("{rel}.wiki.md"))).unwrap_or_default())),
     ])
 }
 
 pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
+    let _lock = match lock_or_fail(root) {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
     let rel = file.trim_start_matches("./");
     let path = root.join(rel);
     if !path.is_file() {
         return fail("FileNotFound", format!("file does not exist: {rel}"));
     }
-    let stamp = match artifacts::append_journal(root, "record-change", rel, reason) {
-        Ok(s) => s,
+    let written = match artifacts::append_journal(root, "record-change", rel, reason) {
+        Ok(written) => written,
         Err(e) => return fail("JournalError", e),
     };
     let hash = file_sha256_prefixed(&path).unwrap_or_default();
-    if let Err(e) = artifacts::upsert_health_row(root, HealthRow {
-        file: rel.into(),
-        status: "🟡 Yellow".into(),
-        last_updated: stamp,
-        reason: reason.into(),
-        source_hash: hash,
-        verification: String::new(),
-    }) {
+    let mut row = HealthRow::new(rel, "🟡 Yellow", written.stamp, reason, hash, "");
+    if let Some(old) = artifacts::read_health(root).into_iter().find(|r| r.file == rel) {
+        row.keep_baseline_from(&old);
+    }
+    if let Err(e) = artifacts::upsert_health_row(root, row) {
         return fail("HealthError", e);
     }
     let pending = root.join("pending_updates.md");
@@ -619,10 +802,18 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
             return fail("PendingError", "could not write pending_updates.md");
         }
     }
-    ok(vec![("file", Json::String(rel.into())), ("journaled", Json::Bool(true))])
+    ok(vec![
+        ("file", Json::String(rel.into())),
+        ("journaled", Json::Bool(written.journaled)),
+        ("duplicate_skipped", Json::Bool(!written.journaled)),
+    ])
 }
 
 pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
+    let _lock = match lock_or_fail(root) {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
     let rel = file.trim_start_matches("./");
     let path = root.join(rel);
     if !path.is_file() {
@@ -631,57 +822,124 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
     if force && reason.trim().is_empty() {
         return fail("ValueError", "force=True needs a reason explaining why the wiki is still accurate");
     }
-    let (symbols, symbol_warning) = public_symbols(&path);
-    let wiki = fs::read_to_string(root.join(format!("{rel}.wiki.md"))).unwrap_or_default();
+    let symbols = public_symbols(&path);
+    let wiki_path = root.join(format!("{rel}.wiki.md"));
+    let wiki = fs::read_to_string(&wiki_path).unwrap_or_default();
+    let previous = artifacts::read_health(root).into_iter().find(|r| r.file == rel);
+    let verdict = wiki_verdict(&symbols, &wiki, previous.as_ref(), &wiki_path);
     if wiki.is_empty() {
-        let stamp = local_stamp();
-        let hash = file_sha256_prefixed(&path).unwrap_or_default();
-        let _ = artifacts::upsert_health_row(root, HealthRow {
-            file: rel.into(),
-            status: "🟢 Green".into(),
-            last_updated: stamp,
-            reason: if reason.is_empty() { "no wiki".into() } else { reason.into() },
-            source_hash: hash,
-            verification: "no_wiki".into(),
-        });
-        return attach_warning(ok(vec![("file", Json::String(rel.into())), ("verification", Json::String("no_wiki".into()))]), symbol_warning);
+        let _ = write_green_row(root, rel, &path, reason, "no_wiki", &symbols.names);
+        return attach_warning(ok(vec![("file", Json::String(rel.into())), ("verification", Json::String("no_wiki".into()))]), symbols.warning);
     }
-    let mut missing = Vec::new();
-    for sym in &symbols {
-        if !wiki.contains(sym) {
-            missing.push(sym.clone());
-        }
-    }
-    if !missing.is_empty() && !force {
+    if !verdict.issues.is_empty() && !force {
         return attach_warning(Json::obj(vec![
             ("success", Json::Bool(false)),
             ("error", Json::String("wiki misses public symbols".into())),
             ("error_type", Json::String("WikiVerificationError".into())),
             ("file", Json::String(rel.into())),
-            ("issues", Json::Array(missing.into_iter().map(Json::String).collect())),
-        ]), symbol_warning);
+            ("issues", Json::Array(verdict.issues.into_iter().map(Json::String).collect())),
+        ]), symbols.warning.or(verdict.warning));
     }
-    let verification = if !missing.is_empty() && force { "forced" } else { "verified" };
-    let stamp = local_stamp();
-    let hash = file_sha256_prefixed(&path).unwrap_or_default();
-    if let Err(e) = artifacts::upsert_health_row(root, HealthRow {
-        file: rel.into(),
-        status: "🟢 Green".into(),
-        last_updated: stamp,
-        reason: if reason.is_empty() { "mark-green".into() } else { reason.into() },
-        source_hash: hash,
-        verification: verification.into(),
-    }) {
-        return attach_warning(fail("HealthError", e), symbol_warning);
+    let verification = if !symbols.extractor {
+        "unchecked"
+    } else if !verdict.issues.is_empty() && force {
+        "forced"
+    } else {
+        "verified"
+    };
+    if let Err(e) = write_green_row(root, rel, &path, reason, verification, &symbols.names) {
+        return attach_warning(fail("HealthError", e), symbols.warning);
     }
-    attach_warning(ok(vec![("file", Json::String(rel.into())), ("verification", Json::String(verification.into()))]), symbol_warning)
+    attach_warning(ok(vec![("file", Json::String(rel.into())), ("verification", Json::String(verification.into()))]), symbols.warning.or(verdict.warning))
 }
 
-fn public_symbols(path: &Path) -> (Vec<String>, Option<String>) {
-    let (text, warning) = crate::parse::read_utf8(path);
-    if path.extension().and_then(|s| s.to_str()) != Some("py") {
-        return (Vec::new(), warning);
+struct SymbolScan {
+    names: Vec<String>,
+    warning: Option<String>,
+    extractor: bool,
+}
+
+struct WikiVerdict {
+    issues: Vec<String>,
+    warning: Option<String>,
+}
+
+fn wiki_verdict(symbols: &SymbolScan, wiki: &str, previous: Option<&HealthRow>, wiki_path: &Path) -> WikiVerdict {
+    let mut issues = Vec::new();
+    let mut warning = None;
+    if wiki.is_empty() || !symbols.extractor {
+        return WikiVerdict { issues, warning };
     }
+    for sym in &symbols.names {
+        if !wiki.contains(sym) {
+            issues.push(format!("undocumented_new_symbols: {sym}"));
+        }
+    }
+    let baseline: Vec<String> = previous.map(|row| split_symbols(&row.public_symbols)).unwrap_or_default();
+    let had_baseline = previous.is_some_and(|row| !row.public_symbols.is_empty() || !row.wiki_hash.is_empty());
+    if !had_baseline {
+        warning = Some("no_symbol_baseline".into());
+    } else {
+        for sym in &baseline {
+            if !symbols.names.iter().any(|name| name == sym) && wiki.contains(&format!("`{sym}`")) {
+                issues.push(format!("wiki_mentions_removed_symbols: {sym}"));
+            }
+        }
+        let surface_changed = !same_symbols(&baseline, &symbols.names);
+        let wiki_hash = file_sha256_prefixed(wiki_path).unwrap_or_default();
+        let old_hash = previous.map(|row| row.wiki_hash.clone()).unwrap_or_default();
+        if surface_changed && !old_hash.is_empty() && wiki_hash == old_hash {
+            issues.push("wiki_not_updated_for_api_change".into());
+        }
+    }
+    WikiVerdict { issues, warning }
+}
+
+fn split_symbols(text: &str) -> Vec<String> {
+    text.split(['\n', ',']).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+fn same_symbols(left: &[String], right: &[String]) -> bool {
+    let mut a = left.to_vec();
+    let mut b = right.to_vec();
+    a.sort();
+    b.sort();
+    a.dedup();
+    b.dedup();
+    a == b
+}
+
+fn write_green_row(root: &Path, rel: &str, path: &Path, reason: &str, verification: &str, symbols: &[String]) -> Result<(), String> {
+    let wiki_path = root.join(format!("{rel}.wiki.md"));
+    let mut row = HealthRow::new(
+        rel,
+        "🟢 Green",
+        local_stamp(),
+        if reason.is_empty() { if verification == "no_wiki" { "no wiki" } else { "mark-green" } } else { reason },
+        file_sha256_prefixed(path).unwrap_or_default(),
+        verification,
+    );
+    row.public_symbols = symbols.join("\n");
+    row.wiki_hash = if wiki_path.is_file() { file_sha256_prefixed(&wiki_path).unwrap_or_default() } else { String::new() };
+    row.source_mtime_ns = cache::stat_ns(path).map(|(mtime, _)| mtime.to_string()).unwrap_or_default();
+    artifacts::upsert_health_row(root, row)?;
+    drop_pending_line(root, rel);
+    Ok(())
+}
+
+fn public_symbols(path: &Path) -> SymbolScan {
+    let (text, warning) = crate::parse::read_utf8(path);
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+    if ext == "py" {
+        return SymbolScan { names: python_public_symbols(&text), warning, extractor: true };
+    }
+    if matches!(ext.as_str(), "js" | "ts" | "jsx" | "tsx" | "mjs" | "cjs" | "mts" | "cts") {
+        return SymbolScan { names: js_public_symbols(&text), warning, extractor: true };
+    }
+    SymbolScan { names: Vec::new(), warning, extractor: false }
+}
+
+fn python_public_symbols(text: &str) -> Vec<String> {
     let mut symbols = Vec::new();
     for line in text.lines() {
         let t = line.trim();
@@ -694,7 +952,7 @@ fn public_symbols(path: &Path) -> (Vec<String>, Option<String>) {
                             symbols.push(name.to_string());
                         }
                     }
-                    return (symbols, warning);
+                    return symbols;
                 }
             }
         }
@@ -708,7 +966,54 @@ fn public_symbols(path: &Path) -> (Vec<String>, Option<String>) {
             }
         }
     }
-    (symbols, warning)
+    symbols
+}
+
+fn js_public_symbols(text: &str) -> Vec<String> {
+    let mut symbols = Vec::new();
+    for line in text.lines() {
+        let t = line.trim().trim_end_matches(';').trim();
+        let Some(rest) = t.strip_prefix("export ") else { continue };
+        let rest = rest.trim();
+        if rest.starts_with("default ") {
+            push_symbol(&mut symbols, "default");
+            continue;
+        }
+        if rest.starts_with('{') {
+            let head = rest.split(" from ").next().unwrap_or(rest);
+            let inner = head.trim().trim_start_matches('{').trim_end_matches('}');
+            for part in inner.split(',') {
+                let part = part.trim();
+                if part.is_empty() {
+                    continue;
+                }
+                let name = part.split(" as ").last().unwrap_or(part).trim();
+                push_symbol(&mut symbols, name);
+            }
+            continue;
+        }
+        if rest.starts_with('*') {
+            continue;
+        }
+        let rest = rest.trim_start_matches("declare ").trim();
+        let rest = rest.strip_prefix("async ").unwrap_or(rest).trim();
+        let rest = ["function ", "class ", "interface ", "type ", "enum ", "const ", "let ", "var "]
+            .iter()
+            .find_map(|prefix| rest.strip_prefix(prefix))
+            .unwrap_or("");
+        let name = rest.split([' ', '(', ':', '=', '<', '{']).next().unwrap_or("").trim();
+        if !name.is_empty() && name != "from" {
+            push_symbol(&mut symbols, name);
+        }
+    }
+    symbols
+}
+
+fn push_symbol(symbols: &mut Vec<String>, name: &str) {
+    let name = name.trim().trim_matches(|c| c == '\'' || c == '"' || c == '`');
+    if !name.is_empty() && !name.starts_with('_') && !symbols.iter().any(|have| have == name) {
+        symbols.push(name.to_string());
+    }
 }
 
 pub fn health(root: &Path) -> Json {
@@ -784,7 +1089,9 @@ pub fn validate(root: &Path) -> Json {
 }
 
 pub fn cycles(root: &Path) -> Json {
+    let _ = crate::legacy_cache::import_if_empty(root);
     let edges = cache::edges(root);
+    let meta = edge_meta(root);
     let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (src, dst) in &edges {
         graph.entry(src.clone()).or_default().push(dst.clone());
@@ -794,11 +1101,70 @@ pub fn cycles(root: &Path) -> Json {
     let cyclic: Vec<Vec<String>> = sccs.into_iter().filter(|c| c.len() > 1).collect();
     ok(vec![
         ("count", Json::Int(cyclic.len() as i64)),
-        ("cycles", Json::Array(cyclic.into_iter().map(|files| Json::obj(vec![
-            ("size", Json::Int(files.len() as i64)),
-            ("files", Json::Array(files.into_iter().map(Json::String).collect())),
-        ])).collect())),
+        ("cycles", Json::Array(cyclic.into_iter().map(|files| {
+            let set: BTreeSet<String> = files.iter().cloned().collect();
+            let mut weakest: Option<(f64, String, String)> = None;
+            for src in &files {
+                for dst in graph.get(src).into_iter().flatten() {
+                    if !set.contains(dst) {
+                        continue;
+                    }
+                    let score = meta.get(&(src.clone(), dst.clone())).map(|edge| edge.confidence()).unwrap_or(0.9);
+                    if weakest.as_ref().map(|(have, _, _)| score < *have).unwrap_or(true) {
+                        weakest = Some((score, src.clone(), dst.clone()));
+                    }
+                }
+            }
+            let outside = edges.iter().filter(|(src, dst)| set.contains(src) && !set.contains(dst)).count() as i64;
+            let mut obj = vec![
+                ("size".into(), Json::Int(files.len() as i64)),
+                ("files".into(), Json::Array(files.into_iter().map(Json::String).collect())),
+                ("external_edges".into(), Json::Int(outside)),
+            ];
+            if let Some((score, src, dst)) = weakest {
+                obj.push(("break_hint".into(), Json::obj(vec![
+                    ("src", Json::String(src)),
+                    ("dst", Json::String(dst)),
+                    ("confidence", Json::Float(score)),
+                    ("reason", Json::String("lowest-confidence edge inside the component".into())),
+                ])));
+            }
+            Json::from_pairs(obj)
+        }).collect())),
     ])
+}
+
+fn edge_meta(root: &Path) -> BTreeMap<(String, String), cache::InternalEdge> {
+    let mut out = BTreeMap::new();
+    for rel in cache::all_paths(root) {
+        if let Ok(view) = cache::load_dependency_view(root, &rel) {
+            for edge in view.internal {
+                out.insert((rel.clone(), edge.path.clone()), edge);
+            }
+        }
+    }
+    out
+}
+
+fn cycle_pairs(root: &Path) -> BTreeSet<(String, String)> {
+    let edges = cache::edges(root);
+    let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (src, dst) in &edges {
+        graph.entry(src.clone()).or_default().push(dst.clone());
+        graph.entry(dst.clone()).or_default();
+    }
+    let mut pairs = BTreeSet::new();
+    for comp in tarjan(&graph).into_iter().filter(|c| c.len() > 1) {
+        let set: BTreeSet<String> = comp.iter().cloned().collect();
+        for src in &comp {
+            for dst in graph.get(src).into_iter().flatten() {
+                if set.contains(dst) {
+                    pairs.insert((src.clone(), dst.clone()));
+                }
+            }
+        }
+    }
+    pairs
 }
 
 fn tarjan(graph: &BTreeMap<String, Vec<String>>) -> Vec<Vec<String>> {
@@ -866,15 +1232,18 @@ pub fn verify_wikis(root: &Path) -> Json {
         if wiki.is_empty() {
             continue;
         }
-        let (symbols, symbol_warning) = public_symbols(&path);
-        if let Some(warning) = symbol_warning {
+        let symbols = public_symbols(&path);
+        if let Some(warning) = &symbols.warning {
             warnings.push(format!("{}: {warning}", row.file));
         }
-        let missing: Vec<String> = symbols.into_iter().filter(|s| !wiki.contains(s)).collect();
-        if !missing.is_empty() {
+        let verdict = wiki_verdict(&symbols, &wiki, Some(&row), &wiki_path);
+        if let Some(warning) = verdict.warning {
+            warnings.push(format!("{}: {warning}", row.file));
+        }
+        if !verdict.issues.is_empty() {
             failed.push(Json::obj(vec![
                 ("file", Json::String(row.file)),
-                ("issues", Json::Array(missing.into_iter().map(Json::String).collect())),
+                ("issues", Json::Array(verdict.issues.into_iter().map(Json::String).collect())),
             ]));
         }
     }
@@ -894,63 +1263,298 @@ pub fn verify_wikis(root: &Path) -> Json {
 }
 
 pub fn record_changes(root: &Path, reason_lines: &[String], default_reason: Option<&str>) -> Json {
-    let status = std::process::Command::new("git")
-        .args(["-C", &root.display().to_string(), "status", "--porcelain"])
-        .output();
-    let output = match status {
-        Ok(o) if o.status.success() => o,
-        _ => return fail("GitUnavailableError", "git is not available or this directory is not a repository"),
+    record_changes_opts(root, reason_lines, default_reason, &[], None, false, false)
+}
+
+pub fn record_changes_opts(
+    root: &Path,
+    reason_lines: &[String],
+    default_reason: Option<&str>,
+    only: &[String],
+    since: Option<&str>,
+    green: bool,
+    dry_run: bool,
+) -> Json {
+    let _lock = if dry_run {
+        None
+    } else {
+        match lock_or_fail(root) {
+            Ok(lock) => Some(lock),
+            Err(err) => return err,
+        }
     };
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut files = Vec::new();
-    for line in text.lines() {
-        if line.len() < 4 {
+    let changes = match git_changes(root, since) {
+        Ok(changes) => changes,
+        Err(err) => return fail("GitUnavailableError", err),
+    };
+    let reasons: Vec<(String, String)> = reason_lines.iter().filter_map(|line| line.split_once('=').map(|(p, w)| (p.to_string(), w.to_string()))).collect();
+    let mut selected = Vec::new();
+    for change in changes {
+        if artifact_path(&change.path) {
             continue;
         }
-        let path = line[3..].trim();
-        let path = path.strip_prefix('"').unwrap_or(path).trim_end_matches('"');
-        if path.ends_with(".wiki.md") || path.starts_with(".wikifier_staging/") {
+        if !only_allows(&change.path, only) {
             continue;
         }
-        if line.starts_with(" D") || line.starts_with("D ") {
-            continue;
-        }
-        files.push(path.to_string());
-    }
-    let mut reasons: BTreeMap<String, String> = BTreeMap::new();
-    for line in reason_lines {
-        if let Some((p, why)) = line.split_once('=') {
-            reasons.insert(p.to_string(), why.to_string());
-        }
+        selected.push(change);
     }
     let mut missing = Vec::new();
-    for f in &files {
-        let why = reasons.get(f).cloned().or_else(|| default_reason.map(|s| s.to_string()));
-        if why.is_none() {
-            missing.push(f.clone());
+    let mut planned: Vec<(GitChange, String)> = Vec::new();
+    for change in &selected {
+        let why = reason_for(&change.path, &reasons).or_else(|| default_reason.map(|s| s.to_string()));
+        match why {
+            Some(why) => planned.push((change.clone(), why)),
+            None => missing.push(change.path.clone()),
         }
     }
+    let unused: Vec<String> = reasons.iter().filter(|(key, _)| !selected.iter().any(|change| reason_key_matches(key, &change.path))).map(|(key, _)| key.clone()).collect();
     if !missing.is_empty() {
         return Json::obj(vec![
             ("success", Json::Bool(false)),
             ("error", Json::String("every changed file needs a reason".into())),
             ("error_type", Json::String("MissingReasons".into())),
-            ("missing_reasons", Json::Array(missing.into_iter().map(Json::String).collect())),
+            ("missing_reasons", Json::Array(missing.iter().cloned().map(Json::String).collect())),
+            ("template", Json::String(missing.iter().map(|f| format!("{f}=WHY")).collect::<Vec<_>>().join("\n"))),
+            ("unused_reasons", Json::Array(unused.into_iter().map(Json::String).collect())),
             ("recorded", Json::Int(0)),
         ]);
     }
+    if dry_run {
+        return ok(vec![
+            ("dry_run", Json::Bool(true)),
+            ("recorded", Json::Int(planned.len() as i64)),
+            ("files", Json::Array(planned.iter().map(|(c, _)| Json::String(c.path.clone())).collect())),
+            ("unused_reasons", Json::Array(unused.into_iter().map(Json::String).collect())),
+        ]);
+    }
+    let _lock = _lock;
     let mut recorded = 0i64;
-    for f in &files {
-        let why = reasons.get(f).cloned().or_else(|| default_reason.map(|s| s.to_string())).unwrap_or_default();
-        let res = record_change(root, f, &why);
+    let mut files = Vec::new();
+    let mut verification_failed = Vec::new();
+    for (change, why) in &planned {
+        let res = if change.deleted {
+            record_deletion(root, &change.path, why)
+        } else {
+            record_change(root, &change.path, why)
+        };
         if res.get("success").and_then(|s| s.as_bool()) == Some(true) {
             recorded += 1;
+            files.push(change.path.clone());
+            if green && !change.deleted {
+                let marked = mark_green(root, &change.path, why, false);
+                if marked.get("success").and_then(|s| s.as_bool()) != Some(true) {
+                    verification_failed.push(Json::obj(vec![
+                        ("file", Json::String(change.path.clone())),
+                        ("error", Json::String(marked.get("error").and_then(|s| s.as_str()).unwrap_or("wiki verification failed").into())),
+                        ("issues", marked.get("issues").cloned().unwrap_or(Json::Array(vec![]))),
+                    ]));
+                }
+            }
         }
     }
-    ok(vec![("recorded", Json::Int(recorded)), ("files", Json::Array(files.into_iter().map(Json::String).collect()))])
+    ok(vec![
+        ("recorded", Json::Int(recorded)),
+        ("files", Json::Array(files.into_iter().map(Json::String).collect())),
+        ("verification_failed", Json::Array(verification_failed)),
+        ("unused_reasons", Json::Array(unused.into_iter().map(Json::String).collect())),
+        ("green", Json::Bool(green)),
+    ])
+}
+
+#[derive(Clone)]
+struct GitChange {
+    path: String,
+    deleted: bool,
+}
+
+fn git_changes(root: &Path, since: Option<&str>) -> Result<Vec<GitChange>, String> {
+    let root_s = root.display().to_string();
+    if let Some(since) = since {
+        let diff = std::process::Command::new("git").args(["-C", &root_s, "diff", "--name-status", since]).output().map_err(|e| e.to_string())?;
+        if !diff.status.success() {
+            return Err("git is not available or this directory is not a repository".into());
+        }
+        let mut out = parse_name_status(&String::from_utf8_lossy(&diff.stdout));
+        let untracked = std::process::Command::new("git").args(["-C", &root_s, "ls-files", "--others", "--exclude-standard"]).output().map_err(|e| e.to_string())?;
+        if untracked.status.success() {
+            for line in String::from_utf8_lossy(&untracked.stdout).lines() {
+                let path = line.trim();
+                if !path.is_empty() {
+                    out.push(GitChange { path: path.to_string(), deleted: false });
+                }
+            }
+        }
+        return Ok(out);
+    }
+    let status = std::process::Command::new("git").args(["-C", &root_s, "status", "--porcelain", "-uall"]).output().map_err(|e| e.to_string())?;
+    if !status.status.success() {
+        return Err("git is not available or this directory is not a repository".into());
+    }
+    Ok(parse_porcelain(&String::from_utf8_lossy(&status.stdout)))
+}
+
+fn parse_porcelain(text: &str) -> Vec<GitChange> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let code = &line[..2];
+        let path = line[3..].trim().trim_matches('"');
+        if let Some((old, new)) = path.split_once(" -> ") {
+            out.push(GitChange { path: old.trim().trim_matches('"').to_string(), deleted: true });
+            out.push(GitChange { path: new.trim().trim_matches('"').to_string(), deleted: false });
+            continue;
+        }
+        let deleted = code.contains('D');
+        out.push(GitChange { path: path.to_string(), deleted });
+    }
+    out
+}
+
+fn parse_name_status(text: &str) -> Vec<GitChange> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let mut parts = line.split('\t');
+        let code = parts.next().unwrap_or("");
+        let path = parts.next().unwrap_or("").trim();
+        if path.is_empty() {
+            continue;
+        }
+        if code.starts_with('R') || code.starts_with('C') {
+            let new = parts.next().unwrap_or("").trim();
+            out.push(GitChange { path: path.to_string(), deleted: true });
+            if !new.is_empty() {
+                out.push(GitChange { path: new.to_string(), deleted: false });
+            }
+            continue;
+        }
+        out.push(GitChange { path: path.to_string(), deleted: code.starts_with('D') });
+    }
+    out
+}
+
+fn artifact_path(path: &str) -> bool {
+    path.ends_with(".wiki.md")
+        || path.starts_with(".wikifier_staging/")
+        || path == "file_health.md"
+        || path == "file_health.json"
+        || path == "pending_updates.md"
+        || path == "library.md"
+        || path.starts_with("journal/")
+}
+
+fn only_allows(path: &str, only: &[String]) -> bool {
+    if only.is_empty() {
+        return true;
+    }
+    only.iter().any(|item| reason_key_matches(item, path))
+}
+
+fn reason_for(path: &str, reasons: &[(String, String)]) -> Option<String> {
+    if let Some((_, why)) = reasons.iter().find(|(key, _)| key == path) {
+        return Some(why.clone());
+    }
+    let mut best: Option<(usize, &str)> = None;
+    for (key, why) in reasons {
+        if key.ends_with('/') && (path.starts_with(key.as_str()) || path == key.trim_end_matches('/')) && best.map(|(len, _)| key.len() > len).unwrap_or(true) {
+            best = Some((key.len(), why));
+        }
+    }
+    if let Some((_, why)) = best {
+        return Some(why.to_string());
+    }
+    let mut glob_best: Option<(usize, &str)> = None;
+    for (key, why) in reasons {
+        if (key.contains('*') || key.contains('?')) && glob_match(key, path) && glob_best.map(|(len, _)| key.len() > len).unwrap_or(true) {
+            glob_best = Some((key.len(), why));
+        }
+    }
+    glob_best.map(|(_, why)| why.to_string())
+}
+
+fn reason_key_matches(key: &str, path: &str) -> bool {
+    if key == path {
+        return true;
+    }
+    if key.ends_with('/') && (path.starts_with(key) || path == key.trim_end_matches('/')) {
+        return true;
+    }
+    (key.contains('*') || key.contains('?')) && glob_match(key, path)
+}
+
+fn glob_match(pattern: &str, text: &str) -> bool {
+    fn rec(pattern: &[u8], text: &[u8]) -> bool {
+        if pattern.is_empty() {
+            return text.is_empty();
+        }
+        if pattern[0] == b'*' {
+            return rec(&pattern[1..], text) || (!text.is_empty() && rec(pattern, &text[1..]));
+        }
+        if pattern[0] == b'?' {
+            return !text.is_empty() && rec(&pattern[1..], &text[1..]);
+        }
+        !text.is_empty() && pattern[0] == text[0] && rec(&pattern[1..], &text[1..])
+    }
+    rec(pattern.as_bytes(), text.as_bytes())
+}
+
+pub fn record_deletion(root: &Path, file: &str, reason: &str) -> Json {
+    let _lock = match lock_or_fail(root) {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
+    let rel = file.trim_start_matches("./");
+    let written = match artifacts::append_journal(root, "record-deletion", rel, reason) {
+        Ok(written) => written,
+        Err(e) => return fail("JournalError", e),
+    };
+    let mut row = HealthRow::new(rel, "🔴 Red", written.stamp.clone(), if reason.is_empty() { "recorded deletion" } else { reason }, "", "deleted");
+    if let Some(old) = artifacts::read_health(root).into_iter().find(|r| r.file == rel) {
+        row.source_hash = old.source_hash.clone();
+        row.keep_baseline_from(&old);
+    }
+    if let Err(e) = artifacts::upsert_health_row(root, row) {
+        return fail("HealthError", e);
+    }
+    if let Err(e) = cache::remove_file(root, rel) {
+        return fail("CacheError", e);
+    }
+    drop_pending_line(root, rel);
+    ok(vec![
+        ("file", Json::String(rel.into())),
+        ("status", Json::String("🔴 Red".into())),
+        ("journaled", Json::Bool(written.journaled)),
+        ("duplicate_skipped", Json::Bool(!written.journaled)),
+        ("removed_from_graph", Json::Bool(true)),
+    ])
+}
+
+fn drop_pending_line(root: &Path, rel: &str) {
+    let path = root.join("pending_updates.md");
+    let text = fs::read_to_string(&path).unwrap_or_default();
+    if text.is_empty() {
+        return;
+    }
+    let mut out = String::new();
+    for line in text.lines() {
+        let hit = line.trim().strip_prefix("- ").is_some_and(|rest| {
+            let file = rest.split(" — ").next().unwrap_or(rest).split(" - ").next().unwrap_or(rest).trim();
+            file == rel
+        });
+        if !hit {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    let _ = fs::write(path, out);
 }
 
 pub fn heal_stubs(root: &Path, min_len: usize) -> Json {
+    let _guard = match lock_or_fail(root) {
+        Ok(guard) => guard,
+        Err(err) => return err,
+    };
     let mut rows = artifacts::read_health(root);
     let mut healed = 0i64;
     for row in &mut rows {
@@ -973,17 +1577,55 @@ pub fn heal_stubs(root: &Path, min_len: usize) -> Json {
 }
 
 pub fn prune_health(root: &Path) -> Json {
+    prune_health_opts(root, false)
+}
+
+pub fn prune_health_opts(root: &Path, deleted_missing: bool) -> Json {
+    let _guard = match lock_or_fail(root) {
+        Ok(guard) => guard,
+        Err(err) => return err,
+    };
     let scope = scope::detect(root);
+    let watched = watched_files(root);
     let rows = artifacts::read_health(root);
     let before = rows.len();
-    let kept: Vec<_> = rows.into_iter().filter(|r| in_scope(&scope, &r.file)).collect();
+    let kept: Vec<_> = rows.into_iter().filter(|row| {
+        if !kept_path(&scope, &watched, &row.file) {
+            return false;
+        }
+        if deleted_missing && !root.join(&row.file).is_file() {
+            return false;
+        }
+        true
+    }).collect();
     let changed = before - kept.len();
     let _ = artifacts::write_health(root, &kept);
-    ok(vec![("changed", Json::Int(changed as i64))])
+    if deleted_missing {
+        let pending = root.join("pending_updates.md");
+        let text = fs::read_to_string(&pending).unwrap_or_default();
+        let mut out = String::new();
+        for line in text.lines() {
+            let drop_line = line.trim().strip_prefix("- ").is_some_and(|rest| {
+                let file = rest.split(" — ").next().unwrap_or(rest).trim();
+                !root.join(file).is_file()
+            });
+            if !drop_line {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        let _ = fs::write(pending, out);
+    }
+    ok(vec![("changed", Json::Int(changed as i64)), ("deleted_missing", Json::Bool(deleted_missing))])
 }
 
 pub fn prune_pending(root: &Path) -> Json {
+    let _guard = match lock_or_fail(root) {
+        Ok(guard) => guard,
+        Err(err) => return err,
+    };
     let scope = scope::detect(root);
+    let watched = watched_files(root);
     let path = root.join("pending_updates.md");
     let text = fs::read_to_string(&path).unwrap_or_default();
     let mut out = String::new();
@@ -991,7 +1633,7 @@ pub fn prune_pending(root: &Path) -> Json {
     for line in text.lines() {
         let keep = if let Some(rest) = line.trim().strip_prefix("- ") {
             let file = rest.split(" — ").next().unwrap_or(rest).trim();
-            if in_scope(&scope, file) { true } else { changed += 1; false }
+            if kept_path(&scope, &watched, file) { true } else { changed += 1; false }
         } else { true };
         if keep {
             out.push_str(line);
@@ -1002,11 +1644,21 @@ pub fn prune_pending(root: &Path) -> Json {
     ok(vec![("changed", Json::Int(changed))])
 }
 
-fn in_scope(scope: &Scope, rel: &str) -> bool {
+fn watched_files(root: &Path) -> Vec<String> {
+    scope::read_path_list(root, "monitored_paths.txt")
+        .into_iter()
+        .filter(|rel| root.join(rel).is_file())
+        .collect()
+}
+
+fn kept_path(scope: &Scope, watched: &[String], rel: &str) -> bool {
+    if watched.iter().any(|path| path == rel) {
+        return true;
+    }
     if scope.full_tree || scope.prefixes.is_empty() {
         return true;
     }
-    scope.prefixes.iter().any(|p| rel == p || rel.starts_with(&(p.clone() + "/")))
+    scope.prefixes.iter().any(|prefix| rel == prefix || rel.starts_with(&format!("{prefix}/")))
 }
 
 pub fn stale_wikis(root: &Path) -> Json {
@@ -1043,6 +1695,10 @@ pub fn stale_wikis(root: &Path) -> Json {
 }
 
 pub fn prune_barrels(root: &Path, max_age_days: f64, dry_run: bool) -> Json {
+    let _guard = match lock_or_fail(root) {
+        Ok(guard) => guard,
+        Err(err) => return err,
+    };
     match cache::prune_barrel_files(root, max_age_days, dry_run) {
         Ok(n) => ok(vec![
             ("pruned", Json::Int(n as i64)),
@@ -1055,6 +1711,10 @@ pub fn prune_barrels(root: &Path, max_age_days: f64, dry_run: bool) -> Json {
 }
 
 pub fn metrics_snapshot(root: &Path) -> Json {
+    let _guard = match lock_or_fail(root) {
+        Ok(guard) => guard,
+        Err(err) => return err,
+    };
     let rows = artifacts::read_health(root);
     let mut green = 0i64;
     let mut yellow = 0i64;
@@ -1117,20 +1777,88 @@ pub fn healing_stats(root: &Path) -> Json {
 }
 
 pub fn resolution_diagnostics(root: &Path) -> Json {
+    let _ = crate::legacy_cache::import_if_empty(root);
     let mut notes = Vec::new();
+    let mut counts: BTreeMap<String, i64> = BTreeMap::new();
+    let mut low = Vec::new();
     for rel in cache::all_paths(root) {
-        if let Ok(view) = cache::load_dependency_view(root, &rel) {
-            for (raw, line) in view.unresolved {
+        let Ok(view) = cache::load_dependency_view(root, &rel) else { continue };
+        for name in &view.external {
+            *counts.entry("external_or_bare".into()).or_insert(0) += 1;
+            notes.push(Json::obj(vec![
+                ("file", Json::String(rel.clone())),
+                ("raw", Json::String(name.clone())),
+                ("reason", Json::String("external_or_bare".into())),
+            ]));
+        }
+        for (raw, line, reason) in &view.unresolved {
+            *counts.entry(reason.clone()).or_insert(0) += 1;
+            notes.push(Json::obj(vec![
+                ("file", Json::String(rel.clone())),
+                ("raw", Json::String(raw.clone())),
+                ("line", Json::Int(*line)),
+                ("reason", Json::String(reason.clone())),
+            ]));
+        }
+        for edge in &view.internal {
+            let code = edge.acs_reason();
+            if code != "resolved_static" {
+                *counts.entry(code.into()).or_insert(0) += 1;
                 notes.push(Json::obj(vec![
                     ("file", Json::String(rel.clone())),
-                    ("raw", Json::String(raw)),
-                    ("line", Json::Int(line)),
-                    ("reason", Json::String("unresolved".into())),
+                    ("raw", Json::String(edge.path.clone())),
+                    ("line", Json::Int(edge.line)),
+                    ("reason", Json::String(code.into())),
+                    ("confidence", Json::Float(edge.confidence())),
+                ]));
+            }
+            if edge.confidence() < 0.6 && code != "external_or_bare" && code != "dynamic_literal" {
+                low.push(Json::obj(vec![
+                    ("file", Json::String(rel.clone())),
+                    ("path", Json::String(edge.path.clone())),
+                    ("confidence", Json::Float(edge.confidence())),
+                    ("reason", Json::String(code.into())),
                 ]));
             }
         }
     }
-    ok(vec![("notes", Json::Array(notes))])
+    ok(vec![
+        ("notes", Json::Array(notes)),
+        ("reason_code_counts", Json::from_pairs(counts.into_iter().map(|(k, n)| (k, Json::Int(n))).collect())),
+        ("actionable_low_conf_edges", Json::Array(low)),
+    ])
+}
+
+pub fn barrel_reports(root: &Path) -> Json {
+    let dir = root.join(".wikifier_staging").join("wk_cache").join("barrels");
+    let mut barrels = Vec::new();
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for ent in entries.flatten() {
+            let text = fs::read_to_string(ent.path()).unwrap_or_default();
+            if let Ok(parsed) = crate::jsonutil::parse(&text) {
+                if parsed.get("src").is_some() {
+                    barrels.push(parsed);
+                }
+            }
+        }
+    }
+    barrels.sort_by(|a, b| {
+        a.get("src").and_then(|s| s.as_str()).unwrap_or("").cmp(b.get("src").and_then(|s| s.as_str()).unwrap_or(""))
+    });
+    ok(vec![
+        ("count", Json::Int(barrels.len() as i64)),
+        ("barrels", Json::Array(barrels)),
+    ])
+}
+
+pub fn incremental_status(root: &Path) -> Json {
+    let mut status = crate::maps_out::read_status(root);
+    if status.get("map_complete").is_none() {
+        status = ok(vec![("map_complete", Json::Bool(!cache::all_paths(root).is_empty()))]);
+    } else if status.get("success").is_none() {
+        status.insert("success", Json::Bool(true));
+    }
+    status
 }
 
 pub fn serve_once(root: &Path) -> Json {
@@ -1176,7 +1904,240 @@ pub fn serve_once(root: &Path) -> Json {
     ])
 }
 
-pub fn daemon_ctl(root: &Path, action: &str) -> Json {
+pub fn serve_loop(root: &Path, port: u16) -> Json {
+    use std::io::Read;
+    use std::net::TcpListener;
+    let addr = format!("127.0.0.1:{port}");
+    let listener = match TcpListener::bind(&addr) {
+        Ok(listener) => listener,
+        Err(err) => return fail("ServeError", err.to_string()),
+    };
+    let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
+    eprintln!("wikifier serve http://127.0.0.1:{bound}/index.html");
+    let _ = fs::create_dir_all(root.join(".wikifier_staging"));
+    let _ = fs::write(root.join(".wikifier_staging/serve.port"), bound.to_string());
+    let once = std::env::var("WIKIFIER_SERVE_ONCE").ok().as_deref() == Some("1");
+    for conn in listener.incoming() {
+        let mut sock = match conn {
+            Ok(sock) => sock,
+            Err(_) => continue,
+        };
+        let _ = sock.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let mut buf = [0u8; 8192];
+        let n = sock.read(&mut buf).unwrap_or(0);
+        let req = String::from_utf8_lossy(&buf[..n]);
+        let (method, path, _) = request_line(&req);
+        if method == "POST" && path == "/__wikifier/shutdown" {
+            let _ = write_http(&mut sock, "200 OK", "application/json", r#"{"ok":true}"#);
+            break;
+        }
+        if method == "POST" && path == "/__wikifier/run" {
+            let body = dashboard_run(root, &req);
+            let _ = write_http(&mut sock, "200 OK", "application/json", &body);
+            if once {
+                break;
+            }
+            continue;
+        }
+        let (status, content_type, body) = serve_response(root, &req);
+        let _ = write_http(&mut sock, status, content_type, &body);
+        if once {
+            break;
+        }
+    }
+    let _ = fs::remove_file(root.join(".wikifier_staging/serve.port"));
+    ok(vec![("bound", Json::Bool(true)), ("port", Json::Int(bound as i64)), ("served", Json::Bool(true))])
+}
+
+fn write_http(sock: &mut std::net::TcpStream, status: &str, content_type: &str, body: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let resp = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    sock.write_all(resp.as_bytes())?;
+    sock.write_all(body.as_bytes())
+}
+
+fn request_line(req: &str) -> (&str, &str, &str) {
+    let line = req.lines().next().unwrap_or("");
+    let mut parts = line.split_whitespace();
+    let method = parts.next().unwrap_or("");
+    let target = parts.next().unwrap_or("/");
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    (method, path, query)
+}
+
+fn dashboard_run(root: &Path, req: &str) -> String {
+    let body = req.split_once("\r\n\r\n").map(|(_, rest)| rest).unwrap_or("");
+    let cmd = crate::jsonutil::parse(body)
+        .ok()
+        .and_then(|value| value.get("cmd").and_then(|item| item.as_str()).map(|text| text.to_string()))
+        .unwrap_or_default();
+    let started = std::time::Instant::now();
+    let result = match cmd.as_str() {
+        "update-maps" => update_maps(root),
+        "update-maps --full" => update_maps_run(root, &MapRun { full: true, quiet: true, directory: None, max_files: None, stream: false }),
+        "check-changes" => check_changes(root),
+        _ => fail("ValueError", "command is not available from the dashboard"),
+    };
+    let succeeded = result.get("success").and_then(|flag| flag.as_bool()).unwrap_or(false);
+    let error = if succeeded {
+        String::new()
+    } else {
+        result.get("error").and_then(|item| item.as_str()).unwrap_or("failed").to_string()
+    };
+    Json::obj(vec![
+        ("ok", Json::Bool(succeeded)),
+        ("output", Json::String(result.to_string())),
+        ("error", Json::String(error)),
+        ("duration_s", Json::Float(started.elapsed().as_secs_f64())),
+    ]).to_string()
+}
+
+fn serve_response(root: &Path, req: &str) -> (&'static str, &'static str, String) {
+    let line = req.lines().next().unwrap_or("");
+    let mut parts = line.split_whitespace();
+    let method = parts.next().unwrap_or("");
+    let target = parts.next().unwrap_or("/");
+    if method != "GET" && method != "HEAD" {
+        return ("405 Method Not Allowed", "text/plain; charset=utf-8", "method not allowed\n".into());
+    }
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    if path.contains("..") || query.contains("..") {
+        return ("400 Bad Request", "application/json", fail("PathError", "path traversal refused").to_string());
+    }
+    let file_arg = query_param(query, "path").or_else(|| query_param(query, "file")).unwrap_or_default();
+    if file_arg.contains("..") {
+        return ("400 Bad Request", "application/json", fail("PathError", "path traversal refused").to_string());
+    }
+    match path {
+        "/" | "/index.html" => ("200 OK", "text/html; charset=utf-8", dashboard_html(root)),
+        "/__wikifier/api/bootstrap" => ("200 OK", "application/json", session_bootstrap(root).to_string()),
+        "/__wikifier/api/dependencies" => ("200 OK", "application/json", load_dependencies(root, &file_arg).to_string()),
+        "/__wikifier/api/dependents" => ("200 OK", "application/json", load_dependents(root, &file_arg).to_string()),
+        "/__wikifier/api/cycles" => ("200 OK", "application/json", cycles(root).to_string()),
+        "/__wikifier/api/journal" => {
+            let entries = read_journal(root, None);
+            let body = ok(vec![("entries", Json::Array(entries.into_iter().map(|e| Json::obj(vec![
+                ("stamp", Json::String(e.stamp)),
+                ("action", Json::String(e.action)),
+                ("file", Json::String(e.file)),
+                ("reason", Json::String(e.reason)),
+            ])).collect()))]);
+            ("200 OK", "application/json", body.to_string())
+        }
+        "/__wikifier/api/diagnostics" => ("200 OK", "application/json", resolution_diagnostics(root).to_string()),
+        "/__wikifier/api/file" => serve_file(root, &file_arg),
+        "/__wikifier/status" => {
+            let project = root.file_name().and_then(|name| name.to_str()).unwrap_or("project");
+            let body = ok(vec![
+                ("wikifier_serve", Json::Bool(true)),
+                ("version", Json::String(VERSION.into())),
+                ("project", Json::String(project.into())),
+                ("root", Json::String(root.display().to_string())),
+            ]);
+            ("200 OK", "application/json", body.to_string())
+        }
+        _ => serve_project_file(root, path),
+    }
+}
+
+fn serve_project_file(root: &Path, path: &str) -> (&'static str, &'static str, String) {
+    let rel = path.trim_start_matches('/');
+    if rel.is_empty() || rel.contains("..") || rel.split('/').any(|part| part == ".git") {
+        return ("404 Not Found", "application/json", fail("NotFound", "unknown path").to_string());
+    }
+    let (status, _, body) = serve_file(root, rel);
+    if !status.starts_with("200") {
+        return (status, "application/json", body);
+    }
+    let content_type = if rel.ends_with(".json") {
+        "application/json"
+    } else if rel.ends_with(".html") {
+        "text/html; charset=utf-8"
+    } else if rel.ends_with(".md") {
+        "text/markdown; charset=utf-8"
+    } else {
+        "text/plain; charset=utf-8"
+    };
+    (status, content_type, body)
+}
+
+fn serve_file(root: &Path, rel: &str) -> (&'static str, &'static str, String) {
+    if rel.is_empty() {
+        return ("400 Bad Request", "application/json", fail("PathError", "missing path").to_string());
+    }
+    let path = root.join(rel);
+    let Ok(canon_root) = root.canonicalize() else {
+        return ("400 Bad Request", "application/json", fail("PathError", "root is not readable").to_string());
+    };
+    let Ok(canon) = path.canonicalize() else {
+        return ("404 Not Found", "application/json", fail("FileNotFound", format!("file does not exist: {rel}")).to_string());
+    };
+    if !canon.starts_with(&canon_root) {
+        return ("400 Bad Request", "application/json", fail("PathError", "path is outside the project").to_string());
+    }
+    match fs::read_to_string(&canon) {
+        Ok(text) => ("200 OK", "text/plain; charset=utf-8", text),
+        Err(err) => ("404 Not Found", "application/json", fail("FileNotFound", err.to_string()).to_string()),
+    }
+}
+
+fn dashboard_html(root: &Path) -> String {
+    let path = root.join("index.html");
+    fs::read_to_string(path).unwrap_or_else(|_| INDEX_HTML.to_string())
+}
+
+fn query_param(query: &str, key: &str) -> Option<String> {
+    for pair in query.split('&') {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        if k == key {
+            return Some(percent_decode(v));
+        }
+    }
+    None
+}
+
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        if bytes[i] == b'+' {
+            out.push(b' ');
+        } else {
+            out.push(bytes[i]);
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+const INDEX_HTML: &str = include_str!("../index.html");
+
+pub fn monitor_loop(root: &Path, interval_s: u64) -> Json {
+    let once = std::env::var("WIKIFIER_MONITOR_ONCE").ok().as_deref() == Some("1");
+    loop {
+        let report = check_changes(root);
+        let dirty = report.get("dirty_total").and_then(|v| match v { Json::Int(n) => Some(*n), _ => None }).unwrap_or(0);
+        eprintln!("monitor dirty={dirty}");
+        if once {
+            return report;
+        }
+        let step = interval_s.max(1);
+        std::thread::sleep(std::time::Duration::from_secs(step));
+    }
+}
+
+pub fn daemon_ctl(root: &Path, action: &str, force: bool) -> Json {
     let pidfile = root.join(".wikifier_staging").join("daemon.pid");
     match action {
         "run" => {
@@ -1186,15 +2147,27 @@ pub fn daemon_ctl(root: &Path, action: &str) -> Json {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(20));
             }
-            for _ in 0..3600 {
-                if !pidfile.is_file() {
-                    break;
+            let maps = std::env::var("WIKIFIER_DAEMON_MAPS").ok().as_deref() != Some("0");
+            while pidfile.is_file() {
+                let _ = check_changes(root);
+                if maps {
+                    let _ = update_maps(root);
                 }
-                std::thread::sleep(std::time::Duration::from_millis(200));
+                for _ in 0..10 {
+                    if !pidfile.is_file() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
             }
             ok(vec![("running", Json::Bool(false)), ("action", Json::String("run".into()))])
         }
         "start" => {
+            let scope = scope::detect(root);
+            let ready = readiness_of(&scope, !cache::all_paths(root).is_empty(), &artifacts::read_health(root), health_file_present(root));
+            if (ready == "blocked" || ready == "not_ready") && !force {
+                return fail("NotReady", format!("readiness is {ready}; pass --force to start the daemon anyway"));
+            }
             let _ = fs::create_dir_all(pidfile.parent().unwrap());
             let exe = match std::env::current_exe() {
                 Ok(p) => p,
@@ -1279,20 +2252,20 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
         "check-changes" | "check_changes" => check_changes(root),
         "record-change" | "record_change" => record_change(root, file, &reason),
         "mark-green" | "mark_green" => mark_green(root, file, &reason, flags.get("force").map(|s| s == "true").unwrap_or(false)),
-        "record-deletion" | "record_deletion" => {
-            let _ = artifacts::append_journal(root, "record-deletion", file, &reason);
-            ok(vec![("file", Json::String(file.into()))])
-        }
+        "record-deletion" | "record_deletion" => record_deletion(root, file, &reason),
         "session-bootstrap" | "bootstrap" | "session-start" | "session_bootstrap" => session_bootstrap(root),
         "suggest-next" | "suggest" | "suggest-next-actions" | "suggest_next_actions" => suggest_next_actions(root),
         "prepare-edit" | "prepare_edit" | "lookup" | "preflight" => prepare_edit(root, file),
-        "dependencies" | "deps" | "get_dependencies" => load_dependencies(root, file),
+        "dependencies" | "deps" | "get_dependencies" => dependency_report(root, file, flag_on(flags, "full")),
         "dependents" | "importers" | "get_dependents" => load_dependents(root, file),
         "list-paths" | "list_paths" => list_paths(root, flags.get("prefix").map(|s| s.as_str()).unwrap_or(file)),
         "update-maps" | "update_maps" => {
-            let full = flags.get("full").map(|s| s == "true").unwrap_or(false);
-            let quiet = flags.get("quiet").map(|s| s == "true").unwrap_or(false);
-            update_maps_opts(root, full, quiet)
+            let full = flag_on(flags, "full");
+            let quiet = flag_on(flags, "quiet");
+            let directory = flags.get("directory").cloned().filter(|s| s != "true");
+            let max_files = flags.get("max-files").or_else(|| flags.get("max_files")).and_then(|s| s.parse().ok());
+            let stream = flag_on(flags, "stream");
+            update_maps_run(root, &MapRun { full, quiet, directory, max_files, stream })
         }
         "health" => health(root),
         "cache-status" | "cache" => cache_status(root),
@@ -1342,17 +2315,27 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
         "get_file_wiki" => ok(vec![("file", Json::String(file.into())), ("wiki", Json::String(fs::read_to_string(root.join(format!("{file}.wiki.md"))).unwrap_or_default()))]),
         "get_files_needing_attention" => suggest_next_actions(root),
         "get_resolution_diagnostics" => resolution_diagnostics(root),
-        "get_barrel_reports" | "get_incremental_status" => resolution_diagnostics(root),
+        "get_barrel_reports" => barrel_reports(root),
+        "get_incremental_status" => incremental_status(root),
         "record-changes" | "record_changes" => {
-            let lines = flags.get("reasons").map(|s| s.split('\n').map(|x| x.to_string()).collect::<Vec<_>>()).unwrap_or_default();
-            record_changes(root, &lines, flags.get("default").map(|s| s.as_str()))
+            let lines = flags.get("reasons").map(|s| s.split('\n').map(|x| x.to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>()).unwrap_or_default();
+            let only = flags.get("only").map(|s| s.split('\n').map(|x| x.to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>()).unwrap_or_default();
+            record_changes_opts(
+                root,
+                &lines,
+                flags.get("default").map(|s| s.as_str()),
+                &only,
+                flags.get("since").map(|s| s.as_str()),
+                flag_on(flags, "green"),
+                flag_on(flags, "dry-run"),
+            )
         },
         "seed-health" | "seed-source-hashes" | "seed_source_content_hashes" => {
             let _ = seed_health_from_map(root);
             ok(vec![("seeded", Json::Bool(true))])
         }
         "prune-pending" => prune_pending(root),
-        "prune-health" => prune_health(root),
+        "prune-health" => prune_health_opts(root, flag_on(flags, "deleted-missing")),
         "heal-stubs" | "heal_stubs" => heal_stubs(root, flags.get("min-wiki-length").and_then(|s| s.parse().ok()).unwrap_or(20)),
         "healable-stubs" | "list_healable_stubs" => {
             let min = flags.get("min-wiki-length").and_then(|s| s.parse().ok()).unwrap_or(20usize);
@@ -1369,9 +2352,17 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
             prune_barrels(root, days, dry)
         }
         "metrics-snapshot" | "metrics" => metrics_snapshot(root),
-        "monitor" => check_changes(root),
-        "serve" => serve_once(root),
-        "daemon" => daemon_ctl(root, positional.first().map(|s| s.as_str()).unwrap_or("status")),
+        "monitor" => {
+            let interval = flags.get("interval").and_then(|s| s.parse().ok()).unwrap_or(30);
+            monitor_loop(root, interval)
+        }
+        "serve" => {
+            let port = positional.first().and_then(|s| s.parse().ok())
+                .or_else(|| flags.get("port").and_then(|s| s.parse().ok()))
+                .unwrap_or(8787);
+            serve_loop(root, port)
+        }
+        "daemon" => daemon_ctl(root, positional.first().map(|s| s.as_str()).unwrap_or("status"), flag_on(flags, "force")),
         "help" => ok(vec![("commands", Json::Array(CLI_COMMANDS.iter().map(|s| Json::String((*s).into())).collect()))]),
         other => fail("UnknownCommand", format!("unknown command {other}")),
     }
@@ -1387,17 +2378,57 @@ pub const CLI_COMMANDS: &[&str] = &[
     "serve", "daemon", "help", "mcp",
 ];
 
+fn flag_on(flags: &BTreeMap<String, String>, key: &str) -> bool {
+    flags.get(key).map(|s| s == "true" || s == "1").unwrap_or(false)
+}
+
+fn path_list_has_entries(root: &Path, name: &str) -> bool {
+    !scope::read_path_list(root, name).is_empty()
+}
+
 fn init_project(root: &Path) -> Json {
+    let _lock = match lock_or_fail(root) {
+        Ok(lock) => lock,
+        Err(err) => return err,
+    };
     let src = root.join("src");
-    if src.is_dir() {
-        let _ = fs::write(root.join("map_paths.txt"), "src\n");
-        let _ = fs::write(root.join("monitored_paths.txt"), "src\n");
-        ok(vec![("seeded", Json::String("src".into()))])
-    } else {
-        let _ = fs::write(root.join("map_paths.txt"), "");
-        let _ = fs::write(root.join("monitored_paths.txt"), "");
-        fail("ScopeError", "no src/ directory; name map_paths before update-maps")
+    let mut seeded = Vec::new();
+    if !path_list_has_entries(root, "map_paths.txt") {
+        if src.is_dir() {
+            if fs::write(root.join("map_paths.txt"), "src\n").is_err() {
+                return fail("InitError", "could not write map_paths.txt");
+            }
+            seeded.push("map_paths.txt");
+        }
     }
+    if !path_list_has_entries(root, "monitored_paths.txt") {
+        if src.is_dir() {
+            if fs::write(root.join("monitored_paths.txt"), "src\n").is_err() {
+                return fail("InitError", "could not write monitored_paths.txt");
+            }
+            seeded.push("monitored_paths.txt");
+        }
+    }
+    if !path_list_has_entries(root, "map_paths.txt") && !src.is_dir() {
+        return fail("ScopeError", "no src/ directory and map_paths.txt has no roots; name map_paths before update-maps");
+    }
+    let index = root.join("index.html");
+    let mut copied = false;
+    if !index.is_file() {
+        if fs::write(&index, INDEX_HTML).is_err() {
+            return fail("InitError", "could not write index.html");
+        }
+        copied = true;
+    }
+    let marker = root.join(".wikifier");
+    let _ = fs::create_dir_all(&marker);
+    let _ = fs::write(marker.join("marker"), format!("wikifier {VERSION}\n"));
+    ok(vec![
+        ("seeded", Json::String(if seeded.is_empty() { "kept".into() } else { seeded.join(",") })),
+        ("index_html", Json::Bool(index.is_file())),
+        ("index_copied", Json::Bool(copied)),
+        ("marker", Json::String(".wikifier".into())),
+    ])
 }
 
 pub fn ensure_root(root: Option<&Path>) -> Result<PathBuf, Json> {

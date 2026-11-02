@@ -243,13 +243,69 @@ pub struct InternalEdge {
     pub path: String,
     pub line: i64,
     pub names: Vec<String>,
+    pub conditional: bool,
+    pub dynamic: bool,
+    pub via_barrel: bool,
+}
+
+impl InternalEdge {
+    pub fn confidence(&self) -> f64 {
+        confidence_of(self.conditional, self.dynamic, self.via_barrel)
+    }
+
+    pub fn acs_reason(&self) -> &'static str {
+        if self.dynamic {
+            "dynamic_literal"
+        } else if self.conditional {
+            "conditional_guard"
+        } else if self.via_barrel {
+            "via_barrel"
+        } else {
+            "resolved_static"
+        }
+    }
+}
+
+pub fn confidence_of(conditional: bool, dynamic: bool, via_barrel: bool) -> f64 {
+    if dynamic {
+        0.4
+    } else if conditional {
+        0.55
+    } else if via_barrel {
+        0.7
+    } else {
+        0.9
+    }
+}
+
+pub fn format_edge_line(dst: &str, line: i64, names: &[String], conditional: bool, dynamic: bool, via_barrel: bool) -> String {
+    let mut flags = String::new();
+    if conditional {
+        flags.push('c');
+    }
+    if dynamic {
+        flags.push('d');
+    }
+    if via_barrel {
+        flags.push('b');
+    }
+    let joined = names.join(",");
+    if flags.is_empty() {
+        format!("{dst}\t{line}\t{joined}")
+    } else {
+        format!("{dst}\t{line}\t{joined}\t{flags}")
+    }
+}
+
+fn parse_flags(field: &str) -> (bool, bool, bool) {
+    (field.contains('c'), field.contains('d'), field.contains('b'))
 }
 
 #[derive(Clone, Debug)]
 pub struct DependencyView {
     pub internal: Vec<InternalEdge>,
     pub external: Vec<String>,
-    pub unresolved: Vec<(String, i64)>,
+    pub unresolved: Vec<(String, i64, String)>,
 }
 
 fn notes_path(root: &Path, rel: &str) -> PathBuf {
@@ -266,7 +322,8 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
         }
         let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
         let names = parts.next().unwrap_or("").split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
-        internal.push(InternalEdge { path, line: line_no, names });
+        let (conditional, dynamic, via_barrel) = parse_flags(parts.next().unwrap_or(""));
+        internal.push(InternalEdge { path, line: line_no, names, conditional, dynamic, via_barrel });
     }
     let mut external = Vec::new();
     let mut unresolved = Vec::new();
@@ -282,8 +339,10 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
             "U" => {
                 let raw = parts.next().unwrap_or("").to_string();
                 let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
+                let reason = parts.next().unwrap_or("unresolved").to_string();
+                let reason = if reason.is_empty() { "unresolved".into() } else { reason };
                 if !raw.is_empty() {
-                    unresolved.push((raw, line_no));
+                    unresolved.push((raw, line_no, reason));
                 }
             }
             _ => {}
@@ -325,7 +384,7 @@ pub struct FileUpdate {
     pub dsts: BTreeSet<String>,
     pub edge_lines: Vec<String>,
     pub external: Vec<String>,
-    pub unresolved: Vec<(String, i64)>,
+    pub unresolved: Vec<(String, i64, String)>,
 }
 
 /// Write one file. Prefer [`Session`] when updating many files in one run.

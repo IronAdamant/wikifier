@@ -3,5 +3,5 @@
 # One directory (or source file) per line. No bare ".".
 # Used by update-maps when --directory= is not set.
 
-wikifier/
+src/
 tests/

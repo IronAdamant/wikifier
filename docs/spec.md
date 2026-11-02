@@ -32,10 +32,10 @@ There should be skills, and these should be automatically run by LLMs, though hu
 
 ## Core Principles (v0.3 + v0.4 evolution)
 
-- **Agent-first design**: Every command and file is optimized for LLM consumption and autonomous operation. (v0.4: Python library + Protocol v0.4 as primary surfaces per skills/run.md + m2 plan Workstream E).
-- **Zero external dependencies**: pure stdlib Python; the `.sh` / `.ps1` / `.bat` launchers for macOS, Linux and Windows only start `python -m wikifier`, so every OS runs the same code.
-- **Semantic change tracking**: `record-change` captures *why* a change was made, not just that it happened. (Now available as `from wikifier import record_change` with structured returns + locking.)
-- **Health Matrix driven workflow**: 🔴 Red / 🟡 Yellow files must be addressed before new work. (Library `health()` + `check_changes()` + `mark_green()` provide the clean API.)
+- **Agent-first design**: Every command and file is optimized for LLM consumption and autonomous operation. The current surface is the std-only Rust binary and Agent Protocol v0.7 (`skills/run.md`).
+- **Zero external dependencies**: `Cargo.toml` has an empty `[dependencies]` list. The `.sh` / `.ps1` / `.bat` launchers exec that binary, so every OS runs the same code.
+- **Semantic change tracking**: `wikifier record-change` captures *why* a change was made, not just that it happened. The command returns a JSON object with `success` and takes the project lock.
+- **Health Matrix driven workflow**: 🔴 Red / 🟡 Yellow files must be addressed before new work. `wikifier health`, `check-changes`, and `mark-green` are the commands.
 - **Heartbeat monitoring**: Passive background `monitor` loop keeps the wiki fresh without constant LLM attention.
 - **Self-documenting**: The system documents its own usage via journals and health flips.
-- **Rigorous low-ambiguity protocol (v0.4)**: See `skills/run.md` for I/O contracts, mandatory workflow (library-preferred), error handling, scaling. Conformance harness + thin CLI/MCP consumers in progress (Agent 6).
+- **Rigorous low-ambiguity protocol (v0.7)**: See `skills/run.md` for I/O contracts, the daily loop, error handling, and scaling. CLI and MCP both call `src/api.rs`.

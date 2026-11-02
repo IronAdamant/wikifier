@@ -22,8 +22,8 @@ Works from small scripts to large monorepos. **Deep import/include maps** (zero-
 
 | Language | Extensions | Notes |
 |----------|------------|--------|
-| Python | `.py` | absolute, relative and `from pkg import submodule` imports; comments and strings ignored |
-| JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts` | tsconfig paths, package `exports`, workspaces, barrel chains; comments/strings ignored |
+| Python | `.py` | comment-masked regex; relative imports and same-tree module paths; an indented import is flagged conditional |
+| JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts` | comment-masked regex; named re-exports followed to depth 8; `import()` flagged dynamic |
 | Rust | `.rs` | `use` / `mod` / `extern crate` |
 | Go | `.go` | `import` / import blocks |
 | C / C++ | `.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh` | `#include` (local + system) |
@@ -99,18 +99,17 @@ Advanced intel as needed: `list_paths` (names-only folder expand), `get_dependen
 
 ## What you get
 
-- **Import analysis** — Python (`ast`), JS/TS (ESM/CJS, barrels), Rust (`use`/`mod` + best-effort `crate::` paths), Go, C/C++ includes, C# usings, Java; per-edge confidence; barrel expansion for TS/JS
-- **Incremental pipeline** — pure-Python `update-maps`: dirty parse → import cache → reverse deps → cycles → `library.md`
-- **Warm agent maps (4.6.3–4.6.7)** — zero-dirty + **index-first** candidates (re-list only when fingerprint / map-scoped index / live count disagree); **MapScope** keeps collect, live count, index filter, and prune aligned; **stdlib SQLite**; content-hash dirty
-- **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = extra watch list (docs, scripts). `check-changes` always watches mapped files and anything ever marked Green, so a narrow list never hides edits
-- **Green you can trust** — `mark-green` checks the wiki against the code's public symbols (Python, JS/TS) and refuses when added symbols are undocumented or removed ones are still referenced; `verify-wikis` audits every Green wiki; `health --summary` splits Green into verified / no-wiki / forced
-- **Partial-map honesty** — `map_coverage` on `update_maps` / bootstrap / **`suggest_next`**; `update_maps_until_complete` when incomplete
-- **Cache ops** — `wikifier cache-status`; JSON dual-write **deprecated default-off** (`WIKIFIER_CACHE_JSON=1` opt-in); dual-read for migrate
-- **Selective agent work** — health + suggest bias to 🔴/actionable 🟡 only; **ACS v1.3** `reason_code` / `agent_signal`; prefer `actionable_low_conf_edges` + reason codes — **never** raw `low_conf_edges` averages alone
-- **Scale** — indexed edge table (dependents/dependencies without loading the cache), exact barrel invalidation, nanosecond-mtime dirty checks (unchanged files are never re-read)
-- **MCP tools** — optional server for Claude, Cursor, Cline, and other MCP clients
-- **Zero core dependencies** — stdlib only; forks can add their own stack on top
-- **Honest failures** — a missing `project_root`, missing file or lock timeout is an error result, never a silent fallback. The implementation is a std-only Rust binary. `wikifier.sh` launches that binary.
+- **Import analysis** — comment-masked regex for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8. Edges carry conditional, dynamic, and via-barrel flags, and a confidence read from those flags.
+- **Incremental pipeline** — `update-maps` parses files whose size or mtime changed, then writes the `wk_cache` text index, reverse edges, `library.md`, and sharded folder cards.
+- **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = extra watch list (docs, scripts). `check-changes` always watches mapped files and anything ever marked Green, so a narrow list never hides edits.
+- **Green you can trust** — `mark-green` checks the wiki against Python and JS/TS public symbols and refuses when added symbols are undocumented, removed symbols are still in backticks, or the public surface changed while the wiki file did not. Other languages are recorded as unchecked. `verify-wikis` audits every Green wiki. `health --summary` includes `green_breakdown`.
+- **Partial-map honesty** — `--max-files` returns `map_complete=false` and `files_remaining_dirty`. Run the same command again to resume. Already-parsed files are stat-skipped.
+- **Cache** — `.wikifier_staging/wk_cache`. `wikifier cache-status` reports the backend and the file count. An empty cache imports `import_cache.sqlite` through the `sqlite3` CLI, or `import_cache.json`.
+- **Selective agent work** — health and `suggest-next` stay on 🔴 and actionable 🟡. Diagnostics list ACS reason codes and `actionable_low_conf_edges`.
+- **Scale** — dependents and dependencies read one edge index. Unchanged files are skipped by size and mtime. `--full` rehashes.
+- **MCP** — `wikifier mcp` in the same binary. A failed tool call sets `isError`. Calls stop at `WIKIFIER_MCP_DEADLINE_S` (default 60 seconds).
+- **Zero core dependencies** — empty `[dependencies]` in `Cargo.toml`.
+- **Honest failures** — a missing `project_root`, missing file, or lock timeout is an error result, never a silent fallback. `wikifier.sh` launches the Rust binary.
 
 ## Does it pay off? (measured)
 
@@ -136,11 +135,11 @@ Full / heavy runs (historical order-of-magnitude):
 | Babylon.js | ~3.9k TS files, barrel-heavy | minutes full; scoped re-runs tens of seconds |
 | Large trees (e.g. LLVM-scale) | tens of thousands of files | `map_paths` / `--directory` / `--max-files` — never unscoped one-shot |
 
-Warm **0-dirty** re-runs after **4.6.7** (same machine class; scoped; candidates **reused** — agent session path):
+Warm **0-dirty** re-runs after **4.6.7** (same machine class; scoped; candidates **reused** — agent session path). These numbers are from the Python package. This repo's map roots are now `src/` and `tests/`.
 
 | Project | Scope | Warm `update-maps` | n |
 |---------|-------|--------------------|---|
-| Wikifier (self) | `map_paths`: `wikifier/` + `tests/` | **~30 ms** | 50 |
+| Wikifier (self, Python era) | `map_paths`: `wikifier/` + `tests/` | **~30 ms** | 50 |
 | llama_index | `llama-index-core` | **~76 ms** | 724 |
 | rust | `library/std` | **~79 ms** | 719 |
 | airflow | `airflow-core` | **~180 ms** | 1920 |
@@ -178,7 +177,7 @@ Tests: `cargo test` (std-only Rust; accuracy fixtures, cache lookups, and the ag
 | `wikifier dependencies <file> [--full]` / `dependents <file>` | What a file imports (compact; `--full` for per-edge confidence records) / who imports it (JSON) |
 | `wikifier suggest-next` | Next actions (🔴/actionable 🟡 only; `--json` for `actions[]`) |
 | `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + human `library.md` + agent folder maps (warm 0-dirty is fast; honors `map_paths.txt`) |
-| `wikifier cache-status` | SQLite/JSON backend, dual-write policy, coverage snapshot (no full pair load) |
+| `wikifier cache-status` | `wk_cache` backend and mapped file count |
 | `wikifier health [--summary\|--json]` | Health matrix (machine-friendly flags) |
 | `wikifier validate` | Missing wiki rows + ghost paths |
 | `wikifier cycles [--json]` | Circular deps + break hints |
@@ -186,18 +185,15 @@ Tests: `cargo test` (std-only Rust; accuracy fixtures, cache lookups, and the ag
 | `wikifier monitor` / `daemon` | Background maintenance (`WIKIFIER_DAEMON_MAPS=0` for check-only) |
 | `wikifier serve` | Localhost dashboard with Run/Stop |
 
-Library: `from wikifier import session_bootstrap, prepare_edit, list_paths, check_changes, record_change, record_changes, mark_green, verify_wikis, suggest_next_actions, update_maps, get_dependencies, get_dependents, cycles_report, health, init_project`.
-
-`wikifier.sh` / `wikifier.ps1` / `wikifier.bat` launch the Rust binary (`WIKIFIER_BIN` overrides the path). MCP is `wikifier mcp` on stdio. There is no Python package and no `mcp` extra.
+The same operations live in `src/api.rs`. Agents call the CLI or `wikifier mcp`. `wikifier.sh` / `wikifier.ps1` / `wikifier.bat` launch the Rust binary (`WIKIFIER_BIN` overrides the path). There is no Python package.
 
 ## MCP
 
 ```bash
-WIKIFIER_PROJECT_ROOT=/abs/path/to/project wikifier-mcp
-# or: python3 -m wikifier.mcp.server
+WIKIFIER_PROJECT_ROOT=/abs/path/to/project wikifier mcp
 ```
 
-Setup and tool list: [`wikifier/mcp/README.md`](wikifier/mcp/README.md).
+This repo's `.mcp.json` launches `wikifier` with argument `mcp`. Tool names and the daily loop are in [`skills/run.md`](skills/run.md).
 
 ## Human dashboard (secondary)
 
@@ -212,7 +208,7 @@ Setup and tool list: [`wikifier/mcp/README.md`](wikifier/mcp/README.md).
 **In:** agent-maintained codebase wiki, dependency intelligence, token-saving lookup for LLMs and coding agents.  
 **Out:** general human documentation systems, IDE plugins, “docs for everyone” product growth.
 
-**Agent navigability:** Prefer the protocol ([`skills/run.md`](skills/run.md)) + MCP Core 6 over reading the parsers/cache. Self-tests live under `tests/` and `tests/selftest/`.
+**Agent navigability:** Prefer the protocol ([`skills/run.md`](skills/run.md)) and the MCP Core 6 over reading the parsers or the cache. Tests live in `tests/*.rs`.
 
 ## Links
 

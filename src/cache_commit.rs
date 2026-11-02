@@ -193,8 +193,8 @@ impl Session {
         for name in &upd.external {
             notes.push_str(&format!("E\t{name}\n"));
         }
-        for (raw, line) in &upd.unresolved {
-            notes.push_str(&format!("U\t{raw}\t{line}\n"));
+        for (raw, line, reason) in &upd.unresolved {
+            notes.push_str(&format!("U\t{raw}\t{line}\t{reason}\n"));
         }
         self.notes.insert(upd.rel.clone(), if notes.is_empty() { None } else { Some(notes) });
         self.rows.insert(

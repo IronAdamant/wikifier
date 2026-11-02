@@ -33,13 +33,32 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
-        if a == "-r" || a == "--reason" {
+        if a == "-r" || a == "--reason" || a == "--only" {
             if i + 1 < args.len() {
-                let cur = flags.entry("reasons".into()).or_default();
+                let key = if a == "--only" { "only" } else { "reasons" };
+                let cur = flags.entry(key.into()).or_default();
                 if !cur.is_empty() {
                     cur.push('\n');
                 }
                 cur.push_str(&args[i + 1]);
+                i += 2;
+                continue;
+            }
+        }
+        if a == "--reasons" {
+            if i + 1 < args.len() {
+                let text = std::fs::read_to_string(&args[i + 1]).unwrap_or_default();
+                let cur = flags.entry("reasons".into()).or_default();
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') {
+                        continue;
+                    }
+                    if !cur.is_empty() {
+                        cur.push('\n');
+                    }
+                    cur.push_str(line);
+                }
                 i += 2;
                 continue;
             }
