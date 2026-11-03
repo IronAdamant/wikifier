@@ -31,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CI empty-dependency check reads `Cargo.toml` with `awk`. The workflow does not run Python.
 - The live daemon actions are `start`, `stop`, `status`, and `run`.
 - This repo's import-map roots are `src/` and `tests/`.
-- The import scan remains comment-masked regex plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). It is not a CPython `ast` walk, and it has not been run on Babylon.js. The accuracy gate is still the four frozen fixtures.
+- The import scan remains comment-masked regex plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). It is not a CPython `ast` walk, and it has not been run on Babylon.js. The accuracy gate is `accuracy_fixtures_match_frozen_edges`, now including a Cargo crate layout.
+- Rust `mod`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name resolve to files. Hyphens in the package name become underscores. `crate::` stays inside the file's crate (`tests/*.rs` and `src/bin/*.rs` are separate crates). The package or lib name points at the library, so binaries and integration tests are dependents of the library modules they import.
 
 ## [4.7.0] - 2026-10-01
 

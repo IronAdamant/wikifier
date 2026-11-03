@@ -26,7 +26,7 @@ Works from small scripts to large monorepos. **Deep import/include maps** (zero-
 |----------|------------|--------|
 | Python | `.py` | comment-masked regex; relative imports and same-tree module paths; an indented import is flagged conditional |
 | JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts` | comment-masked regex; named re-exports followed to depth 8; `import()` flagged dynamic |
-| Rust | `.rs` | `use` / `mod` / `extern crate` |
+| Rust | `.rs` | `mod`, `use`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name (`-` becomes `_`). A name points at the library; `crate::` stays inside the file's own crate, including `tests/` and `src/bin/` |
 | Go | `.go` | `import` / import blocks |
 | C / C++ | `.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh` | `#include` (local + system) |
 | C# | `.cs` | `using` namespaces |

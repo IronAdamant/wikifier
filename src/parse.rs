@@ -1,4 +1,4 @@
-//! Import extraction for the languages Python Wikifier parses.
+//! Import extraction for the languages Wikifier parses.
 //! Unknown suffixes (COBOL, Swift, assembly) are not languages and emit no edges.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -14,6 +14,8 @@ pub struct RawImport {
     pub names: Vec<String>,
     pub kind: Kind,
     pub conditional: bool,
+    /// Inline `mod name { ... }` frames around this import. `super::` pops these before leaving the file.
+    pub inline_depth: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,6 +24,8 @@ pub enum Kind {
     ExportFrom,
     ExportStar,
     Dynamic,
+    /// A `::` path in an expression, not a `use` or `mod` item.
+    PathExpr,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -132,7 +136,7 @@ pub fn resolve_project(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTree
         let mut dsts = BTreeSet::new();
         let lang = language(Path::new(rel)).unwrap_or("");
         for imp in &scan.imports {
-            if let Some(target) = resolver.resolve(rel, &imp.spec, lang) {
+            if let Some(target) = resolver.resolve(rel, &imp.spec, lang, imp.inline_depth) {
                 if &target != rel {
                     dsts.insert(target.clone());
                 }
@@ -162,13 +166,13 @@ fn defining_file(resolver: &Resolver, scans: &BTreeMap<String, Scan>, file: &str
     }
     for imp in &scan.imports {
         if imp.kind == Kind::ExportFrom && imp.names.iter().any(|n| n == name) {
-            let target = resolver.resolve(file, &imp.spec, "javascript")?;
+            let target = resolver.resolve(file, &imp.spec, "javascript", 0)?;
             return defining_file(resolver, scans, &target, name, depth + 1).or(Some(target));
         }
     }
     for imp in &scan.imports {
         if imp.kind == Kind::ExportStar {
-            if let Some(target) = resolver.resolve(file, &imp.spec, "javascript") {
+            if let Some(target) = resolver.resolve(file, &imp.spec, "javascript", 0) {
                 if let Some(found) = defining_file(resolver, scans, &target, name, depth + 1) {
                     return Some(found);
                 }
@@ -182,6 +186,7 @@ struct Resolver {
     files: BTreeSet<String>,
     ts_paths: Vec<(String, String, String)>,
     packages: Vec<Package>,
+    rust_crates: Vec<String>,
 }
 
 struct Package {
@@ -195,14 +200,15 @@ impl Resolver {
         let files: BTreeSet<String> = rels.iter().cloned().collect();
         let ts_paths = load_ts_paths(root);
         let packages = load_packages(root);
-        Resolver { files, ts_paths, packages }
+        let rust_crates = load_rust_crate_names(root);
+        Resolver { files, ts_paths, packages, rust_crates }
     }
 
-    fn resolve(&self, from_rel: &str, spec: &str, lang: &str) -> Option<String> {
+    fn resolve(&self, from_rel: &str, spec: &str, lang: &str, inline_depth: usize) -> Option<String> {
         match lang {
             "python" => None, // python resolves inside scan_python via statements; handled below
             "javascript" => self.resolve_js(from_rel, spec),
-            "rust" => self.resolve_rust(from_rel, spec),
+            "rust" => self.resolve_rust(from_rel, spec, inline_depth),
             "go" => self.resolve_go(from_rel, spec),
             "c" => self.resolve_c(from_rel, spec),
             "java" => self.resolve_java(spec),
@@ -288,46 +294,173 @@ impl Resolver {
         None
     }
 
-    fn resolve_rust(&self, from_rel: &str, spec: &str) -> Option<String> {
+    fn resolve_rust(&self, from_rel: &str, spec: &str, inline_depth: usize) -> Option<String> {
         if let Some(rest) = spec.strip_prefix("mod:") {
-            let base = Path::new(from_rel).parent().unwrap_or(Path::new(""));
-            let a = normalize(&base.join(format!("{rest}.rs")));
-            if self.files.contains(&a) {
-                return Some(a);
-            }
-            let b = normalize(&base.join(rest).join("mod.rs"));
-            if self.files.contains(&b) {
-                return Some(b);
-            }
+            return self.resolve_rust_mod(from_rel, rest);
+        }
+        self.resolve_rust_path(from_rel, spec, inline_depth)
+    }
+
+    /// `mod` names a file next to the declaring module. Inline `mod` frames are path segments.
+    fn resolve_rust_mod(&self, from_rel: &str, rest: &str) -> Option<String> {
+        let parts: Vec<&str> = rest.split('/').filter(|part| !part.is_empty()).collect();
+        if parts.is_empty() {
             return None;
         }
-        if let Some(rest) = spec.strip_prefix("crate::") {
-            let parts: Vec<&str> = rest.split("::").filter(|p| !p.is_empty()).collect();
-            return self.rust_under("src", &parts).or_else(|| self.rust_under("", &parts));
+        let mut dir = rust_submodule_dir(from_rel);
+        for (i, part) in parts.iter().enumerate() {
+            if i + 1 == parts.len() {
+                return self.rust_module_at(&dir, part);
+            }
+            dir.push(part);
         }
         None
     }
 
-    fn rust_under(&self, prefix: &str, parts: &[&str]) -> Option<String> {
-        if parts.is_empty() {
+    fn resolve_rust_path(&self, from_rel: &str, spec: &str, inline_depth: usize) -> Option<String> {
+        let segments: Vec<&str> = spec.split("::").map(str::trim).filter(|part| !part.is_empty() && *part != "*").collect();
+        if segments.is_empty() {
             return None;
         }
-        let mut p = PathBuf::from(prefix);
-        for part in parts {
-            p.push(part);
+        let head = segments[0];
+        if head == "crate" {
+            let root = self.file_crate_root(from_rel);
+            let dir = root.as_deref().map(rust_submodule_dir).unwrap_or_else(|| PathBuf::from("src"));
+            return self.rust_walk(&dir, &segments[1..], root.as_deref());
         }
-        let file = normalize(&p).trim_end_matches('/').to_string() + ".rs";
+        if self.rust_crates.iter().any(|name| name == head) {
+            let root = self.library_root_file();
+            let dir = root.as_deref().map(rust_submodule_dir).unwrap_or_else(|| PathBuf::from("src"));
+            return self.rust_walk(&dir, &segments[1..], root.as_deref());
+        }
+        let mut dir = rust_submodule_dir(from_rel);
+        let mut depth = inline_depth;
+        let mut index = 0;
+        if head == "self" {
+            index = 1;
+        }
+        while index < segments.len() && segments[index] == "super" {
+            if depth > 0 {
+                depth -= 1;
+            } else if dir.as_os_str().is_empty() {
+                return None;
+            } else {
+                dir.pop();
+            }
+            index += 1;
+        }
+        if depth > 0 {
+            return None;
+        }
+        if index == 0 && !self.rust_child_exists(&dir, head) {
+            return None;
+        }
+        self.rust_walk(&dir, &segments[index..], None)
+    }
+
+    fn rust_spec_is_internal(&self, from_rel: &str, spec: &str) -> bool {
+        if spec.starts_with("mod:") {
+            return true;
+        }
+        let head = spec.split("::").next().unwrap_or("").trim();
+        if matches!(head, "crate" | "self" | "super") {
+            return true;
+        }
+        if self.rust_crates.iter().any(|name| name == head) {
+            return true;
+        }
+        self.rust_child_exists(&rust_submodule_dir(from_rel), head)
+    }
+
+    fn rust_child_exists(&self, dir: &Path, name: &str) -> bool {
+        self.rust_module_at(dir, name).is_some()
+    }
+
+    fn rust_module_at(&self, dir: &Path, name: &str) -> Option<String> {
+        let file = format!("{}.rs", normalize(&dir.join(name)));
         if self.files.contains(&file) {
             return Some(file);
         }
-        let dirmod = normalize(&p.join("mod.rs"));
+        let dirmod = normalize(&dir.join(name).join("mod.rs"));
         if self.files.contains(&dirmod) {
             return Some(dirmod);
         }
-        if parts.len() > 1 {
-            return self.rust_under(prefix, &parts[..parts.len() - 1]);
+        None
+    }
+
+    fn rust_walk(&self, dir: &Path, parts: &[&str], crate_root: Option<&str>) -> Option<String> {
+        if parts.is_empty() {
+            return self.module_file_for(dir, crate_root);
+        }
+        let part = parts[0];
+        if part == "self" {
+            return self.rust_walk(dir, &parts[1..], crate_root);
+        }
+        if let Some(found) = self.rust_module_at(dir, part) {
+            let next = dir.join(part);
+            if parts.len() == 1 {
+                return Some(found);
+            }
+            if let Some(hit) = self.rust_walk(&next, &parts[1..], None) {
+                return Some(hit);
+            }
+            return Some(found);
+        }
+        if parts.len() == 1 {
+            return self.module_file_for(dir, crate_root);
         }
         None
+    }
+
+    fn module_file_for(&self, dir: &Path, crate_root: Option<&str>) -> Option<String> {
+        if let Some(root) = crate_root {
+            if self.files.contains(root) && normalize(&rust_submodule_dir(root)) == normalize(dir) {
+                return Some(root.to_string());
+            }
+        }
+        if dir.as_os_str().is_empty() {
+            for name in ["mod.rs", "lib.rs", "main.rs"] {
+                if self.files.contains(name) {
+                    return Some(name.to_string());
+                }
+            }
+            return None;
+        }
+        for name in ["mod.rs", "lib.rs", "main.rs"] {
+            let cand = normalize(&dir.join(name));
+            if self.files.contains(&cand) {
+                return Some(cand);
+            }
+        }
+        let file = format!("{}.rs", normalize(dir));
+        if self.files.contains(&file) {
+            return Some(file);
+        }
+        None
+    }
+
+    fn library_root_file(&self) -> Option<String> {
+        if self.files.contains("src/lib.rs") {
+            Some("src/lib.rs".into())
+        } else if self.files.contains("src/main.rs") {
+            Some("src/main.rs".into())
+        } else if self.files.contains("lib.rs") {
+            Some("lib.rs".into())
+        } else {
+            None
+        }
+    }
+
+    fn file_crate_root(&self, from_rel: &str) -> Option<String> {
+        if let Some(root) = separate_crate_root(from_rel) {
+            if self.files.contains(&root) {
+                return Some(root);
+            }
+        }
+        if from_rel == "src/main.rs" {
+            return Some("src/main.rs".into());
+        }
+        self.library_root_file()
     }
 
     fn resolve_go(&self, from_rel: &str, spec: &str) -> Option<String> {
@@ -502,7 +635,7 @@ fn scan_python(src: &str) -> Scan {
     let (masked, dynamic) = mask_python(src);
     let mut imports = Vec::new();
     for spec in dynamic {
-        imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false });
+        imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false, inline_depth: 0 });
     }
     for stmt in python_statements(&masked) {
         imports.push(stmt);
@@ -688,7 +821,7 @@ fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
         if names.is_empty() {
             return None;
         }
-        return Some(RawImport { spec: format!("py:import:0::{names}"), names: Vec::new(), kind: Kind::Import, conditional: false });
+        return Some(RawImport { spec: format!("py:import:0::{names}"), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
     }
     if let Some(rest) = stmt.strip_prefix("from ") {
         let import_at = rest.find(" import ")?;
@@ -715,7 +848,7 @@ fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
             spec: format!("py:from:{level}:{module}:{}", names.join(",")),
             names,
             kind: Kind::Import,
-            conditional: false,
+            conditional: false, inline_depth: 0,
         });
     }
     None
@@ -770,7 +903,7 @@ fn scan_js(src: &str) -> Scan {
             let after = i + "import".len();
             if after < b.len() && b[after] == b'(' {
                 if let Some((spec, next)) = read_call_spec(src, after) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false });
+                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false, inline_depth: 0 });
                     i = next;
                     tail.clear();
                     continue;
@@ -804,7 +937,7 @@ fn scan_js(src: &str) -> Scan {
             let after = i + "require".len();
             if after < b.len() && b[after] == b'(' {
                 if let Some((spec, next)) = read_call_spec(src, after) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false });
+                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false, inline_depth: 0 });
                     i = next;
                     tail.clear();
                     continue;
@@ -950,7 +1083,7 @@ fn read_import_statement(rest: &str) -> Option<(RawImport, usize)> {
     let lead = rest.len() - t.len();
     if t.starts_with('\'') || t.starts_with('"') {
         let (spec, n) = read_quoted(t)?;
-        return Some((RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false }, lead + n));
+        return Some((RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 }, lead + n));
     }
     let from = t.find(" from ")?;
     let head = &t[..from];
@@ -958,7 +1091,7 @@ fn read_import_statement(rest: &str) -> Option<(RawImport, usize)> {
     let ws = after.len() - after.trim_start().len();
     let (spec, n) = read_quoted(after.trim_start())?;
     let names = brace_names(head);
-    Some((RawImport { spec, names, kind: Kind::Import, conditional: false }, lead + from + " from ".len() + ws + n))
+    Some((RawImport { spec, names, kind: Kind::Import, conditional: false, inline_depth: 0 }, lead + from + " from ".len() + ws + n))
 }
 
 fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
@@ -967,7 +1100,7 @@ fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
         let after = trimmed[from + " from ".len()..].trim_start();
         let (spec, n) = read_quoted(after)?;
         let consumed = from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
-        return Some((RawImport { spec, names: Vec::new(), kind: Kind::ExportStar, conditional: false }, consumed));
+        return Some((RawImport { spec, names: Vec::new(), kind: Kind::ExportStar, conditional: false, inline_depth: 0 }, consumed));
     }
     if trimmed.starts_with('{') {
         let from = trimmed.find(" from ")?;
@@ -975,7 +1108,7 @@ fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
         let after = trimmed[from + " from ".len()..].trim_start();
         let (spec, n) = read_quoted(after)?;
         let consumed = from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
-        return Some((RawImport { spec, names, kind: Kind::ExportFrom, conditional: false }, consumed));
+        return Some((RawImport { spec, names, kind: Kind::ExportFrom, conditional: false, inline_depth: 0 }, consumed));
     }
     None
 }
@@ -1026,29 +1159,386 @@ fn read_quoted(s: &str) -> Option<(String, usize)> {
 }
 
 fn scan_rust(src: &str) -> Scan {
+    let b = src.as_bytes();
     let mut imports = Vec::new();
-    for line in strip_c_comments(src).lines() {
-        let t = line.trim();
-        if let Some(rest) = t.strip_prefix("mod ") {
-            let name = rest.trim().trim_end_matches(';').split_whitespace().next().unwrap_or("");
-            if is_ident(name) {
-                imports.push(RawImport { spec: format!("mod:{name}"), names: Vec::new(), kind: Kind::Import, conditional: false });
+    let mut i = 0;
+    let mut brace: i32 = 0;
+    let mut inline: Vec<(String, i32)> = Vec::new();
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if b[i] == b'/' && i + 1 < b.len() && (b[i + 1] == b'/' || b[i + 1] == b'*') {
+            i = skip_rust_comment(b, i);
+            continue;
+        }
+        if let Some(end) = skip_rust_string(b, i) {
+            i = end;
+            continue;
+        }
+        if b[i] == b'\'' {
+            i = skip_rust_char_or_lifetime(b, i);
+            continue;
+        }
+        if b[i] == b'{' {
+            brace += 1;
+            i += 1;
+            continue;
+        }
+        if b[i] == b'}' {
+            brace -= 1;
+            while inline.last().is_some_and(|(_, depth)| *depth > brace) {
+                inline.pop();
             }
-        } else if let Some(rest) = t.strip_prefix("pub mod ") {
-            let name = rest.trim().trim_end_matches(';').split_whitespace().next().unwrap_or("");
-            if is_ident(name) {
-                imports.push(RawImport { spec: format!("mod:{name}"), names: Vec::new(), kind: Kind::Import, conditional: false });
-            }
-        } else if let Some(rest) = t.strip_prefix("use ") {
-            let rest = rest.trim().trim_end_matches(';');
-            if rest.starts_with("crate::") {
-                let path = rest.split("::").take_while(|p| !p.contains('{') && !p.contains(' ')).collect::<Vec<_>>().join("::");
-                // drop the last segment if it looks like an item (lowercase function) — keep module path
-                imports.push(RawImport { spec: path, names: Vec::new(), kind: Kind::Import, conditional: false });
+            i += 1;
+            continue;
+        }
+        if starts_word(b, i, "mod") {
+            if let Some((name, end, body)) = read_rust_mod(b, i + 3) {
+                if body {
+                    inline.push((name, brace + 1));
+                } else {
+                    let mut spec = String::from("mod:");
+                    for (frame, _) in &inline {
+                        spec.push_str(frame);
+                        spec.push('/');
+                    }
+                    spec.push_str(&name);
+                    imports.push(rust_import(spec, Kind::Import, inline.len()));
+                }
+                i = end;
+                continue;
             }
         }
+        if starts_word(b, i, "use") {
+            if let Some((end, paths)) = read_rust_use(b, i + 3) {
+                let depth = inline.len();
+                for path in paths {
+                    if !path.is_empty() {
+                        imports.push(rust_import(path, Kind::Import, depth));
+                    }
+                }
+                i = end;
+                continue;
+            }
+        }
+        if let Some((first, end)) = read_colon_path(b, i) {
+            if path_is_module_ref(&first) && first.split("::").nth(1).is_some() {
+                imports.push(rust_import(first, Kind::PathExpr, inline.len()));
+            }
+            i = end;
+            continue;
+        }
+        if let Some((_, end)) = read_ident(b, i) {
+            i = end;
+            continue;
+        }
+        i += 1;
     }
+    let mut seen = BTreeSet::new();
+    imports.retain(|imp| seen.insert(format!("{}:{}:{}", imp.inline_depth, kind_tag(imp.kind), imp.spec)));
     Scan { imports, local_exports: Vec::new() }
+}
+
+fn rust_import(spec: String, kind: Kind, inline_depth: usize) -> RawImport {
+    RawImport { spec, names: Vec::new(), kind, conditional: false, inline_depth }
+}
+
+fn kind_tag(kind: Kind) -> u8 {
+    match kind {
+        Kind::Import => 0,
+        Kind::ExportFrom => 1,
+        Kind::ExportStar => 2,
+        Kind::Dynamic => 3,
+        Kind::PathExpr => 4,
+    }
+}
+
+fn path_is_module_ref(path: &str) -> bool {
+    matches!(path.chars().next(), Some(c) if c.is_ascii_lowercase() || c == '_')
+}
+
+fn read_rust_mod(b: &[u8], start: usize) -> Option<(String, usize, bool)> {
+    let i = skip_noise(b, start);
+    let (name, mut j) = read_ident(b, i)?;
+    j = skip_noise(b, j);
+    if j < b.len() && b[j] == b';' {
+        return Some((name, j + 1, false));
+    }
+    if j < b.len() && b[j] == b'{' {
+        return Some((name, j, true));
+    }
+    None
+}
+
+fn read_rust_use(b: &[u8], start: usize) -> Option<(usize, Vec<String>)> {
+    let i = skip_noise(b, start);
+    let (end, paths) = parse_use_tree(b, i, &[])?;
+    let end = skip_noise(b, end);
+    let end = if end < b.len() && b[end] == b';' { end + 1 } else { end };
+    Some((end, paths))
+}
+
+fn parse_use_tree(b: &[u8], start: usize, prefix: &[String]) -> Option<(usize, Vec<String>)> {
+    let i = skip_noise(b, start);
+    if i >= b.len() {
+        return None;
+    }
+    if b[i] == b'{' {
+        return parse_use_group(b, i + 1, prefix);
+    }
+    if b[i] == b'*' {
+        return Some((i + 1, vec![prefix.join("::")]));
+    }
+    let (ident, mut j) = read_ident(b, i)?;
+    j = skip_noise(b, j);
+    if starts_word(b, j, "as") {
+        let alias_at = skip_noise(b, j + 2);
+        let (_, after_alias) = read_ident(b, alias_at)?;
+        j = skip_noise(b, after_alias);
+    }
+    if j + 1 < b.len() && b[j] == b':' && b[j + 1] == b':' {
+        let next = skip_noise(b, j + 2);
+        let mut deeper = prefix.to_vec();
+        if ident != "self" {
+            deeper.push(ident);
+        }
+        return parse_use_tree(b, next, &deeper);
+    }
+    let mut segs = prefix.to_vec();
+    if ident != "self" {
+        segs.push(ident);
+    }
+    let path = segs.join("::");
+    let paths = if path.is_empty() { Vec::new() } else { vec![path] };
+    Some((j, paths))
+}
+
+fn parse_use_group(b: &[u8], mut i: usize, prefix: &[String]) -> Option<(usize, Vec<String>)> {
+    let mut out = Vec::new();
+    loop {
+        i = skip_noise(b, i);
+        if i >= b.len() {
+            return None;
+        }
+        if b[i] == b'}' {
+            return Some((i + 1, out));
+        }
+        if b[i] == b',' {
+            i += 1;
+            continue;
+        }
+        let (end, paths) = parse_use_tree(b, i, prefix)?;
+        out.extend(paths);
+        i = end;
+    }
+}
+
+/// `ident::ident` starting at `i`. The returned string omits whitespace around `::`.
+fn read_colon_path(b: &[u8], i: usize) -> Option<(String, usize)> {
+    let (first, mut j) = read_ident(b, i)?;
+    let mut segs = vec![first];
+    loop {
+        let k = skip_noise(b, j);
+        if k + 1 < b.len() && b[k] == b':' && b[k + 1] == b':' {
+            let next = skip_noise(b, k + 2);
+            if next < b.len() && b[next] == b'{' {
+                return Some((segs.join("::"), next));
+            }
+            if let Some((ident, end)) = read_ident(b, next) {
+                segs.push(ident);
+                j = end;
+                continue;
+            }
+            return Some((segs.join("::"), next));
+        }
+        if segs.len() < 2 {
+            return None;
+        }
+        return Some((segs.join("::"), j));
+    }
+}
+
+fn read_ident(b: &[u8], i: usize) -> Option<(String, usize)> {
+    if i >= b.len() {
+        return None;
+    }
+    let start = b[i];
+    if !(start.is_ascii_alphabetic() || start == b'_') {
+        return None;
+    }
+    let mut j = i + 1;
+    while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_') {
+        j += 1;
+    }
+    Some((String::from_utf8_lossy(&b[i..j]).into_owned(), j))
+}
+
+fn skip_noise(b: &[u8], mut i: usize) -> usize {
+    loop {
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i + 1 < b.len() && b[i] == b'/' && (b[i + 1] == b'/' || b[i + 1] == b'*') {
+            i = skip_rust_comment(b, i);
+            continue;
+        }
+        return i;
+    }
+}
+
+fn skip_rust_comment(b: &[u8], i: usize) -> usize {
+    if i + 1 < b.len() && b[i] == b'/' && b[i + 1] == b'/' {
+        let mut j = i + 2;
+        while j < b.len() && b[j] != b'\n' {
+            j += 1;
+        }
+        return j;
+    }
+    if i + 1 < b.len() && b[i] == b'/' && b[i + 1] == b'*' {
+        let mut j = i + 2;
+        while j + 1 < b.len() && !(b[j] == b'*' && b[j + 1] == b'/') {
+            j += 1;
+        }
+        return (j + 2).min(b.len());
+    }
+    i
+}
+
+fn skip_rust_string(b: &[u8], i: usize) -> Option<usize> {
+    let mut i = i;
+    if i < b.len() && (b[i] == b'b' || b[i] == b'c') {
+        let next = *b.get(i + 1)?;
+        if next == b'"' || next == b'\'' || next == b'r' {
+            i += 1;
+        } else {
+            return None;
+        }
+    }
+    if i < b.len() && b[i] == b'r' {
+        i += 1;
+        let mut hashes = 0usize;
+        while i < b.len() && b[i] == b'#' {
+            hashes += 1;
+            i += 1;
+        }
+        if i >= b.len() || b[i] != b'"' {
+            return None;
+        }
+        i += 1;
+        while i < b.len() {
+            if b[i] == b'"' {
+                let mut k = 0;
+                while k < hashes && i + 1 + k < b.len() && b[i + 1 + k] == b'#' {
+                    k += 1;
+                }
+                if k == hashes {
+                    return Some(i + 1 + hashes);
+                }
+            }
+            i += 1;
+        }
+        return Some(b.len());
+    }
+    if i < b.len() && b[i] == b'"' {
+        i += 1;
+        while i < b.len() {
+            if b[i] == b'\\' {
+                i += 2;
+                continue;
+            }
+            if b[i] == b'"' {
+                return Some(i + 1);
+            }
+            i += 1;
+        }
+        return Some(b.len());
+    }
+    None
+}
+
+fn skip_rust_char_or_lifetime(b: &[u8], i: usize) -> usize {
+    let next = b.get(i + 1).copied().unwrap_or(0);
+    if next.is_ascii_alphabetic() || next == b'_' {
+        let mut j = i + 2;
+        while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_') {
+            j += 1;
+        }
+        return j;
+    }
+    if next == b'\\' {
+        return (i + 4).min(b.len());
+    }
+    (i + 3).min(b.len())
+}
+
+fn rust_submodule_dir(from_rel: &str) -> PathBuf {
+    let path = Path::new(from_rel);
+    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+    let parent = path.parent().unwrap_or(Path::new(""));
+    if name == "mod.rs" || name == "lib.rs" || name == "main.rs" {
+        return parent.to_path_buf();
+    }
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("mod");
+    parent.join(stem)
+}
+
+fn separate_crate_root(from_rel: &str) -> Option<String> {
+    let parts: Vec<&str> = from_rel.split('/').filter(|part| !part.is_empty()).collect();
+    if parts.len() >= 2 && matches!(parts[0], "tests" | "examples" | "benches") {
+        let stem = parts[1].trim_end_matches(".rs");
+        return Some(format!("{}/{stem}.rs", parts[0]));
+    }
+    if parts.len() >= 3 && parts[0] == "src" && parts[1] == "bin" {
+        let stem = parts[2].trim_end_matches(".rs");
+        return Some(format!("src/bin/{stem}.rs"));
+    }
+    None
+}
+
+fn load_rust_crate_names(root: &Path) -> Vec<String> {
+    let text = fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
+    let mut section = String::new();
+    let mut package = String::new();
+    let mut lib_name = String::new();
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            section = line[1..line.len() - 1].trim().to_string();
+            continue;
+        }
+        if section != "package" && section != "lib" {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else { continue };
+        if key.trim() != "name" {
+            continue;
+        }
+        let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+        if value.is_empty() {
+            continue;
+        }
+        if section == "package" && package.is_empty() {
+            package = value.to_string();
+        } else if section == "lib" && lib_name.is_empty() {
+            lib_name = value.to_string();
+        }
+    }
+    let mut names = Vec::new();
+    if !package.is_empty() {
+        names.push(package.replace('-', "_"));
+    }
+    if !lib_name.is_empty() {
+        let normalized = lib_name.replace('-', "_");
+        if !names.contains(&normalized) {
+            names.push(normalized);
+        }
+    }
+    names
 }
 
 fn scan_go(src: &str) -> Scan {
@@ -1067,7 +1557,7 @@ fn scan_go(src: &str) -> Scan {
                 while j < bytes.len() && bytes[j] != b')' {
                     if bytes[j] == b'"' {
                         if let Some((spec, n)) = read_quoted(&text[j..]) {
-                            imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false });
+                            imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
                             j += n;
                             continue;
                         }
@@ -1079,7 +1569,7 @@ fn scan_go(src: &str) -> Scan {
             }
             if j < bytes.len() && bytes[j] == b'"' {
                 if let Some((spec, n)) = read_quoted(&text[j..]) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false });
+                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
                     i = j + n;
                     continue;
                 }
@@ -1097,9 +1587,9 @@ fn scan_c(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("#include") {
             let rest = rest.trim();
             if let Some(inner) = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
-                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
+                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
             } else if let Some(inner) = rest.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
-                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
+                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
             }
         }
     }
@@ -1113,7 +1603,7 @@ fn scan_java(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("import ") {
             let rest = rest.trim_start_matches("static ").trim();
             if !rest.is_empty() {
-                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
+                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
             }
         }
     }
@@ -1130,7 +1620,7 @@ fn scan_csharp(src: &str) -> Scan {
                 continue;
             }
             if !rest.is_empty() && !rest.starts_with('(') {
-                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false });
+                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
             }
         }
     }
@@ -1542,7 +2032,7 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
             }
         } else if !lang.is_empty() {
             for imp in &scan.imports {
-                let target = resolver.resolve(rel, &imp.spec, lang);
+                let target = resolver.resolve(rel, &imp.spec, lang, imp.inline_depth);
                 let line = line_of(&text, &[imp.spec.clone()]);
                 let dynamic = imp.kind == Kind::Dynamic;
                 match target {
@@ -1565,11 +2055,17 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                         }
                     }
                     _ => {
-                        if imp.spec.starts_with('.') {
+                        if lang == "rust" {
+                            if target.is_none() && imp.kind != Kind::PathExpr && resolver.rust_spec_is_internal(rel, &imp.spec) {
+                                note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
+                            } else if target.is_none() && imp.kind != Kind::PathExpr && !imp.spec.is_empty() && !resolver.rust_spec_is_internal(rel, &imp.spec) {
+                                facts.external.push(imp.spec.clone());
+                            }
+                        } else if imp.spec.starts_with('.') {
                             note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
                         } else if !imp.spec.is_empty() && !imp.spec.starts_with("mod:") && !imp.spec.starts_with("crate::") {
                             facts.external.push(imp.spec.clone());
-                        } else if imp.spec.starts_with('.') || (target.is_none() && imp.spec.starts_with("mod:")) {
+                        } else if target.is_none() && imp.spec.starts_with("mod:") {
                             note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
                         }
                     }
