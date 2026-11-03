@@ -6,4 +6,4 @@
 
 `append_journal` skips an identical action, file, and reason inside 120 seconds. `folder_card` reads `.wikifier_staging/maps/_root.json` or a directory `_index.json`.
 
-Public names: `HealthRow`, `read_health`, `write_health`, `upsert_health_row`, `JournalEntry`, `journal_path`, `read_journal`, `parse_journal`, `JournalWrite`, `append_journal`, `read_pending`, `folder_card`.
+Public names: `HealthRow`, `new`, `keep_baseline_from`, `read_health`, `write_health`, `upsert_health_row`, `JournalEntry`, `journal_path`, `read_journal`, `parse_journal`, `JournalWrite`, `append_journal`, `read_pending`, `folder_card`.

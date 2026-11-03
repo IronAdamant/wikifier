@@ -9,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use wikifier::cache::indexed_rows;
 use wikifier::jsonutil::{parse, Json};
 use wikifier::mcp;
-use wikifier::{load_dependencies, session_bootstrap, update_maps};
+use wikifier::{load_dependencies, mapped_edges, mark_green, read_health, session_bootstrap, update_maps};
 
 fn scratch(name: &str) -> PathBuf {
     let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
@@ -216,5 +216,109 @@ fn actionable_low_conf_edges_keep_conditional_and_drop_dynamic() {
     let counts = body.get("reason_code_counts").unwrap_or(&Json::Null);
     assert!(counts.get("conditional_guard").is_some(), "{counts}");
     assert!(counts.get("dynamic_literal").is_some(), "{counts}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn impl_items_are_checked_and_restricted_visibility_is_not() {
+    let root = scratch("impl-green");
+    let source = "\
+pub struct Widget;
+pub(crate) struct Hidden;
+
+impl Widget {
+    pub fn documented(&self) -> i32 { 1 }
+    pub const FLAG: i32 = 1;
+    pub(crate) fn crate_only(&self) {}
+    pub(super) fn super_only(&self) {}
+    fn private(&self) {}
+}
+
+impl std::fmt::Display for Widget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _ = f;
+        Ok(())
+    }
+}
+
+impl Drop for Hidden {
+    fn drop(&mut self) {}
+}
+
+impl Hidden {
+    pub fn not_exported(&self) {}
+}
+";
+    std::fs::write(root.join("src/lib.rs"), source).unwrap();
+    std::fs::write(root.join("src/lib.rs.wiki.md"), "Widget has documented, FLAG, and fmt.\n").unwrap();
+    let marked = mark_green(&root, "src/lib.rs", "wiki names the methods", false);
+    assert_eq!(marked.get("verification").and_then(|flag| flag.as_str()), Some("verified"), "{marked}");
+    let row = read_health(&root).into_iter().find(|row| row.file == "src/lib.rs").unwrap();
+    for name in ["Widget", "documented", "FLAG", "fmt"] {
+        assert!(row.public_symbols.contains(name), "missing {name} in {}", row.public_symbols);
+    }
+    for name in ["crate_only", "super_only", "private", "drop", "not_exported", "Hidden"] {
+        assert!(!row.public_symbols.split(['\n', ',']).any(|have| have.trim() == name), "{name} should stay out: {}", row.public_symbols);
+    }
+
+    std::fs::write(root.join("src/lib.rs.wiki.md"), "Widget has FLAG and fmt.\n").unwrap();
+    let missing = mark_green(&root, "src/lib.rs", "wiki dropped documented", false);
+    assert_eq!(missing.get("error_type").and_then(|flag| flag.as_str()), Some("WikiVerificationError"), "{missing}");
+    assert!(missing.to_string().contains("undocumented_new_symbols: documented"), "{missing}");
+
+    std::fs::write(root.join("src/lib.rs"), "pub struct Widget;\nimpl Widget {\n    pub const FLAG: i32 = 1;\n}\n").unwrap();
+    std::fs::write(root.join("src/lib.rs.wiki.md"), "Widget keeps FLAG. `documented` and `fmt` are gone.\n").unwrap();
+    let removed = mark_green(&root, "src/lib.rs", "wiki still names removed methods", false);
+    assert_eq!(removed.get("error_type").and_then(|flag| flag.as_str()), Some("WikiVerificationError"), "{removed}");
+    let text = removed.to_string();
+    assert!(text.contains("wiki_mentions_removed_symbols: documented"), "{removed}");
+    assert!(text.contains("wiki_mentions_removed_symbols: fmt"), "{removed}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn workspace_members_resolve_across_crates_and_keep_crate_paths_local() {
+    let root = scratch("workspace");
+    std::fs::write(root.join("map_paths.txt"), "crates\ntools\n").unwrap();
+    let files = [
+        ("Cargo.toml", "[workspace]\nmembers = [\"crates/alpha\", \"crates/beta\", \"tools/*\"]\nexclude = [\"tools/skip\"]\n"),
+        ("crates/alpha/Cargo.toml", "[package]\nname = \"alpha-crate\"\nversion = \"0.1.0\"\n\n[lib]\nname = \"alpha\"\n"),
+        ("crates/alpha/src/lib.rs", "pub mod child;\npub fn from_alpha() -> i32 { 1 }\nuse helper_tool::help;\n"),
+        ("crates/alpha/src/child.rs", "pub fn child_fn() -> i32 { 2 }\n"),
+        ("crates/beta/Cargo.toml", "[package]\nname = \"beta\"\nversion = \"0.1.0\"\n"),
+        ("crates/beta/src/lib.rs", "use alpha::child::child_fn;\nuse alpha_crate::from_alpha;\npub fn from_beta() -> i32 { child_fn() + from_alpha() }\n"),
+        ("crates/beta/src/main.rs", "use alpha::from_alpha;\nfn main() { let _ = from_alpha(); }\n"),
+        ("crates/beta/tests/use_alpha.rs", "use alpha::from_alpha;\nuse crate::local;\n\n#[test]\nfn calls() { let _ = from_alpha(); let _ = local(); }\n"),
+        ("crates/beta/tests/use_alpha/local.rs", "pub fn local() -> i32 { 3 }\n"),
+        ("tools/helper/Cargo.toml", "[package]\nname = \"helper-tool\"\nversion = \"0.1.0\"\n\n[lib]\nname = \"helper_tool\"\n"),
+        ("tools/helper/src/lib.rs", "pub fn help() -> i32 { 4 }\n"),
+        ("tools/skip/Cargo.toml", "[package]\nname = \"skip-tool\"\nversion = \"0.1.0\"\n\n[lib]\nname = \"skip_tool\"\n"),
+        ("tools/skip/src/lib.rs", "mod local;\nuse alpha::from_alpha;\npub fn skipped() -> i32 { from_alpha() }\n"),
+        ("tools/skip/src/local.rs", "pub fn inside() -> i32 { 5 }\n"),
+    ];
+    for (rel, text) in files {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let mapped = update_maps(&root);
+    assert_eq!(mapped.get("success").and_then(|flag| flag.as_bool()), Some(true), "{mapped}");
+    let edges = mapped_edges(&root);
+    let expect = [
+        ("crates/alpha/src/lib.rs", "crates/alpha/src/child.rs"),
+        ("crates/alpha/src/lib.rs", "tools/helper/src/lib.rs"),
+        ("crates/beta/src/lib.rs", "crates/alpha/src/child.rs"),
+        ("crates/beta/src/lib.rs", "crates/alpha/src/lib.rs"),
+        ("crates/beta/src/main.rs", "crates/alpha/src/lib.rs"),
+        ("crates/beta/tests/use_alpha.rs", "crates/alpha/src/lib.rs"),
+        ("crates/beta/tests/use_alpha.rs", "crates/beta/tests/use_alpha/local.rs"),
+        ("tools/skip/src/lib.rs", "tools/skip/src/local.rs"),
+        ("tools/skip/src/lib.rs", "crates/alpha/src/lib.rs"),
+    ];
+    for (src, dst) in expect {
+        assert!(edges.contains(&(src.into(), dst.into())), "missing {src} -> {dst} in {edges:?}");
+    }
+    assert!(!edges.iter().any(|(src, dst)| src.contains("skip") && dst.contains("helper")), "excluded crate resolved as a member: {edges:?}");
+    assert!(!edges.iter().any(|(src, dst)| src.starts_with("crates/beta/tests/") && dst.starts_with("crates/beta/src/")), "crate:: in a test escaped into the library: {edges:?}");
     let _ = std::fs::remove_dir_all(&root);
 }
