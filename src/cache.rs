@@ -5,9 +5,9 @@
 //! The original path is stored in the payload JSON and as the `@` header of edge files.
 
 use std::collections::BTreeSet;
-use std::fs::{self, OpenOptions};
 #[cfg(not(windows))]
 use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -49,11 +49,15 @@ pub(crate) fn legacy_enc(rel: &str) -> String {
 }
 
 pub(crate) fn store_file(root: &Path, sub: &str, rel: &str, ext: &str) -> PathBuf {
-    cache_root(root).join(sub).join(format!("{}.{}", enc(rel), ext))
+    cache_root(root)
+        .join(sub)
+        .join(format!("{}.{}", enc(rel), ext))
 }
 
 pub(crate) fn legacy_file(root: &Path, sub: &str, rel: &str, ext: &str) -> PathBuf {
-    cache_root(root).join(sub).join(format!("{}.{}", legacy_enc(rel), ext))
+    cache_root(root)
+        .join(sub)
+        .join(format!("{}.{}", legacy_enc(rel), ext))
 }
 
 fn read_file(root: &Path, sub: &str, rel: &str, ext: &str) -> PathBuf {
@@ -103,7 +107,11 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("cache");
     let tmp = parent.join(format!(".{file_name}.{}.{seq}.tmp", std::process::id()));
     let write_result = (|| {
-        let mut file = OpenOptions::new().write(true).create_new(true).open(&tmp).map_err(|e| e.to_string())?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .map_err(|e| e.to_string())?;
         file.write_all(bytes).map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
         Ok(())
@@ -136,7 +144,8 @@ fn replace_file(from: &Path, to: &Path) -> Result<(), String> {
     }
     #[cfg(not(windows))]
     {
-        fs::rename(from, to).map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
+        fs::rename(from, to)
+            .map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
     }
 }
 
@@ -156,9 +165,20 @@ fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
     }
     let src = wide(from);
     let dst = wide(to);
-    let ok = unsafe { MoveFileExW(src.as_ptr(), dst.as_ptr(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) };
+    let ok = unsafe {
+        MoveFileExW(
+            src.as_ptr(),
+            dst.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
     if ok == 0 {
-        Err(format!("rename {} -> {}: {}", from.display(), to.display(), std::io::Error::last_os_error()))
+        Err(format!(
+            "rename {} -> {}: {}",
+            from.display(),
+            to.display(),
+            std::io::Error::last_os_error()
+        ))
     } else {
         Ok(())
     }
@@ -220,11 +240,19 @@ fn fsync_dir_windows(path: &Path) {
 }
 
 pub(crate) fn read_lines(path: &Path) -> Vec<String> {
-    fs::read_to_string(path).unwrap_or_default().lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 pub(crate) fn content_lines(path: &Path) -> Vec<String> {
-    read_lines(path).into_iter().filter(|line| !line.starts_with("@\t")).collect()
+    read_lines(path)
+        .into_iter()
+        .filter(|line| !line.starts_with("@\t"))
+        .collect()
 }
 
 pub(crate) fn dst_of(line: &str) -> String {
@@ -232,7 +260,11 @@ pub(crate) fn dst_of(line: &str) -> String {
 }
 
 pub fn load_dependencies(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    let mut dsts: Vec<String> = content_lines(&by_src_path(root, rel)).into_iter().map(|line| dst_of(&line)).filter(|s| !s.is_empty()).collect();
+    let mut dsts: Vec<String> = content_lines(&by_src_path(root, rel))
+        .into_iter()
+        .map(|line| dst_of(&line))
+        .filter(|s| !s.is_empty())
+        .collect();
     dsts.sort();
     dsts.dedup();
     Ok(dsts)
@@ -278,7 +310,14 @@ pub fn confidence_of(conditional: bool, dynamic: bool, via_barrel: bool) -> f64 
     }
 }
 
-pub fn format_edge_line(dst: &str, line: i64, names: &[String], conditional: bool, dynamic: bool, via_barrel: bool) -> String {
+pub fn format_edge_line(
+    dst: &str,
+    line: i64,
+    names: &[String],
+    conditional: bool,
+    dynamic: bool,
+    via_barrel: bool,
+) -> String {
     let mut flags = String::new();
     if conditional {
         flags.push('c');
@@ -298,7 +337,11 @@ pub fn format_edge_line(dst: &str, line: i64, names: &[String], conditional: boo
 }
 
 fn parse_flags(field: &str) -> (bool, bool, bool) {
-    (field.contains('c'), field.contains('d'), field.contains('b'))
+    (
+        field.contains('c'),
+        field.contains('d'),
+        field.contains('b'),
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -321,9 +364,22 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
             continue;
         }
         let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
-        let names = parts.next().unwrap_or("").split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
+        let names = parts
+            .next()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
         let (conditional, dynamic, via_barrel) = parse_flags(parts.next().unwrap_or(""));
-        internal.push(InternalEdge { path, line: line_no, names, conditional, dynamic, via_barrel });
+        internal.push(InternalEdge {
+            path,
+            line: line_no,
+            names,
+            conditional,
+            dynamic,
+            via_barrel,
+        });
     }
     let mut external = Vec::new();
     let mut unresolved = Vec::new();
@@ -340,7 +396,11 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
                 let raw = parts.next().unwrap_or("").to_string();
                 let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
                 let reason = parts.next().unwrap_or("unresolved").to_string();
-                let reason = if reason.is_empty() { "unresolved".into() } else { reason };
+                let reason = if reason.is_empty() {
+                    "unresolved".into()
+                } else {
+                    reason
+                };
                 if !raw.is_empty() {
                     unresolved.push((raw, line_no, reason));
                 }
@@ -350,7 +410,11 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
     }
     external.sort();
     external.dedup();
-    Ok(DependencyView { internal, external, unresolved })
+    Ok(DependencyView {
+        internal,
+        external,
+        unresolved,
+    })
 }
 
 pub fn load_dependents(root: &Path, rel: &str) -> Result<Vec<String>, String> {
@@ -423,7 +487,12 @@ pub fn payload_bytes(root: &Path, rel: &str) -> Option<Vec<u8>> {
 
 pub fn stat_ns(path: &Path) -> Option<(u128, u64)> {
     let meta = fs::metadata(path).ok()?;
-    let mtime = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+    let mtime = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
     Some((mtime, meta.len()))
 }
 
@@ -449,9 +518,20 @@ pub fn write_barrel_record(root: &Path, rel: &str, dsts: &[String]) -> Result<()
     let _lock = crate::cache_commit::LockGuard::acquire(root)?;
     let body = crate::jsonutil::Json::obj(vec![
         ("src", crate::jsonutil::Json::String(rel.to_string())),
-        ("dsts", crate::jsonutil::Json::Array(dsts.iter().cloned().map(crate::jsonutil::Json::String).collect())),
+        (
+            "dsts",
+            crate::jsonutil::Json::Array(
+                dsts.iter()
+                    .cloned()
+                    .map(crate::jsonutil::Json::String)
+                    .collect(),
+            ),
+        ),
     ]);
-    atomic_write(&store_file(root, "barrels", rel, "json"), body.to_string().as_bytes())
+    atomic_write(
+        &store_file(root, "barrels", rel, "json"),
+        body.to_string().as_bytes(),
+    )
 }
 
 pub fn prune_barrel_files(root: &Path, max_age_days: f64, dry_run: bool) -> Result<usize, String> {
@@ -471,14 +551,25 @@ pub fn prune_barrel_files(root: &Path, max_age_days: f64, dry_run: bool) -> Resu
         }
         let text = fs::read_to_string(&path).unwrap_or_default();
         let parsed = crate::jsonutil::parse(&text).ok();
-        let src = parsed.as_ref().and_then(|v| v.get("src")).and_then(|s| s.as_str()).unwrap_or("");
+        let src = parsed
+            .as_ref()
+            .and_then(|v| v.get("src"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("");
         let dsts: Vec<String> = parsed
             .as_ref()
             .and_then(|v| v.get("dsts"))
             .and_then(|v| v.as_array())
-            .map(|items| items.iter().filter_map(|item| item.as_str().map(|s| s.to_string())).collect())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
-        let dangling = src.is_empty() || !root.join(src).is_file() || dsts.iter().any(|dst| !root.join(dst).is_file());
+        let dangling = src.is_empty()
+            || !root.join(src).is_file()
+            || dsts.iter().any(|dst| !root.join(dst).is_file());
         let aged = ent
             .metadata()
             .ok()

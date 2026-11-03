@@ -1,3 +1,43 @@
 # Pending Updates
 
 (no pending items — run check-changes after making edits)
+- AGENTS.md: LLM/agent edit — Correct the scanner and wiki-lookup notes.
+- CHANGELOG.md: LLM/agent edit — Record the parity work under Unreleased.
+- CLAUDE.md: LLM/agent edit — Correct the tsconfig note.
+- README.md: LLM/agent edit — Command notes and the measured benchmark table.
+- skills/run.md: LLM/agent edit — Document the parity behaviour.
+- src/api.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/artifacts.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/cache.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/cache_commit.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/jsonutil.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/legacy_cache.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/lib.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/main.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/maps_out.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/mcp.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/parse.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/proc.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/project_lock.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/scope.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/sha256.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/timeutil.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- tests/behaviour_gaps.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/cache_and_artifacts.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/cli_surface.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/contract_gaps.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/dogfood.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/parity.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/protocol_v07.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/robustness.rs: LLM/agent edit — Tests for those parity fixes.
+- tests/skip_maps.rs: LLM/agent edit — Tests for those parity fixes.
+- scripts/benchmark_parity.sh: LLM/agent edit — Benchmark script and measured results.
+- scripts/benchmark_results.md: LLM/agent edit — Benchmark script and measured results.
+- src/cycle_report.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/daemon_svc.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/low_conf.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/pending_line.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/symbols.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/text_out.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- src/wiki_files.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
+- tests/parity_fixes.rs: LLM/agent edit — Tests for those parity fixes.

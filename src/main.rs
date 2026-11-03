@@ -44,22 +44,33 @@ fn main() -> ExitCode {
             continue;
         }
         if a == "--reasons" && i + 1 < args.len() {
-                let text = std::fs::read_to_string(&args[i + 1]).unwrap_or_default();
-                let cur = flags.entry("reasons".into()).or_default();
-                for line in text.lines() {
-                    let line = line.trim();
-                    if line.is_empty() || line.starts_with('#') {
-                        continue;
-                    }
-                    if !cur.is_empty() {
-                        cur.push('\n');
-                    }
-                    cur.push_str(line);
+            let spec = &args[i + 1];
+            let text = if spec == "-" {
+                let mut body = String::new();
+                let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut body);
+                body
+            } else {
+                std::fs::read_to_string(spec).unwrap_or_default()
+            };
+            let cur = flags.entry("reasons".into()).or_default();
+            for line in reason_lines(&text) {
+                if !cur.is_empty() {
+                    cur.push('\n');
                 }
-                i += 2;
-                continue;
+                cur.push_str(&line);
+            }
+            i += 2;
+            continue;
         }
-        if a == "--json" || a == "--full" || a == "--summary" || a == "--force" || a == "--stream" || a == "--quiet" || a == "--dry-run" || a == "--green" {
+        if a == "--json"
+            || a == "--full"
+            || a == "--summary"
+            || a == "--force"
+            || a == "--stream"
+            || a == "--quiet"
+            || a == "--dry-run"
+            || a == "--green"
+        {
             flags.insert(a.trim_start_matches('-').to_string(), "true".into());
             i += 1;
             continue;
@@ -104,15 +115,55 @@ fn main() -> ExitCode {
         // aliases already listed; unknown falls through to dispatch
     }
     let value = api::dispatch(&command, &root, &positional, &flags);
-    let success = value.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-    flush_stdout(&format!("{value}\n"));
+    let success = value
+        .get("success")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false);
+    let textual = flags
+        .get("text")
+        .map(|s| s == "true" || s == "1")
+        .unwrap_or(false)
+        || (command == "health" && flags.get("format").map(|s| s == "text").unwrap_or(false));
+    if textual {
+        if let Some(prose) = wikifier::text_out::render(&command, &value) {
+            flush_stdout(&prose);
+        } else {
+            flush_stdout(&format!("{value}\n"));
+        }
+    } else {
+        flush_stdout(&format!("{value}\n"));
+    }
     if success {
         ExitCode::SUCCESS
-    } else if value.get("error_type").and_then(|s| s.as_str()) == Some("ScopeError") && command == "autonomous-status" {
+    } else if value.get("error_type").and_then(|s| s.as_str()) == Some("ScopeError")
+        && command == "autonomous-status"
+    {
         ExitCode::from(2)
     } else {
         ExitCode::from(1)
     }
+}
+
+fn reason_lines(text: &str) -> Vec<String> {
+    let trimmed = text.trim();
+    if trimmed.starts_with('{') {
+        if let Ok(wikifier::Json::Object(map)) = wikifier::jsonutil::parse(trimmed) {
+            return map
+                .into_iter()
+                .filter_map(|(key, value)| value.as_str().map(|reason| format!("{key}={reason}")))
+                .collect();
+        }
+    }
+    text.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                None
+            } else {
+                Some(line.to_string())
+            }
+        })
+        .collect()
 }
 
 fn extract_target(args: &[String]) -> (Option<PathBuf>, bool, Vec<String>) {
@@ -128,7 +179,10 @@ fn extract_target(args: &[String]) -> (Option<PathBuf>, bool, Vec<String>) {
             i += 2;
             continue;
         }
-        if let Some(v) = a.strip_prefix("--target=").or_else(|| a.strip_prefix("--project-root=")) {
+        if let Some(v) = a
+            .strip_prefix("--target=")
+            .or_else(|| a.strip_prefix("--project-root="))
+        {
             root = Some(PathBuf::from(v));
             explicit = true;
             i += 1;
@@ -145,6 +199,10 @@ fn print_help() {
     names.sort();
     flush_stdout(&format!(
         "wikifier {VERSION}\n\nUsage: wikifier [--target DIR] <command> [args]\n\nCommands:\n{}\n",
-        names.iter().map(|n| format!("  {n}")).collect::<Vec<_>>().join("\n")
+        names
+            .iter()
+            .map(|n| format!("  {n}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     ));
 }

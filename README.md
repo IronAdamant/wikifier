@@ -32,7 +32,7 @@ Works from small scripts to large monorepos. **Deep import/include maps** (zero-
 | C# | `.cs` | `using` namespaces |
 | Java | `.java` | `import` / `import static` |
 
-Health/journal still work for any monitored path. The non-Python parsers are pragmatic regex (not full cargo/`go.mod`/classpath/`-I` resolution). On huge monorepos, split scope deliberately:
+JavaScript and TypeScript resolution also reads `tsconfig.json` `paths`, `package.json` `exports`, and npm `workspaces`. Health/journal still work for any monitored path. The non-Python parsers are pragmatic regex (not full cargo/`go.mod`/classpath/`-I` resolution). On huge monorepos, split scope deliberately:
 
 | File | Surface |
 |------|---------|
@@ -135,6 +135,25 @@ Warm **0-dirty** re-runs after **4.6.7** (same machine class; scoped; candidates
 
 Residual floor on large scopes is mtime/stat + live count under MapScope (not full JSON re-walk). Sub-100ms is not a hard SLA on every 1k+ tree.
 
+## Benchmarks
+
+Python 4.7 at `24812ef` versus this Rust release build, 5 runs, median milliseconds (min–max). Machine: Intel Xeon, 4 cores, 15.6 GiB RAM, Linux 6.12.94+, Python 3.12.3, rustc 1.83.0. Cold deletes `.wikifier_staging` first. Warm is the next `update-maps`. Full notes, peak RSS, and commands: [`scripts/benchmark_results.md`](scripts/benchmark_results.md). Reproduce with `scripts/benchmark_parity.sh`.
+
+| Command | small Python | small Rust | medium Python | medium Rust | large Python | large Rust |
+|---|---:|---:|---:|---:|---:|---:|
+| startup (`--version`) | 63 (61–66) | 2 (1–2) | same pair | same pair | same pair | same pair |
+| cold update-maps | 123 (121–126) | 8 (7–13) | 167 (163–168) | 62 (59–73) | 12675 (12540–13094) | 3142 (3114–3305) |
+| warm update-maps | 69 (67–72) | 4 (3–5) | 73 (72–74) | 4 (4–5) | 422 (417–433) | 246 (243–253) |
+| session-bootstrap | 66 (64–67) | 2 (1–2) | 65 (64–67) | 2 (1–2) | 270 (269–278) | 21 (21–21) |
+| check-changes | 64 (62–65) | 3 (2–3) | 70 (69–75) | 5 (5–6) | 1232 (1217–1266) | 74 (73–76) |
+| health --summary | 60 (60–62) | 2 (1–2) | 60 (59–63) | 1 (1–2) | 109 (108–114) | 8 (8–9) |
+| verify-wikis | 60 (60–61) | 2 (1–2) | 62 (60–67) | 1 (1–2) | 106 (103–108) | 8 (7–8) |
+| cycles | 60 (60–61) | 2 (1–2) | 61 (60–63) | 2 (2–2) | 63 (61–64) | 54 (53–55) |
+
+Resolved file edges after a warm map: small 2 and 2, medium (this repo) 44 Python and 98 Rust, large (Django `django/` + `tests/`, 2939 Python files) 9074 and 9074. Rust cold `update-maps` peak RSS was 3384 / 4424 / 40012 kbytes; Python was 27544 / 28392 / 97564 kbytes. The release binary is 2197456 bytes.
+
+Small is three modules under `src/pkg`. Medium is `src/` and `tests/`. Large is a shallow clone of Django.
+
 ### Parser accuracy
 
 `cargo test` checks internal edges on the frozen accuracy layouts:
@@ -163,13 +182,13 @@ Tests: `cargo test` (std-only Rust; accuracy fixtures, cache lookups, and the ag
 | `wikifier verify-wikis [dir]` | Re-check every Green wiki against its code (exit 1 on failures) |
 | `wikifier record-deletion <file> "reason"` | Mark removed paths 🔴, drop them from the graph, prune barrel refs |
 | `wikifier dependencies <file> [--full]` / `dependents <file>` | What a file imports (compact; `--full` for per-edge confidence records) / who imports it (JSON) |
-| `wikifier suggest-next` | Next actions (🔴/actionable 🟡 only; `--json` for `actions[]`) |
+| `wikifier suggest-next` | Next actions (JSON `actions[]`; `--text` for prose). Includes low-confidence edges when any exist |
 | `wikifier update-maps [--directory=src/] [--max-files=N]` | Rebuild graph + human `library.md` + agent folder maps (warm 0-dirty is fast; honors `map_paths.txt`) |
 | `wikifier cache-status` | `wk_cache` backend and mapped file count |
-| `wikifier health [--summary\|--json]` | Health matrix (machine-friendly flags) |
+| `wikifier health [--summary\|--format text]` | Health matrix. Default is JSON. `--summary` is counts only. `--text` or `--format text` is prose |
 | `wikifier validate` | Missing wiki rows + ghost paths |
-| `wikifier cycles [--json]` | Circular deps + break hints |
-| `wikifier heal-stubs [--dry-run]` | Promote Initial stubs that now have a real wiki |
+| `wikifier cycles [--no-analysis] [--max-items N]` | Circular deps, break hints, severity, and who is most depended on |
+| `wikifier heal-stubs [--dry-run]` | Promote Initial stubs whose wiki is at least 350 characters |
 | `wikifier monitor` / `daemon` | Background maintenance (`WIKIFIER_DAEMON_MAPS=0` for check-only) |
 | `wikifier serve` | Localhost dashboard with Run/Stop |
 

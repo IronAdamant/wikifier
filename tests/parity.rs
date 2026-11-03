@@ -15,7 +15,8 @@ struct Fixture {
 #[test]
 fn accuracy_fixtures_match_frozen_edges() {
     for fixture in FIXTURES {
-        let root = std::env::temp_dir().join(format!("wk-acc-{}-{}", fixture.name, std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("wk-acc-{}-{}", fixture.name, std::process::id()));
         let _ = fs::remove_dir_all(&root);
         for (rel, text) in fixture.files {
             let path = root.join(rel);
@@ -23,13 +24,25 @@ fn accuracy_fixtures_match_frozen_edges() {
             fs::write(&path, text).unwrap();
         }
         let built = update_maps(&root);
-        assert_eq!(built.get("success").and_then(|s| s.as_bool()), Some(true), "{}: {built}", fixture.name);
+        assert_eq!(
+            built.get("success").and_then(|s| s.as_bool()),
+            Some(true),
+            "{}: {built}",
+            fixture.name
+        );
         let found = mapped_edges(&root);
-        let expected: BTreeSet<(String, String)> = fixture.edges.iter().map(|(a, b)| ((*a).to_string(), (*b).to_string())).collect();
+        let expected: BTreeSet<(String, String)> = fixture
+            .edges
+            .iter()
+            .map(|(a, b)| ((*a).to_string(), (*b).to_string()))
+            .collect();
         if found != expected {
             let missed: Vec<_> = expected.difference(&found).cloned().collect();
             let extra: Vec<_> = found.difference(&expected).cloned().collect();
-            panic!("{}: edges diverged\nmissed {missed:?}\nextra {extra:?}", fixture.name);
+            panic!(
+                "{}: edges diverged\nmissed {missed:?}\nextra {extra:?}",
+                fixture.name
+            );
         }
         let _ = fs::remove_dir_all(&root);
     }
@@ -166,11 +179,19 @@ fn each_parsed_language_emits_a_local_edge() {
     fs::write(root.join("src/a.c"), "#include \"b.h\"\n").unwrap();
     fs::write(root.join("src/b.h"), "#pragma once\n").unwrap();
     fs::write(root.join("src/A.java"), "import demo.B;\nclass A {}\n").unwrap();
-    fs::write(root.join("src/B.java"), "package demo;\npublic class B {}\n").unwrap();
+    fs::write(
+        root.join("src/B.java"),
+        "package demo;\npublic class B {}\n",
+    )
+    .unwrap();
     fs::write(root.join("src/A.cs"), "using Demo;\nclass A {}\n").unwrap();
     fs::write(root.join("src/Demo.cs"), "class Demo {}\n").unwrap();
     let built = update_maps(&root);
-    assert_eq!(built.get("success").and_then(|s| s.as_bool()), Some(true), "{built}");
+    assert_eq!(
+        built.get("success").and_then(|s| s.as_bool()),
+        Some(true),
+        "{built}"
+    );
     let edges = mapped_edges(&root);
     for (src, dst) in [
         ("src/a.py", "src/b.py"),
@@ -181,7 +202,10 @@ fn each_parsed_language_emits_a_local_edge() {
         ("src/A.java", "src/B.java"),
         ("src/A.cs", "src/Demo.cs"),
     ] {
-        assert!(edges.contains(&(src.into(), dst.into())), "missing {src} -> {dst} in {edges:?}");
+        assert!(
+            edges.contains(&(src.into(), dst.into())),
+            "missing {src} -> {dst} in {edges:?}"
+        );
     }
     let _ = fs::remove_dir_all(&root);
 }
@@ -193,17 +217,28 @@ fn unknown_suffixes_emit_no_edges() {
     fs::create_dir_all(root.join("src")).unwrap();
     fs::write(root.join("map_paths.txt"), "src\n").unwrap();
     fs::write(root.join("monitored_paths.txt"), "src\n").unwrap();
-    fs::write(root.join("src/hello.cbl"), "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. HELLO.\n").unwrap();
+    fs::write(
+        root.join("src/hello.cbl"),
+        "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. HELLO.\n",
+    )
+    .unwrap();
     fs::write(root.join("src/hello.cob"), "       PROCEDURE DIVISION.\n").unwrap();
     fs::write(root.join("src/hello.cpy"), "       COPY HELLO.\n").unwrap();
     fs::write(root.join("src/hello.swift"), "import Foundation\n").unwrap();
     fs::write(root.join("src/hello.s"), "mov x0, #0\n").unwrap();
     fs::write(root.join("src/real.py"), "def hi():\n    return 1\n").unwrap();
     let built = update_maps(&root);
-    assert_eq!(built.get("success").and_then(|s| s.as_bool()), Some(true), "{built}");
+    assert_eq!(
+        built.get("success").and_then(|s| s.as_bool()),
+        Some(true),
+        "{built}"
+    );
     let edges = mapped_edges(&root);
     assert!(edges.is_empty(), "{edges:?}");
-    let files = built.get("parseable_files").and_then(|n| match n { Json::Int(i) => Some(*i), _ => None });
+    let files = built.get("parseable_files").and_then(|n| match n {
+        Json::Int(i) => Some(*i),
+        _ => None,
+    });
     assert_eq!(files, Some(1), "only real.py is parseable, got {built}");
     let _ = fs::remove_dir_all(&root);
 }

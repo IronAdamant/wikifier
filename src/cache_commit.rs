@@ -44,7 +44,10 @@ impl LockGuard {
         loop {
             match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(mut file) => {
-                    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                    let stamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
                     writeln!(file, "{}\n{stamp}", std::process::id()).map_err(|e| e.to_string())?;
                     file.sync_all().map_err(|e| e.to_string())?;
                     return Ok(LockGuard { path });
@@ -74,7 +77,13 @@ fn try_steal(path: &Path) -> bool {
         Ok(text) => text,
         Err(_) => return false,
     };
-    let pid: i32 = text.lines().next().unwrap_or("0").trim().parse().unwrap_or(0);
+    let pid: i32 = text
+        .lines()
+        .next()
+        .unwrap_or("0")
+        .trim()
+        .parse()
+        .unwrap_or(0);
     let stale = if pid > 0 {
         !crate::proc::pid_alive(pid)
     } else {
@@ -138,16 +147,23 @@ impl Session {
     }
 
     pub fn known(&self, rel: &str) -> Option<(u128, u64, String)> {
-        self.rows.get(rel).map(|row| (row.mtime_ns, row.size, row.hash.clone()))
+        self.rows
+            .get(rel)
+            .map(|row| (row.mtime_ns, row.size, row.hash.clone()))
     }
 
     pub fn dsts_of(&self, rel: &str) -> BTreeSet<String> {
-        self.rows.get(rel).map(|row| row.dsts.clone()).unwrap_or_default()
+        self.rows
+            .get(rel)
+            .map(|row| row.dsts.clone())
+            .unwrap_or_default()
     }
 
     /// Record a new size or mtime when the bytes still match the stored hash.
     pub fn note_stat(&mut self, rel: &str, mtime_ns: u128, size: u64) {
-        let Some(row) = self.rows.get_mut(rel) else { return };
+        let Some(row) = self.rows.get_mut(rel) else {
+            return;
+        };
         if row.mtime_ns == mtime_ns && row.size == size {
             return;
         }
@@ -162,7 +178,11 @@ impl Session {
 
     pub fn upsert(&mut self, upd: &FileUpdate) {
         self.removed.remove(&upd.rel);
-        let old = self.rows.get(&upd.rel).map(|row| row.dsts.clone()).unwrap_or_default();
+        let old = self
+            .rows
+            .get(&upd.rel)
+            .map(|row| row.dsts.clone())
+            .unwrap_or_default();
         for gone in old.difference(&upd.dsts) {
             if let Some(set) = self.rev.get_mut(gone) {
                 set.remove(&upd.rel);
@@ -170,7 +190,10 @@ impl Session {
             self.dirty_dst.insert(gone.clone());
         }
         for added in upd.dsts.difference(&old) {
-            self.rev.entry(added.clone()).or_default().insert(upd.rel.clone());
+            self.rev
+                .entry(added.clone())
+                .or_default()
+                .insert(upd.rel.clone());
             self.dirty_dst.insert(added.clone());
         }
         let mut src_lines = if upd.edge_lines.is_empty() {
@@ -185,8 +208,20 @@ impl Session {
             "{{\"rel\":{},\"sha256\":{},\"imports\":{},\"resolved\":{}}}",
             crate::jsonutil::Json::String(upd.rel.clone()),
             crate::jsonutil::Json::String(upd.hash.clone()),
-            crate::jsonutil::Json::Array(upd.imports.iter().cloned().map(crate::jsonutil::Json::String).collect()),
-            crate::jsonutil::Json::Array(upd.dsts.iter().cloned().map(crate::jsonutil::Json::String).collect()),
+            crate::jsonutil::Json::Array(
+                upd.imports
+                    .iter()
+                    .cloned()
+                    .map(crate::jsonutil::Json::String)
+                    .collect()
+            ),
+            crate::jsonutil::Json::Array(
+                upd.dsts
+                    .iter()
+                    .cloned()
+                    .map(crate::jsonutil::Json::String)
+                    .collect()
+            ),
         );
         self.payloads.insert(upd.rel.clone(), payload);
         let mut notes = String::new();
@@ -196,7 +231,10 @@ impl Session {
         for (raw, line, reason) in &upd.unresolved {
             notes.push_str(&format!("U\t{raw}\t{line}\t{reason}\n"));
         }
-        self.notes.insert(upd.rel.clone(), if notes.is_empty() { None } else { Some(notes) });
+        self.notes.insert(
+            upd.rel.clone(),
+            if notes.is_empty() { None } else { Some(notes) },
+        );
         self.rows.insert(
             upd.rel.clone(),
             Row {
@@ -211,7 +249,14 @@ impl Session {
     }
 
     pub fn remove(&mut self, rel: &str) {
-        let importers: Vec<String> = self.rev.get(rel).cloned().unwrap_or_default().into_iter().filter(|src| src != rel && self.rows.contains_key(src)).collect();
+        let importers: Vec<String> = self
+            .rev
+            .get(rel)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|src| src != rel && self.rows.contains_key(src))
+            .collect();
         for src in importers {
             self.strip_dst(&src, rel);
         }
@@ -238,7 +283,11 @@ impl Session {
         if let Some(set) = self.rev.get_mut(dst) {
             set.remove(src);
         }
-        let mut lines = self.dirty_src.get(src).cloned().unwrap_or_else(|| cache::content_lines(&cache::by_src_path(&self.root, src)));
+        let mut lines = self
+            .dirty_src
+            .get(src)
+            .cloned()
+            .unwrap_or_else(|| cache::content_lines(&cache::by_src_path(&self.root, src)));
         lines.retain(|line| cache::dst_of(line) != dst);
         self.dirty_src.insert(src.to_string(), lines);
         self.dirty_dst.insert(dst.to_string());
@@ -254,11 +303,19 @@ impl Session {
             return Ok(());
         }
         let gen = read_generation(&self.root).saturating_add(1);
-        cache::atomic_write(&cache::commit_pending_path(&self.root), format!("{gen}\n").as_bytes())?;
+        cache::atomic_write(
+            &cache::commit_pending_path(&self.root),
+            format!("{gen}\n").as_bytes(),
+        )?;
         // by_dst is keyed by the importer's target. Dropping a file removes its
         // forward edges above; the reverse file for this path stays until importers change.
         for rel in &self.removed {
-            for (sub, ext) in [("payload", "json"), ("by_src", "edges"), ("notes", "txt"), ("barrels", "json")] {
+            for (sub, ext) in [
+                ("payload", "json"),
+                ("by_src", "edges"),
+                ("notes", "txt"),
+                ("barrels", "json"),
+            ] {
                 let _ = fs::remove_file(cache::store_file(&self.root, sub, rel, ext));
                 let _ = fs::remove_file(cache::legacy_file(&self.root, sub, rel, ext));
             }
@@ -267,11 +324,22 @@ impl Session {
             if self.removed.contains(rel) {
                 continue;
             }
-            let body = if lines.is_empty() { String::new() } else { format!("{}\n", lines.join("\n")) };
-            cache::write_labeled(&cache::store_file(&self.root, "by_src", rel, "edges"), rel, &body)?;
+            let body = if lines.is_empty() {
+                String::new()
+            } else {
+                format!("{}\n", lines.join("\n"))
+            };
+            cache::write_labeled(
+                &cache::store_file(&self.root, "by_src", rel, "edges"),
+                rel,
+                &body,
+            )?;
         }
         for (rel, payload) in &self.payloads {
-            cache::atomic_write(&cache::store_file(&self.root, "payload", rel, "json"), payload.as_bytes())?;
+            cache::atomic_write(
+                &cache::store_file(&self.root, "payload", rel, "json"),
+                payload.as_bytes(),
+            )?;
         }
         for (rel, notes) in &self.notes {
             let path = cache::store_file(&self.root, "notes", rel, "txt");
@@ -285,9 +353,20 @@ impl Session {
         for (rel, dsts) in &self.barrels {
             let body = crate::jsonutil::Json::obj(vec![
                 ("src", crate::jsonutil::Json::String(rel.clone())),
-                ("dsts", crate::jsonutil::Json::Array(dsts.iter().cloned().map(crate::jsonutil::Json::String).collect())),
+                (
+                    "dsts",
+                    crate::jsonutil::Json::Array(
+                        dsts.iter()
+                            .cloned()
+                            .map(crate::jsonutil::Json::String)
+                            .collect(),
+                    ),
+                ),
             ]);
-            cache::atomic_write(&cache::store_file(&self.root, "barrels", rel, "json"), body.to_string().as_bytes())?;
+            cache::atomic_write(
+                &cache::store_file(&self.root, "barrels", rel, "json"),
+                body.to_string().as_bytes(),
+            )?;
         }
         // Reverse edges after forward edges. A crash here is repaired from by_src.
         for dst in &self.dirty_dst {
@@ -302,7 +381,10 @@ impl Session {
             }
         }
         save_index(&self.root, &self.rows)?;
-        cache::atomic_write(&cache::generation_path(&self.root), format!("{gen}\n").as_bytes())?;
+        cache::atomic_write(
+            &cache::generation_path(&self.root),
+            format!("{gen}\n").as_bytes(),
+        )?;
         let _ = fs::remove_file(cache::commit_pending_path(&self.root));
         cache::atomic_write(&cache::names_marker(&self.root), b"fnv1a64\n")?;
         Ok(())
@@ -310,7 +392,10 @@ impl Session {
 }
 
 fn read_generation(root: &Path) -> u64 {
-    fs::read_to_string(cache::generation_path(root)).ok().and_then(|text| text.trim().parse().ok()).unwrap_or(0)
+    fs::read_to_string(cache::generation_path(root))
+        .ok()
+        .and_then(|text| text.trim().parse().ok())
+        .unwrap_or(0)
 }
 
 fn join_dsts(dsts: &BTreeSet<String>) -> String {
@@ -325,7 +410,10 @@ fn join_dsts(dsts: &BTreeSet<String>) -> String {
 }
 
 fn parse_dsts(raw: &str) -> BTreeSet<String> {
-    raw.split('\u{1e}').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect()
+    raw.split('\u{1e}')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn index_record_lines(root: &Path) -> Vec<String> {
@@ -353,10 +441,22 @@ fn load_rows(root: &Path) -> (BTreeMap<String, Row>, bool) {
             Some(raw) => parse_dsts(raw),
             None => {
                 upgrade = true;
-                cache::load_dependencies(root, &rel).unwrap_or_default().into_iter().collect()
+                cache::load_dependencies(root, &rel)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect()
             }
         };
-        map.insert(rel.clone(), Row { rel, mtime_ns, size, hash, dsts });
+        map.insert(
+            rel.clone(),
+            Row {
+                rel,
+                mtime_ns,
+                size,
+                hash,
+                dsts,
+            },
+        );
     }
     (map, upgrade)
 }
@@ -365,7 +465,14 @@ fn save_index(root: &Path, rows: &BTreeMap<String, Row>) -> Result<(), String> {
     let mut body = String::new();
     let mut paths = String::new();
     for row in rows.values() {
-        body.push_str(&format!("{}\t{}\t{}\t{}\t{}\n", row.rel, row.mtime_ns, row.size, row.hash, join_dsts(&row.dsts)));
+        body.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{}\n",
+            row.rel,
+            row.mtime_ns,
+            row.size,
+            row.hash,
+            join_dsts(&row.dsts)
+        ));
         paths.push_str(&row.rel);
         paths.push('\n');
     }
@@ -379,7 +486,11 @@ fn index_rels(root: &Path) -> Vec<String> {
         .into_iter()
         .filter_map(|line| {
             let rel = line.split('\t').next().unwrap_or("").trim().to_string();
-            if rel.is_empty() { None } else { Some(rel) }
+            if rel.is_empty() {
+                None
+            } else {
+                Some(rel)
+            }
         })
         .collect()
 }
@@ -391,7 +502,9 @@ fn migrate_legacy(root: &Path) -> Result<(), String> {
     }
     for sub in ["payload", "by_src", "by_dst", "notes", "barrels"] {
         let dir = root_dir.join(sub);
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         for ent in entries.flatten() {
             let name = ent.file_name().to_string_lossy().to_string();
             if !name.contains('%') {
@@ -452,24 +565,40 @@ fn hash_to_rel(root: &Path) -> HashMap<String, String> {
 
 fn file_header(path: &Path) -> Option<String> {
     let text = fs::read_to_string(path).ok()?;
-    text.lines().next().and_then(|line| line.trim().strip_prefix("@\t").map(|s| s.to_string()))
+    text.lines()
+        .next()
+        .and_then(|line| line.trim().strip_prefix("@\t").map(|s| s.to_string()))
 }
 
-fn read_edge_dir(dir: &Path, names: &HashMap<String, String>, orphans: &mut Vec<String>) -> BTreeMap<String, BTreeSet<String>> {
+fn read_edge_dir(
+    dir: &Path,
+    names: &HashMap<String, String>,
+    orphans: &mut Vec<String>,
+) -> BTreeMap<String, BTreeSet<String>> {
     let mut out = BTreeMap::new();
-    let Ok(entries) = fs::read_dir(dir) else { return out };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return out;
+    };
     for ent in entries.flatten() {
         let path = ent.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("edges") {
             continue;
         }
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
         let rel = file_header(&path).or_else(|| names.get(&stem).cloned());
         let Some(rel) = rel else {
             orphans.push(format!("edge file {} has no stored path", path.display()));
             continue;
         };
-        let dsts = cache::content_lines(&path).into_iter().map(|line| cache::dst_of(&line)).filter(|s| !s.is_empty()).collect();
+        let dsts = cache::content_lines(&path)
+            .into_iter()
+            .map(|line| cache::dst_of(&line))
+            .filter(|s| !s.is_empty())
+            .collect();
         out.insert(rel, dsts);
     }
     out
@@ -482,12 +611,24 @@ pub fn check_consistency(root: &Path) -> Consistency {
         mismatches.push("commit.pending is set; the last cache commit did not finish".into());
     }
     if !cache::cache_root(root).is_dir() {
-        return Consistency { consistent: mismatches.is_empty(), incomplete, mismatches };
+        return Consistency {
+            consistent: mismatches.is_empty(),
+            incomplete,
+            mismatches,
+        };
     }
     let names = hash_to_rel(root);
     let mut orphans = Vec::new();
-    let forward = read_edge_dir(&cache::cache_root(root).join("by_src"), &names, &mut orphans);
-    let reverse = read_edge_dir(&cache::cache_root(root).join("by_dst"), &names, &mut orphans);
+    let forward = read_edge_dir(
+        &cache::cache_root(root).join("by_src"),
+        &names,
+        &mut orphans,
+    );
+    let reverse = read_edge_dir(
+        &cache::cache_root(root).join("by_dst"),
+        &names,
+        &mut orphans,
+    );
     mismatches.append(&mut orphans);
     let mut expected: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (src, dsts) in &forward {
@@ -519,7 +660,11 @@ pub fn check_consistency(root: &Path) -> Consistency {
             mismatches.push(format!("by_src {rel} is not in the index"));
         }
     }
-    Consistency { consistent: mismatches.is_empty(), incomplete, mismatches }
+    Consistency {
+        consistent: mismatches.is_empty(),
+        incomplete,
+        mismatches,
+    }
 }
 
 pub fn rebuild(root: &Path) -> Result<(), String> {
@@ -532,7 +677,11 @@ fn rebuild_locked(root: &Path) -> Result<(), String> {
     let (old, _) = load_rows(root);
     let names = hash_to_rel(root);
     let mut orphans = Vec::new();
-    let forward = read_edge_dir(&cache::cache_root(root).join("by_src"), &names, &mut orphans);
+    let forward = read_edge_dir(
+        &cache::cache_root(root).join("by_src"),
+        &names,
+        &mut orphans,
+    );
     if !orphans.is_empty() {
         return Err(orphans.join("; "));
     }
