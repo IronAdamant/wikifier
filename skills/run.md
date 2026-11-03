@@ -128,18 +128,18 @@ Mutations take an advisory project lock (`.wikifier_staging/.lock`, a create-new
 
 | Command | Purpose |
 |---|---|
-| `init [DIR]` | keeps an existing path list, seeds `src/` when that list is empty, copies `index.html` only when it is missing, writes `.wikifier/marker` |
+| `init [DIR]` | keeps an existing path list, seeds `src/` when that list is empty, copies `index.html` only when it is missing, writes `.wikifier/marker`. `[DIR]` is the project root unless `--target` is set |
 | `session-bootstrap`, `check-changes`, `suggest-next [--json]` | core loop |
 | `prepare-edit F`, `record-change F WHY`, `mark-green F [WHY] [--force]`, `record-deletion F [WHY]` | per-file loop |
 | `record-changes [-r PATH=WHY]… [--reasons FILE] [--default WHY] [--only P]… [--since REF] [--green] [--dry-run]` | batch loop (git) |
-| `verify-wikis [DIR]` | re-check Green wikis against the code (exit 1 if any fail) |
-| `dependencies F [--full]`, `dependents F`, `cycles [--json]`, `why-file F`, `search-journal [TEXT] [--file F]` | lookup |
+| `verify-wikis [DIR]` | re-check Green wikis against the code (exit 1 if any fail). `[DIR]` limits the check to that file or directory |
+| `dependencies F [--full]`, `dependents F`, `cycles [--json]`, `why-file F`, `search-journal [TEXT] [--file F]` | lookup. `--file` limits the journal search to that path |
 | `update-maps [--full] [--directory D] [--max-files N] [--stream]` | dependency map |
 | `health [--summary\|--json]`, `validate`, `cache-status`, `autonomous-status` | status |
 | `seed-health`, `seed-source-hashes`, `prune-pending`, `prune-health [--deleted-missing]`, `prune-barrels` | hygiene |
 | `heal-stubs [--dry-run]`, `healable-stubs`, `healing-stats`, `stale-wikis` | stub healing |
-| `journal [YYYY-MM-DD]`, `issues [SEVERITY]`, `list-paths [PREFIX]`, `list-core-tools` | misc |
-| `monitor`, `daemon start\|stop\|status\|logs\|run\|install-service`, `serve [PORT]` | background / human view |
+| `journal [YYYY-MM-DD]`, `issues`, `list-paths [PREFIX]`, `list-core-tools` | misc. `issues` is the same `actions[]` list as `suggest-next` |
+| `monitor`, `daemon start\|stop\|status\|run`, `serve [PORT]` | background / human view. `daemon logs` and `install-service` are not commands |
 
 The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` launch it. MCP is `wikifier mcp`.
 

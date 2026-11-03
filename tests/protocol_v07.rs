@@ -300,6 +300,81 @@ fn serve_loop_serves_the_dashboard_files_and_shuts_down() {
     let _ = fs::remove_dir_all(&root);
 }
 
+#[test]
+fn heal_stubs_dry_run_leaves_initial_stubs() {
+    use std::collections::BTreeMap;
+    let root = scratch("heal-dry");
+    fs::write(root.join("src/a.py"), "def alpha():\n    return 1\n").unwrap();
+    let mapped = update_maps(&root);
+    assert_eq!(mapped.get("success").and_then(|flag| flag.as_bool()), Some(true), "{mapped}");
+    fs::write(root.join("src/a.py.wiki.md"), "This wiki is long enough to heal the alpha stub.\n").unwrap();
+    let mut flags = BTreeMap::new();
+    flags.insert("dry-run".into(), "true".into());
+    let dry = api::dispatch("heal-stubs", &root, &[], &flags);
+    assert_eq!(dry.get("success").and_then(|flag| flag.as_bool()), Some(true), "{dry}");
+    assert_eq!(dry.get("dry_run").and_then(|flag| flag.as_bool()), Some(true), "{dry}");
+    assert!(int_field(&dry, "healed_count") >= 1, "{dry}");
+    assert_eq!(int_field(&dry, "changed"), 0, "{dry}");
+    let during = read_health(&root);
+    assert!(during.iter().any(|row| row.file == "src/a.py" && row.reason == "Initial stub"), "{during:?}");
+    let wet = api::dispatch("heal-stubs", &root, &[], &BTreeMap::new());
+    assert!(int_field(&wet, "changed") >= 1, "{wet}");
+    let after = read_health(&root);
+    assert!(after.iter().any(|row| row.file == "src/a.py" && row.reason == "healed stub"), "{after:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn init_positional_directory_is_the_project_root() {
+    let root = scratch("init-pos");
+    let dest = root.join("proj");
+    fs::create_dir_all(dest.join("src")).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_wikifier")).arg("init").arg(&dest).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let seeded = fs::read_to_string(dest.join("map_paths.txt")).unwrap_or_default();
+    assert!(seeded.contains("src"), "{seeded}");
+    assert!(dest.join(".wikifier/marker").is_file());
+    assert!(dest.join("index.html").is_file());
+    assert_eq!(fs::read_to_string(root.join("map_paths.txt")).unwrap(), "src\n");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn search_journal_file_flag_keeps_one_path() {
+    use std::collections::BTreeMap;
+    let root = scratch("search");
+    fs::write(root.join("src/a.py"), "x = 1\n").unwrap();
+    fs::write(root.join("src/b.py"), "y = 2\n").unwrap();
+    assert_eq!(api::record_change(&root, "src/a.py", "alpha reason").get("success").and_then(|flag| flag.as_bool()), Some(true));
+    assert_eq!(api::record_change(&root, "src/b.py", "beta reason").get("success").and_then(|flag| flag.as_bool()), Some(true));
+    let mut flags = BTreeMap::new();
+    flags.insert("file".into(), "src/a.py".into());
+    let found = api::dispatch("search-journal", &root, &[], &flags);
+    let Json::Array(entries) = found.get("entries").unwrap() else { panic!("{found}") };
+    assert_eq!(entries.len(), 1, "{found}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn verify_wikis_prefix_checks_one_file() {
+    use std::collections::BTreeMap;
+    let root = scratch("verify-prefix");
+    fs::write(root.join("src/a.py"), "def alpha():\n    return 1\n").unwrap();
+    fs::write(root.join("src/b.py"), "def beta():\n    return 2\n").unwrap();
+    let mapped = update_maps(&root);
+    assert_eq!(mapped.get("success").and_then(|flag| flag.as_bool()), Some(true), "{mapped}");
+    fs::write(root.join("src/a.py.wiki.md"), "alpha is the public function.\n").unwrap();
+    fs::write(root.join("src/b.py.wiki.md"), "beta is the public function.\n").unwrap();
+    let marked_a = mark_green(&root, "src/a.py", "wiki names alpha", false);
+    let marked_b = mark_green(&root, "src/b.py", "wiki names beta", false);
+    assert_eq!(marked_a.get("success").and_then(|flag| flag.as_bool()), Some(true), "{marked_a}");
+    assert_eq!(marked_b.get("success").and_then(|flag| flag.as_bool()), Some(true), "{marked_b}");
+    let checked = api::dispatch("verify-wikis", &root, &["src/a.py".into()], &BTreeMap::new());
+    assert_eq!(checked.get("success").and_then(|flag| flag.as_bool()), Some(true), "{checked}");
+    assert_eq!(int_field(&checked, "checked"), 1, "{checked}");
+    let _ = fs::remove_dir_all(&root);
+}
+
 fn http_exchange(port: u16, request: &str) -> String {
     use std::io::{Read, Write};
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();

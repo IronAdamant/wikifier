@@ -1214,13 +1214,23 @@ fn tarjan(graph: &BTreeMap<String, Vec<String>>) -> Vec<Vec<String>> {
 }
 
 pub fn verify_wikis(root: &Path) -> Json {
+    verify_wikis_under(root, None)
+}
+
+fn verify_wikis_under(root: &Path, prefix: Option<&str>) -> Json {
     let rows = artifacts::read_health(root);
+    let prefix = prefix.map(|p| p.trim_matches('/')).filter(|p| !p.is_empty());
     let mut checked = 0i64;
     let mut failed = Vec::new();
     let mut warnings = Vec::new();
     for row in rows {
         if !is_green(&row.status) {
             continue;
+        }
+        if let Some(prefix) = prefix {
+            if row.file != prefix && !row.file.starts_with(&format!("{prefix}/")) {
+                continue;
+            }
         }
         let path = root.join(&row.file);
         if !path.is_file() {
@@ -1550,7 +1560,7 @@ fn drop_pending_line(root: &Path, rel: &str) {
     let _ = fs::write(path, out);
 }
 
-pub fn heal_stubs(root: &Path, min_len: usize) -> Json {
+pub fn heal_stubs(root: &Path, min_len: usize, dry_run: bool) -> Json {
     let _guard = match lock_or_fail(root) {
         Ok(guard) => guard,
         Err(err) => return err,
@@ -1563,17 +1573,25 @@ pub fn heal_stubs(root: &Path, min_len: usize) -> Json {
         }
         let wiki = fs::read_to_string(root.join(format!("{}.wiki.md", row.file))).unwrap_or_default();
         if wiki.trim().len() >= min_len {
-            row.status = "🟢 Green".into();
-            row.reason = "healed stub".into();
-            row.verification = "verified".into();
-            row.last_updated = local_stamp();
+            if !dry_run {
+                row.status = "🟢 Green".into();
+                row.reason = "healed stub".into();
+                row.verification = "verified".into();
+                row.last_updated = local_stamp();
+            }
             healed += 1;
         }
     }
-    if healed > 0 {
-        let _ = artifacts::write_health(root, &rows);
+    if healed > 0 && !dry_run {
+        if let Err(err) = artifacts::write_health(root, &rows) {
+            return fail("HealthError", err);
+        }
     }
-    ok(vec![("healed_count", Json::Int(healed)), ("changed", Json::Int(healed))])
+    ok(vec![
+        ("healed_count", Json::Int(healed)),
+        ("changed", Json::Int(if dry_run { 0 } else { healed })),
+        ("dry_run", Json::Bool(dry_run)),
+    ])
 }
 
 pub fn prune_health(root: &Path) -> Json {
@@ -2291,7 +2309,12 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
         }
         "search-journal" | "search_journal" => {
             let q = flags.get("query").cloned().or_else(|| positional.first().cloned()).unwrap_or_default();
-            let entries = artifacts::read_journal(root, None).into_iter().filter(|e| e.reason.contains(&q) || e.file.contains(&q)).collect::<Vec<_>>();
+            let file_filter = flags.get("file").map(|s| s.as_str()).filter(|s| !s.is_empty() && *s != "true");
+            let entries = artifacts::read_journal(root, None).into_iter().filter(|e| {
+                let text_ok = q.is_empty() || e.reason.contains(&q) || e.file.contains(&q);
+                let file_ok = file_filter.map(|f| e.file == f).unwrap_or(true);
+                text_ok && file_ok
+            }).collect::<Vec<_>>();
             ok(vec![("entries", Json::Array(entries.into_iter().map(|e| Json::obj(vec![
                 ("file", Json::String(e.file)),
                 ("reason", Json::String(e.reason)),
@@ -2304,7 +2327,10 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
         },
         "issues" => suggest_next_actions(root),
         "cycles" | "get_cycles" => cycles(root),
-        "verify-wikis" | "verify_wikis" => verify_wikis(root),
+        "verify-wikis" | "verify_wikis" => {
+            let prefix = positional.first().map(|s| s.as_str()).filter(|s| !s.is_empty());
+            verify_wikis_under(root, prefix)
+        }
         "autonomous-status" | "readiness" => {
             let scope = scope::detect(root);
             ok(vec![("readiness", Json::String(readiness_of(&scope, !cache::all_paths(root).is_empty(), &artifacts::read_health(root), health_file_present(root)).into())), ("scope", scope_json(&scope))])
@@ -2331,12 +2357,18 @@ pub fn dispatch(name: &str, root: &Path, positional: &[String], flags: &BTreeMap
             )
         },
         "seed-health" | "seed-source-hashes" | "seed_source_content_hashes" => {
-            let _ = seed_health_from_map(root);
-            ok(vec![("seeded", Json::Bool(true))])
+            match seed_health_from_map(root) {
+                Ok(()) => ok(vec![("seeded", Json::Bool(true))]),
+                Err(err) => fail("HealthError", err),
+            }
         }
         "prune-pending" => prune_pending(root),
         "prune-health" => prune_health_opts(root, flag_on(flags, "deleted-missing")),
-        "heal-stubs" | "heal_stubs" => heal_stubs(root, flags.get("min-wiki-length").and_then(|s| s.parse().ok()).unwrap_or(20)),
+        "heal-stubs" | "heal_stubs" => heal_stubs(
+            root,
+            flags.get("min-wiki-length").and_then(|s| s.parse().ok()).unwrap_or(20),
+            flag_on(flags, "dry-run"),
+        ),
         "healable-stubs" | "list_healable_stubs" => {
             let min = flags.get("min-wiki-length").and_then(|s| s.parse().ok()).unwrap_or(20usize);
             let files: Vec<Json> = artifacts::read_health(root).into_iter().filter(|r| r.reason == "Initial stub" && fs::read_to_string(root.join(format!("{}.wiki.md", r.file))).unwrap_or_default().len() >= min).map(|r| Json::String(r.file)).collect();

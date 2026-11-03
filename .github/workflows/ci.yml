@@ -35,14 +35,13 @@ jobs:
       - name: Empty dependency list
         shell: bash
         run: |
-          cargo metadata --format-version 1 --no-deps > metadata.json
-          python3 - <<'PY'
-          import json
-          data = json.load(open("metadata.json"))
-          for pkg in data["packages"]:
-              deps = pkg.get("dependencies") or []
-              assert deps == [], (pkg["name"], deps)
-          PY
+          set -euo pipefail
+          awk '
+            /^\[(dependencies|dev-dependencies|build-dependencies)\]/ { section=$0; in_deps=1; next }
+            /^\[/ { in_deps=0 }
+            in_deps && $0 ~ /^[[:space:]]*[^#[:space:]]/ { print section ": " $0; bad=1 }
+            END { exit bad ? 1 : 0 }
+          ' Cargo.toml
 
       - name: Version
         run: cargo run --quiet -- --version

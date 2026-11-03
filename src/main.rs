@@ -14,7 +14,7 @@ fn main() -> ExitCode {
         flush_stdout(&format!("wikifier {VERSION}\n"));
         return ExitCode::SUCCESS;
     }
-    let (root, rest) = extract_target(&args);
+    let (root, explicit_target, rest) = extract_target(&args);
     args = rest;
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
         print_help();
@@ -91,6 +91,11 @@ fn main() -> ExitCode {
             flags.entry("date".into()).or_insert_with(|| d.clone());
         }
     }
+    let root = if command == "init" && !explicit_target {
+        positional.first().map(PathBuf::from).or(root)
+    } else {
+        root
+    };
     let root = match root {
         Some(r) if r.is_dir() => r,
         Some(r) => {
@@ -114,8 +119,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn extract_target(args: &[String]) -> (Option<PathBuf>, Vec<String>) {
+fn extract_target(args: &[String]) -> (Option<PathBuf>, bool, Vec<String>) {
     let mut root = env::var("WIKIFIER_PROJECT_ROOT").ok().map(PathBuf::from);
+    let mut explicit = false;
     let mut rest = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -123,19 +129,21 @@ fn extract_target(args: &[String]) -> (Option<PathBuf>, Vec<String>) {
         if a == "--target" || a == "--project-root" {
             if i + 1 < args.len() {
                 root = Some(PathBuf::from(&args[i + 1]));
+                explicit = true;
                 i += 2;
                 continue;
             }
         }
         if let Some(v) = a.strip_prefix("--target=").or_else(|| a.strip_prefix("--project-root=")) {
             root = Some(PathBuf::from(v));
+            explicit = true;
             i += 1;
             continue;
         }
         rest.push(a.clone());
         i += 1;
     }
-    (root, rest)
+    (root, explicit, rest)
 }
 
 fn print_help() {

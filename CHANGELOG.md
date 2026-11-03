@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `prune-health` and `prune-pending` keep files listed in `monitored_paths.txt` when those files sit outside `map_paths.txt`.
 
 ### Changed
+- `heal-stubs --dry-run` counts the stubs it would mark and does not write health. `seed-health` and `seed-source-hashes` return `HealthError` when the health write fails.
+- `init DIR` uses that directory as the project root unless `--target` is set. `verify-wikis DIR` limits the check to that file or directory. `search-journal --file` keeps only that path.
+- The CI empty-dependency check reads `Cargo.toml` with `awk`. The workflow does not run Python.
+- The live daemon actions are `start`, `stop`, `status`, and `run`.
 - This repo's import-map roots are `src/` and `tests/`.
 - The import scan remains comment-masked regex plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). It is not a CPython `ast` walk, and it has not been run on Babylon.js. The accuracy gate is still the four frozen fixtures.
 
