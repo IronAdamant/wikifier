@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -19,28 +19,207 @@ jobs:
       - name: Test
         run: cargo test --locked
 
-  release:
-    name: GitHub release
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.target }}
     needs: test
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
     steps:
       - uses: actions/checkout@v6
+
       - uses: dtolnay/rust-toolchain@1.83.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo_version="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
+          if [[ -z "$cargo_version" ]]; then
+            echo "Cargo.toml has no version" >&2
+            exit 1
+          fi
+          version="$cargo_version"
+          if [[ "$GITHUB_REF" == refs/tags/v*.*.* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [[ "$version" != "$cargo_version" ]]; then
+              echo "tag v${version} does not match Cargo.toml ${cargo_version}" >&2
+              exit 1
+            fi
+          fi
+          mkdir -p dist
+          printf '%s\n' "$version" > dist/VERSION
+
       - name: Build release binary
-        run: cargo build --release --locked
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked --target "$TARGET"
+
+      - name: Package tar.gz
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < dist/VERSION)"
+          name="wikifier-${version}-${TARGET}"
+          stage="$(mktemp -d)"
+          cp "target/${TARGET}/release/wikifier" "${stage}/wikifier"
+          tar -C "$stage" -czf "${name}.tar.gz" wikifier
+          rm -rf "$stage" dist/VERSION
+          mv "${name}.tar.gz" dist/
+          listing="$(tar -tzf "dist/${name}.tar.gz")"
+          if [[ "$listing" != "wikifier" ]]; then
+            echo "archive listing: ${listing}" >&2
+            exit 1
+          fi
+
+      - name: Package zip
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content -Raw 'dist/VERSION').Trim()
+          $name = "wikifier-$version-$env:TARGET"
+          Copy-Item "target/$env:TARGET/release/wikifier.exe" 'dist/wikifier.exe'
+          Remove-Item 'dist/VERSION'
+          Push-Location dist
+          try {
+            Compress-Archive -LiteralPath 'wikifier.exe' -DestinationPath "$name.zip" -Force
+          } finally {
+            Pop-Location
+          }
+          Remove-Item 'dist/wikifier.exe'
+          if (-not (Test-Path "dist/$name.zip")) { throw "missing dist/$name.zip" }
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/wikifier-*
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download archives
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          shopt -s nullglob
+          archives=(wikifier-*.tar.gz wikifier-*.zip)
+          if [[ ${#archives[@]} -ne 4 ]]; then
+            echo "expected 4 release archives, found ${#archives[@]}" >&2
+            ls -la >&2
+            exit 1
+          fi
+          for archive in "${archives[@]}"; do
+            case "$archive" in
+              *.tar.gz)
+                listing="$(tar -tzf "$archive")"
+                if [[ "$listing" != "wikifier" ]]; then
+                  echo "$archive listing: ${listing}" >&2
+                  exit 1
+                fi
+                ;;
+              *.zip)
+                sig="$(od -An -tx1 -N4 "$archive" | tr -d ' \n')"
+                if [[ "$sig" != "504b0304" ]]; then
+                  echo "$archive is not a zip (magic $sig)" >&2
+                  exit 1
+                fi
+                listing="$(unzip -l "$archive")"
+                if [[ "$listing" != *wikifier.exe* ]]; then
+                  echo "$archive listing: ${listing}" >&2
+                  exit 1
+                fi
+                ;;
+            esac
+          done
+          sha256sum -- "${archives[@]}" | LC_ALL=C sort -k2 > SHA256SUMS
+          sha256sum --check SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Write release body
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo_version="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
+          version="$cargo_version"
+          if [[ "$GITHUB_REF" == refs/tags/v*.*.* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          cat > release_body.md <<'EOF'
+          ## Install
+
+          Download the archive for your platform and check it against `SHA256SUMS` before you unpack it.
+
+          | Platform | File |
+          |---|---|
+          | Linux x86_64 | `wikifier-@@VERSION@@-x86_64-unknown-linux-gnu.tar.gz` |
+          | macOS Apple silicon (arm64) | `wikifier-@@VERSION@@-aarch64-apple-darwin.tar.gz` |
+          | macOS Intel (x86_64) | `wikifier-@@VERSION@@-x86_64-apple-darwin.tar.gz` |
+          | Windows x86_64 | `wikifier-@@VERSION@@-x86_64-pc-windows-msvc.zip` |
+
+          On Linux and macOS, `tar -xzf wikifier-@@VERSION@@-<target>.tar.gz` and run `./wikifier`. On Windows, unzip the archive and run `wikifier.exe`. Put that binary on your `PATH`.
+
+          Or build from source:
+
+          ```bash
+          cargo build --release
+          ./target/release/wikifier --version
+          ```
+
+          `pip install wikifier` still installs the old Python 4.7 package.
+
+          The change list is in CHANGELOG.md. Measured startup, `update-maps`, and session commands are in the README Benchmarks section.
+          EOF
+          sed -i "s/@@VERSION@@/${version}/g" release_body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
-          files: target/release/wikifier
-          body: |
-            ## Installation
-
-            Download the `wikifier` binary from this release, or build from source:
-
-            ```bash
-            cargo build --release
-            ./target/release/wikifier --version
-            ```
+          body_path: release_body.md
+          files: |
+            dist/wikifier-*
+            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,9 +3,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Stars](https://img.shields.io/github/stars/IronAdamant/wikifier?style=social)](https://github.com/IronAdamant/wikifier/stargazers)
 
-**The PyPI package is archived.** It will not receive further uploads, and it is not the project anymore. Do not use `pip install wikifier` for new work.
+## Install
 
-The replacement is this repository. Wikifier is a std-only Rust program. Build it from source:
+Download a binary from the [GitHub releases](https://github.com/IronAdamant/wikifier/releases). A `v*.*.*` tag publishes these archives and a `SHA256SUMS` file:
+
+| Platform | Archive |
+|---|---|
+| Linux x86_64 | `wikifier-<version>-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS Apple silicon | `wikifier-<version>-aarch64-apple-darwin.tar.gz` |
+| macOS Intel | `wikifier-<version>-x86_64-apple-darwin.tar.gz` |
+| Windows x86_64 | `wikifier-<version>-x86_64-pc-windows-msvc.zip` |
+
+Check `SHA256SUMS`, unpack, and put `wikifier` (`wikifier.exe` on Windows) on your `PATH`.
+
+```bash
+# Linux x86_64, 5.0.0
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.0.0/SHA256SUMS
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.0.0/wikifier-5.0.0-x86_64-unknown-linux-gnu.tar.gz
+sha256sum --check --ignore-missing SHA256SUMS
+tar -xzf wikifier-5.0.0-x86_64-unknown-linux-gnu.tar.gz
+./wikifier --version
+```
+
+Or build from source. `[dependencies]` is empty:
 
 ```bash
 git clone https://github.com/IronAdamant/wikifier
@@ -13,6 +33,8 @@ cd wikifier
 cargo build --release
 ./target/release/wikifier --version
 ```
+
+`pip install wikifier` still installs the archived Python 4.7 package.
 
 **A zero-dependency codebase wiki for AI agents.** Token-efficient maps so LLMs look things up instead of re-reading full sources.
 
@@ -74,7 +96,7 @@ Always set an explicit root for external trees: `WIKIFIER_PROJECT_ROOT=/abs/path
 
 ## Steady state (only touch what needs it)
 
-Full protocol: [`skills/run.md`](skills/run.md) (Agent Protocol v0.7 — package **4.7.x**).
+Full protocol: [`skills/run.md`](skills/run.md) (Agent Protocol v0.7 — package **5.0.0**).
 
 ```bash
 wikifier session-bootstrap      # one-shot: root, health, attention, actions[], names-only map_index
@@ -137,7 +159,7 @@ Residual floor on large scopes is mtime/stat + live count under MapScope (not fu
 
 ## Benchmarks
 
-Python 4.7 at `24812ef` versus this Rust release build, 5 runs, median milliseconds (min–max). Machine: Intel Xeon, 4 cores, 15.6 GiB RAM, Linux 6.12.94+, Python 3.12.3, rustc 1.83.0. Cold deletes `.wikifier_staging` first. Warm is the next `update-maps`. Full notes, peak RSS, and commands: [`scripts/benchmark_results.md`](scripts/benchmark_results.md). Reproduce with `scripts/benchmark_parity.sh`.
+Python 4.7 at `24812ef` versus the Rust binary recorded in [`scripts/benchmark_results.md`](scripts/benchmark_results.md) (that binary reported 4.7.0). 5.0.0 is that program. 5 runs, median milliseconds (min–max). Machine: Intel Xeon, 4 cores, 15.6 GiB RAM, Linux 6.12.94+, Python 3.12.3, rustc 1.83.0. Cold deletes `.wikifier_staging` first. Warm is the next `update-maps`. Full notes, peak RSS, and commands are in that file. Reproduce with `scripts/benchmark_parity.sh`.
 
 | Command | small Python | small Rust | medium Python | medium Rust | large Python | large Rust |
 |---|---:|---:|---:|---:|---:|---:|
@@ -192,7 +214,7 @@ Tests: `cargo test` (std-only Rust; accuracy fixtures, cache lookups, and the ag
 | `wikifier monitor` / `daemon` | Background maintenance (`WIKIFIER_DAEMON_MAPS=0` for check-only) |
 | `wikifier serve` | Localhost dashboard with Run/Stop |
 
-The same operations live in `src/api.rs`. Agents call the CLI or `wikifier mcp`. `wikifier.sh` / `wikifier.ps1` / `wikifier.bat` launch the Rust binary (`WIKIFIER_BIN` overrides the path). There is no Python package.
+The same operations live in `src/api.rs`. Agents call the CLI or `wikifier mcp`. `wikifier.sh` / `wikifier.ps1` / `wikifier.bat` launch the Rust binary (`WIKIFIER_BIN` overrides the path). `pip install wikifier` still installs the archived Python 4.7 package.
 
 ## MCP
 
@@ -219,7 +241,7 @@ This repo's `.mcp.json` launches `wikifier` with argument `mcp`. Tool names and 
 
 ## Links
 
-- [PyPI](https://pypi.org/project/wikifier/) · [GitHub](https://github.com/IronAdamant/wikifier)
+- [Releases](https://github.com/IronAdamant/wikifier/releases) · [PyPI](https://pypi.org/project/wikifier/) · [GitHub](https://github.com/IronAdamant/wikifier)
 - Agent protocol: [`skills/run.md`](skills/run.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
 - Dogfood notes: `Findings/` (historical plans and research in `Findings/archive/`)
