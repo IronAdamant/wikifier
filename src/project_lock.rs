@@ -50,7 +50,10 @@ impl ProjectLock {
         loop {
             match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(mut file) => {
-                    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                    let stamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
                     writeln!(file, "{}\n{stamp}", std::process::id()).map_err(|e| e.to_string())?;
                     file.sync_all().map_err(|e| e.to_string())?;
                     DEPTH.with(|depth| depth.set(1));
@@ -81,7 +84,13 @@ fn try_steal(path: &Path) -> bool {
         Ok(text) => text,
         Err(_) => return false,
     };
-    let pid: i32 = text.lines().next().unwrap_or("0").trim().parse().unwrap_or(0);
+    let pid: i32 = text
+        .lines()
+        .next()
+        .unwrap_or("0")
+        .trim()
+        .parse()
+        .unwrap_or(0);
     let stale = if pid > 0 {
         !crate::proc::pid_alive(pid)
     } else {

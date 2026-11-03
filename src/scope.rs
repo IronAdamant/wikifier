@@ -10,8 +10,22 @@ pub const SOURCE_EXTS: &[&str] = &[
 ];
 
 const DEFAULT_EXCLUDES: &[&str] = &[
-    "node_modules", ".git", "dist", "build", ".next", "coverage", "__pycache__", "tmp", "temp",
-    ".turbo", ".cache", "target", "out", ".wikifier_staging", ".venv", "venv",
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".next",
+    "coverage",
+    "__pycache__",
+    "tmp",
+    "temp",
+    ".turbo",
+    ".cache",
+    "target",
+    "out",
+    ".wikifier_staging",
+    ".venv",
+    "venv",
 ];
 
 #[derive(Clone, Debug)]
@@ -29,7 +43,9 @@ pub struct Scope {
 
 impl Scope {
     pub fn allows_walk(&self) -> bool {
-        !self.container && self.missing_dirs.is_empty() && (self.full_tree || !self.prefixes.is_empty())
+        !self.container
+            && self.missing_dirs.is_empty()
+            && (self.full_tree || !self.prefixes.is_empty())
     }
 }
 
@@ -46,9 +62,8 @@ pub fn detect(root: &Path) -> Scope {
     let map_paths = read_path_list(root, "map_paths.txt");
     let bare_dot = monitored.is_empty() || monitored.iter().any(|p| p == "." || p == "./");
     if bare_dot && !container {
-        warnings.push(
-            "monitored_paths is bare '.' or missing. Prefer lean package roots.".to_string(),
-        );
+        warnings
+            .push("monitored_paths is bare '.' or missing. Prefer lean package roots.".to_string());
     }
     let (prefixes, missing, full_tree) = resolve_prefixes(root, &map_paths, &monitored);
     if !missing.is_empty() {
@@ -88,7 +103,9 @@ fn child_projects(root: &Path) -> (usize, Vec<String>) {
         if !path.is_dir() {
             continue;
         }
-        if path.join(".git").exists() || path.join("file_health.json").exists() || path.join(".wikifier_staging").is_dir()
+        if path.join(".git").exists()
+            || path.join("file_health.json").exists()
+            || path.join(".wikifier_staging").is_dir()
         {
             n += 1;
             if sample.len() < 8 {
@@ -99,7 +116,11 @@ fn child_projects(root: &Path) -> (usize, Vec<String>) {
     (n, sample)
 }
 
-fn resolve_prefixes(root: &Path, map_paths: &[String], monitored: &[String]) -> (Vec<String>, Vec<String>, bool) {
+fn resolve_prefixes(
+    root: &Path,
+    map_paths: &[String],
+    monitored: &[String],
+) -> (Vec<String>, Vec<String>, bool) {
     if !map_paths.is_empty() {
         return split_existing(root, map_paths);
     }
@@ -119,7 +140,10 @@ fn resolve_prefixes(root: &Path, map_paths: &[String], monitored: &[String]) -> 
 }
 
 fn looks_like_dir(p: &str) -> bool {
-    let suf = Path::new(p.trim_end_matches('/')).extension().and_then(|s| s.to_str()).unwrap_or("");
+    let suf = Path::new(p.trim_end_matches('/'))
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
     suf.is_empty()
 }
 
@@ -182,7 +206,11 @@ pub fn read_path_list(root: &Path, name: &str) -> Vec<String> {
         if p.is_empty() || p.starts_with('#') {
             continue;
         }
-        let p = p.split_whitespace().next().unwrap_or("").trim_end_matches('/');
+        let p = p
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches('/');
         if p.is_empty() || p == "." || p == "./" {
             continue;
         }

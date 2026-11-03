@@ -9,6 +9,66 @@ use std::time::Duration;
 use crate::api::{self, MCP_TOOLS};
 use crate::jsonutil::{self, Json};
 
+fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
+    let boolean = |description: &str| {
+        Json::obj(vec![
+            ("type", Json::String("boolean".into())),
+            ("description", Json::String(description.into())),
+        ])
+    };
+    let integer = |description: &str| {
+        Json::obj(vec![
+            ("type", Json::String("integer".into())),
+            ("description", Json::String(description.into())),
+        ])
+    };
+    let mut props = vec![
+        (
+            "timeout_s",
+            integer(
+                "Stop this call after this many seconds. Falls back to WIKIFIER_MCP_DEADLINE_S.",
+            ),
+        ),
+        (
+            "format",
+            string_prop(
+                "text or json. json is the default. text fills the content string with prose.",
+            ),
+        ),
+        (
+            "directory",
+            string_prop("Limit the result to this project-relative prefix."),
+        ),
+    ];
+    match name {
+        "get_dependencies" => props.extend([
+            ("detail", string_prop("compact or full. full adds confidence reasons.")),
+            ("low_confidence_only", boolean("Keep resolved edges below 0.65 that are not dynamic.")),
+            ("unresolved_only", boolean("Keep only imports that did not resolve to a project file.")),
+        ]),
+        "list_paths" => props.extend([
+            ("depth", integer("1 is the folder card. 0 lists every file under the prefix.")),
+            ("recursive", boolean("Same as depth 0.")),
+            ("max_files", integer("Cap the returned file list.")),
+        ]),
+        "get_cycles" => props.extend([
+            ("max_items", integer("Cap the cycle list.")),
+            ("analysis", boolean("Include severity and reverse-dependency ranking. Default true.")),
+        ]),
+        "verify_wikis" | "health" | "suggest_next_actions" | "session_bootstrap" | "get_project_status" => {
+            props.push(("limit", integer("Cap listed failures or stale rows.")));
+        }
+        "record_changes" => props.push(("reasons", Json::obj(vec![
+            ("type", Json::String("object".into())),
+            ("description", Json::String("Map of path, glob, or dir/ to a reason. A string array of PATH=REASON lines also works.".into())),
+        ]))),
+        "heal_stubs" | "list_healable_stubs" => props.push(("min_wiki_length", integer("Minimum wiki length. Default 350."))),
+        "mark_green" => props.push(("force", boolean("Override a failed wiki check. Requires a reason."))),
+        _ => {}
+    }
+    props
+}
+
 fn string_prop(description: &str) -> Json {
     Json::obj(vec![
         ("type", Json::String("string".into())),
@@ -16,47 +76,189 @@ fn string_prop(description: &str) -> Json {
     ])
 }
 
-fn tool_spec(name: &str) -> (&'static str, &'static [&'static str], &'static [&'static str]) {
+fn tool_spec(
+    name: &str,
+) -> (
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+) {
     match name {
-        "check_changes" => ("Compare mapped files and Green baselines and report content drift.", &["project_root"], &[]),
-        "record_change" => ("Record a semantic edit against one file and mark that file actionable.", &["project_root", "file", "reason"], &[]),
-        "record_deletion" => ("Record that a mapped file was removed and should leave the health matrix.", &["project_root", "file", "reason"], &[]),
-        "mark_green" => ("Mark a file Green after its wiki names the file's public symbols.", &["project_root", "file"], &["reason"]),
-        "record_changes" => ("Record git changes in one batch. Pass per-file reasons when you have them.", &["project_root"], &[]),
-        "verify_wikis" => ("Check every Green wiki against the public symbols currently in the source.", &["project_root"], &[]),
-        "prepare_edit" => ("Look up health, wiki text, dependencies, and dependents before editing a file.", &["project_root", "file"], &[]),
-        "session_bootstrap" => ("Return readiness, health, suggested actions, and the mapped file list for this root.", &["project_root"], &[]),
-        "suggest_next_actions" => ("Return the next agent actions, highest priority first.", &["project_root"], &[]),
-        "list_core_tools" => ("List the daily core tools and the full MCP tool catalogue.", &["project_root"], &[]),
-        "list_paths" => ("List mapped files under a project-relative prefix.", &["project_root"], &["prefix"]),
-        "search_journal" => ("Search journal entries by file path or reason text.", &["project_root", "query"], &["text"]),
-        "why_file" => ("Return the journal reasons recorded for one file.", &["project_root", "file"], &[]),
-        "get_dependencies" => ("Return internal edges, external imports, and unresolved imports for one file.", &["project_root", "file"], &[]),
-        "get_dependents" => ("Return the mapped files that import a given file.", &["project_root", "file"], &[]),
-        "get_cycles" => ("Return import cycles in the mapped graph.", &["project_root"], &[]),
-        "get_resolution_diagnostics" => ("Return resolution and barrel diagnostics for the current map.", &["project_root"], &[]),
-        "get_file_wiki" => ("Return the wiki markdown stored beside a source file.", &["project_root", "file"], &[]),
-        "get_files_needing_attention" => ("Return files whose health is Red or an actionable Yellow.", &["project_root"], &[]),
-        "get_project_status" => ("Return the same readiness snapshot as session bootstrap.", &["project_root"], &[]),
-        "get_current_project_root" => ("Return the absolute project root this call is using.", &["project_root"], &[]),
-        "get_barrel_reports" => ("Return barrel and incremental-resolution status for the current map.", &["project_root"], &[]),
-        "get_incremental_status" => ("Return whether the map is incremental and which barrels are recorded.", &["project_root"], &[]),
-        "update_maps" => ("Parse the scoped tree and commit one cache generation for the whole run.", &["project_root"], &[]),
-        "health" => ("Return the health matrix entries and the green, yellow, and red counts.", &["project_root"], &[]),
-        "validate" => ("Check health coverage and that the forward and reverse cache indexes agree.", &["project_root"], &[]),
-        "list_healable_stubs" => ("List Initial-stub files whose wiki is long enough to heal.", &["project_root"], &[]),
-        "heal_stubs" => ("Promote Initial stubs that already have a long enough wiki.", &["project_root"], &[]),
-        "seed_source_content_hashes" => ("Seed health rows from the current map without rewriting wikis.", &["project_root"], &[]),
-        "journal" => ("Return journal entries, optionally for one date.", &["project_root"], &[]),
-        "issues" => ("Return the same prioritized actions as suggest_next_actions.", &["project_root"], &[]),
-        _ => ("Run one Wikifier agent operation against project_root.", &["project_root"], &[]),
+        "check_changes" => (
+            "Compare mapped files and Green baselines and report content drift.",
+            &["project_root"],
+            &[],
+        ),
+        "record_change" => (
+            "Record a semantic edit against one file and mark that file actionable.",
+            &["project_root", "file", "reason"],
+            &[],
+        ),
+        "record_deletion" => (
+            "Record that a mapped file was removed and should leave the health matrix.",
+            &["project_root", "file", "reason"],
+            &[],
+        ),
+        "mark_green" => (
+            "Mark a file Green after its wiki names the file's public symbols.",
+            &["project_root", "file"],
+            &["reason"],
+        ),
+        "record_changes" => (
+            "Record git changes in one batch. Pass per-file reasons when you have them.",
+            &["project_root"],
+            &[],
+        ),
+        "verify_wikis" => (
+            "Check every Green wiki against the public symbols currently in the source.",
+            &["project_root"],
+            &[],
+        ),
+        "prepare_edit" => (
+            "Look up health, wiki text, dependencies, and dependents before editing a file.",
+            &["project_root", "file"],
+            &[],
+        ),
+        "session_bootstrap" => (
+            "Return readiness, health, suggested actions, and the mapped file list for this root.",
+            &["project_root"],
+            &[],
+        ),
+        "suggest_next_actions" => (
+            "Return the next agent actions, highest priority first.",
+            &["project_root"],
+            &[],
+        ),
+        "list_core_tools" => (
+            "List the daily core tools and the full MCP tool catalogue.",
+            &["project_root"],
+            &[],
+        ),
+        "list_paths" => (
+            "List mapped files under a project-relative prefix.",
+            &["project_root"],
+            &["prefix"],
+        ),
+        "search_journal" => (
+            "Search journal entries by file path or reason text.",
+            &["project_root", "query"],
+            &["text"],
+        ),
+        "why_file" => (
+            "Return the journal reasons recorded for one file.",
+            &["project_root", "file"],
+            &[],
+        ),
+        "get_dependencies" => (
+            "Return internal edges, external imports, and unresolved imports for one file.",
+            &["project_root", "file"],
+            &[],
+        ),
+        "get_dependents" => (
+            "Return the mapped files that import a given file.",
+            &["project_root", "file"],
+            &[],
+        ),
+        "get_cycles" => (
+            "Return import cycles in the mapped graph.",
+            &["project_root"],
+            &[],
+        ),
+        "get_resolution_diagnostics" => (
+            "Return resolution and barrel diagnostics for the current map.",
+            &["project_root"],
+            &[],
+        ),
+        "get_file_wiki" => (
+            "Return the wiki markdown stored beside a source file.",
+            &["project_root", "file"],
+            &[],
+        ),
+        "get_files_needing_attention" => (
+            "Return files whose health is Red or an actionable Yellow.",
+            &["project_root"],
+            &[],
+        ),
+        "get_project_status" => (
+            "Return the same readiness snapshot as session bootstrap.",
+            &["project_root"],
+            &[],
+        ),
+        "get_current_project_root" => (
+            "Return the absolute project root this call is using.",
+            &["project_root"],
+            &[],
+        ),
+        "get_barrel_reports" => (
+            "Return barrel and incremental-resolution status for the current map.",
+            &["project_root"],
+            &[],
+        ),
+        "get_incremental_status" => (
+            "Return whether the map is incremental and which barrels are recorded.",
+            &["project_root"],
+            &[],
+        ),
+        "update_maps" => (
+            "Parse the scoped tree and commit one cache generation for the whole run.",
+            &["project_root"],
+            &[],
+        ),
+        "health" => (
+            "Return the health matrix entries and the green, yellow, and red counts.",
+            &["project_root"],
+            &[],
+        ),
+        "validate" => (
+            "Check health coverage and that the forward and reverse cache indexes agree.",
+            &["project_root"],
+            &[],
+        ),
+        "list_healable_stubs" => (
+            "List Initial-stub files whose wiki is long enough to heal.",
+            &["project_root"],
+            &[],
+        ),
+        "heal_stubs" => (
+            "Promote Initial stubs that already have a long enough wiki.",
+            &["project_root"],
+            &[],
+        ),
+        "seed_source_content_hashes" => (
+            "Seed health rows from the current map without rewriting wikis.",
+            &["project_root"],
+            &[],
+        ),
+        "journal" => (
+            "Return journal entries, optionally for one date.",
+            &["project_root"],
+            &[],
+        ),
+        "issues" => (
+            "Return the same prioritized actions as suggest_next_actions.",
+            &["project_root"],
+            &[],
+        ),
+        _ => (
+            "Run one Wikifier agent operation against project_root.",
+            &["project_root"],
+            &[],
+        ),
     }
 }
 
 pub fn tool_schema(name: &str) -> Json {
     let (description, required, optional) = tool_spec(name);
-    let mut props = vec![("project_root".into(), string_prop("Absolute project root. Pass it on every call."))];
-    let mut fields: Vec<&str> = required.iter().copied().chain(optional.iter().copied()).filter(|field| *field != "project_root").collect();
+    let mut props = vec![(
+        "project_root".into(),
+        string_prop("Absolute project root. Pass it on every call."),
+    )];
+    let mut fields: Vec<&str> = required
+        .iter()
+        .copied()
+        .chain(optional.iter().copied())
+        .filter(|field| *field != "project_root")
+        .collect();
     fields.sort();
     fields.dedup();
     for field in fields {
@@ -70,14 +272,28 @@ pub fn tool_schema(name: &str) -> Json {
         };
         props.push((field.into(), string_prop(desc)));
     }
+    for (field, schema) in extra_props(name) {
+        props.push((field.into(), schema));
+    }
     Json::obj(vec![
         ("name", Json::String(name.into())),
         ("description", Json::String(description.into())),
-        ("inputSchema", Json::obj(vec![
-            ("type", Json::String("object".into())),
-            ("properties", Json::from_pairs(props)),
-            ("required", Json::Array(required.iter().map(|field| Json::String((*field).into())).collect())),
-        ])),
+        (
+            "inputSchema",
+            Json::obj(vec![
+                ("type", Json::String("object".into())),
+                ("properties", Json::from_pairs(props)),
+                (
+                    "required",
+                    Json::Array(
+                        required
+                            .iter()
+                            .map(|field| Json::String((*field).into()))
+                            .collect(),
+                    ),
+                ),
+            ]),
+        ),
     ])
 }
 
@@ -88,31 +304,63 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
     let result = match method {
         "initialize" => Json::obj(vec![
             ("protocolVersion", Json::String("2024-11-05".into())),
-            ("capabilities", Json::obj(vec![
-                ("tools", Json::obj(vec![])),
-                ("resources", Json::obj(vec![])),
-                ("prompts", Json::obj(vec![])),
-            ])),
-            ("serverInfo", Json::obj(vec![
-                ("name", Json::String("wikifier".into())),
-                ("version", Json::String(api::VERSION.into())),
-            ])),
+            (
+                "capabilities",
+                Json::obj(vec![
+                    ("tools", Json::obj(vec![])),
+                    ("resources", Json::obj(vec![])),
+                    ("prompts", Json::obj(vec![])),
+                ]),
+            ),
+            (
+                "serverInfo",
+                Json::obj(vec![
+                    ("name", Json::String("wikifier".into())),
+                    ("version", Json::String(api::VERSION.into())),
+                ]),
+            ),
         ]),
-        "tools/list" => Json::obj(vec![
-            ("tools", Json::Array(MCP_TOOLS.iter().map(|n| tool_schema(n)).collect())),
-        ]),
-        "resources/list" => Json::obj(vec![
-            ("resources", Json::Array(["wikifier://library", "wikifier://health", "wikifier://pending", "wikifier://journal"].into_iter().map(|u| {
-                Json::obj(vec![("uri", Json::String(u.into())), ("name", Json::String(u.into()))])
-            }).collect())),
-        ]),
-        "prompts/list" => Json::obj(vec![
-            ("prompts", Json::Array([
-                "review_pending_changes", "audit_project_health", "plan_refactoring",
-                "find_architectural_smells", "understand_codebase_structure", "review_recent_changes",
-                "generate_project_health_report", "onboard_to_module",
-            ].into_iter().map(|n| Json::obj(vec![("name", Json::String(n.into()))])).collect())),
-        ]),
+        "tools/list" => Json::obj(vec![(
+            "tools",
+            Json::Array(MCP_TOOLS.iter().map(|n| tool_schema(n)).collect()),
+        )]),
+        "resources/list" => Json::obj(vec![(
+            "resources",
+            Json::Array(
+                [
+                    "wikifier://library",
+                    "wikifier://health",
+                    "wikifier://pending",
+                    "wikifier://journal",
+                ]
+                .into_iter()
+                .map(|u| {
+                    Json::obj(vec![
+                        ("uri", Json::String(u.into())),
+                        ("name", Json::String(u.into())),
+                    ])
+                })
+                .collect(),
+            ),
+        )]),
+        "prompts/list" => Json::obj(vec![(
+            "prompts",
+            Json::Array(
+                [
+                    "review_pending_changes",
+                    "audit_project_health",
+                    "plan_refactoring",
+                    "find_architectural_smells",
+                    "understand_codebase_structure",
+                    "review_recent_changes",
+                    "generate_project_health_report",
+                    "onboard_to_module",
+                ]
+                .into_iter()
+                .map(|n| Json::obj(vec![("name", Json::String(n.into()))]))
+                .collect(),
+            ),
+        )]),
         "resources/read" => resource_read(msg),
         "prompts/get" => prompt_get(msg),
         "tools/call" => call_tool(msg),
@@ -131,32 +379,104 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
 
 fn call_tool(msg: &Json) -> Json {
     let params = msg.get("params");
-    let name = params.and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("").to_string();
+    let name = params
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("")
+        .to_string();
     let args = params.and_then(|p| p.get("arguments")).cloned();
-    let root = args.as_ref().and_then(|a| a.get("project_root")).and_then(|r| r.as_str()).map(PathBuf::from)
-        .or_else(|| std::env::var("WIKIFIER_PROJECT_ROOT").ok().map(PathBuf::from))
+    let root = args
+        .as_ref()
+        .and_then(|a| a.get("project_root"))
+        .and_then(|r| r.as_str())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("WIKIFIER_PROJECT_ROOT")
+                .ok()
+                .map(PathBuf::from)
+        })
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let mut flags = BTreeMap::new();
     let mut positional = Vec::new();
-    if let Some(file) = args.as_ref().and_then(|a| a.get("file")).and_then(|f| f.as_str()) {
+    if let Some(file) = args
+        .as_ref()
+        .and_then(|a| a.get("file"))
+        .and_then(|f| f.as_str())
+    {
         positional.push(file.to_string());
     }
-    if let Some(reason) = args.as_ref().and_then(|a| a.get("reason")).and_then(|f| f.as_str()) {
+    if let Some(reason) = args
+        .as_ref()
+        .and_then(|a| a.get("reason"))
+        .and_then(|f| f.as_str())
+    {
         positional.push(reason.to_string());
     }
     copy_str(&args, &mut flags, "prefix");
-    if let Some(q) = args.as_ref().and_then(|a| a.get("query").or_else(|| a.get("text"))).and_then(|f| f.as_str()) {
+    if let Some(q) = args
+        .as_ref()
+        .and_then(|a| a.get("query").or_else(|| a.get("text")))
+        .and_then(|f| f.as_str())
+    {
         flags.insert("query".into(), q.into());
     }
     copy_str(&args, &mut flags, "directory");
     copy_str(&args, &mut flags, "since");
     copy_str(&args, &mut flags, "default");
-    if let Some(max) = args.as_ref().and_then(|a| a.get("max_files").or_else(|| a.get("max-files"))) {
+    copy_str(&args, &mut flags, "detail");
+    copy_str(&args, &mut flags, "format");
+    copy_str(&args, &mut flags, "prefix");
+    if let Some(depth) = args.as_ref().and_then(|a| a.get("depth")) {
+        if let Some(text) = json_text(depth) {
+            flags.insert("depth".into(), text);
+        }
+    }
+    if let Some(limit) = args
+        .as_ref()
+        .and_then(|a| a.get("limit").or_else(|| a.get("max_items")))
+    {
+        if let Some(text) = json_text(limit) {
+            flags.insert("limit".into(), text.clone());
+            flags.insert("max-items".into(), text);
+        }
+    }
+    if let Some(min) = args.as_ref().and_then(|a| {
+        a.get("min_wiki_length")
+            .or_else(|| a.get("min-wiki-length"))
+    }) {
+        if let Some(text) = json_text(min) {
+            flags.insert("min-wiki-length".into(), text);
+        }
+    }
+    if arg_on(args.as_ref(), "recursive") {
+        flags.insert("recursive".into(), "true".into());
+    }
+    if arg_on(args.as_ref(), "low_confidence_only") || arg_on(args.as_ref(), "low-confidence-only")
+    {
+        flags.insert("low-confidence-only".into(), "true".into());
+    }
+    if arg_on(args.as_ref(), "unresolved_only") || arg_on(args.as_ref(), "unresolved-only") {
+        flags.insert("unresolved-only".into(), "true".into());
+    }
+    if args
+        .as_ref()
+        .and_then(|a| a.get("analysis"))
+        .and_then(|v| v.as_bool())
+        == Some(false)
+    {
+        flags.insert("no-analysis".into(), "true".into());
+    }
+    if let Some(max) = args
+        .as_ref()
+        .and_then(|a| a.get("max_files").or_else(|| a.get("max-files")))
+    {
         if let Some(text) = json_text(max) {
             flags.insert("max-files".into(), text);
         }
     }
-    for key in ["full", "quiet", "stream", "green", "force", "dry_run", "dry-run"] {
+    for key in [
+        "full", "quiet", "stream", "green", "force", "dry_run", "dry-run",
+    ] {
         if arg_on(args.as_ref(), key) {
             let stored = if key == "dry_run" { "dry-run" } else { key };
             flags.insert(stored.into(), "true".into());
@@ -168,7 +488,11 @@ fn call_tool(msg: &Json) -> Json {
                 flags.insert("only".into(), text.clone());
             }
             Json::Array(items) => {
-                let joined = items.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n");
+                let joined = items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 flags.insert("only".into(), joined);
             }
             _ => {}
@@ -180,13 +504,45 @@ fn call_tool(msg: &Json) -> Json {
                 flags.insert("reasons".into(), text.clone());
             }
             Json::Array(items) => {
-                let joined = items.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n");
+                let joined = items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                flags.insert("reasons".into(), joined);
+            }
+            Json::Object(map) => {
+                let joined = map
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        value.as_str().map(|reason| format!("{key}={reason}"))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 flags.insert("reasons".into(), joined);
             }
             _ => {}
         }
     }
-    let deadline = std::env::var("WIKIFIER_MCP_DEADLINE_S").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(60).max(1);
+    let textual = flags.get("format").map(|s| s == "text").unwrap_or(false);
+    let tool_name = name.clone();
+    let from_arg = args
+        .as_ref()
+        .and_then(|a| a.get("timeout_s"))
+        .and_then(|value| match value {
+            Json::Int(n) if *n > 0 => Some(*n as u64),
+            Json::Float(n) if *n > 0.0 => Some(*n as u64),
+            Json::String(text) => text.parse::<u64>().ok().filter(|n| *n > 0),
+            _ => None,
+        });
+    let deadline = from_arg
+        .or_else(|| {
+            std::env::var("WIKIFIER_MCP_DEADLINE_S")
+                .ok()
+                .and_then(|s| s.parse().ok())
+        })
+        .unwrap_or(60)
+        .max(1);
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let value = if !root.is_dir() {
@@ -204,29 +560,44 @@ fn call_tool(msg: &Json) -> Json {
         Ok(value) => value,
         Err(_) => Json::obj(vec![
             ("success", Json::Bool(false)),
-            ("error", Json::String(format!("mcp call exceeded {deadline}s deadline"))),
+            (
+                "error",
+                Json::String(format!("mcp call exceeded {deadline}s deadline")),
+            ),
             ("error_type", Json::String("DeadlineExceeded".into())),
             ("timed_out", Json::Bool(true)),
             ("may_still_complete", Json::Bool(true)),
         ]),
     };
-    tool_result(value)
+    tool_result(value, textual, &tool_name)
 }
 
-fn tool_result(value: Json) -> Json {
+fn tool_result(value: Json, textual: bool, tool_name: &str) -> Json {
     let is_error = value.get("success").and_then(|s| s.as_bool()) == Some(false);
+    let text = if textual {
+        crate::text_out::render(tool_name, &value).unwrap_or_else(|| value.to_string())
+    } else {
+        value.to_string()
+    };
     Json::obj(vec![
-        ("content", Json::Array(vec![Json::obj(vec![
-            ("type", Json::String("text".into())),
-            ("text", Json::String(value.to_string())),
-        ])])),
+        (
+            "content",
+            Json::Array(vec![Json::obj(vec![
+                ("type", Json::String("text".into())),
+                ("text", Json::String(text)),
+            ])]),
+        ),
         ("structuredContent", value),
         ("isError", Json::Bool(is_error)),
     ])
 }
 
 fn copy_str(args: &Option<Json>, flags: &mut BTreeMap<String, String>, key: &str) {
-    if let Some(text) = args.as_ref().and_then(|a| a.get(key)).and_then(|v| v.as_str()) {
+    if let Some(text) = args
+        .as_ref()
+        .and_then(|a| a.get(key))
+        .and_then(|v| v.as_str())
+    {
         flags.insert(key.into(), text.into());
     }
 }
@@ -249,42 +620,68 @@ fn arg_on(args: Option<&Json>, key: &str) -> bool {
 
 fn resource_read(msg: &Json) -> Json {
     let params = msg.get("params");
-    let uri = params.and_then(|p| p.get("uri")).and_then(|u| u.as_str()).unwrap_or("");
-    let root = params.and_then(|p| p.get("project_root")).and_then(|r| r.as_str()).map(PathBuf::from)
-        .or_else(|| std::env::var("WIKIFIER_PROJECT_ROOT").ok().map(PathBuf::from))
+    let uri = params
+        .and_then(|p| p.get("uri"))
+        .and_then(|u| u.as_str())
+        .unwrap_or("");
+    let root = params
+        .and_then(|p| p.get("project_root"))
+        .and_then(|r| r.as_str())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("WIKIFIER_PROJECT_ROOT")
+                .ok()
+                .map(PathBuf::from)
+        })
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let text = match uri {
-        "wikifier://library" => std::fs::read_to_string(root.join("library.md")).unwrap_or_default(),
-        "wikifier://health" => std::fs::read_to_string(root.join("file_health.md")).unwrap_or_default(),
-        "wikifier://pending" => std::fs::read_to_string(root.join("pending_updates.md")).unwrap_or_default(),
+        "wikifier://library" => {
+            std::fs::read_to_string(root.join("library.md")).unwrap_or_default()
+        }
+        "wikifier://health" => {
+            std::fs::read_to_string(root.join("file_health.md")).unwrap_or_default()
+        }
+        "wikifier://pending" => {
+            std::fs::read_to_string(root.join("pending_updates.md")).unwrap_or_default()
+        }
         "wikifier://journal" => {
             let entries = api::read_journal(&root, None);
             let mut text = String::new();
             for entry in entries {
                 let _ = std::fmt::Write::write_fmt(
                     &mut text,
-                    format_args!("## [{}] {}\n**File:** {}\n**Reason:** {}\n", entry.stamp, entry.action, entry.file, entry.reason),
+                    format_args!(
+                        "## [{}] {}\n**File:** {}\n**Reason:** {}\n",
+                        entry.stamp, entry.action, entry.file, entry.reason
+                    ),
                 );
             }
             text
         }
-        _ => return Json::obj(vec![
-            ("success", Json::Bool(false)),
-            ("error", Json::String(format!("unknown resource {uri}"))),
-            ("error_type", Json::String("ResourceNotFound".into())),
-        ]),
+        _ => {
+            return Json::obj(vec![
+                ("success", Json::Bool(false)),
+                ("error", Json::String(format!("unknown resource {uri}"))),
+                ("error_type", Json::String("ResourceNotFound".into())),
+            ])
+        }
     };
-    Json::obj(vec![
-        ("contents", Json::Array(vec![Json::obj(vec![
+    Json::obj(vec![(
+        "contents",
+        Json::Array(vec![Json::obj(vec![
             ("uri", Json::String(uri.into())),
             ("mimeType", Json::String("text/markdown".into())),
             ("text", Json::String(text)),
-        ])])),
-    ])
+        ])]),
+    )])
 }
 
 fn prompt_get(msg: &Json) -> Json {
-    let name = msg.get("params").and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+    let name = msg
+        .get("params")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("");
     if name.is_empty() {
         return Json::obj(vec![
             ("success", Json::Bool(false)),
@@ -292,17 +689,37 @@ fn prompt_get(msg: &Json) -> Json {
             ("error_type", Json::String("PromptNotFound".into())),
         ]);
     }
-    let text = format!("Use Wikifier. Prompt {name}. Call session_bootstrap, then check_changes, then act only on Red and actionable Yellow files.");
+    let text = prompt_text(name).to_string();
     Json::obj(vec![
         ("description", Json::String(name.into())),
-        ("messages", Json::Array(vec![Json::obj(vec![
-            ("role", Json::String("user".into())),
-            ("content", Json::obj(vec![
-                ("type", Json::String("text".into())),
-                ("text", Json::String(text)),
-            ])),
-        ])])),
+        (
+            "messages",
+            Json::Array(vec![Json::obj(vec![
+                ("role", Json::String("user".into())),
+                (
+                    "content",
+                    Json::obj(vec![
+                        ("type", Json::String("text".into())),
+                        ("text", Json::String(text)),
+                    ]),
+                ),
+            ])]),
+        ),
     ])
+}
+
+fn prompt_text(name: &str) -> &'static str {
+    match name {
+        "review_pending_changes" => "Review pending documentation work.\n1. session_bootstrap() for actions[].\n2. For each actionable file: prepare_edit(file), get_file_wiki(file), get_dependents(file).\n3. Refresh the wiki, then mark_green(file). Never skip record_change after code edits.",
+        "audit_project_health" => "Audit documentation health.\n1. get_project_status.\n2. get_files_needing_attention.\n3. search_journal for recent activity.\n4. suggest_next_actions and report priorities from actions[].",
+        "plan_refactoring" => "Plan a refactor of the target file.\n1. get_dependents for the blast radius.\n2. get_dependencies with detail=full and read confidence.\n3. get_cycles and use severity plus the break hint when the file is in a cycle.",
+        "find_architectural_smells" => "Find architectural smells.\nCycles: get_cycles and rank by severity and external_blast_radius.\nFragile edges: get_dependencies with low_confidence_only=true.\nHubs: files with many get_dependents results.",
+        "understand_codebase_structure" => "Onboard to this codebase.\n1. session_bootstrap, then list_paths for the folders you need.\n2. prepare_edit, get_dependencies, and get_dependents for the key files.\n3. get_cycles for structural risks.",
+        "review_recent_changes" => "Review recent activity.\n1. search_journal and journal for record-change entries.\n2. why_file on each changed file: is it Green again?\n3. Report files that were recorded but not marked green.",
+        "generate_project_health_report" => "Write a project health report.\nInclude green, yellow, and red counts, the files needing attention, the most depended-on modules, and cycle severity.",
+        "onboard_to_module" => "Understand one module.\n1. get_file_wiki.\n2. get_dependencies with detail=full.\n3. get_dependents.\n4. get_cycles when the file is in a cycle.\nSummarize its role, fragile edges, and blast radius.",
+        _ => "Use Wikifier. Call session_bootstrap, then check_changes, then act only on Red and actionable Yellow files.",
+    }
 }
 
 pub fn serve_stdio() -> Result<(), String> {

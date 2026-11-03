@@ -12,7 +12,10 @@ fn bin() -> PathBuf {
 fn project() -> PathBuf {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQ: AtomicU64 = AtomicU64::new(0);
-    let n = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let n = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let seq = SEQ.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!("wk-cli-{}-{n}-{seq}", std::process::id()));
     std::fs::create_dir_all(root.join("src")).unwrap();
@@ -28,7 +31,10 @@ fn project() -> PathBuf {
 fn version_matches_package() {
     let out = Command::new(bin()).arg("--version").output().unwrap();
     assert!(out.status.success());
-    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), format!("wikifier {}", env!("CARGO_PKG_VERSION")));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        format!("wikifier {}", env!("CARGO_PKG_VERSION"))
+    );
 }
 
 #[test]
@@ -79,37 +85,80 @@ fn mcp_stdio_is_newline_delimited_json() {
     let mut recv = || {
         let mut line = String::new();
         lines.read_line(&mut line).unwrap();
-        assert!(!line.to_ascii_lowercase().contains("content-length"), "{line}");
-        assert!(line.ends_with('\n'), "reply was not one JSON line: {line:?}");
+        assert!(
+            !line.to_ascii_lowercase().contains("content-length"),
+            "{line}"
+        );
+        assert!(
+            line.ends_with('\n'),
+            "reply was not one JSON line: {line:?}"
+        );
         parse_line(&line)
     };
 
     send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
     let init = recv();
-    assert_eq!(init.get("id").and_then(|v| match v { wikifier::Json::Int(n) => Some(*n), _ => None }), Some(1), "{init}");
-    assert_eq!(init.get("result").and_then(|v| v.get("protocolVersion")).and_then(|v| v.as_str()), Some("2024-11-05"), "{init}");
+    assert_eq!(
+        init.get("id").and_then(|v| match v {
+            wikifier::Json::Int(n) => Some(*n),
+            _ => None,
+        }),
+        Some(1),
+        "{init}"
+    );
+    assert_eq!(
+        init.get("result")
+            .and_then(|v| v.get("protocolVersion"))
+            .and_then(|v| v.as_str()),
+        Some("2024-11-05"),
+        "{init}"
+    );
 
     send(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
     let listed = recv();
-    let tools = listed.get("result").and_then(|v| v.get("tools")).and_then(|v| v.as_array()).unwrap_or_else(|| panic!("{listed}"));
+    let tools = listed
+        .get("result")
+        .and_then(|v| v.get("tools"))
+        .and_then(|v| v.as_array())
+        .unwrap_or_else(|| panic!("{listed}"));
     assert_eq!(tools.len(), wikifier::api::MCP_TOOLS.len());
     for tool in tools {
         let name = tool.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let description = tool.get("description").and_then(|v| v.as_str()).unwrap_or("");
+        let description = tool
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         assert!(description.len() > 40, "{name} description {description}");
-        assert!(!description.starts_with("Wikifier "), "{name} still has a placeholder description");
-        let required = tool.get("inputSchema").and_then(|v| v.get("required")).and_then(|v| v.as_array()).unwrap_or_else(|| panic!("{name} schema {tool}"));
-        assert!(required.iter().any(|v| v.as_str() == Some("project_root")), "{name} required {required:?}");
+        assert!(
+            !description.starts_with("Wikifier "),
+            "{name} still has a placeholder description"
+        );
+        let required = tool
+            .get("inputSchema")
+            .and_then(|v| v.get("required"))
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| panic!("{name} schema {tool}"));
+        assert!(
+            required.iter().any(|v| v.as_str() == Some("project_root")),
+            "{name} required {required:?}"
+        );
     }
 
-    let root_text = root.to_str().unwrap().replace('\\', "\\\\").replace('"', "\\\"");
+    let root_text = root
+        .to_str()
+        .unwrap()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
     send(&format!(
         r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"get_current_project_root","arguments":{{"project_root":"{root_text}"}}}}}}"#
     ));
     let called = recv();
     let text = called.to_string();
     assert!(text.contains("\"success\":true"), "{called}");
-    assert!(text.contains(&root.file_name().unwrap().to_string_lossy().to_string()), "{called}");
+    assert!(
+        text.contains(&root.file_name().unwrap().to_string_lossy().to_string()),
+        "{called}"
+    );
     drop(stdin);
     let status = child.wait().unwrap();
     assert!(status.success(), "mcp exit {status}");

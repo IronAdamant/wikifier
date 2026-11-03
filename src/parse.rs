@@ -81,7 +81,13 @@ pub fn read_utf8(path: &Path) -> (String, Option<String>) {
         Ok(text) => (text, None),
         Err(err) => {
             let text = String::from_utf8_lossy(err.as_bytes()).into_owned();
-            (text, Some("not valid UTF-8; parsed with lossy replacement so ASCII imports are kept".into()))
+            (
+                text,
+                Some(
+                    "not valid UTF-8; parsed with lossy replacement so ASCII imports are kept"
+                        .into(),
+                ),
+            )
         }
     }
 }
@@ -107,7 +113,8 @@ pub fn scan_file_warned(path: &Path) -> (Scan, String, Option<String>) {
     match parsed {
         Ok(scan) => (scan, text, warning),
         Err(_) => {
-            let fail = "parser failed; file skipped so the rest of the map can continue".to_string();
+            let fail =
+                "parser failed; file skipped so the rest of the map can continue".to_string();
             let warning = Some(match warning {
                 Some(prev) => format!("{prev}; {fail}"),
                 None => fail,
@@ -140,7 +147,10 @@ pub fn resolve_project(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTree
                 if &target != rel {
                     dsts.insert(target.clone());
                 }
-                if lang == "javascript" && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom) && !imp.names.is_empty() {
+                if lang == "javascript"
+                    && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom)
+                    && !imp.names.is_empty()
+                {
                     for name in &imp.names {
                         if let Some(def) = defining_file(&resolver, &scans, &target, name, 0) {
                             if &def != rel && def != target {
@@ -156,7 +166,13 @@ pub fn resolve_project(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTree
     edges
 }
 
-fn defining_file(resolver: &Resolver, scans: &BTreeMap<String, Scan>, file: &str, name: &str, depth: usize) -> Option<String> {
+fn defining_file(
+    resolver: &Resolver,
+    scans: &BTreeMap<String, Scan>,
+    file: &str,
+    name: &str,
+    depth: usize,
+) -> Option<String> {
     if depth > 8 {
         return Some(file.to_string());
     }
@@ -208,10 +224,21 @@ impl Resolver {
         let ts_paths = load_ts_paths(root);
         let packages = load_packages(root);
         let rust_libs = load_rust_libs(root);
-        Resolver { files, ts_paths, packages, rust_libs }
+        Resolver {
+            files,
+            ts_paths,
+            packages,
+            rust_libs,
+        }
     }
 
-    fn resolve(&self, from_rel: &str, spec: &str, lang: &str, inline_depth: usize) -> Option<String> {
+    fn resolve(
+        &self,
+        from_rel: &str,
+        spec: &str,
+        lang: &str,
+        inline_depth: usize,
+    ) -> Option<String> {
         match lang {
             "python" => None, // python resolves inside scan_python via statements; handled below
             "javascript" => self.resolve_js(from_rel, spec),
@@ -245,7 +272,9 @@ impl Resolver {
         if self.files.contains(&as_is) {
             return Some(as_is);
         }
-        const EXTS: &[&str] = &[".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".d.ts"];
+        const EXTS: &[&str] = &[
+            ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".d.ts",
+        ];
         for ext in EXTS {
             let cand = format!("{as_is}{ext}");
             if self.files.contains(&cand) {
@@ -267,7 +296,11 @@ impl Resolver {
             if let Some(rest) = match_star(pattern, spec) {
                 let mut target = replacement.replace('*', &rest);
                 if !target.starts_with('.') && !target.starts_with('/') {
-                    target = format!("{}/{}", base.trim_end_matches('/'), target.trim_start_matches('/'));
+                    target = format!(
+                        "{}/{}",
+                        base.trim_end_matches('/'),
+                        target.trim_start_matches('/')
+                    );
                 }
                 target = normalize(Path::new(&target));
                 if let Some(hit) = self.try_extensions(&target) {
@@ -286,9 +319,26 @@ impl Resolver {
             if spec != pkg.name && !spec.starts_with(&(pkg.name.clone() + "/")) {
                 continue;
             }
-            let sub = if spec == pkg.name { ".".to_string() } else { format!("./{}", &spec[pkg.name.len() + 1..]) };
-            let mapped = pkg.exports.iter().find(|(k, _)| k == &sub).map(|(_, v)| v.clone())
-                .or_else(|| if sub == "." { pkg.exports.iter().find(|(k, _)| k == ".").map(|(_, v)| v.clone()) } else { None });
+            let sub = if spec == pkg.name {
+                ".".to_string()
+            } else {
+                format!("./{}", &spec[pkg.name.len() + 1..])
+            };
+            let mapped = pkg
+                .exports
+                .iter()
+                .find(|(k, _)| k == &sub)
+                .map(|(_, v)| v.clone())
+                .or_else(|| {
+                    if sub == "." {
+                        pkg.exports
+                            .iter()
+                            .find(|(k, _)| k == ".")
+                            .map(|(_, v)| v.clone())
+                    } else {
+                        None
+                    }
+                });
             let rel_target = if let Some(m) = mapped {
                 normalize(&Path::new(&pkg.dir).join(m.trim_start_matches("./")))
             } else {
@@ -325,14 +375,21 @@ impl Resolver {
     }
 
     fn resolve_rust_path(&self, from_rel: &str, spec: &str, inline_depth: usize) -> Option<String> {
-        let segments: Vec<&str> = spec.split("::").map(str::trim).filter(|part| !part.is_empty() && *part != "*").collect();
+        let segments: Vec<&str> = spec
+            .split("::")
+            .map(str::trim)
+            .filter(|part| !part.is_empty() && *part != "*")
+            .collect();
         if segments.is_empty() {
             return None;
         }
         let head = segments[0];
         if head == "crate" {
             let root = self.file_crate_root(from_rel);
-            let dir = root.as_deref().map(rust_submodule_dir).unwrap_or_else(|| PathBuf::from("src"));
+            let dir = root
+                .as_deref()
+                .map(rust_submodule_dir)
+                .unwrap_or_else(|| PathBuf::from("src"));
             return self.rust_walk(&dir, &segments[1..], root.as_deref());
         }
         if let Some(lib) = self.lib_by_name(head) {
@@ -459,17 +516,25 @@ impl Resolver {
     }
 
     fn lib_by_name(&self, name: &str) -> Option<&RustLib> {
-        self.rust_libs.iter().find(|lib| lib.exported && lib.names.iter().any(|have| have == name))
+        self.rust_libs
+            .iter()
+            .find(|lib| lib.exported && lib.names.iter().any(|have| have == name))
     }
 
     fn package_for(&self, from_rel: &str) -> Option<&RustLib> {
         let mut best: Option<&RustLib> = None;
         for lib in &self.rust_libs {
-            let matches = lib.dir.is_empty() || from_rel == lib.dir || from_rel.starts_with(&(lib.dir.clone() + "/"));
+            let matches = lib.dir.is_empty()
+                || from_rel == lib.dir
+                || from_rel.starts_with(&(lib.dir.clone() + "/"));
             if !matches {
                 continue;
             }
-            if best.as_ref().map(|have| lib.dir.len() > have.dir.len()).unwrap_or(true) {
+            if best
+                .as_ref()
+                .map(|have| lib.dir.len() > have.dir.len())
+                .unwrap_or(true)
+            {
                 best = Some(lib);
             }
         }
@@ -477,13 +542,20 @@ impl Resolver {
     }
 
     fn file_crate_root(&self, from_rel: &str) -> Option<String> {
-        let package_dir = self.package_for(from_rel).map(|lib| lib.dir.clone()).unwrap_or_default();
+        let package_dir = self
+            .package_for(from_rel)
+            .map(|lib| lib.dir.clone())
+            .unwrap_or_default();
         if let Some(root) = separate_in_package(from_rel, &package_dir) {
             if self.files.contains(&root) {
                 return Some(root);
             }
         }
-        let main_rs = if package_dir.is_empty() { "src/main.rs".to_string() } else { format!("{package_dir}/src/main.rs") };
+        let main_rs = if package_dir.is_empty() {
+            "src/main.rs".to_string()
+        } else {
+            format!("{package_dir}/src/main.rs")
+        };
         if from_rel == main_rs {
             return Some(main_rs);
         }
@@ -504,12 +576,19 @@ impl Resolver {
                 return Some(exact);
             }
             let prefix = format!("{joined}/");
-            return self.files.iter().find(|f| f.starts_with(&prefix) && f.ends_with(".go")).cloned();
+            return self
+                .files
+                .iter()
+                .find(|f| f.starts_with(&prefix) && f.ends_with(".go"))
+                .cloned();
         }
         let tail = spec.rsplit('/').next().unwrap_or(spec);
         let exact = format!("{tail}.go");
         let suffix = format!("/{tail}.go");
-        self.files.iter().find(|f| f.ends_with(&suffix) || f.as_str() == exact).cloned()
+        self.files
+            .iter()
+            .find(|f| f.ends_with(&suffix) || f.as_str() == exact)
+            .cloned()
     }
 
     fn resolve_c(&self, from_rel: &str, spec: &str) -> Option<String> {
@@ -525,7 +604,10 @@ impl Resolver {
             }
         }
         let name = Path::new(spec).file_name()?.to_string_lossy().to_string();
-        self.files.iter().find(|f| f.ends_with(&format!("/{name}")) || f.as_str() == name).cloned()
+        self.files
+            .iter()
+            .find(|f| f.ends_with(&format!("/{name}")) || f.as_str() == name)
+            .cloned()
     }
 
     fn resolve_java(&self, spec: &str) -> Option<String> {
@@ -535,14 +617,20 @@ impl Resolver {
         }
         let suffix = format!("/{class}.java");
         let exact = format!("{class}.java");
-        self.files.iter().find(|f| f.ends_with(&suffix) || f.as_str() == exact).cloned()
+        self.files
+            .iter()
+            .find(|f| f.ends_with(&suffix) || f.as_str() == exact)
+            .cloned()
     }
 
     fn resolve_csharp(&self, spec: &str) -> Option<String> {
         let name = spec.split('.').next_back()?.trim();
         let suffix = format!("/{name}.cs");
         let exact = format!("{name}.cs");
-        self.files.iter().find(|f| f.ends_with(&suffix) || f.as_str() == exact).cloned()
+        self.files
+            .iter()
+            .find(|f| f.ends_with(&suffix) || f.as_str() == exact)
+            .cloned()
     }
 }
 
@@ -580,10 +668,22 @@ fn load_ts_paths(root: &Path) -> Vec<(String, String, String)> {
     if text.is_empty() {
         return Vec::new();
     }
-    let Ok(json) = jsonutil::parse_jsonc(&text) else { return Vec::new() };
-    let base = json.get("compilerOptions").and_then(|c| c.get("baseUrl")).and_then(|b| b.as_str()).unwrap_or(".").trim_end_matches('/').to_string();
+    let Ok(json) = jsonutil::parse_jsonc(&text) else {
+        return Vec::new();
+    };
+    let base = json
+        .get("compilerOptions")
+        .and_then(|c| c.get("baseUrl"))
+        .and_then(|b| b.as_str())
+        .unwrap_or(".")
+        .trim_end_matches('/')
+        .to_string();
     let mut out = Vec::new();
-    let Some(paths) = json.get("compilerOptions").and_then(|c| c.get("paths")).and_then(|p| p.as_object()) else {
+    let Some(paths) = json
+        .get("compilerOptions")
+        .and_then(|c| c.get("paths"))
+        .and_then(|p| p.as_object())
+    else {
         return out;
     };
     for (pat, val) in paths {
@@ -625,15 +725,27 @@ fn load_packages(root: &Path) -> Vec<Package> {
     let mut pkgs = Vec::new();
     for dir in dirs {
         let text = fs::read_to_string(dir.join("package.json")).unwrap_or_default();
-        let Ok(json) = jsonutil::parse(&text) else { continue };
-        let Some(name) = json.get("name").and_then(|n| n.as_str()) else { continue };
+        let Ok(json) = jsonutil::parse(&text) else {
+            continue;
+        };
+        let Some(name) = json.get("name").and_then(|n| n.as_str()) else {
+            continue;
+        };
         let mut exports = Vec::new();
         if let Some(exp) = json.get("exports") {
             collect_exports(exp, &mut exports);
         }
         let rel_dir = rel_of(root, &dir);
-        let rel_dir = if rel_dir.is_empty() { ".".to_string() } else { rel_dir };
-        pkgs.push(Package { dir: rel_dir, name: name.to_string(), exports });
+        let rel_dir = if rel_dir.is_empty() {
+            ".".to_string()
+        } else {
+            rel_dir
+        };
+        pkgs.push(Package {
+            dir: rel_dir,
+            name: name.to_string(),
+            exports,
+        });
     }
     pkgs
 }
@@ -651,7 +763,10 @@ fn collect_exports(exp: &Json, out: &mut Vec<(String, String)>) {
                             .find_map(|key| inner.get(*key).and_then(|x| x.as_str()));
                         if let Some(s) = pref {
                             out.push((k.clone(), s.to_string()));
-                        } else if let Some((_, s)) = inner.iter().find_map(|(_, val)| val.as_str().map(|s| ((), s.to_string()))) {
+                        } else if let Some((_, s)) = inner
+                            .iter()
+                            .find_map(|(_, val)| val.as_str().map(|s| ((), s.to_string())))
+                        {
                             out.push((k.clone(), s));
                         }
                     }
@@ -667,12 +782,21 @@ fn scan_python(src: &str) -> Scan {
     let (masked, dynamic) = mask_python(src);
     let mut imports = Vec::new();
     for spec in dynamic {
-        imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false, inline_depth: 0 });
+        imports.push(RawImport {
+            spec,
+            names: Vec::new(),
+            kind: Kind::Dynamic,
+            conditional: false,
+            inline_depth: 0,
+        });
     }
     for stmt in python_statements(&masked) {
         imports.push(stmt);
     }
-    Scan { imports, local_exports: Vec::new() }
+    Scan {
+        imports,
+        local_exports: Vec::new(),
+    }
 }
 
 fn mask_python(src: &str) -> (String, Vec<String>) {
@@ -772,7 +896,9 @@ fn recent_call(tail: &str) -> &str {
 }
 
 fn is_py_module_lit(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
 }
 
 fn python_quote_at(b: &[u8], i: usize) -> Option<usize> {
@@ -819,7 +945,10 @@ fn python_statements(masked: &str) -> Vec<RawImport> {
     let mut i = 0;
     while i < lines.len() {
         let raw_line = lines[i];
-        let indent = raw_line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+        let indent = raw_line
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .count();
         let line = raw_line.trim();
         if line.starts_with("import ") || line.starts_with("from ") {
             let mut buf = line.to_string();
@@ -843,22 +972,41 @@ fn python_statements(masked: &str) -> Vec<RawImport> {
 }
 
 fn paren_delta(s: &str) -> i32 {
-    s.chars().fold(0, |n, c| n + match c { '(' => 1, ')' => -1, _ => 0 })
+    s.chars().fold(0, |n, c| {
+        n + match c {
+            '(' => 1,
+            ')' => -1,
+            _ => 0,
+        }
+    })
 }
 
 fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
     let stmt = stmt.trim().trim_end_matches('\\').trim();
     if let Some(rest) = stmt.strip_prefix("import ") {
-        let names = rest.split(',').map(|s| s.split_whitespace().next().unwrap_or("")).filter(|s| !s.is_empty() && *s != "__future__").collect::<Vec<_>>().join(",");
+        let names = rest
+            .split(',')
+            .map(|s| s.split_whitespace().next().unwrap_or(""))
+            .filter(|s| !s.is_empty() && *s != "__future__")
+            .collect::<Vec<_>>()
+            .join(",");
         if names.is_empty() {
             return None;
         }
-        return Some(RawImport { spec: format!("py:import:0::{names}"), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+        return Some(RawImport {
+            spec: format!("py:import:0::{names}"),
+            names: Vec::new(),
+            kind: Kind::Import,
+            conditional: false,
+            inline_depth: 0,
+        });
     }
     if let Some(rest) = stmt.strip_prefix("from ") {
         let import_at = rest.find(" import ")?;
         let left = rest[..import_at].trim();
-        let right = rest[import_at + " import ".len()..].trim().trim_matches(|c| c == '(' || c == ')');
+        let right = rest[import_at + " import ".len()..]
+            .trim()
+            .trim_matches(|c| c == '(' || c == ')');
         let mut level = 0;
         for c in left.chars() {
             if c == '.' {
@@ -880,7 +1028,8 @@ fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
             spec: format!("py:from:{level}:{module}:{}", names.join(",")),
             names,
             kind: Kind::Import,
-            conditional: false, inline_depth: 0,
+            conditional: false,
+            inline_depth: 0,
         });
     }
     None
@@ -935,7 +1084,13 @@ fn scan_js(src: &str) -> Scan {
             let after = i + "import".len();
             if after < b.len() && b[after] == b'(' {
                 if let Some((spec, next)) = read_call_spec(src, after) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false, inline_depth: 0 });
+                    imports.push(RawImport {
+                        spec,
+                        names: Vec::new(),
+                        kind: Kind::Dynamic,
+                        conditional: false,
+                        inline_depth: 0,
+                    });
                     i = next;
                     tail.clear();
                     continue;
@@ -952,7 +1107,8 @@ fn scan_js(src: &str) -> Scan {
             let rest = &src[i + "export".len()..];
             let trimmed = rest.trim_start();
             let lead = rest.len() - trimmed.len();
-            if trimmed.starts_with('*') || (trimmed.starts_with('{') && trimmed.contains(" from ")) {
+            if trimmed.starts_with('*') || (trimmed.starts_with('{') && trimmed.contains(" from "))
+            {
                 if let Some((imp, n)) = read_export_from(trimmed) {
                     imports.push(imp);
                     i = i + "export".len() + lead + n;
@@ -969,7 +1125,13 @@ fn scan_js(src: &str) -> Scan {
             let after = i + "require".len();
             if after < b.len() && b[after] == b'(' {
                 if let Some((spec, next)) = read_call_spec(src, after) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Dynamic, conditional: false, inline_depth: 0 });
+                    imports.push(RawImport {
+                        spec,
+                        names: Vec::new(),
+                        kind: Kind::Dynamic,
+                        conditional: false,
+                        inline_depth: 0,
+                    });
                     i = next;
                     tail.clear();
                     continue;
@@ -987,10 +1149,18 @@ fn scan_js(src: &str) -> Scan {
         }
         i += ch.len_utf8();
     }
-    Scan { imports, local_exports }
+    Scan {
+        imports,
+        local_exports,
+    }
 }
 
-fn scan_template(b: &[u8], mut i: usize, imports: &mut Vec<RawImport>, local_exports: &mut Vec<String>) -> usize {
+fn scan_template(
+    b: &[u8],
+    mut i: usize,
+    imports: &mut Vec<RawImport>,
+    local_exports: &mut Vec<String>,
+) -> usize {
     i += 1;
     while i < b.len() && b[i] != b'`' {
         if b[i] == b'$' && i + 1 < b.len() && b[i + 1] == b'{' {
@@ -1030,9 +1200,22 @@ fn scan_template(b: &[u8], mut i: usize, imports: &mut Vec<RawImport>, local_exp
 
 fn export_local_name(trimmed: &str) -> Option<String> {
     let rest = trimmed.trim_start_matches("default ").trim_start();
-    for kw in ["const ", "let ", "var ", "function ", "async function ", "class ", "interface ", "type ", "enum "] {
+    for kw in [
+        "const ",
+        "let ",
+        "var ",
+        "function ",
+        "async function ",
+        "class ",
+        "interface ",
+        "type ",
+        "enum ",
+    ] {
         if let Some(after) = rest.strip_prefix(kw) {
-            let name = after.split(['=', '(', '<', '{', ':', ' ', '\n', '\t']).next().unwrap_or("");
+            let name = after
+                .split(['=', '(', '<', '{', ':', ' ', '\n', '\t'])
+                .next()
+                .unwrap_or("");
             if is_ident(name) {
                 return Some(name.to_string());
             }
@@ -1046,7 +1229,10 @@ fn export_local_name(trimmed: &str) -> Option<String> {
 
 fn js_regex_start(code: &str) -> bool {
     let t = code.trim_end();
-    t.is_empty() || t.ends_with(['=', '(', '[', ',', ';', '!', '&', '|', '?', ':', '{', '}', '+', '-'])
+    t.is_empty()
+        || t.ends_with([
+            '=', '(', '[', ',', ';', '!', '&', '|', '?', ':', '{', '}', '+', '-',
+        ])
 }
 
 fn skip_js_string(b: &[u8], i: usize) -> usize {
@@ -1068,7 +1254,9 @@ fn skip_js_string(b: &[u8], i: usize) -> usize {
 fn is_ident(s: &str) -> bool {
     let mut cs = s.chars();
     match cs.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$' => cs.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$'),
+        Some(c) if c.is_ascii_alphabetic() || c == '_' || c == '$' => {
+            cs.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+        }
         _ => false,
     }
 }
@@ -1115,7 +1303,16 @@ fn read_import_statement(rest: &str) -> Option<(RawImport, usize)> {
     let lead = rest.len() - t.len();
     if t.starts_with('\'') || t.starts_with('"') {
         let (spec, n) = read_quoted(t)?;
-        return Some((RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 }, lead + n));
+        return Some((
+            RawImport {
+                spec,
+                names: Vec::new(),
+                kind: Kind::Import,
+                conditional: false,
+                inline_depth: 0,
+            },
+            lead + n,
+        ));
     }
     let from = t.find(" from ")?;
     let head = &t[..from];
@@ -1123,7 +1320,16 @@ fn read_import_statement(rest: &str) -> Option<(RawImport, usize)> {
     let ws = after.len() - after.trim_start().len();
     let (spec, n) = read_quoted(after.trim_start())?;
     let names = brace_names(head);
-    Some((RawImport { spec, names, kind: Kind::Import, conditional: false, inline_depth: 0 }, lead + from + " from ".len() + ws + n))
+    Some((
+        RawImport {
+            spec,
+            names,
+            kind: Kind::Import,
+            conditional: false,
+            inline_depth: 0,
+        },
+        lead + from + " from ".len() + ws + n,
+    ))
 }
 
 fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
@@ -1131,23 +1337,47 @@ fn read_export_from(trimmed: &str) -> Option<(RawImport, usize)> {
         let from = trimmed.find(" from ")?;
         let after = trimmed[from + " from ".len()..].trim_start();
         let (spec, n) = read_quoted(after)?;
-        let consumed = from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
-        return Some((RawImport { spec, names: Vec::new(), kind: Kind::ExportStar, conditional: false, inline_depth: 0 }, consumed));
+        let consumed =
+            from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
+        return Some((
+            RawImport {
+                spec,
+                names: Vec::new(),
+                kind: Kind::ExportStar,
+                conditional: false,
+                inline_depth: 0,
+            },
+            consumed,
+        ));
     }
     if trimmed.starts_with('{') {
         let from = trimmed.find(" from ")?;
         let names = brace_names(&trimmed[..from]);
         let after = trimmed[from + " from ".len()..].trim_start();
         let (spec, n) = read_quoted(after)?;
-        let consumed = from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
-        return Some((RawImport { spec, names, kind: Kind::ExportFrom, conditional: false, inline_depth: 0 }, consumed));
+        let consumed =
+            from + " from ".len() + (trimmed[from + " from ".len()..].len() - after.len()) + n;
+        return Some((
+            RawImport {
+                spec,
+                names,
+                kind: Kind::ExportFrom,
+                conditional: false,
+                inline_depth: 0,
+            },
+            consumed,
+        ));
     }
     None
 }
 
 fn brace_names(head: &str) -> Vec<String> {
-    let Some(a) = head.find('{') else { return Vec::new() };
-    let Some(b) = head.find('}') else { return Vec::new() };
+    let Some(a) = head.find('{') else {
+        return Vec::new();
+    };
+    let Some(b) = head.find('}') else {
+        return Vec::new();
+    };
     head[a + 1..b]
         .split(',')
         .filter_map(|part| {
@@ -1162,7 +1392,11 @@ fn brace_names(head: &str) -> Vec<String> {
             };
             // `type Foo` inside braces
             let name = name.trim_start_matches("type ").trim();
-            if is_ident(name) { Some(name.to_string()) } else { None }
+            if is_ident(name) {
+                Some(name.to_string())
+            } else {
+                None
+            }
         })
         .collect()
 }
@@ -1269,12 +1503,28 @@ fn scan_rust(src: &str) -> Scan {
         i += 1;
     }
     let mut seen = BTreeSet::new();
-    imports.retain(|imp| seen.insert(format!("{}:{}:{}", imp.inline_depth, kind_tag(imp.kind), imp.spec)));
-    Scan { imports, local_exports: Vec::new() }
+    imports.retain(|imp| {
+        seen.insert(format!(
+            "{}:{}:{}",
+            imp.inline_depth,
+            kind_tag(imp.kind),
+            imp.spec
+        ))
+    });
+    Scan {
+        imports,
+        local_exports: Vec::new(),
+    }
 }
 
 fn rust_import(spec: String, kind: Kind, inline_depth: usize) -> RawImport {
-    RawImport { spec, names: Vec::new(), kind, conditional: false, inline_depth }
+    RawImport {
+        spec,
+        names: Vec::new(),
+        kind,
+        conditional: false,
+        inline_depth,
+    }
 }
 
 fn kind_tag(kind: Kind) -> u8 {
@@ -1308,7 +1558,11 @@ fn read_rust_use(b: &[u8], start: usize) -> Option<(usize, Vec<String>)> {
     let i = skip_noise(b, start);
     let (end, paths) = parse_use_tree(b, i, &[])?;
     let end = skip_noise(b, end);
-    let end = if end < b.len() && b[end] == b';' { end + 1 } else { end };
+    let end = if end < b.len() && b[end] == b';' {
+        end + 1
+    } else {
+        end
+    };
     Some((end, paths))
 }
 
@@ -1343,7 +1597,11 @@ fn parse_use_tree(b: &[u8], start: usize, prefix: &[String]) -> Option<(usize, V
         segs.push(ident);
     }
     let path = segs.join("::");
-    let paths = if path.is_empty() { Vec::new() } else { vec![path] };
+    let paths = if path.is_empty() {
+        Vec::new()
+    } else {
+        vec![path]
+    };
     Some((j, paths))
 }
 
@@ -1557,7 +1815,11 @@ fn separate_in_package(from_rel: &str, dir: &str) -> Option<String> {
 }
 
 fn join_rel(dir: &str, rest: &str) -> String {
-    if dir.is_empty() { rest.to_string() } else { format!("{dir}/{rest}") }
+    if dir.is_empty() {
+        rest.to_string()
+    } else {
+        format!("{dir}/{rest}")
+    }
 }
 
 /// Public Rust names: unrestricted `pub` items, `pub` methods and associated items on a
@@ -1770,7 +2032,8 @@ fn read_impl_header(b: &[u8], start: usize) -> Option<(usize, bool, String)> {
             continue;
         }
         if let Some((ident, end)) = read_ident(b, i) {
-            if angle == 0 && !in_where && ident != "const" && ident != "unsafe" && ident != "async" {
+            if angle == 0 && !in_where && ident != "const" && ident != "unsafe" && ident != "async"
+            {
                 last_ident = ident;
             }
             i = end;
@@ -1799,7 +2062,11 @@ fn read_assoc_item(b: &[u8], start: usize) -> Option<(String, usize)> {
         }
     }
     if starts_word(b, i, "fn") || starts_word(b, i, "type") {
-        let word = if starts_word(b, i, "fn") { "fn" } else { "type" };
+        let word = if starts_word(b, i, "fn") {
+            "fn"
+        } else {
+            "type"
+        };
         let (name, end) = read_ident(b, skip_noise(b, i + word.len()))?;
         return Some((name, end));
     }
@@ -1828,7 +2095,15 @@ fn rust_pub_names(b: &[u8], start: usize) -> Option<(Vec<String>, usize)> {
         }
         break;
     }
-    for (word, len) in [("fn", 2usize), ("struct", 6), ("enum", 4), ("trait", 5), ("mod", 3), ("type", 4), ("static", 6)] {
+    for (word, len) in [
+        ("fn", 2usize),
+        ("struct", 6),
+        ("enum", 4),
+        ("trait", 5),
+        ("mod", 3),
+        ("type", 4),
+        ("static", 6),
+    ] {
         if starts_word(b, i, word) {
             let mut next = skip_noise(b, i + len);
             if word == "static" && starts_word(b, next, "mut") {
@@ -1895,7 +2170,11 @@ fn use_export_names(b: &[u8], start: usize) -> Option<(Vec<String>, usize)> {
     }
     let (end, names) = walk(b, skip_noise(b, start))?;
     let end = skip_noise(b, end);
-    let end = if end < b.len() && b[end] == b';' { end + 1 } else { end };
+    let end = if end < b.len() && b[end] == b';' {
+        end + 1
+    } else {
+        end
+    };
     Some((names, end))
 }
 
@@ -1920,7 +2199,9 @@ fn load_rust_libs(root: &Path) -> Vec<RustLib> {
     }
     let mut libs = Vec::new();
     for dir in dirs {
-        let exported = dir.is_empty() || expand_member_dirs(root, &members, &exclude).contains(&dir) || (members.is_empty() && dir.is_empty());
+        let exported = dir.is_empty()
+            || expand_member_dirs(root, &members, &exclude).contains(&dir)
+            || (members.is_empty() && dir.is_empty());
         if let Some(lib) = rust_lib_at(root, &dir, exported && !exclude_matches(&exclude, &dir)) {
             libs.push(lib);
         }
@@ -1960,12 +2241,21 @@ fn rust_lib_at(root: &Path, dir: &str, exported: bool) -> Option<RustLib> {
             names.push(normalized);
         }
     }
-    Some(RustLib { names, root_file, dir: dir.to_string(), exported: exported && has_lib })
+    Some(RustLib {
+        names,
+        root_file,
+        dir: dir.to_string(),
+        exported: exported && has_lib,
+    })
 }
 
 fn cargo_package_name(text: &str) -> Option<String> {
     let (package, _, _) = cargo_identity(text);
-    if package.is_empty() { None } else { Some(package) }
+    if package.is_empty() {
+        None
+    } else {
+        Some(package)
+    }
 }
 
 fn cargo_identity(text: &str) -> (String, String, Option<String>) {
@@ -1985,7 +2275,9 @@ fn cargo_identity(text: &str) -> (String, String, Option<String>) {
         if section != "package" && section != "lib" {
             continue;
         }
-        let Some((key, value)) = line.split_once('=') else { continue };
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
         let key = key.trim();
         let value = unquote_toml(value.trim());
         if value.is_empty() {
@@ -2003,7 +2295,10 @@ fn cargo_identity(text: &str) -> (String, String, Option<String>) {
 }
 
 fn unquote_toml(value: &str) -> String {
-    value.trim().trim_matches(|c| c == '"' || c == '\'').to_string()
+    value
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .to_string()
 }
 
 fn workspace_arrays(text: &str) -> (Vec<String>, Vec<String>) {
@@ -2031,13 +2326,18 @@ fn workspace_arrays(text: &str) -> (Vec<String>, Vec<String>) {
             buf.push_str(line);
             if line.contains(']') {
                 let items = quoted_strings(&buf);
-                if key == "members" { members = items; }
-                else if key == "exclude" { exclude = items; }
+                if key == "members" {
+                    members = items;
+                } else if key == "exclude" {
+                    exclude = items;
+                }
                 collecting = false;
             }
             continue;
         }
-        let Some((raw_key, value)) = line.split_once('=') else { continue };
+        let Some((raw_key, value)) = line.split_once('=') else {
+            continue;
+        };
         let raw_key = raw_key.trim();
         if raw_key != "members" && raw_key != "exclude" {
             continue;
@@ -2048,8 +2348,11 @@ fn workspace_arrays(text: &str) -> (Vec<String>, Vec<String>) {
             collecting = true;
         } else {
             let items = quoted_strings(value);
-            if raw_key == "members" { members = items; }
-            else if raw_key == "exclude" { exclude = items; }
+            if raw_key == "members" {
+                members = items;
+            } else if raw_key == "exclude" {
+                exclude = items;
+            }
         }
     }
     (members, exclude)
@@ -2090,11 +2393,17 @@ fn expand_member_dirs(root: &Path, patterns: &[String], exclude: &[String]) -> V
         }
         if pattern.contains('*') || pattern.contains('?') {
             for dir in cargo_package_dirs(root) {
-                if cargo_glob_match(&pattern, &dir) && !exclude_matches(exclude, &dir) && !found.contains(&dir) {
+                if cargo_glob_match(&pattern, &dir)
+                    && !exclude_matches(exclude, &dir)
+                    && !found.contains(&dir)
+                {
                     found.push(dir);
                 }
             }
-        } else if root.join(&pattern).join("Cargo.toml").is_file() && !exclude_matches(exclude, &pattern) && !found.contains(&pattern) {
+        } else if root.join(&pattern).join("Cargo.toml").is_file()
+            && !exclude_matches(exclude, &pattern)
+            && !found.contains(&pattern)
+        {
             found.push(pattern);
         }
     }
@@ -2104,7 +2413,9 @@ fn expand_member_dirs(root: &Path, patterns: &[String], exclude: &[String]) -> V
 fn cargo_package_dirs(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if !path.is_dir() {
@@ -2116,7 +2427,11 @@ fn cargo_package_dirs(root: &Path) -> Vec<String> {
             }
             if path.join("Cargo.toml").is_file() {
                 if let Ok(rel) = path.strip_prefix(root) {
-                    let rel = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
+                    let rel = rel
+                        .components()
+                        .map(|c| c.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("/");
                     if !rel.is_empty() {
                         out.push(rel);
                     }
@@ -2181,7 +2496,13 @@ fn scan_go(src: &str) -> Scan {
                 while j < bytes.len() && bytes[j] != b')' {
                     if bytes[j] == b'"' {
                         if let Some((spec, n)) = read_quoted(&text[j..]) {
-                            imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+                            imports.push(RawImport {
+                                spec,
+                                names: Vec::new(),
+                                kind: Kind::Import,
+                                conditional: false,
+                                inline_depth: 0,
+                            });
                             j += n;
                             continue;
                         }
@@ -2193,7 +2514,13 @@ fn scan_go(src: &str) -> Scan {
             }
             if j < bytes.len() && bytes[j] == b'"' {
                 if let Some((spec, n)) = read_quoted(&text[j..]) {
-                    imports.push(RawImport { spec, names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+                    imports.push(RawImport {
+                        spec,
+                        names: Vec::new(),
+                        kind: Kind::Import,
+                        conditional: false,
+                        inline_depth: 0,
+                    });
                     i = j + n;
                     continue;
                 }
@@ -2201,7 +2528,10 @@ fn scan_go(src: &str) -> Scan {
         }
         i += 1;
     }
-    Scan { imports, local_exports: Vec::new() }
+    Scan {
+        imports,
+        local_exports: Vec::new(),
+    }
 }
 
 fn scan_c(src: &str) -> Scan {
@@ -2211,13 +2541,28 @@ fn scan_c(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("#include") {
             let rest = rest.trim();
             if let Some(inner) = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
-                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+                imports.push(RawImport {
+                    spec: inner.to_string(),
+                    names: Vec::new(),
+                    kind: Kind::Import,
+                    conditional: false,
+                    inline_depth: 0,
+                });
             } else if let Some(inner) = rest.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
-                imports.push(RawImport { spec: inner.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+                imports.push(RawImport {
+                    spec: inner.to_string(),
+                    names: Vec::new(),
+                    kind: Kind::Import,
+                    conditional: false,
+                    inline_depth: 0,
+                });
             }
         }
     }
-    Scan { imports, local_exports: Vec::new() }
+    Scan {
+        imports,
+        local_exports: Vec::new(),
+    }
 }
 
 fn scan_java(src: &str) -> Scan {
@@ -2227,11 +2572,20 @@ fn scan_java(src: &str) -> Scan {
         if let Some(rest) = t.strip_prefix("import ") {
             let rest = rest.trim_start_matches("static ").trim();
             if !rest.is_empty() {
-                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+                imports.push(RawImport {
+                    spec: rest.to_string(),
+                    names: Vec::new(),
+                    kind: Kind::Import,
+                    conditional: false,
+                    inline_depth: 0,
+                });
             }
         }
     }
-    Scan { imports, local_exports: Vec::new() }
+    Scan {
+        imports,
+        local_exports: Vec::new(),
+    }
 }
 
 fn scan_csharp(src: &str) -> Scan {
@@ -2244,11 +2598,20 @@ fn scan_csharp(src: &str) -> Scan {
                 continue;
             }
             if !rest.is_empty() && !rest.starts_with('(') {
-                imports.push(RawImport { spec: rest.to_string(), names: Vec::new(), kind: Kind::Import, conditional: false, inline_depth: 0 });
+                imports.push(RawImport {
+                    spec: rest.to_string(),
+                    names: Vec::new(),
+                    kind: Kind::Import,
+                    conditional: false,
+                    inline_depth: 0,
+                });
             }
         }
     }
-    Scan { imports, local_exports: Vec::new() }
+    Scan {
+        imports,
+        local_exports: Vec::new(),
+    }
 }
 
 fn strip_c_comments(src: &str) -> String {
@@ -2329,7 +2692,11 @@ pub fn resolve_python_spec(root: &Path, from_rel: &str, spec: &str) -> Vec<Strin
             if *name == "*" {
                 continue;
             }
-            let dotted = if module.is_empty() { (*name).to_string() } else { format!("{module}.{name}") };
+            let dotted = if module.is_empty() {
+                (*name).to_string()
+            } else {
+                format!("{module}.{name}")
+            };
             if let Some(p) = py_resolve(&from, root, &dotted, level) {
                 subs.push(rel_of(root, &p));
             }
@@ -2360,7 +2727,9 @@ pub fn resolve_python_spec(root: &Path, from_rel: &str, spec: &str) -> Vec<Strin
     }
     // dynamic module string
     let from = root.join(from_rel);
-    py_resolve(&from, root, spec, 0).map(|p| vec![rel_of(root, &p)]).unwrap_or_default()
+    py_resolve(&from, root, spec, 0)
+        .map(|p| vec![rel_of(root, &p)])
+        .unwrap_or_default()
 }
 
 fn py_resolve(from: &Path, root: &Path, module: &str, level: usize) -> Option<PathBuf> {
@@ -2429,18 +2798,24 @@ fn module_file(base: &Path, dotted: &str) -> Option<PathBuf> {
         t.set_file_name(name);
         t
     };
-    [py, init, pyi].into_iter().find(|cand| exists_exact(base, cand))
+    [py, init, pyi]
+        .into_iter()
+        .find(|cand| exists_exact(base, cand))
 }
 
 fn exists_exact(base: &Path, candidate: &Path) -> bool {
     if !candidate.is_file() {
         return false;
     }
-    let Ok(rel) = candidate.strip_prefix(base) else { return candidate.is_file() };
+    let Ok(rel) = candidate.strip_prefix(base) else {
+        return candidate.is_file();
+    };
     let mut current = base.to_path_buf();
     for name in rel.components() {
         let name = name.as_os_str().to_string_lossy().to_string();
-        let Ok(rd) = fs::read_dir(&current) else { return false };
+        let Ok(rd) = fs::read_dir(&current) else {
+            return false;
+        };
         let mut found = false;
         for ent in rd.flatten() {
             if ent.file_name().to_string_lossy() == name {
@@ -2465,7 +2840,10 @@ mod dbg_scan {
         assert!(
             scan.imports.iter().any(|i| i.spec == "./lazy"),
             "specs {:?}",
-            scan.imports.iter().map(|i| format!("{} {:?}", i.spec, i.kind)).collect::<Vec<_>>()
+            scan.imports
+                .iter()
+                .map(|i| format!("{} {:?}", i.spec, i.kind))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -2477,8 +2855,18 @@ mod dbg_scan {
         }
         src.push_str("from . import b\nimport_module(\"pkg.mod\")\n");
         let scan = super::scan_python(&src);
-        assert!(scan.imports.iter().any(|imp| imp.spec.contains("py:from") && imp.spec.contains('b')), "{:?}", scan.imports);
-        assert!(scan.imports.iter().any(|imp| imp.spec == "pkg.mod"), "{:?}", scan.imports);
+        assert!(
+            scan.imports
+                .iter()
+                .any(|imp| imp.spec.contains("py:from") && imp.spec.contains('b')),
+            "{:?}",
+            scan.imports
+        );
+        assert!(
+            scan.imports.iter().any(|imp| imp.spec == "pkg.mod"),
+            "{:?}",
+            scan.imports
+        );
     }
 
     #[test]
@@ -2490,10 +2878,19 @@ mod dbg_scan {
         }
         src.push_str("import { add } from \"./math\";\nexport const 値 = 1;\n");
         let scan = super::scan_js(&src);
-        assert!(scan.imports.iter().any(|imp| imp.spec == "./math"), "{:?}", scan.imports);
-        let ts = "import type { 設定 } from \"./types\";\nconst emoji = \"🐍\";\nexport { 設定 };\n";
+        assert!(
+            scan.imports.iter().any(|imp| imp.spec == "./math"),
+            "{:?}",
+            scan.imports
+        );
+        let ts =
+            "import type { 設定 } from \"./types\";\nconst emoji = \"🐍\";\nexport { 設定 };\n";
         let scan = super::scan_js(ts);
-        assert!(scan.imports.iter().any(|imp| imp.spec == "./types"), "{:?}", scan.imports);
+        assert!(
+            scan.imports.iter().any(|imp| imp.spec == "./types"),
+            "{:?}",
+            scan.imports
+        );
     }
 }
 
@@ -2515,7 +2912,15 @@ pub struct FileFacts {
     pub unresolved: Vec<(String, i64, String)>,
 }
 
-fn add_edge(facts: &mut FileFacts, dst: String, line: i64, names: Vec<String>, conditional: bool, dynamic: bool, via_barrel: bool) {
+fn add_edge(
+    facts: &mut FileFacts,
+    dst: String,
+    line: i64,
+    names: Vec<String>,
+    conditional: bool,
+    dynamic: bool,
+    via_barrel: bool,
+) {
     if let Some(existing) = facts.internal.iter_mut().find(|edge| edge.dst == dst) {
         if !via_barrel {
             existing.via_barrel = false;
@@ -2529,7 +2934,14 @@ fn add_edge(facts: &mut FileFacts, dst: String, line: i64, names: Vec<String>, c
         return;
     }
     facts.dsts.insert(dst.clone());
-    facts.internal.push(FactEdge { dst, line, names, conditional, dynamic, via_barrel });
+    facts.internal.push(FactEdge {
+        dst,
+        line,
+        names,
+        conditional,
+        dynamic,
+        via_barrel,
+    });
 }
 
 fn note_unresolved(facts: &mut FileFacts, spec: String, line: i64, kind: Kind) {
@@ -2551,7 +2963,10 @@ pub struct Analysis {
 
 fn line_of(text: &str, needles: &[String]) -> i64 {
     for (i, line) in text.lines().enumerate() {
-        if needles.iter().any(|n| !n.is_empty() && line.contains(n.as_str())) {
+        if needles
+            .iter()
+            .any(|n| !n.is_empty() && line.contains(n.as_str()))
+        {
             return (i + 1) as i64;
         }
     }
@@ -2560,14 +2975,27 @@ fn line_of(text: &str, needles: &[String]) -> i64 {
 
 fn py_parts(spec: &str) -> (String, Vec<String>) {
     if let Some(rest) = spec.strip_prefix("py:import:") {
-        let names = rest.split("::").nth(1).unwrap_or("").split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect::<Vec<_>>();
+        let names = rest
+            .split("::")
+            .nth(1)
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
         return (names.first().cloned().unwrap_or_default(), names);
     }
     if let Some(rest) = spec.strip_prefix("py:from:") {
         let mut parts = rest.splitn(3, ':');
         let _level = parts.next();
         let module = parts.next().unwrap_or("").to_string();
-        let names = parts.next().unwrap_or("").split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect::<Vec<_>>();
+        let names = parts
+            .next()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
         return (module, names);
     }
     (spec.to_string(), Vec::new())
@@ -2584,7 +3012,11 @@ pub fn analyze_changed(root: &Path, universe: &[PathBuf], changed: &[PathBuf]) -
     analyze_files_filtered(root, universe, Some(only))
 }
 
-fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<String>>) -> Analysis {
+fn analyze_files_filtered(
+    root: &Path,
+    files: &[PathBuf],
+    only: Option<BTreeSet<String>>,
+) -> Analysis {
     let mut scans: HashMap<String, Scan> = HashMap::new();
     let mut texts: HashMap<String, String> = HashMap::new();
     let mut warnings = Vec::new();
@@ -2611,7 +3043,11 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
     }
     // The full-tree path keeps the second resolution pass. A partial update
     // resolves changed files against the whole universe below.
-    let js_edges = if only.is_none() { resolve_project(root, &other_files) } else { BTreeMap::new() };
+    let js_edges = if only.is_none() {
+        resolve_project(root, &other_files)
+    } else {
+        BTreeMap::new()
+    };
     let resolver = Resolver::build(root, &rels);
     let mut out = BTreeMap::new();
     for rel in &rels {
@@ -2632,7 +3068,11 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                 }
                 let line = line_of(&text, &needles);
                 if resolved.is_empty() {
-                    let label = if module.is_empty() { names.first().cloned().unwrap_or_default() } else { module.clone() };
+                    let label = if module.is_empty() {
+                        names.first().cloned().unwrap_or_default()
+                    } else {
+                        module.clone()
+                    };
                     if imp.spec.starts_with("py:") {
                         if !label.is_empty() {
                             facts.external.push(label);
@@ -2644,7 +3084,15 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                     let dynamic = imp.kind == Kind::Dynamic;
                     for dst in resolved {
                         if &dst != rel {
-                            add_edge(&mut facts, dst, line, names.clone(), imp.conditional, dynamic, false);
+                            add_edge(
+                                &mut facts,
+                                dst,
+                                line,
+                                names.clone(),
+                                imp.conditional,
+                                dynamic,
+                                false,
+                            );
                         }
                     }
                 }
@@ -2656,18 +3104,42 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                 let dynamic = imp.kind == Kind::Dynamic;
                 match target {
                     Some(dst) if dst != *rel => {
-                        add_edge(&mut facts, dst.clone(), line, imp.names.clone(), imp.conditional, dynamic, false);
-                        if lang == "javascript" && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom) {
+                        add_edge(
+                            &mut facts,
+                            dst.clone(),
+                            line,
+                            imp.names.clone(),
+                            imp.conditional,
+                            dynamic,
+                            false,
+                        );
+                        if lang == "javascript"
+                            && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom)
+                        {
                             for name in &imp.names {
-                                if let Some(def) = defining_file(&resolver, &{
-                                    let mut m = BTreeMap::new();
-                                    for (k, v) in &scans {
-                                        m.insert(k.clone(), v.clone());
-                                    }
-                                    m
-                                }, &dst, name, 0) {
+                                if let Some(def) = defining_file(
+                                    &resolver,
+                                    &{
+                                        let mut m = BTreeMap::new();
+                                        for (k, v) in &scans {
+                                            m.insert(k.clone(), v.clone());
+                                        }
+                                        m
+                                    },
+                                    &dst,
+                                    name,
+                                    0,
+                                ) {
                                     if def != *rel && def != dst && !facts.dsts.contains(&def) {
-                                        add_edge(&mut facts, def, line, vec![name.clone()], imp.conditional, dynamic, true);
+                                        add_edge(
+                                            &mut facts,
+                                            def,
+                                            line,
+                                            vec![name.clone()],
+                                            imp.conditional,
+                                            dynamic,
+                                            true,
+                                        );
                                     }
                                 }
                             }
@@ -2675,14 +3147,24 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
                     }
                     _ => {
                         if lang == "rust" {
-                            if target.is_none() && imp.kind != Kind::PathExpr && resolver.rust_spec_is_internal(rel, &imp.spec) {
+                            if target.is_none()
+                                && imp.kind != Kind::PathExpr
+                                && resolver.rust_spec_is_internal(rel, &imp.spec)
+                            {
                                 note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
-                            } else if target.is_none() && imp.kind != Kind::PathExpr && !imp.spec.is_empty() && !resolver.rust_spec_is_internal(rel, &imp.spec) {
+                            } else if target.is_none()
+                                && imp.kind != Kind::PathExpr
+                                && !imp.spec.is_empty()
+                                && !resolver.rust_spec_is_internal(rel, &imp.spec)
+                            {
                                 facts.external.push(imp.spec.clone());
                             }
                         } else if imp.spec.starts_with('.') {
                             note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
-                        } else if !imp.spec.is_empty() && !imp.spec.starts_with("mod:") && !imp.spec.starts_with("crate::") {
+                        } else if !imp.spec.is_empty()
+                            && !imp.spec.starts_with("mod:")
+                            && !imp.spec.starts_with("crate::")
+                        {
                             facts.external.push(imp.spec.clone());
                         } else if target.is_none() && imp.spec.starts_with("mod:") {
                             note_unresolved(&mut facts, imp.spec.clone(), line, imp.kind);
@@ -2708,9 +3190,17 @@ fn analyze_files_filtered(root: &Path, files: &[PathBuf], only: Option<BTreeSet<
         }
     }
     let _ = js_edges;
-    Analysis { facts: out, scans, warnings }
+    Analysis {
+        facts: out,
+        scans,
+        warnings,
+    }
 }
 
 pub fn edges_for_files(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTreeSet<String>> {
-    analyze_files(root, files).facts.into_iter().map(|(k, v)| (k, v.dsts)).collect()
+    analyze_files(root, files)
+        .facts
+        .into_iter()
+        .map(|(k, v)| (k, v.dsts))
+        .collect()
 }

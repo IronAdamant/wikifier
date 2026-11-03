@@ -129,7 +129,10 @@ fn escape(s: &str) -> String {
 }
 
 pub fn parse(input: &str) -> Result<Json, String> {
-    let mut p = Parser { s: input.as_bytes(), i: 0 };
+    let mut p = Parser {
+        s: input.as_bytes(),
+        i: 0,
+    };
     let v = p.value()?;
     p.skip();
     if p.i != p.s.len() {
@@ -246,7 +249,8 @@ impl Parser<'_> {
                             if self.i + 4 > self.s.len() {
                                 return Err("bad unicode".into());
                             }
-                            let hex = std::str::from_utf8(&self.s[self.i..self.i + 4]).map_err(|e| e.to_string())?;
+                            let hex = std::str::from_utf8(&self.s[self.i..self.i + 4])
+                                .map_err(|e| e.to_string())?;
                             let cp = u32::from_str_radix(hex, 16).map_err(|e| e.to_string())?;
                             let ch = char::from_u32(cp).unwrap_or('\u{FFFD}');
                             let mut buf = [0u8; 4];
@@ -289,9 +293,13 @@ impl Parser<'_> {
         }
         let text = std::str::from_utf8(&self.s[start..self.i]).map_err(|e| e.to_string())?;
         if float {
-            text.parse::<f64>().map(Json::Float).map_err(|e| e.to_string())
+            text.parse::<f64>()
+                .map(Json::Float)
+                .map_err(|e| e.to_string())
         } else {
-            text.parse::<i64>().map(Json::Int).map_err(|e| e.to_string())
+            text.parse::<i64>()
+                .map(Json::Int)
+                .map_err(|e| e.to_string())
         }
     }
     fn array(&mut self) -> Result<Json, String> {

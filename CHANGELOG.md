@@ -29,7 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `heal-stubs --dry-run` counts the stubs it would mark and does not write health. `seed-health` and `seed-source-hashes` return `HealthError` when the health write fails.
 - `init DIR` uses that directory as the project root unless `--target` is set. `verify-wikis DIR` limits the check to that file or directory. `search-journal --file` keeps only that path.
 - The CI empty-dependency check reads `Cargo.toml` with `awk`. The workflow does not run Python.
-- The live daemon actions are `start`, `stop`, `status`, and `run`.
+- Daemon actions are `start`, `stop`, `status`, `run`, `logs`, `restart`, `install-service`, and `uninstall-service`. The loop checks every 30 seconds and refreshes maps at start and then at most every 600 seconds. `start` refuses only readiness `blocked` unless `--force`.
+- `init --no-copy` skips the dashboard. `init` writes `exclude_patterns.txt`, empty health, pending, and library files, `.wikifier/config`, `journal/`, and `Logged_issues/` when missing.
+- Wiki lookup falls back from `<file>.wiki.md` through `docs/wiki`, `docs`, `wiki`, `documentation`, and `.wiki`. Python and JS/TS public names ignore comments and strings. Python `__all__` may span lines. `.pyi` is checked.
+- `record-changes --reasons` accepts a JSON object or `PATH=REASON` lines. `health --summary` omits the entry list. `list-paths` honors `--depth`, `--recursive`, and `--max-files`. `cycles` includes severity and a reverse-dependency ranking. `--text` prints prose; the default remains JSON.
+- `suggest-next` emits `review_low_confidence_edges` when a non-dynamic resolved edge is below 0.65. `seed-source-hashes` records hashes on Green rows and does not change status. `heal-stubs` defaults to a 350-character wiki. `update-maps` seeds health rows only for paths in `monitored_paths.txt` when that file lists real paths.
+- Pending bullets use `- path: message`.
 - This repo's import-map roots are `src/` and `tests/`.
 - The import scan remains comment-masked regex plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). It is not a CPython `ast` walk, and it has not been run on Babylon.js. The accuracy gate is `accuracy_fixtures_match_frozen_edges`, now including a Cargo crate layout.
 - Rust `mod`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name resolve to files. Hyphens in the package name become underscores. `crate::` stays inside the file's crate (`tests/*.rs` and `src/bin/*.rs` are separate crates). The package or lib name points at the library, so binaries and integration tests are dependents of the library modules they import.

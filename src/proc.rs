@@ -58,7 +58,11 @@ fn windows_signal(pid: i32, sig: i32) -> bool {
         fn CloseHandle(handle: *mut core::ffi::c_void) -> i32;
     }
     unsafe {
-        let access = if sig == 0 { PROCESS_QUERY_LIMITED_INFORMATION } else { PROCESS_TERMINATE };
+        let access = if sig == 0 {
+            PROCESS_QUERY_LIMITED_INFORMATION
+        } else {
+            PROCESS_TERMINATE
+        };
         let handle = OpenProcess(access, 0, pid as u32);
         if handle.is_null() || handle == (-1isize as *mut core::ffi::c_void) {
             return false;
