@@ -113,20 +113,6 @@ Advanced intel as needed: `list_paths` (names-only folder expand), `get_dependen
 - **Zero core dependencies** — empty `[dependencies]` in `Cargo.toml`.
 - **Honest failures** — a missing `project_root`, missing file, or lock timeout is an error result, never a silent fallback. `wikifier.sh` launches the Rust binary.
 
-## Does it pay off? (measured)
-
-`scripts/benchmark_lookup.py` asks the questions an agent asks before an edit, on real repositories, answered by Wikifier and by grep, scored against Python's own bytecode import scanner ([details](Findings/2026-10-01-lookup-benchmark.md)). 40 targets per repo:
-
-| Question | Repo | Wikifier: exactly right / median tokens | grep: exactly right / median tokens |
-|---|---|---|---|
-| Which files import M? | llama-index-core (724 files) | **40/40** · 72 | 27/40 · 84 |
-| | airflow-core (1,143 files) | **39/40** · 111 | 23/40 · 266 |
-| What could break if I change M? (depth 3) | llama-index-core | **40/40** · 487 | 11/40 · 209 (15 over a 200k-token budget) |
-| | airflow-core | **36/40** · 584 | 12/40 · 21,676 (8 over budget) |
-| What does M import? | both | **40/40** · ~270 | reading the file: ~1,100 |
-
-Typical lookups cost about the same; grep goes wrong on common module names (`base`, `utils`) and its cost explodes on them (up to 100k tokens for one question). Mapping from scratch: 2.3 s for 724 files, 21 s for 7,174.
-
 ## Performance (measured)
 
 Full / heavy runs (historical order-of-magnitude):

@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The import scan remains comment-masked regex plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). It is not a CPython `ast` walk, and it has not been run on Babylon.js. The accuracy gate is `accuracy_fixtures_match_frozen_edges`, now including a Cargo crate layout.
 - Rust `mod`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name resolve to files. Hyphens in the package name become underscores. `crate::` stays inside the file's crate (`tests/*.rs` and `src/bin/*.rs` are separate crates). The package or lib name points at the library, so binaries and integration tests are dependents of the library modules they import.
 
+### Removed
+- The README section "Does it pay off? (measured)" is gone. It cited `scripts/benchmark_lookup.py`, which left with the Python package, and its numbers were measured on that package. The performance table that remains is still labeled as Python-era.
+
 ## [4.7.0] - 2026-10-01
 
 Full-codebase review release. Details and measurements: `Findings/2026-10-01-review-4.7.0.md`;
