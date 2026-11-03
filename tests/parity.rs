@@ -3,7 +3,6 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
 
 use wikifier::{mapped_edges, update_maps, Json};
 
@@ -124,6 +123,28 @@ const FIXTURES: &[Fixture] = &[
             ("src/app.js", "src/real.js"),
             ("src/app.js", "src/other.js"),
             ("lib/use.py", "lib/helpers.py"),
+        ],
+    },
+    Fixture {
+        name: "rust_crate",
+        files: &[
+            ("Cargo.toml", "[package]\nname = \"demo-crate\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\nname = \"demo_lib\"\n"),
+            ("src/lib.rs", "pub mod child;\n\npub fn root_item() -> i32 {\n    1\n}\n"),
+            ("src/child.rs", "pub mod nested;\n\npub fn from_child() -> i32 {\n    2\n}\n\nuse self::nested::from_nested;\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n}\n"),
+            ("src/child/nested.rs", "pub fn from_nested() -> i32 {\n    3\n}\n\nuse super::from_child;\nuse crate::child::from_child as again;\n"),
+            ("src/main.rs", "use demo_crate::child::from_child;\n\nfn main() {\n    let _ = from_child();\n    let _ = demo_lib::root_item();\n}\n"),
+            ("src/bin/tool.rs", "use demo_lib::child;\n\nfn main() {\n    let _ = child::from_child();\n}\n"),
+            ("tests/use_lib.rs", "use demo_lib::child::nested::from_nested;\nuse demo_crate::root_item;\n\n#[test]\nfn calls_the_library() {\n    let _ = from_nested();\n    let _ = root_item();\n}\n"),
+        ],
+        edges: &[
+            ("src/lib.rs", "src/child.rs"),
+            ("src/child.rs", "src/child/nested.rs"),
+            ("src/child/nested.rs", "src/child.rs"),
+            ("src/main.rs", "src/child.rs"),
+            ("src/main.rs", "src/lib.rs"),
+            ("src/bin/tool.rs", "src/child.rs"),
+            ("tests/use_lib.rs", "src/child/nested.rs"),
+            ("tests/use_lib.rs", "src/lib.rs"),
         ],
     },
 ];

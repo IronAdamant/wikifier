@@ -32,8 +32,8 @@ Prefer the CLI when the connected MCP server is still `python3 -m wikifier.mcp.s
 - Do not hand-edit `library.md`, `file_health.md`, `file_health.json`, or `pending_updates.md`. `update-maps` rewrites `library.md`. Health and pending change only through the commands. They take `.wikifier_staging/.lock`.
 - `init` copies `index.html` only when it is missing, and it does not clobber an existing path list. `diagnostics.html` stays in this repo. `index.v2.html` and `diagnostics.v2.html` are comparison pages and are not deployed.
 - This repo's map roots are `src/` and `tests/` (`map_paths.txt`). `monitored_paths.txt` is the extra watch list for docs and `wikifier.sh`.
-- The import scan is comment-masked regex, plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). An indented Python import is conditional. `import()` is dynamic. The accuracy gate is `accuracy_fixtures_match_frozen_edges` (four frozen fixtures). Do not describe the scan as a CPython `ast` walk, and do not claim it has been run on Babylon.js. It does not read tsconfig paths, package exports, or workspaces.
-- `mark_green` checks Python and JS/TS public names against the wiki. Rust, Go, C/C++, C#, Java, and Markdown come back `unchecked`. That is expected.
+- The import scan is comment-masked regex, plus named JS/TS re-exports to depth 8 (`parser: "regex+reexport"`). An indented Python import is conditional. `import()` is dynamic. Rust resolves `mod`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name (`-` to `_`). `crate::` stays in that file's crate (`tests/*.rs` and `src/bin/*.rs` included). The package or lib name points at the library, which is how `src/main.rs` and `tests/*.rs` show up as dependents. The accuracy gate is `accuracy_fixtures_match_frozen_edges` (the frozen layouts, including a Cargo crate). Do not describe the scan as a CPython `ast` walk, and do not claim it has been run on Babylon.js. It does not read tsconfig paths, package exports, or workspaces.
+- `mark_green` checks Python, JS/TS, and Rust public names against the wiki. Rust names are top-level `pub` items, not `pub(crate)` and not methods inside `impl`. Go, C/C++, C#, Java, and Markdown come back `unchecked`. That is expected.
 - `wikifier serve` binds `127.0.0.1:8787`. Do not bind port 8080.
 - Do not set the project root to a parent that contains several repos.
 - Git: honor hooks. Do not use `--no-verify`. Do not commit `.cursor/`, `target/`, or gitignored leftovers (`wikifier/*.pyc`, `build/`, `dist/`, `.venv-build/`).
@@ -56,8 +56,8 @@ Prefer the CLI when the connected MCP server is still `python3 -m wikifier.mcp.s
 
 These files still describe the deleted Python package. They are records. Do not implement them, and do not rewrite them to sound current.
 
-- `MODULARIZATION_PLAN.md`
-- `SIMPLIFICATION_PLAN_AND_LOG.md`
+- `Findings/archive/MODULARIZATION_PLAN.md`
+- `Findings/archive/SIMPLIFICATION_PLAN_AND_LOG.md`
 - `Findings/` and `Findings/archive/`
 - `journal/` entries from before the Rust cutover
 - Released sections of `CHANGELOG.md` (Unreleased is the live note)

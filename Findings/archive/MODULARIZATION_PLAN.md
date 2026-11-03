@@ -1,3 +1,5 @@
+> Archived Python-era record. The package it describes is gone. Kept so the history stays readable.
+
 # Wikifier Modularization Plan
 
 > **Status (4.7.0, 2026-10-01):** `cache/` and `health_pkg/` are done for real — `cache/_core.py` and

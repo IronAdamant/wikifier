@@ -26,7 +26,7 @@ Works from small scripts to large monorepos. **Deep import/include maps** (zero-
 |----------|------------|--------|
 | Python | `.py` | comment-masked regex; relative imports and same-tree module paths; an indented import is flagged conditional |
 | JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts` | comment-masked regex; named re-exports followed to depth 8; `import()` flagged dynamic |
-| Rust | `.rs` | `use` / `mod` / `extern crate` |
+| Rust | `.rs` | `mod`, `use`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name (`-` becomes `_`). A name points at the library; `crate::` stays inside the file's own crate, including `tests/` and `src/bin/` |
 | Go | `.go` | `import` / import blocks |
 | C / C++ | `.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh` | `#include` (local + system) |
 | C# | `.cs` | `using` namespaces |
@@ -104,7 +104,7 @@ Advanced intel as needed: `list_paths` (names-only folder expand), `get_dependen
 - **Import analysis** — comment-masked regex for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8. Edges carry conditional, dynamic, and via-barrel flags, and a confidence read from those flags.
 - **Incremental pipeline** — `update-maps` parses files whose size or mtime changed, then writes the `wk_cache` text index, reverse edges, `library.md`, and sharded folder cards.
 - **Two path lists** — `map_paths.txt` = map package roots; `monitored_paths.txt` = extra watch list (docs, scripts). `check-changes` always watches mapped files and anything ever marked Green, so a narrow list never hides edits.
-- **Green you can trust** — `mark-green` checks the wiki against Python and JS/TS public symbols and refuses when added symbols are undocumented, removed symbols are still in backticks, or the public surface changed while the wiki file did not. Other languages are recorded as unchecked. `verify-wikis` audits every Green wiki. `health --summary` includes `green_breakdown`.
+- **Green you can trust** — `mark-green` checks the wiki against Python, JS/TS, and Rust public symbols and refuses when a public name is missing, a removed name is still in backticks, or the public surface changed while the wiki file did not. Rust names are top-level `pub` items: `fn`, `struct`, `enum`, `trait`, `mod`, `type`, `const`, `static`, and the names a `pub use` exports. `pub(crate)` and items inside `impl` are not in that set. Go, C/C++, C#, and Java are recorded as unchecked. `verify-wikis` re-checks every Green wiki. `health --summary` includes `green_breakdown`.
 - **Partial-map honesty** — `--max-files` returns `map_complete=false` and `files_remaining_dirty`. Run the same command again to resume. Already-parsed files are stat-skipped.
 - **Cache** — `.wikifier_staging/wk_cache`. `wikifier cache-status` reports the backend and the file count. An empty cache imports `import_cache.sqlite` through the `sqlite3` CLI, or `import_cache.json`.
 - **Selective agent work** — health and `suggest-next` stay on 🔴 and actionable 🟡. Diagnostics list ACS reason codes and `actionable_low_conf_edges`.
@@ -112,20 +112,6 @@ Advanced intel as needed: `list_paths` (names-only folder expand), `get_dependen
 - **MCP** — `wikifier mcp` in the same binary. A failed tool call sets `isError`. Calls stop at `WIKIFIER_MCP_DEADLINE_S` (default 60 seconds).
 - **Zero core dependencies** — empty `[dependencies]` in `Cargo.toml`.
 - **Honest failures** — a missing `project_root`, missing file, or lock timeout is an error result, never a silent fallback. `wikifier.sh` launches the Rust binary.
-
-## Does it pay off? (measured)
-
-`scripts/benchmark_lookup.py` asks the questions an agent asks before an edit, on real repositories, answered by Wikifier and by grep, scored against Python's own bytecode import scanner ([details](Findings/2026-10-01-lookup-benchmark.md)). 40 targets per repo:
-
-| Question | Repo | Wikifier: exactly right / median tokens | grep: exactly right / median tokens |
-|---|---|---|---|
-| Which files import M? | llama-index-core (724 files) | **40/40** · 72 | 27/40 · 84 |
-| | airflow-core (1,143 files) | **39/40** · 111 | 23/40 · 266 |
-| What could break if I change M? (depth 3) | llama-index-core | **40/40** · 487 | 11/40 · 209 (15 over a 200k-token budget) |
-| | airflow-core | **36/40** · 584 | 12/40 · 21,676 (8 over budget) |
-| What does M import? | both | **40/40** · ~270 | reading the file: ~1,100 |
-
-Typical lookups cost about the same; grep goes wrong on common module names (`base`, `utils`) and its cost explodes on them (up to 100k tokens for one question). Mapping from scratch: 2.3 s for 724 files, 21 s for 7,174.
 
 ## Performance (measured)
 

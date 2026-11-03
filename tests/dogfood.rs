@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use wikifier::jsonutil::{parse, Json};
-use wikifier::{session_bootstrap, update_maps};
+use wikifier::{prepare_edit, session_bootstrap, update_maps};
 
 fn temp_root(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("wk-dog-{name}-{}", std::process::id()));
@@ -105,4 +105,70 @@ fn containers_are_refused_and_scoped_children_map() {
     let _ = fs::remove_dir_all(&container);
     let _ = fs::remove_dir_all(&copy);
     let _ = fs::remove_dir_all(&cobol);
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+fn string_list(value: &Json, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(|item| item.as_array())
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|item| item.as_str().map(|text| text.to_string()))
+        .collect()
+}
+
+#[test]
+fn prepare_edit_on_this_repo_lists_api_dependents() {
+    let live = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root = temp_root("self-api");
+    fs::copy(live.join("Cargo.toml"), root.join("Cargo.toml")).unwrap();
+    fs::copy(live.join("map_paths.txt"), root.join("map_paths.txt")).unwrap();
+    copy_tree(&live.join("src"), &root.join("src"));
+    copy_tree(&live.join("tests"), &root.join("tests"));
+
+    let built = update_maps(&root);
+    assert_eq!(built.get("success").and_then(|s| s.as_bool()), Some(true), "{built}");
+    assert_eq!(built.get("map_complete").and_then(|s| s.as_bool()), Some(true), "{built}");
+
+    let prep = prepare_edit(&root, "src/api.rs");
+    assert_eq!(prep.get("success").and_then(|s| s.as_bool()), Some(true), "{prep}");
+    let mut dependents = string_list(&prep, "dependents");
+    dependents.sort();
+    let expected = vec![
+        "src/lib.rs",
+        "src/main.rs",
+        "src/mcp.rs",
+        "tests/cli_surface.rs",
+        "tests/contract_gaps.rs",
+        "tests/protocol_v07.rs",
+        "tests/robustness.rs",
+        "tests/skip_maps.rs",
+    ];
+    assert_eq!(dependents, expected, "prepare-edit src/api.rs dependents");
+
+    let main = prepare_edit(&root, "src/main.rs");
+    assert!(main.get("dependencies").and_then(|item| item.as_array()).is_some_and(|rows| !rows.is_empty()), "{main}");
+    let main_deps: Vec<String> = main
+        .get("dependencies")
+        .and_then(|item| item.as_array())
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|item| item.get("path").and_then(|path| path.as_str()).map(|text| text.to_string()))
+        .collect();
+    assert!(main_deps.iter().any(|path| path == "src/api.rs"), "main.rs dependencies: {main_deps:?}");
+    assert!(main_deps.iter().any(|path| path == "src/timeutil.rs"), "main.rs dependencies: {main_deps:?}");
+    let _ = fs::remove_dir_all(&root);
 }

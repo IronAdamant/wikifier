@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.83.0
       - name: Test
         run: cargo test --locked
 
@@ -25,7 +25,7 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.83.0
       - name: Build release binary
         run: cargo build --release --locked
       - name: Create GitHub Release

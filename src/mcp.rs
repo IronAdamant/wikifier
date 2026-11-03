@@ -84,9 +84,7 @@ pub fn tool_schema(name: &str) -> Json {
 pub fn handle_message(msg: &Json) -> Option<Json> {
     let id = msg.get("id").cloned();
     let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
-    if id.is_none() {
-        return None;
-    }
+    id.as_ref()?;
     let result = match method {
         "initialize" => Json::obj(vec![
             ("protocolVersion", Json::String("2024-11-05".into())),
@@ -261,7 +259,14 @@ fn resource_read(msg: &Json) -> Json {
         "wikifier://pending" => std::fs::read_to_string(root.join("pending_updates.md")).unwrap_or_default(),
         "wikifier://journal" => {
             let entries = api::read_journal(&root, None);
-            entries.into_iter().map(|e| format!("## [{}] {}\n**File:** {}\n**Reason:** {}\n", e.stamp, e.action, e.file, e.reason)).collect()
+            let mut text = String::new();
+            for entry in entries {
+                let _ = std::fmt::Write::write_fmt(
+                    &mut text,
+                    format_args!("## [{}] {}\n**File:** {}\n**Reason:** {}\n", entry.stamp, entry.action, entry.file, entry.reason),
+                );
+            }
+            text
         }
         _ => return Json::obj(vec![
             ("success", Json::Bool(false)),

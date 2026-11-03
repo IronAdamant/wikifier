@@ -375,6 +375,53 @@ fn verify_wikis_prefix_checks_one_file() {
     let _ = fs::remove_dir_all(&root);
 }
 
+#[test]
+fn rust_mark_green_requires_top_level_pub_items() {
+    let root = scratch("rust-green");
+    let source = "\
+pub fn kept() -> i32 { 1 }
+pub struct Widget;
+pub enum Phase { On }
+pub trait Run { fn run(&self); }
+pub mod child;
+pub type Alias = Widget;
+pub const FLAG: i32 = 1;
+pub use child::exported;
+pub(crate) fn hidden() {}
+impl Widget { pub fn method(&self) {} }
+#[cfg(test)]
+mod tests { pub fn inside() {} }
+";
+    fs::write(root.join("src/lib.rs"), source).unwrap();
+    fs::write(root.join("src/child.rs"), "pub fn exported() {}\n").unwrap();
+    fs::write(root.join("src/lib.rs.wiki.md"), "Names kept, Widget, Phase, Run, child, Alias, FLAG, exported.\n").unwrap();
+    let marked = mark_green(&root, "src/lib.rs", "wiki names the public items", false);
+    assert_eq!(marked.get("success").and_then(|flag| flag.as_bool()), Some(true), "{marked}");
+    assert_eq!(marked.get("verification").and_then(|flag| flag.as_str()), Some("verified"), "{marked}");
+    let row = read_health(&root).into_iter().find(|row| row.file == "src/lib.rs").unwrap();
+    assert!(row.public_symbols.contains("kept"), "{}", row.public_symbols);
+    assert!(!row.public_symbols.contains("hidden"), "pub(crate) counted: {}", row.public_symbols);
+    assert!(!row.public_symbols.contains("method"), "impl method counted: {}", row.public_symbols);
+    assert!(!row.public_symbols.contains("inside"), "nested pub counted: {}", row.public_symbols);
+
+    let wiki = fs::read_to_string(root.join("src/lib.rs.wiki.md")).unwrap();
+    fs::write(root.join("src/lib.rs"), "pub fn kept() -> i32 { 1 }\npub fn added() -> i32 { 2 }\n").unwrap();
+    fs::write(root.join("src/lib.rs.wiki.md"), &wiki).unwrap();
+    let refused = mark_green(&root, "src/lib.rs", "same wiki", false);
+    assert_eq!(refused.get("error_type").and_then(|flag| flag.as_str()), Some("WikiVerificationError"), "{refused}");
+    assert!(refused.to_string().contains("undocumented_new_symbols: added"), "{refused}");
+
+    fs::write(root.join("src/lib.rs.wiki.md"), "kept stays. `Widget` was removed. added is the new function.\n").unwrap();
+    let removed = mark_green(&root, "src/lib.rs", "wiki still names Widget", false);
+    assert_eq!(removed.get("error_type").and_then(|flag| flag.as_str()), Some("WikiVerificationError"), "{removed}");
+    assert!(removed.to_string().contains("wiki_mentions_removed_symbols: Widget"), "{removed}");
+
+    fs::write(root.join("src/lib.rs.wiki.md"), "kept and added are the public functions.\n").unwrap();
+    let again = mark_green(&root, "src/lib.rs", "wiki names kept and added", false);
+    assert_eq!(again.get("verification").and_then(|flag| flag.as_str()), Some("verified"), "{again}");
+    let _ = fs::remove_dir_all(&root);
+}
+
 fn http_exchange(port: u16, request: &str) -> String {
     use std::io::{Read, Write};
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();

@@ -37,7 +37,7 @@ Please use the appropriate GitHub issue template:
    ```bash
    wikifier mark-green "path/to/your/file"
    ```
-5. Before opening a PR: `cargo test`, then `wikifier update-maps` and `wikifier validate` on this repo. Parser changes must keep `accuracy_fixtures_match_frozen_edges` green.
+5. Before opening a PR: `cargo test`, then `wikifier update-maps` and `wikifier validate` on this repo. Parser changes must keep `accuracy_fixtures_match_frozen_edges` green. CI pins Rust 1.83.0 and runs `cargo test --locked` on Ubuntu, macOS, and Windows. All three jobs are required.
 
 ### 3. Pull Request Guidelines
 

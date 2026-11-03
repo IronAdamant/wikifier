@@ -1,3 +1,5 @@
+> Archived Python-era record. The package it describes is gone. Kept so the history stays readable.
+
 # Wikifier Simplification Plan & Execution Log (Post M5 Audit)
 
 **Date started**: 2026-06-07

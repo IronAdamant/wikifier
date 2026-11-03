@@ -60,7 +60,7 @@ Pipeline: **scan → parse → resolve → cache → health → artifacts**, imp
 
 - `src/api.rs` — the library surface: `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions`, `record_change`, `record_changes`, `record_deletion`, `mark_green`, `verify_wikis`, `update_maps` / `update_maps_run`, `dependency_report`, `load_dependents`, `cycles`, `init_project`, `serve_loop`, `monitor_loop`, `daemon_ctl`. `check_changes` watches mapped files, Green files, and `monitored_paths.txt`. `record_changes` reads `git status` (git is optional).
 - `src/scope.rs` — project root, `map_paths.txt`, `monitored_paths.txt`, excludes, and the file walk. A missing configured map directory is a scope error. Three or more child projects make the root a container and the walk stops.
-- `src/parse.rs` — comment-masked regex scans for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8 (`via_barrel`). An indented Python import is `conditional`. `import()` is `dynamic`. This is not a CPython `ast` parser and it does not read tsconfig paths, package `exports`, or workspaces. The accuracy gate is `accuracy_fixtures_match_frozen_edges`.
+- `src/parse.rs` — comment-masked regex scans for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8 (`via_barrel`). An indented Python import is `conditional`. `import()` is `dynamic`. Rust resolves `mod`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name (`-` to `_`). `crate::` stays in the file's crate; the package or lib name points at the library. This is not a CPython `ast` parser and it does not read tsconfig paths, package `exports`, or workspaces. The accuracy gate is `accuracy_fixtures_match_frozen_edges`.
 - `src/cache.rs` + `src/cache_commit.rs` — text index at `.wikifier_staging/wk_cache` (per-file payload, `by_src`, `by_dst`, notes, barrels). One commit per `update-maps`. Size and mtime skip unchanged files. `--full` rehashes. `src/legacy_cache.rs` imports an empty cache from `import_cache.sqlite` (the `sqlite3` CLI) or `import_cache.json`.
 - `src/artifacts.rs` — `file_health.json` (schema version 2) plus the `file_health.md` view, pending lines, and the journal. Identical journal retries within 120 seconds are skipped. `mark_green` stores `public_symbols`, `wiki_hash`, and `source_mtime_ns`, and refuses a Python or JS/TS wiki that misses the current public names, still mentions a removed name in backticks, or is unchanged after the public surface changed.
 - `src/maps_out.rs` — `library.md` (a file tree, a Mermaid block capped at 80 edges, and the dependency table) and sharded folder cards at `.wikifier_staging/maps/_root.json` and `maps/{prefix}/_index.json`.
@@ -69,7 +69,7 @@ Pipeline: **scan → parse → resolve → cache → health → artifacts**, imp
 
 Generated artifacts (in the target project root): `file_health.md/.json`, `library.md`, `pending_updates.md`, `journal/YYYY/MM/DD.md`, per-file `*.wiki.md`, `.wikifier_staging/` (`wk_cache`, folder maps, `incremental_status.json`, locks, daemon state). Scoping: `monitored_paths.txt` (extra watch list), `map_paths.txt` (import-map roots), `exclude_patterns.txt`. This repo's map roots are `src/` and `tests/`.
 
-Adding a language means a scan in `src/parse.rs` with the same edge shape, a frozen fixture kept green by `accuracy_fixtures_match_frozen_edges`, and, when wiki verification should refuse that language, a symbol extractor beside `python_public_symbols` / `js_public_symbols` in `src/api.rs`. Languages without an extractor are marked `unchecked`.
+Adding a language means a scan in `src/parse.rs` with the same edge shape, a frozen fixture kept green by `accuracy_fixtures_match_frozen_edges`, and, when wiki verification should refuse that language, a symbol extractor beside `python_public_symbols` / `js_public_symbols` / `rust_public_symbols`. Languages without an extractor are marked `unchecked`. Rust's extractor is `rust_public_symbols` in `src/parse.rs`.
 
 ## Versioning & Releases
 
@@ -83,5 +83,5 @@ Adding a language means a scan in `src/parse.rs` with the same edge shape, a fro
 - `skills/run.md` — the agent protocol (primary contract for any LLM operating Wikifier)
 - `docs/spec.md` — original requirements, then the living Core Principles
 - `Findings/` — dogfood evidence (`README.md` index; superseded plans in `Findings/archive/`). Historical. Do not treat it as the current design.
-- `SIMPLIFICATION_PLAN_AND_LOG.md`, `MODULARIZATION_PLAN.md` — Python-era logs. Do not implement them.
+- `Findings/archive/SIMPLIFICATION_PLAN_AND_LOG.md`, `Findings/archive/MODULARIZATION_PLAN.md` — Python-era logs. Do not implement them.
 - `file_health.md`, `pending_updates.md`, `journal/`, `library.md` — this repo's own live wiki state (dogfood)
