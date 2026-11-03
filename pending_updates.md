@@ -1,11 +1,6 @@
 # Pending Updates
 
 (no pending items — run check-changes after making edits)
-- AGENTS.md: LLM/agent edit — Correct the scanner and wiki-lookup notes.
-- CHANGELOG.md: LLM/agent edit — Record the parity work under Unreleased.
-- CLAUDE.md: LLM/agent edit — Correct the tsconfig note.
-- README.md: LLM/agent edit — Command notes and the measured benchmark table.
-- skills/run.md: LLM/agent edit — Document the parity behaviour.
 - src/api.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/artifacts.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/cache.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.

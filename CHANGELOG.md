@@ -9,10 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-11-03
+
+First release of the std-only Rust rewrite. `[dependencies]` is empty: no crates.io crates and no Python runtime. The binary implements the Python 4.7 agent contract. Protocol v0.7 stays. `pip install wikifier` still installs that Python 4.7 package.
+
+Python 4.7 at `24812ef` versus the Rust binary, 5 runs, median milliseconds (min–max). That Rust binary reported 4.7.0 when it was timed (`scripts/benchmark_results.md`). Figures: [Benchmarks](README.md#benchmarks). On the large tree, cold `update-maps` was 12675 (12540–13094) for Python and 3142 (3114–3305) for Rust; warm was 422 (417–433) and 246 (243–253). Resolved file edges on that tree were 9074 and 9074. Medium (this repo) was 44 Python and 98 Rust. Startup (`--version`) was 63 (61–66) and 2 (1–2).
+
 ### Breaking
-- The Python package is gone. Wikifier is the std-only Rust binary (`cargo build --release`). `pip install wikifier` and `python -m wikifier` are no longer the product. `wikifier.sh` / `.ps1` / `.bat` launch the Rust binary. MCP is `wikifier mcp`.
+- This repository no longer ships the Python package. Wikifier 5.0.0 is the std-only Rust binary (`cargo build --release`, or a release archive). `pip install wikifier` still installs the archived Python 4.7 package. `wikifier.sh` / `.ps1` / `.bat` launch the Rust binary. MCP is `wikifier mcp`.
 
 ### Added
+- A `v*.*.*` tag, after the test job, builds release binaries for `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-apple-darwin`, and `x86_64-pc-windows-msvc` with the same Rust 1.83.0 pin as CI. Unix archives are `.tar.gz`, Windows is `.zip`, named `wikifier-<version>-<target>`. `SHA256SUMS` is uploaded with them.
 - `update-maps` writes `library.md` (file tree, Mermaid, dependency table) and sharded folder cards under `.wikifier_staging/maps/`. `--directory`, `--max-files`, and `--stream` are honored. A `--max-files` budget leaves `map_complete=false`; the next run resumes because parsed files are stat-skipped.
 - `prune-health --deleted-missing` drops health rows whose path is no longer a file, including rows that still sit under a map root.
 - `dependencies --full` returns per-edge confidence, conditional / dynamic / via-barrel flags, and ACS reason codes. `cycles` adds `break_hint` (lowest-confidence edge in the component) and `external_edges`.

@@ -1,5 +1,5 @@
 # CHANGELOG.md
 
-**Role:** Keep a Changelog history for package 4.7.x.
+**Role:** Keep a Changelog history. 5.0.0 is the first Rust release (std-only, Python 4.7 contract, release archives). The 4.7.0 section is the Python package that shipped then.
 
-The 4.7.0 section is the record of that release, including the Python package that shipped then. Unreleased notes describe the Rust binary: map artifacts, dependency flags, wiki checks, deletion, background commands, the dashboard serve routes, MCP error reporting, `heal-stubs --dry-run`, and `init DIR`. The import scan is recorded as `regex+reexport`. Unreleased notes that Rust crate-name imports resolve to the library and to `[workspace] members`, that the unreproducible lookup benchmark was removed, that Rust `pub` names including impl methods can be verified Green, and that the MCP deadline, check-changes cap, sqlite import, and low-confidence edges have tests. CI pins Rust 1.83.0 and requires Ubuntu, macOS, and Windows. CI checks the empty dependency list without Python.
+The 5.0.0 notes cover map artifacts, dependency flags, wiki checks, deletion, background commands, the dashboard serve routes, MCP error reporting, Rust crate and workspace resolution, and the tag workflow that uploads `wikifier-<version>-<target>` archives plus `SHA256SUMS`. The import scan is recorded as `regex+reexport`. Benchmarks link to the README Benchmarks section and `scripts/benchmark_results.md`. CI pins Rust 1.83.0 and requires Ubuntu, macOS, and Windows.

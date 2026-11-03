@@ -1,12 +1,12 @@
 # AGENTS.md
 
-Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 4.7.x). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
+Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.0.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
 
 ## What this program is
 
 Wikifier is a zero-dependency, agent-to-agent codebase wiki. Agents look up a health matrix, a dependency map, and short per-file wikis instead of re-reading full sources. The human dashboard (`index.html`) is a read-only view of the same artifacts.
 
-The program is the std-only Rust binary under `src/`. Version is `Cargo.toml` (`wikifier --version`). `wikifier.sh`, `wikifier.ps1`, and `wikifier.bat` only exec that binary. MCP is `wikifier mcp` in the same binary. `.mcp.json` launches `wikifier` with args `["mcp"]`. There is no Python package. `pip install wikifier` and `python -m wikifier` are the archived product.
+The program is the std-only Rust binary under `src/`. Version is `Cargo.toml` (`wikifier --version`). `wikifier.sh`, `wikifier.ps1`, and `wikifier.bat` only exec that binary. MCP is `wikifier mcp` in the same binary. `.mcp.json` launches `wikifier` with args `["mcp"]`. `pip install wikifier` and `python -m wikifier` are the archived Python 4.7 package.
 
 `src/main.rs` and `src/mcp.rs` both call `src/api.rs`. Every call returns JSON with `success`. An operational failure is `{"success": false, "error", "error_type"}`.
 

@@ -4,4 +4,4 @@ version = 4
 
 [[package]]
 name = "wikifier"
-version = "4.7.0"
+version = "5.0.0"
