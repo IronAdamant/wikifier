@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rust `mod`, `crate::`, `self::`, `super::`, and the root `Cargo.toml` package or lib name resolve to files. Hyphens in the package name become underscores. `crate::` stays inside the file's crate (`tests/*.rs` and `src/bin/*.rs` are separate crates). The package or lib name points at the library, so binaries and integration tests are dependents of the library modules they import.
 - `mark-green` checks Rust top-level `pub` items (`fn`, `struct`, `enum`, `trait`, `mod`, `type`, `const`, `static`, and `pub use` names) the same way it checks Python and JS/TS names. `pub(crate)` and items inside `impl` stay out of that set. A Rust file can be `verified` Green. Go, C/C++, C#, and Java stay `unchecked`.
 - Tests cover `WIKIFIER_MCP_DEADLINE_S`, `WIKIFIER_CHECK_CHANGES_MAX`, an `import_cache.sqlite` import (including `sqlite_present_unread`), and `actionable_low_conf_edges`.
+- CI pins Rust 1.83.0 (`dtolnay/rust-toolchain@1.83.0`). Ubuntu, macOS, and Windows all run `cargo test --locked`, and a Windows failure fails the workflow.
 
 ### Removed
 - The README section "Does it pay off? (measured)" is gone. It cited `scripts/benchmark_lookup.py`, which left with the Python package, and its numbers were measured on that package. The performance table that remains is still labeled as Python-era.

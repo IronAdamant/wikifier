@@ -130,8 +130,26 @@ fn check_changes_cap_stops_the_pass_and_names_the_env_var() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+fn sqlite3_available() -> bool {
+    Command::new("sqlite3").arg("-version").output().map(|out| out.status.success()).unwrap_or(false)
+}
+
 #[test]
 fn sqlite_import_fills_an_empty_cache_and_reports_an_unreadable_file() {
+    let broken = scratch("sqlite-bad");
+    std::fs::create_dir_all(broken.join(".wikifier_staging")).unwrap();
+    std::fs::write(broken.join(".wikifier_staging/import_cache.sqlite"), b"not a sqlite database").unwrap();
+    std::fs::write(broken.join("src/a.py"), "x = 1\n").unwrap();
+    let boot = session_bootstrap(&broken);
+    assert_eq!(boot.get("success").and_then(|flag| flag.as_bool()), Some(true), "{boot}");
+    let warnings = json_text(boot.get("warnings").unwrap_or(&Json::Null));
+    assert!(warnings.contains("sqlite_present_unread"), "{boot}");
+    let _ = std::fs::remove_dir_all(&broken);
+    if !sqlite3_available() {
+        eprintln!("sqlite3 CLI is not on PATH; the import assertions run where the CLI is installed");
+        return;
+    }
+
     let root = scratch("sqlite");
     std::fs::create_dir_all(root.join(".wikifier_staging")).unwrap();
     std::fs::write(root.join("src/a.py"), "x = 1\n").unwrap();
@@ -161,16 +179,7 @@ fn sqlite_import_fills_an_empty_cache_and_reports_an_unreadable_file() {
     let paths: Vec<_> = again.get("internal").and_then(|item| item.as_array()).unwrap_or(&[]).iter().filter_map(|edge| edge.get("path").and_then(|path| path.as_str())).collect();
     assert_eq!(paths, ["src/b.py"], "a filled cache must ignore a later sqlite file: {again}");
 
-    let broken = scratch("sqlite-bad");
-    std::fs::create_dir_all(broken.join(".wikifier_staging")).unwrap();
-    std::fs::write(broken.join(".wikifier_staging/import_cache.sqlite"), b"not a sqlite database").unwrap();
-    std::fs::write(broken.join("src/a.py"), "x = 1\n").unwrap();
-    let boot = session_bootstrap(&broken);
-    assert_eq!(boot.get("success").and_then(|flag| flag.as_bool()), Some(true), "{boot}");
-    let warnings = json_text(boot.get("warnings").unwrap_or(&Json::Null));
-    assert!(warnings.contains("sqlite_present_unread"), "{boot}");
     let _ = std::fs::remove_dir_all(&root);
-    let _ = std::fs::remove_dir_all(&broken);
 }
 
 #[test]
