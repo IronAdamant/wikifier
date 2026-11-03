@@ -1,6 +1,6 @@
 # skills/run.md
 
-**Role:** Agent Protocol v0.7. This is the contract for the daily loop.
+**Role:** Agent Protocol v0.7. This is the contract for the daily loop. `AGENTS.md` is the repository entry point and points here.
 
 Part 1 is the session loop: bootstrap, check-changes, suggest-next, prepare-edit, record-change, mark-green, update-maps. Part 2 is the reference for health, wiki verification, batch recording, dependencies, and commands.
 

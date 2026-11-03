@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wikifier is a **zero-dependency, agent-to-agent codebase wiki**: it gives AI agents a token-efficient, queryable map of a codebase (health matrix, dependency graph, per-file wiki summaries) so they can look things up instead of re-reading full sources. The human layer (`index.html` dashboard) is strictly secondary — a read-only viewer of the same artifacts. It is deliberately NOT a general human documentation tool.
 
-**This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). The authoritative agent contract is `skills/run.md` (Agent Protocol v0.7 — package 4.7.x) — read it before substantive work.
+**This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). `AGENTS.md` is the entry point for any coding agent. The authoritative contract is `skills/run.md` (Agent Protocol v0.7, package 4.7.x). Read it before substantive work.
 
 **USE WIKIFIER FIRST (non-negotiable in this repo, preferred on any managed target):** At session start call `session_bootstrap` (MCP or `wikifier session-bootstrap`). Prefer Core daily tools (`list_core_tools`): bootstrap, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green`. Look up via map/wiki/deps before re-reading full sources. Selective work only (🔴 / actionable 🟡). Never skip `record_change` after edits.
 
@@ -63,7 +63,7 @@ Pipeline: **scan → parse → resolve → cache → health → artifacts**, imp
 - `src/parse.rs` — comment-masked regex scans for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8 (`via_barrel`). An indented Python import is `conditional`. `import()` is `dynamic`. This is not a CPython `ast` parser and it does not read tsconfig paths, package `exports`, or workspaces. The accuracy gate is `accuracy_fixtures_match_frozen_edges`.
 - `src/cache.rs` + `src/cache_commit.rs` — text index at `.wikifier_staging/wk_cache` (per-file payload, `by_src`, `by_dst`, notes, barrels). One commit per `update-maps`. Size and mtime skip unchanged files. `--full` rehashes. `src/legacy_cache.rs` imports an empty cache from `import_cache.sqlite` (the `sqlite3` CLI) or `import_cache.json`.
 - `src/artifacts.rs` — `file_health.json` (schema version 2) plus the `file_health.md` view, pending lines, and the journal. Identical journal retries within 120 seconds are skipped. `mark_green` stores `public_symbols`, `wiki_hash`, and `source_mtime_ns`, and refuses a Python or JS/TS wiki that misses the current public names, still mentions a removed name in backticks, or is unchanged after the public surface changed.
-- `src/maps_out.rs` — `library.md` (Mermaid capped at 80 edges, plus the dependency table) and sharded folder cards at `.wikifier_staging/maps/_root.json` and `maps/{prefix}/_index.json`.
+- `src/maps_out.rs` — `library.md` (a file tree, a Mermaid block capped at 80 edges, and the dependency table) and sharded folder cards at `.wikifier_staging/maps/_root.json` and `maps/{prefix}/_index.json`.
 - `src/project_lock.rs` — advisory lock `.wikifier_staging/.lock`, taken before the cache lock, re-entrant per thread, 30 second wait, stolen when the recorded pid is dead.
 - `src/mcp.rs` — stdio JSON-RPC. `isError` follows `success: false`. `resources/read` and `prompts/get` are implemented. Deadline `WIKIFIER_MCP_DEADLINE_S` (default 60).
 
@@ -75,12 +75,13 @@ Adding a language means a scan in `src/parse.rs` with the same edge shape, a fro
 
 - Version lives in `Cargo.toml` (`version`). SemVer + Keep a Changelog format in `CHANGELOG.md`.
 - Protocol versions (`skills/run.md`) are independent of package version; mandatory I/O changes require a protocol version bump with migration notes there.
-- Agents must tolerate additive fields in dict returns; library returns always include `"success": bool`. Operational failures return `{"success": False, "error": ...}`; contract misuse raises.
+- Agents must tolerate additive fields in JSON returns. Every return includes `"success"`. Operational failures return `{"success": false, "error", "error_type"}`.
 
 ## Repo Map (beyond the package)
 
+- `AGENTS.md` — entry point for any coding agent in this repo
 - `skills/run.md` — the agent protocol (primary contract for any LLM operating Wikifier)
-- `docs/spec.md` — spec and guiding principles
-- `Findings/` — decisions and dogfood evidence (`README.md` index; superseded plans in `Findings/archive/`)
-- `SIMPLIFICATION_PLAN_AND_LOG.md` — log of the simplification phases
+- `docs/spec.md` — original requirements, then the living Core Principles
+- `Findings/` — dogfood evidence (`README.md` index; superseded plans in `Findings/archive/`). Historical. Do not treat it as the current design.
+- `SIMPLIFICATION_PLAN_AND_LOG.md`, `MODULARIZATION_PLAN.md` — Python-era logs. Do not implement them.
 - `file_health.md`, `pending_updates.md`, `journal/`, `library.md` — this repo's own live wiki state (dogfood)

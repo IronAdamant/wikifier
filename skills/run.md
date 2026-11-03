@@ -2,7 +2,7 @@
 
 **Package 4.7.x** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
-This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference.
+This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference. In the Wikifier repository, `AGENTS.md` is the entry point and points here.
 
 ---
 

@@ -18,6 +18,8 @@ cargo build --release
 
 Wikifier is an **agent-to-agent** tool: it builds a living map of a project (health matrix, dependency graph, short file summaries) and agents keep that map current as they work. Humans can peek via a small dashboard; the product is the agent loop, not a general docs site or IDE.
 
+Agents working in this repository start at [`AGENTS.md`](AGENTS.md). The day-to-day contract is [`skills/run.md`](skills/run.md).
+
 Works from small scripts to large monorepos. **Deep import/include maps** (zero-dependency parsers):
 
 | Language | Extensions | Notes |

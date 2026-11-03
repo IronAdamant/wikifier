@@ -7,6 +7,7 @@
 # Specific files only. Mapped sources under map_paths.txt are watched without being listed here.
 skills/run.md
 README.md
+AGENTS.md
 CLAUDE.md
 CONTRIBUTING.md
 CHANGELOG.md
