@@ -33,20 +33,17 @@ fn main() -> ExitCode {
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
-        if a == "-r" || a == "--reason" || a == "--only" {
-            if i + 1 < args.len() {
-                let key = if a == "--only" { "only" } else { "reasons" };
-                let cur = flags.entry(key.into()).or_default();
-                if !cur.is_empty() {
-                    cur.push('\n');
-                }
-                cur.push_str(&args[i + 1]);
-                i += 2;
-                continue;
+        if (a == "-r" || a == "--reason" || a == "--only") && i + 1 < args.len() {
+            let key = if a == "--only" { "only" } else { "reasons" };
+            let cur = flags.entry(key.into()).or_default();
+            if !cur.is_empty() {
+                cur.push('\n');
             }
+            cur.push_str(&args[i + 1]);
+            i += 2;
+            continue;
         }
-        if a == "--reasons" {
-            if i + 1 < args.len() {
+        if a == "--reasons" && i + 1 < args.len() {
                 let text = std::fs::read_to_string(&args[i + 1]).unwrap_or_default();
                 let cur = flags.entry("reasons".into()).or_default();
                 for line in text.lines() {
@@ -61,7 +58,6 @@ fn main() -> ExitCode {
                 }
                 i += 2;
                 continue;
-            }
         }
         if a == "--json" || a == "--full" || a == "--summary" || a == "--force" || a == "--stream" || a == "--quiet" || a == "--dry-run" || a == "--green" {
             flags.insert(a.trim_start_matches('-').to_string(), "true".into());
@@ -126,13 +122,11 @@ fn extract_target(args: &[String]) -> (Option<PathBuf>, bool, Vec<String>) {
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
-        if a == "--target" || a == "--project-root" {
-            if i + 1 < args.len() {
-                root = Some(PathBuf::from(&args[i + 1]));
-                explicit = true;
-                i += 2;
-                continue;
-            }
+        if (a == "--target" || a == "--project-root") && i + 1 < args.len() {
+            root = Some(PathBuf::from(&args[i + 1]));
+            explicit = true;
+            i += 2;
+            continue;
         }
         if let Some(v) = a.strip_prefix("--target=").or_else(|| a.strip_prefix("--project-root=")) {
             root = Some(PathBuf::from(v));

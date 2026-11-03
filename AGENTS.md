@@ -56,8 +56,8 @@ Prefer the CLI when the connected MCP server is still `python3 -m wikifier.mcp.s
 
 These files still describe the deleted Python package. They are records. Do not implement them, and do not rewrite them to sound current.
 
-- `MODULARIZATION_PLAN.md`
-- `SIMPLIFICATION_PLAN_AND_LOG.md`
+- `Findings/archive/MODULARIZATION_PLAN.md`
+- `Findings/archive/SIMPLIFICATION_PLAN_AND_LOG.md`
 - `Findings/` and `Findings/archive/`
 - `journal/` entries from before the Rust cutover
 - Released sections of `CHANGELOG.md` (Unreleased is the live note)

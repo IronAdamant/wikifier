@@ -83,5 +83,5 @@ Adding a language means a scan in `src/parse.rs` with the same edge shape, a fro
 - `skills/run.md` — the agent protocol (primary contract for any LLM operating Wikifier)
 - `docs/spec.md` — original requirements, then the living Core Principles
 - `Findings/` — dogfood evidence (`README.md` index; superseded plans in `Findings/archive/`). Historical. Do not treat it as the current design.
-- `SIMPLIFICATION_PLAN_AND_LOG.md`, `MODULARIZATION_PLAN.md` — Python-era logs. Do not implement them.
+- `Findings/archive/SIMPLIFICATION_PLAN_AND_LOG.md`, `Findings/archive/MODULARIZATION_PLAN.md` — Python-era logs. Do not implement them.
 - `file_health.md`, `pending_updates.md`, `journal/`, `library.md` — this repo's own live wiki state (dogfood)

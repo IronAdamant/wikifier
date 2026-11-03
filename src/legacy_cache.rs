@@ -99,7 +99,7 @@ fn import_json(root: &Path, path: &Path) -> Result<usize, String> {
         if key.starts_with('_') {
             continue;
         }
-        if !entry.as_object().is_some() {
+        if entry.as_object().is_none() {
             continue;
         }
         rels.insert(key.clone());

@@ -817,7 +817,7 @@ fn paren_delta(s: &str) -> i32 {
 fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
     let stmt = stmt.trim().trim_end_matches('\\').trim();
     if let Some(rest) = stmt.strip_prefix("import ") {
-        let names = rest.split(',').map(|s| s.trim().split_whitespace().next().unwrap_or("")).filter(|s| !s.is_empty() && *s != "__future__").collect::<Vec<_>>().join(",");
+        let names = rest.split(',').map(|s| s.split_whitespace().next().unwrap_or("")).filter(|s| !s.is_empty() && *s != "__future__").collect::<Vec<_>>().join(",");
         if names.is_empty() {
             return None;
         }
@@ -838,7 +838,7 @@ fn parse_py_stmt(stmt: &str) -> Option<RawImport> {
         let module = left[level..].trim();
         let names: Vec<String> = right
             .split(',')
-            .map(|s| s.trim().split_whitespace().next().unwrap_or("").to_string())
+            .map(|s| s.split_whitespace().next().unwrap_or("").to_string())
             .filter(|s| !s.is_empty())
             .collect();
         if module.starts_with("__future__") {
@@ -1978,12 +1978,7 @@ fn module_file(base: &Path, dotted: &str) -> Option<PathBuf> {
         t.set_file_name(name);
         t
     };
-    for cand in [py, init, pyi] {
-        if exists_exact(base, &cand) {
-            return Some(cand);
-        }
-    }
-    None
+    [py, init, pyi].into_iter().find(|cand| exists_exact(base, cand))
 }
 
 fn exists_exact(base: &Path, candidate: &Path) -> bool {

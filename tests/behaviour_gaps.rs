@@ -50,7 +50,7 @@ fn mcp_call(bin: &str, deadline: Option<&str>, body: &str) -> (Json, Duration) {
     (parsed, elapsed)
 }
 
-fn tool_body(root: &PathBuf, name: &str) -> String {
+fn tool_body(root: &std::path::Path, name: &str) -> String {
     let root_text = root.to_str().unwrap().replace('\\', "\\\\").replace('"', "\\\"");
     format!(
         r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"{name}","arguments":{{"project_root":"{root_text}"}}}}}}"#

@@ -191,7 +191,7 @@ struct Parser<'a> {
     i: usize,
 }
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     fn skip(&mut self) {
         while self.i < self.s.len() && self.s[self.i].is_ascii_whitespace() {
             self.i += 1;

@@ -364,7 +364,7 @@ fn load_rows(root: &Path) -> (BTreeMap<String, Row>, bool) {
 fn save_index(root: &Path, rows: &BTreeMap<String, Row>) -> Result<(), String> {
     let mut body = String::new();
     let mut paths = String::new();
-    for (_, row) in rows {
+    for row in rows.values() {
         body.push_str(&format!("{}\t{}\t{}\t{}\t{}\n", row.rel, row.mtime_ns, row.size, row.hash, join_dsts(&row.dsts)));
         paths.push_str(&row.rel);
         paths.push('\n');

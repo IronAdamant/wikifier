@@ -457,24 +457,6 @@ pub fn list_paths(root: &Path, prefix: &str) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
     let paths = cache::list_prefix(root, prefix).unwrap_or_default();
     let pref = prefix.trim_matches('/');
-    let mut dirs: BTreeMap<String, i64> = BTreeMap::new();
-    let mut files = Vec::new();
-    for path in &paths {
-        let rest = if pref.is_empty() { path.as_str() } else if let Some(r) = path.strip_prefix(pref) { r.trim_start_matches('/') } else { continue };
-        if rest.is_empty() {
-            files.push(path.clone());
-            continue;
-        }
-        if let Some((dir, _)) = rest.split_once('/') {
-            *dirs.entry(dir.to_string()).or_insert(0) += 1;
-        } else if !pref.is_empty() && path == pref {
-            files.push(path.clone());
-        } else if pref.is_empty() {
-            files.push(path.clone());
-        } else {
-            files.push(path.clone());
-        }
-    }
     // depth-1: a path directly under prefix is a file; a longer path contributes to its first segment
     let mut direct_files = Vec::new();
     let mut dir_counts: BTreeMap<String, i64> = BTreeMap::new();
@@ -494,7 +476,6 @@ pub fn list_paths(root: &Path, prefix: &str) -> Json {
             direct_files.push(path.clone());
         }
     }
-    let _ = (dirs, files);
     ok(vec![
         ("prefix", Json::String(pref.into())),
         ("files", Json::Array(direct_files.into_iter().map(Json::String).collect())),
@@ -1170,50 +1151,69 @@ fn cycle_pairs(root: &Path) -> BTreeSet<(String, String)> {
     pairs
 }
 
-fn tarjan(graph: &BTreeMap<String, Vec<String>>) -> Vec<Vec<String>> {
-    fn strong(node: &str, graph: &BTreeMap<String, Vec<String>>, index: &mut i64, stack: &mut Vec<String>, on: &mut BTreeSet<String>, idx: &mut BTreeMap<String, i64>, low: &mut BTreeMap<String, i64>, out: &mut Vec<Vec<String>>) {
-        idx.insert(node.to_string(), *index);
-        low.insert(node.to_string(), *index);
-        *index += 1;
-        stack.push(node.to_string());
-        on.insert(node.to_string());
-        for nxt in graph.get(node).into_iter().flatten() {
-            if !idx.contains_key(nxt) {
-                strong(nxt, graph, index, stack, on, idx, low, out);
-                let ln = *low.get(node).unwrap_or(&0);
-                let lnxt = *low.get(nxt).unwrap_or(&0);
-                low.insert(node.to_string(), ln.min(lnxt));
-            } else if on.contains(nxt) {
-                let ln = *low.get(node).unwrap_or(&0);
-                let inxt = *idx.get(nxt).unwrap_or(&0);
-                low.insert(node.to_string(), ln.min(inxt));
+struct Tarjan<'a> {
+    graph: &'a BTreeMap<String, Vec<String>>,
+    index: i64,
+    stack: Vec<String>,
+    on: BTreeSet<String>,
+    idx: BTreeMap<String, i64>,
+    low: BTreeMap<String, i64>,
+    out: Vec<Vec<String>>,
+}
+
+impl Tarjan<'_> {
+    fn strong(&mut self, node: &str) {
+        self.idx.insert(node.to_string(), self.index);
+        self.low.insert(node.to_string(), self.index);
+        self.index += 1;
+        self.stack.push(node.to_string());
+        self.on.insert(node.to_string());
+        let next: Vec<String> = self.graph.get(node).into_iter().flatten().cloned().collect();
+        for nxt in next {
+            if !self.idx.contains_key(&nxt) {
+                self.strong(&nxt);
+                let ln = *self.low.get(node).unwrap_or(&0);
+                let lnxt = *self.low.get(&nxt).unwrap_or(&0);
+                self.low.insert(node.to_string(), ln.min(lnxt));
+            } else if self.on.contains(&nxt) {
+                let ln = *self.low.get(node).unwrap_or(&0);
+                let inxt = *self.idx.get(&nxt).unwrap_or(&0);
+                self.low.insert(node.to_string(), ln.min(inxt));
             }
         }
-        if low.get(node) == idx.get(node) {
+        if self.low.get(node) == self.idx.get(node) {
             let mut comp = Vec::new();
-            while let Some(w) = stack.pop() {
-                on.remove(&w);
+            while let Some(w) = self.stack.pop() {
+                self.on.remove(&w);
                 let done = w == node;
                 comp.push(w);
-                if done { break; }
+                if done {
+                    break;
+                }
             }
             comp.sort();
-            out.push(comp);
+            self.out.push(comp);
         }
     }
-    let mut index = 0i64;
-    let mut stack = Vec::new();
-    let mut on = BTreeSet::new();
-    let mut idx = BTreeMap::new();
-    let mut low = BTreeMap::new();
-    let mut out = Vec::new();
+}
+
+fn tarjan(graph: &BTreeMap<String, Vec<String>>) -> Vec<Vec<String>> {
+    let mut search = Tarjan {
+        graph,
+        index: 0,
+        stack: Vec::new(),
+        on: BTreeSet::new(),
+        idx: BTreeMap::new(),
+        low: BTreeMap::new(),
+        out: Vec::new(),
+    };
     let nodes: Vec<String> = graph.keys().cloned().collect();
     for n in nodes {
-        if !idx.contains_key(&n) {
-            strong(&n, graph, &mut index, &mut stack, &mut on, &mut idx, &mut low, &mut out);
+        if !search.idx.contains_key(&n) {
+            search.strong(&n);
         }
     }
-    out
+    search.out
 }
 
 pub fn verify_wikis(root: &Path) -> Json {
@@ -2428,21 +2428,17 @@ fn init_project(root: &Path) -> Json {
     };
     let src = root.join("src");
     let mut seeded = Vec::new();
-    if !path_list_has_entries(root, "map_paths.txt") {
-        if src.is_dir() {
-            if fs::write(root.join("map_paths.txt"), "src\n").is_err() {
-                return fail("InitError", "could not write map_paths.txt");
-            }
-            seeded.push("map_paths.txt");
+    if !path_list_has_entries(root, "map_paths.txt") && src.is_dir() {
+        if fs::write(root.join("map_paths.txt"), "src\n").is_err() {
+            return fail("InitError", "could not write map_paths.txt");
         }
+        seeded.push("map_paths.txt");
     }
-    if !path_list_has_entries(root, "monitored_paths.txt") {
-        if src.is_dir() {
-            if fs::write(root.join("monitored_paths.txt"), "src\n").is_err() {
-                return fail("InitError", "could not write monitored_paths.txt");
-            }
-            seeded.push("monitored_paths.txt");
+    if !path_list_has_entries(root, "monitored_paths.txt") && src.is_dir() {
+        if fs::write(root.join("monitored_paths.txt"), "src\n").is_err() {
+            return fail("InitError", "could not write monitored_paths.txt");
         }
+        seeded.push("monitored_paths.txt");
     }
     if !path_list_has_entries(root, "map_paths.txt") && !src.is_dir() {
         return fail("ScopeError", "no src/ directory and map_paths.txt has no roots; name map_paths before update-maps");
