@@ -1460,17 +1460,39 @@ fn skip_rust_string(b: &[u8], i: usize) -> Option<usize> {
 
 fn skip_rust_char_or_lifetime(b: &[u8], i: usize) -> usize {
     let next = b.get(i + 1).copied().unwrap_or(0);
-    if next.is_ascii_alphabetic() || next == b'_' {
+    if next == b'\\' {
+        let mut j = i + 2;
+        if b.get(j) == Some(&b'u') && b.get(j + 1) == Some(&b'{') {
+            j += 2;
+            while j < b.len() && b[j] != b'}' {
+                j += 1;
+            }
+            j += 1;
+        } else if b.get(j) == Some(&b'x') {
+            j += 3;
+        } else {
+            j += 1;
+        }
+        if j < b.len() && b[j] == b'\'' {
+            j += 1;
+        }
+        return j.min(b.len());
+    }
+    if (next.is_ascii_alphabetic() || next == b'_') && b.get(i + 2) != Some(&b'\'') {
         let mut j = i + 2;
         while j < b.len() && (b[j].is_ascii_alphanumeric() || b[j] == b'_') {
             j += 1;
         }
         return j;
     }
-    if next == b'\\' {
-        return (i + 4).min(b.len());
+    let mut j = i + 1;
+    while j < b.len() && b[j] != b'\'' && j < i + 8 {
+        j += 1;
     }
-    (i + 3).min(b.len())
+    if j < b.len() && b[j] == b'\'' {
+        j += 1;
+    }
+    j.min(b.len())
 }
 
 fn rust_submodule_dir(from_rel: &str) -> PathBuf {
@@ -1495,6 +1517,157 @@ fn separate_crate_root(from_rel: &str) -> Option<String> {
         return Some(format!("src/bin/{stem}.rs"));
     }
     None
+}
+
+/// Top-level `pub` items. `pub(crate)` and items inside `impl` or a function are not part of this set.
+pub fn rust_public_symbols(text: &str) -> Vec<String> {
+    let b = text.as_bytes();
+    let mut symbols = Vec::new();
+    let mut i = 0;
+    let mut brace: i32 = 0;
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if b[i] == b'/' && i + 1 < b.len() && (b[i + 1] == b'/' || b[i + 1] == b'*') {
+            i = skip_rust_comment(b, i);
+            continue;
+        }
+        if let Some(end) = skip_rust_string(b, i) {
+            i = end;
+            continue;
+        }
+        if b[i] == b'\'' {
+            i = skip_rust_char_or_lifetime(b, i);
+            continue;
+        }
+        if b[i] == b'{' {
+            brace += 1;
+            i += 1;
+            continue;
+        }
+        if b[i] == b'}' {
+            brace -= 1;
+            i += 1;
+            continue;
+        }
+        if brace == 0 && starts_word(b, i, "pub") {
+            let after = i + 3;
+            if after < b.len() && b[after] == b'(' {
+                i = after;
+                continue;
+            }
+            if let Some((names, end)) = rust_pub_names(b, after) {
+                for name in names {
+                    if !name.is_empty() && !symbols.iter().any(|have: &String| have == &name) {
+                        symbols.push(name);
+                    }
+                }
+                i = end;
+                continue;
+            }
+        }
+        if let Some((_, end)) = read_ident(b, i) {
+            i = end;
+            continue;
+        }
+        i += 1;
+    }
+    symbols
+}
+
+fn rust_pub_names(b: &[u8], start: usize) -> Option<(Vec<String>, usize)> {
+    let mut i = skip_noise(b, start);
+    loop {
+        if starts_word(b, i, "async") {
+            i = skip_noise(b, i + "async".len());
+            continue;
+        }
+        if starts_word(b, i, "unsafe") {
+            i = skip_noise(b, i + "unsafe".len());
+            continue;
+        }
+        if starts_word(b, i, "const") {
+            let next = skip_noise(b, i + "const".len());
+            if starts_word(b, next, "fn") {
+                i = next;
+                continue;
+            }
+            let (name, end) = read_ident(b, next)?;
+            return Some((vec![name], end));
+        }
+        break;
+    }
+    for (word, len) in [("fn", 2usize), ("struct", 6), ("enum", 4), ("trait", 5), ("mod", 3), ("type", 4), ("static", 6)] {
+        if starts_word(b, i, word) {
+            let mut next = skip_noise(b, i + len);
+            if word == "static" && starts_word(b, next, "mut") {
+                next = skip_noise(b, next + 3);
+            }
+            let (name, end) = read_ident(b, next)?;
+            return Some((vec![name], end));
+        }
+    }
+    if starts_word(b, i, "use") {
+        return use_export_names(b, i + 3);
+    }
+    None
+}
+
+fn use_export_names(b: &[u8], start: usize) -> Option<(Vec<String>, usize)> {
+    fn walk(b: &[u8], start: usize) -> Option<(usize, Vec<String>)> {
+        let i = skip_noise(b, start);
+        if i >= b.len() {
+            return None;
+        }
+        if b[i] == b'{' {
+            return walk_group(b, i + 1);
+        }
+        if b[i] == b'*' {
+            return Some((i + 1, Vec::new()));
+        }
+        let (ident, mut j) = read_ident(b, i)?;
+        j = skip_noise(b, j);
+        let mut alias = None;
+        if starts_word(b, j, "as") {
+            let alias_at = skip_noise(b, j + 2);
+            let (name, after) = read_ident(b, alias_at)?;
+            alias = Some(name);
+            j = skip_noise(b, after);
+        }
+        if j + 1 < b.len() && b[j] == b':' && b[j + 1] == b':' {
+            return walk(b, skip_noise(b, j + 2));
+        }
+        let name = alias.unwrap_or(ident);
+        if name == "self" || name == "super" || name == "crate" {
+            return Some((j, Vec::new()));
+        }
+        Some((j, vec![name]))
+    }
+    fn walk_group(b: &[u8], mut i: usize) -> Option<(usize, Vec<String>)> {
+        let mut out = Vec::new();
+        loop {
+            i = skip_noise(b, i);
+            if i >= b.len() {
+                return None;
+            }
+            if b[i] == b'}' {
+                return Some((i + 1, out));
+            }
+            if b[i] == b',' {
+                i += 1;
+                continue;
+            }
+            let (end, names) = walk(b, i)?;
+            out.extend(names);
+            i = end;
+        }
+    }
+    let (end, names) = walk(b, skip_noise(b, start))?;
+    let end = skip_noise(b, end);
+    let end = if end < b.len() && b[end] == b';' { end + 1 } else { end };
+    Some((names, end))
 }
 
 fn load_rust_crate_names(root: &Path) -> Vec<String> {

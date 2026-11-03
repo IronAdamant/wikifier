@@ -69,7 +69,7 @@ Pipeline: **scan → parse → resolve → cache → health → artifacts**, imp
 
 Generated artifacts (in the target project root): `file_health.md/.json`, `library.md`, `pending_updates.md`, `journal/YYYY/MM/DD.md`, per-file `*.wiki.md`, `.wikifier_staging/` (`wk_cache`, folder maps, `incremental_status.json`, locks, daemon state). Scoping: `monitored_paths.txt` (extra watch list), `map_paths.txt` (import-map roots), `exclude_patterns.txt`. This repo's map roots are `src/` and `tests/`.
 
-Adding a language means a scan in `src/parse.rs` with the same edge shape, a frozen fixture kept green by `accuracy_fixtures_match_frozen_edges`, and, when wiki verification should refuse that language, a symbol extractor beside `python_public_symbols` / `js_public_symbols` in `src/api.rs`. Languages without an extractor are marked `unchecked`.
+Adding a language means a scan in `src/parse.rs` with the same edge shape, a frozen fixture kept green by `accuracy_fixtures_match_frozen_edges`, and, when wiki verification should refuse that language, a symbol extractor beside `python_public_symbols` / `js_public_symbols` / `rust_public_symbols`. Languages without an extractor are marked `unchecked`. Rust's extractor is `rust_public_symbols` in `src/parse.rs`.
 
 ## Versioning & Releases
 

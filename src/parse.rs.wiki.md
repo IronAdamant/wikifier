@@ -8,4 +8,4 @@ Rust `mod` names a file beside the declaring module (`lib.rs`, `main.rs`, and `m
 
 The scan does not use CPython `ast` and does not read tsconfig paths, package exports, or workspaces. The frozen fixtures, including the Cargo crate layout, are the accuracy gate.
 
-Public scan entry points: `language`, `read_utf8`, `scan_file_warned`, `scan_file`, `resolve_project`, `resolve_python_spec`, `analyze_files`, `analyze_changed`, `edges_for_files`. Public types: `RawImport`, `Kind`, `Scan`, `FactEdge`, `FileFacts`, `Analysis`.
+Public scan entry points: `language`, `read_utf8`, `scan_file_warned`, `scan_file`, `resolve_project`, `resolve_python_spec`, `analyze_files`, `analyze_changed`, `edges_for_files`, `rust_public_symbols`. Public types: `RawImport`, `Kind`, `Scan`, `FactEdge`, `FileFacts`, `Analysis`. `rust_public_symbols` lists top-level `pub` items (`fn`, `struct`, `enum`, `trait`, `mod`, `type`, `const`, `static`, and the names a `pub use` exports). `pub(crate)` and items inside `impl` are left out.

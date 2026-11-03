@@ -936,6 +936,9 @@ fn public_symbols(path: &Path) -> SymbolScan {
     if matches!(ext.as_str(), "js" | "ts" | "jsx" | "tsx" | "mjs" | "cjs" | "mts" | "cts") {
         return SymbolScan { names: js_public_symbols(&text), warning, extractor: true };
     }
+    if ext == "rs" {
+        return SymbolScan { names: crate::parse::rust_public_symbols(&text), warning, extractor: true };
+    }
     SymbolScan { names: Vec::new(), warning, extractor: false }
 }
 
