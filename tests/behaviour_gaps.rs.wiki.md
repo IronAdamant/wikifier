@@ -9,3 +9,7 @@
 `sqlite_import_fills_an_empty_cache_and_reports_an_unreadable_file` always checks that a corrupt sqlite file warns `sqlite_present_unread`. When the `sqlite3` CLI is on PATH it also builds a database, checks the imported edge and the `sha256:legacy` hash, and checks that a later sqlite write does not replace a filled cache.
 
 `actionable_low_conf_edges_keep_conditional_and_drop_dynamic` maps a conditional import and a dynamic `import_module`. Only the conditional edge is actionable, at confidence 0.55 with reason `conditional_guard`.
+
+`impl_items_are_checked_and_restricted_visibility_is_not` marks a Rust file green when the wiki names `pub` methods, an associated const, and a trait-impl item, and refuses when one of those names is missing or a removed name stays in backticks. `pub(crate)`, `pub(super)`, private items, and impl items on a `pub(crate)` type stay out of the check.
+
+`workspace_members_resolve_across_crates_and_keep_crate_paths_local` builds a workspace with explicit members and a `tools/*` glob, plus an excluded package. Cross-crate `use` reaches the named member. `crate::` inside an integration test stays in that test crate.

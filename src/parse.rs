@@ -182,11 +182,18 @@ fn defining_file(resolver: &Resolver, scans: &BTreeMap<String, Scan>, file: &str
     None
 }
 
+struct RustLib {
+    names: Vec<String>,
+    root_file: String,
+    dir: String,
+    exported: bool,
+}
+
 struct Resolver {
     files: BTreeSet<String>,
     ts_paths: Vec<(String, String, String)>,
     packages: Vec<Package>,
-    rust_crates: Vec<String>,
+    rust_libs: Vec<RustLib>,
 }
 
 struct Package {
@@ -200,8 +207,8 @@ impl Resolver {
         let files: BTreeSet<String> = rels.iter().cloned().collect();
         let ts_paths = load_ts_paths(root);
         let packages = load_packages(root);
-        let rust_crates = load_rust_crate_names(root);
-        Resolver { files, ts_paths, packages, rust_crates }
+        let rust_libs = load_rust_libs(root);
+        Resolver { files, ts_paths, packages, rust_libs }
     }
 
     fn resolve(&self, from_rel: &str, spec: &str, lang: &str, inline_depth: usize) -> Option<String> {
@@ -328,10 +335,10 @@ impl Resolver {
             let dir = root.as_deref().map(rust_submodule_dir).unwrap_or_else(|| PathBuf::from("src"));
             return self.rust_walk(&dir, &segments[1..], root.as_deref());
         }
-        if self.rust_crates.iter().any(|name| name == head) {
-            let root = self.library_root_file();
-            let dir = root.as_deref().map(rust_submodule_dir).unwrap_or_else(|| PathBuf::from("src"));
-            return self.rust_walk(&dir, &segments[1..], root.as_deref());
+        if let Some(lib) = self.lib_by_name(head) {
+            let root_file = lib.root_file.clone();
+            let dir = rust_submodule_dir(&root_file);
+            return self.rust_walk(&dir, &segments[1..], Some(&root_file));
         }
         let mut dir = rust_submodule_dir(from_rel);
         let mut depth = inline_depth;
@@ -366,7 +373,7 @@ impl Resolver {
         if matches!(head, "crate" | "self" | "super") {
             return true;
         }
-        if self.rust_crates.iter().any(|name| name == head) {
+        if self.lib_by_name(head).is_some() {
             return true;
         }
         self.rust_child_exists(&rust_submodule_dir(from_rel), head)
@@ -451,14 +458,39 @@ impl Resolver {
         }
     }
 
+    fn lib_by_name(&self, name: &str) -> Option<&RustLib> {
+        self.rust_libs.iter().find(|lib| lib.exported && lib.names.iter().any(|have| have == name))
+    }
+
+    fn package_for(&self, from_rel: &str) -> Option<&RustLib> {
+        let mut best: Option<&RustLib> = None;
+        for lib in &self.rust_libs {
+            let matches = lib.dir.is_empty() || from_rel == lib.dir || from_rel.starts_with(&(lib.dir.clone() + "/"));
+            if !matches {
+                continue;
+            }
+            if best.as_ref().map(|have| lib.dir.len() > have.dir.len()).unwrap_or(true) {
+                best = Some(lib);
+            }
+        }
+        best
+    }
+
     fn file_crate_root(&self, from_rel: &str) -> Option<String> {
-        if let Some(root) = separate_crate_root(from_rel) {
+        let package_dir = self.package_for(from_rel).map(|lib| lib.dir.clone()).unwrap_or_default();
+        if let Some(root) = separate_in_package(from_rel, &package_dir) {
             if self.files.contains(&root) {
                 return Some(root);
             }
         }
-        if from_rel == "src/main.rs" {
-            return Some("src/main.rs".into());
+        let main_rs = if package_dir.is_empty() { "src/main.rs".to_string() } else { format!("{package_dir}/src/main.rs") };
+        if from_rel == main_rs {
+            return Some(main_rs);
+        }
+        if let Some(lib) = self.package_for(from_rel) {
+            if self.files.contains(&lib.root_file) {
+                return Some(lib.root_file.clone());
+            }
         }
         self.library_root_file()
     }
@@ -1506,26 +1538,43 @@ fn rust_submodule_dir(from_rel: &str) -> PathBuf {
     parent.join(stem)
 }
 
-fn separate_crate_root(from_rel: &str) -> Option<String> {
-    let parts: Vec<&str> = from_rel.split('/').filter(|part| !part.is_empty()).collect();
+fn separate_in_package(from_rel: &str, dir: &str) -> Option<String> {
+    let rest = if dir.is_empty() {
+        from_rel.to_string()
+    } else {
+        from_rel.strip_prefix(&format!("{dir}/"))?.to_string()
+    };
+    let parts: Vec<&str> = rest.split('/').filter(|part| !part.is_empty()).collect();
     if parts.len() >= 2 && matches!(parts[0], "tests" | "examples" | "benches") {
         let stem = parts[1].trim_end_matches(".rs");
-        return Some(format!("{}/{stem}.rs", parts[0]));
+        return Some(join_rel(dir, &format!("{}/{stem}.rs", parts[0])));
     }
     if parts.len() >= 3 && parts[0] == "src" && parts[1] == "bin" {
         let stem = parts[2].trim_end_matches(".rs");
-        return Some(format!("src/bin/{stem}.rs"));
+        return Some(join_rel(dir, &format!("src/bin/{stem}.rs")));
     }
     None
 }
 
-/// Top-level `pub` items. `pub(crate)` and items inside `impl` or a function are not part of this set.
+fn join_rel(dir: &str, rest: &str) -> String {
+    if dir.is_empty() { rest.to_string() } else { format!("{dir}/{rest}") }
+}
+
+/// Public Rust names: unrestricted `pub` items, `pub` methods and associated items on a
+/// public type, and items written in a trait impl for a public type.
+/// `pub(crate)`, `pub(super)`, `pub(self)`, and `pub(in ...)` stay out. Items inside a
+/// function or a nested module stay out.
 pub fn rust_public_symbols(text: &str) -> Vec<String> {
     let b = text.as_bytes();
     let mut symbols = Vec::new();
+    let mut public_types = BTreeSet::new();
+    let mut known_types = BTreeSet::new();
+    let mut pending: Vec<(String, String)> = Vec::new();
+    let mut impls: Vec<(i32, bool, String)> = Vec::new();
     let mut i = 0;
     let mut brace: i32 = 0;
     while i < b.len() {
+        impls.retain(|(depth, _, _)| brace >= *depth);
         if b[i].is_ascii_whitespace() {
             i += 1;
             continue;
@@ -1552,20 +1601,65 @@ pub fn rust_public_symbols(text: &str) -> Vec<String> {
             i += 1;
             continue;
         }
-        if brace == 0 && starts_word(b, i, "pub") {
-            let after = i + 3;
-            if after < b.len() && b[after] == b'(' {
-                i = after;
+        let at_impl_body = impls.last().is_some_and(|(depth, _, _)| brace == *depth);
+        if brace == 0 && starts_word(b, i, "impl") {
+            if let Some((brace_at, trait_impl, type_name)) = read_impl_header(b, i + 4) {
+                brace += 1;
+                impls.push((brace, trait_impl, type_name));
+                i = brace_at + 1;
                 continue;
             }
-            if let Some((names, end)) = rust_pub_names(b, after) {
-                for name in names {
-                    if !name.is_empty() && !symbols.iter().any(|have: &String| have == &name) {
-                        symbols.push(name);
+        }
+        if brace == 0 && starts_word(b, i, "pub") {
+            if pub_is_restricted(b, i) {
+                let after = skip_restricted_pub(b, i);
+                if let Some((name, end)) = read_type_name(b, after) {
+                    known_types.insert(name);
+                    i = end;
+                    continue;
+                }
+                i = after.max(i + 3);
+                continue;
+            }
+            if let Some((names, end)) = rust_pub_names(b, i + 3) {
+                if let Some((type_name, _)) = read_type_name(b, i + 3) {
+                    if names.iter().any(|name| name == &type_name) {
+                        public_types.insert(type_name.clone());
+                        known_types.insert(type_name);
                     }
+                }
+                for name in names {
+                    push_unique(&mut symbols, name);
                 }
                 i = end;
                 continue;
+            }
+        }
+        if brace == 0 {
+            if let Some((name, end)) = read_type_name(b, i) {
+                known_types.insert(name);
+                i = end;
+                continue;
+            }
+        }
+        if at_impl_body {
+            if let Some((_, trait_impl, type_name)) = impls.last() {
+                let type_name = type_name.clone();
+                if *trait_impl {
+                    if let Some((name, end)) = read_assoc_item(b, i) {
+                        pending.push((type_name, name));
+                        i = end;
+                        continue;
+                    }
+                } else if starts_word(b, i, "pub") && !pub_is_restricted(b, i) {
+                    if let Some((names, end)) = rust_pub_names(b, i + 3) {
+                        for name in names {
+                            pending.push((type_name.clone(), name));
+                        }
+                        i = end;
+                        continue;
+                    }
+                }
             }
         }
         if let Some((_, end)) = read_ident(b, i) {
@@ -1574,7 +1668,142 @@ pub fn rust_public_symbols(text: &str) -> Vec<String> {
         }
         i += 1;
     }
+    for (type_name, name) in pending {
+        let visible = public_types.contains(&type_name) || !known_types.contains(&type_name);
+        if visible {
+            push_unique(&mut symbols, name);
+        }
+    }
     symbols
+}
+
+fn push_unique(symbols: &mut Vec<String>, name: String) {
+    if !name.is_empty() && !symbols.iter().any(|have| have == &name) {
+        symbols.push(name);
+    }
+}
+
+fn pub_is_restricted(b: &[u8], i: usize) -> bool {
+    let j = skip_noise(b, i + 3);
+    j < b.len() && b[j] == b'('
+}
+
+fn skip_restricted_pub(b: &[u8], i: usize) -> usize {
+    let mut j = skip_noise(b, i + 3);
+    if j >= b.len() || b[j] != b'(' {
+        return i + 3;
+    }
+    let mut depth = 0i32;
+    while j < b.len() {
+        if b[j] == b'(' {
+            depth += 1;
+        } else if b[j] == b')' {
+            depth -= 1;
+            j += 1;
+            if depth == 0 {
+                break;
+            }
+            continue;
+        }
+        j += 1;
+    }
+    j
+}
+
+fn read_type_name(b: &[u8], start: usize) -> Option<(String, usize)> {
+    let mut i = skip_noise(b, start);
+    if starts_word(b, i, "unsafe") {
+        i = skip_noise(b, i + "unsafe".len());
+    }
+    for word in ["struct", "enum", "union", "trait", "type"] {
+        if starts_word(b, i, word) {
+            let (name, end) = read_ident(b, skip_noise(b, i + word.len()))?;
+            return Some((name, end));
+        }
+    }
+    None
+}
+
+fn read_impl_header(b: &[u8], start: usize) -> Option<(usize, bool, String)> {
+    let mut i = skip_noise(b, start);
+    let mut angle = 0i32;
+    let mut trait_impl = false;
+    let mut in_where = false;
+    let mut last_ident = String::new();
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if b[i] == b'/' && i + 1 < b.len() && (b[i + 1] == b'/' || b[i + 1] == b'*') {
+            i = skip_rust_comment(b, i);
+            continue;
+        }
+        if b[i] == b'\'' {
+            i = skip_rust_char_or_lifetime(b, i);
+            continue;
+        }
+        if b[i] == b'<' {
+            angle += 1;
+            i += 1;
+            continue;
+        }
+        if b[i] == b'>' {
+            angle -= 1;
+            i += 1;
+            continue;
+        }
+        if b[i] == b'{' && angle <= 0 {
+            if last_ident.is_empty() {
+                return None;
+            }
+            return Some((i, trait_impl, last_ident));
+        }
+        if angle == 0 && !in_where && starts_word(b, i, "where") {
+            in_where = true;
+            i += "where".len();
+            continue;
+        }
+        if angle == 0 && !in_where && starts_word(b, i, "for") {
+            trait_impl = true;
+            i += 3;
+            continue;
+        }
+        if let Some((ident, end)) = read_ident(b, i) {
+            if angle == 0 && !in_where && ident != "const" && ident != "unsafe" && ident != "async" {
+                last_ident = ident;
+            }
+            i = end;
+            continue;
+        }
+        i += 1;
+    }
+    None
+}
+
+fn read_assoc_item(b: &[u8], start: usize) -> Option<(String, usize)> {
+    let mut i = skip_noise(b, start);
+    if starts_word(b, i, "unsafe") {
+        i = skip_noise(b, i + "unsafe".len());
+    }
+    if starts_word(b, i, "async") {
+        i = skip_noise(b, i + "async".len());
+    }
+    if starts_word(b, i, "const") {
+        let next = skip_noise(b, i + "const".len());
+        if starts_word(b, next, "fn") {
+            i = next;
+        } else {
+            let (name, end) = read_ident(b, next)?;
+            return Some((name, end));
+        }
+    }
+    if starts_word(b, i, "fn") || starts_word(b, i, "type") {
+        let word = if starts_word(b, i, "fn") { "fn" } else { "type" };
+        let (name, end) = read_ident(b, skip_noise(b, i + word.len()))?;
+        return Some((name, end));
+    }
+    None
 }
 
 fn rust_pub_names(b: &[u8], start: usize) -> Option<(Vec<String>, usize)> {
@@ -1670,37 +1899,57 @@ fn use_export_names(b: &[u8], start: usize) -> Option<(Vec<String>, usize)> {
     Some((names, end))
 }
 
-fn load_rust_crate_names(root: &Path) -> Vec<String> {
-    let text = fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
-    let mut section = String::new();
-    let mut package = String::new();
-    let mut lib_name = String::new();
-    for line in text.lines() {
-        let line = line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            section = line[1..line.len() - 1].trim().to_string();
-            continue;
-        }
-        if section != "package" && section != "lib" {
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else { continue };
-        if key.trim() != "name" {
-            continue;
-        }
-        let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
-        if value.is_empty() {
-            continue;
-        }
-        if section == "package" && package.is_empty() {
-            package = value.to_string();
-        } else if section == "lib" && lib_name.is_empty() {
-            lib_name = value.to_string();
+fn load_rust_libs(root: &Path) -> Vec<RustLib> {
+    let root_text = fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
+    let (members, exclude) = workspace_arrays(&root_text);
+    let mut dirs: Vec<String> = Vec::new();
+    if cargo_package_name(&root_text).is_some() {
+        dirs.push(String::new());
+    }
+    for dir in expand_member_dirs(root, &members, &exclude) {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
         }
     }
+    // Excluded packages stay in the list so `crate::` does not jump to another crate,
+    // but their names are not importable from outside.
+    for dir in expand_member_dirs(root, &exclude, &[]) {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    let mut libs = Vec::new();
+    for dir in dirs {
+        let exported = dir.is_empty() || expand_member_dirs(root, &members, &exclude).contains(&dir) || (members.is_empty() && dir.is_empty());
+        if let Some(lib) = rust_lib_at(root, &dir, exported && !exclude_matches(&exclude, &dir)) {
+            libs.push(lib);
+        }
+    }
+    libs
+}
+
+fn exclude_matches(exclude: &[String], dir: &str) -> bool {
+    !dir.is_empty() && exclude.iter().any(|pat| cargo_glob_match(pat, dir))
+}
+
+fn rust_lib_at(root: &Path, dir: &str, exported: bool) -> Option<RustLib> {
+    let text = fs::read_to_string(root.join(dir).join("Cargo.toml")).ok()?;
+    let (package, lib_name, lib_path) = cargo_identity(&text);
+    if package.is_empty() && lib_name.is_empty() {
+        return None;
+    }
+    let lib_on_disk = root.join(dir).join("src/lib.rs").is_file();
+    let main_on_disk = root.join(dir).join("src/main.rs").is_file();
+    let has_lib = lib_path.is_some() || lib_on_disk;
+    let root_file = if let Some(path) = lib_path {
+        join_rel(dir, &path)
+    } else if lib_on_disk {
+        join_rel(dir, "src/lib.rs")
+    } else if main_on_disk {
+        join_rel(dir, "src/main.rs")
+    } else {
+        return None;
+    };
     let mut names = Vec::new();
     if !package.is_empty() {
         names.push(package.replace('-', "_"));
@@ -1711,7 +1960,209 @@ fn load_rust_crate_names(root: &Path) -> Vec<String> {
             names.push(normalized);
         }
     }
-    names
+    Some(RustLib { names, root_file, dir: dir.to_string(), exported: exported && has_lib })
+}
+
+fn cargo_package_name(text: &str) -> Option<String> {
+    let (package, _, _) = cargo_identity(text);
+    if package.is_empty() { None } else { Some(package) }
+}
+
+fn cargo_identity(text: &str) -> (String, String, Option<String>) {
+    let mut section = String::new();
+    let mut package = String::new();
+    let mut lib_name = String::new();
+    let mut lib_path = None;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') && !line.starts_with("[[") {
+            section = line[1..line.len() - 1].trim().to_string();
+            continue;
+        }
+        if section != "package" && section != "lib" {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else { continue };
+        let key = key.trim();
+        let value = unquote_toml(value.trim());
+        if value.is_empty() {
+            continue;
+        }
+        if section == "package" && key == "name" && package.is_empty() {
+            package = value;
+        } else if section == "lib" && key == "name" && lib_name.is_empty() {
+            lib_name = value;
+        } else if section == "lib" && key == "path" && lib_path.is_none() {
+            lib_path = Some(value);
+        }
+    }
+    (package, lib_name, lib_path)
+}
+
+fn unquote_toml(value: &str) -> String {
+    value.trim().trim_matches(|c| c == '"' || c == '\'').to_string()
+}
+
+fn workspace_arrays(text: &str) -> (Vec<String>, Vec<String>) {
+    let mut section = String::new();
+    let mut members = Vec::new();
+    let mut exclude = Vec::new();
+    let mut key = String::new();
+    let mut buf = String::new();
+    let mut collecting = false;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') && !line.starts_with("[[") {
+            section = line[1..line.len() - 1].trim().to_string();
+            collecting = false;
+            continue;
+        }
+        if section != "workspace" {
+            continue;
+        }
+        if collecting {
+            buf.push(' ');
+            buf.push_str(line);
+            if line.contains(']') {
+                let items = quoted_strings(&buf);
+                if key == "members" { members = items; }
+                else if key == "exclude" { exclude = items; }
+                collecting = false;
+            }
+            continue;
+        }
+        let Some((raw_key, value)) = line.split_once('=') else { continue };
+        let raw_key = raw_key.trim();
+        if raw_key != "members" && raw_key != "exclude" {
+            continue;
+        }
+        if value.contains('[') && !value.contains(']') {
+            key = raw_key.to_string();
+            buf = value.to_string();
+            collecting = true;
+        } else {
+            let items = quoted_strings(value);
+            if raw_key == "members" { members = items; }
+            else if raw_key == "exclude" { exclude = items; }
+        }
+    }
+    (members, exclude)
+}
+
+fn quoted_strings(text: &str) -> Vec<String> {
+    let b = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'"' || b[i] == b'\'' {
+            let quote = b[i];
+            i += 1;
+            let start = i;
+            while i < b.len() && b[i] != quote {
+                i += 1;
+            }
+            out.push(String::from_utf8_lossy(&b[start..i]).into_owned());
+            if i < b.len() {
+                i += 1;
+            }
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
+fn expand_member_dirs(root: &Path, patterns: &[String], exclude: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for pattern in patterns {
+        let pattern = pattern.trim().trim_matches('/').to_string();
+        if pattern.is_empty() || pattern == "." {
+            if root.join("Cargo.toml").is_file() {
+                found.push(String::new());
+            }
+            continue;
+        }
+        if pattern.contains('*') || pattern.contains('?') {
+            for dir in cargo_package_dirs(root) {
+                if cargo_glob_match(&pattern, &dir) && !exclude_matches(exclude, &dir) && !found.contains(&dir) {
+                    found.push(dir);
+                }
+            }
+        } else if root.join(&pattern).join("Cargo.toml").is_file() && !exclude_matches(exclude, &pattern) && !found.contains(&pattern) {
+            found.push(pattern);
+        }
+    }
+    found
+}
+
+fn cargo_package_dirs(root: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "target" || name == "node_modules" {
+                continue;
+            }
+            if path.join("Cargo.toml").is_file() {
+                if let Ok(rel) = path.strip_prefix(root) {
+                    let rel = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
+                    if !rel.is_empty() {
+                        out.push(rel);
+                    }
+                }
+            }
+            walk(root, &path, out);
+        }
+    }
+    walk(root, root, &mut out);
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn cargo_glob_match(pattern: &str, path: &str) -> bool {
+    let pat: Vec<&str> = pattern.split('/').filter(|part| !part.is_empty()).collect();
+    let segs: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    fn rec(pat: &[&str], segs: &[&str]) -> bool {
+        if pat.is_empty() {
+            return segs.is_empty();
+        }
+        if pat[0] == "**" {
+            return rec(&pat[1..], segs) || (!segs.is_empty() && rec(pat, &segs[1..]));
+        }
+        if segs.is_empty() {
+            return false;
+        }
+        segment_glob(pat[0], segs[0]) && rec(&pat[1..], &segs[1..])
+    }
+    rec(&pat, &segs)
+}
+
+fn segment_glob(pattern: &str, segment: &str) -> bool {
+    fn rec(pat: &[u8], seg: &[u8]) -> bool {
+        if pat.is_empty() {
+            return seg.is_empty();
+        }
+        if pat[0] == b'*' {
+            return rec(&pat[1..], seg) || (!seg.is_empty() && rec(pat, &seg[1..]));
+        }
+        if pat[0] == b'?' {
+            return !seg.is_empty() && rec(&pat[1..], &seg[1..]);
+        }
+        !seg.is_empty() && pat[0] == seg[0] && rec(&pat[1..], &seg[1..])
+    }
+    rec(pattern.as_bytes(), segment.as_bytes())
 }
 
 fn scan_go(src: &str) -> Scan {

@@ -388,20 +388,24 @@ pub type Alias = Widget;
 pub const FLAG: i32 = 1;
 pub use child::exported;
 pub(crate) fn hidden() {}
-impl Widget { pub fn method(&self) {} }
+impl Widget {
+    pub fn method(&self) {}
+    pub(crate) fn crate_only(&self) {}
+}
 #[cfg(test)]
 mod tests { pub fn inside() {} }
 ";
     fs::write(root.join("src/lib.rs"), source).unwrap();
     fs::write(root.join("src/child.rs"), "pub fn exported() {}\n").unwrap();
-    fs::write(root.join("src/lib.rs.wiki.md"), "Names kept, Widget, Phase, Run, child, Alias, FLAG, exported.\n").unwrap();
+    fs::write(root.join("src/lib.rs.wiki.md"), "Names kept, Widget, Phase, Run, child, Alias, FLAG, exported, method.\n").unwrap();
     let marked = mark_green(&root, "src/lib.rs", "wiki names the public items", false);
     assert_eq!(marked.get("success").and_then(|flag| flag.as_bool()), Some(true), "{marked}");
     assert_eq!(marked.get("verification").and_then(|flag| flag.as_str()), Some("verified"), "{marked}");
     let row = read_health(&root).into_iter().find(|row| row.file == "src/lib.rs").unwrap();
     assert!(row.public_symbols.contains("kept"), "{}", row.public_symbols);
+    assert!(row.public_symbols.contains("method"), "inherent pub method missing: {}", row.public_symbols);
     assert!(!row.public_symbols.contains("hidden"), "pub(crate) counted: {}", row.public_symbols);
-    assert!(!row.public_symbols.contains("method"), "impl method counted: {}", row.public_symbols);
+    assert!(!row.public_symbols.contains("crate_only"), "restricted method counted: {}", row.public_symbols);
     assert!(!row.public_symbols.contains("inside"), "nested pub counted: {}", row.public_symbols);
 
     let wiki = fs::read_to_string(root.join("src/lib.rs.wiki.md")).unwrap();
