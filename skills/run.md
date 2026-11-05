@@ -1,6 +1,6 @@
 # Wikifier Agent Protocol v0.7
 
-**Package 5.1.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
+**Package 5.2.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
 This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference. In the Wikifier repository, `AGENTS.md` is the entry point and points here.
 
@@ -39,10 +39,35 @@ This file is the contract for any agent operating Wikifier. Part 1 is all you ne
 2. Write `map_paths.txt` (import-map package roots; independent of monitored paths).
 3. `update_maps(full=True)`, then re-run `session_bootstrap`.
 
+### Choosing groups
+
+You, the agent, choose which Wikifier tool groups a project needs. Add one line for `wikifier` to the `agent-tools` block of the project's AGENTS.md: a fenced code block whose info string is `agent-tools`, in the project root the server uses (`WIKIFIER_PROJECT_ROOT`, else its working directory). The server re-reads the file when it changes and tells the client the tool list changed, so no restart is needed. `WIKIFIER_TOOLS` / `WIKIFIER_DISABLE` in the server's environment override the line, key by key. A mistake in the line is reported as a warning in the `initialize` instructions and the line is ignored.
+
+| Group | What it is for | Turn it off when |
+|---|---|---|
+| `core` | bootstrap, lookups, dependencies, file wikis, `update_maps` | never: always on |
+| `notes` | `record_change` and the journal: why each file changed, handoff reasons | another tool keeps the change notes (for example Trammel notes) and you do not maintain wikis |
+| `health` | `check_changes`, `mark_green`, wiki verification | you only look things up and do not maintain wikis |
+| `map` | import-resolution and barrel diagnostics | you are not debugging the import map (most sessions) |
+| `cycles` | the import-cycle report | you are not untangling dependencies |
+| `status` | repeats of bootstrap: project status, issues, the tool catalogue | almost always |
+
+One agent maintaining wikis (the usual case):
+
+```agent-tools
+wikifier: disable map, cycles, status
+```
+
+Lookups only:
+
+```agent-tools
+wikifier: tools core
+```
+
 ### Paste into new sessions
 
 ```
-You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.1.0).
+You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.2.0).
 It is an agent-to-agent wiki: look things up (health, file wikis, deps) instead of re-reading sources.
 
 SELECTIVE WORK: only update 🔴 Red and actionable 🟡 Yellow files; never re-wiki 🟢 Green files;
@@ -147,7 +172,7 @@ The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` la
 
 There is no Python library. Agents call the CLI or `wikifier mcp`. The same functions live in the Rust crate (`src/api.rs`) and both fronts call them.
 
-### Implementation (package 5.1.0, protocol stays v0.7)
+### Implementation (package 5.2.0, protocol stays v0.7)
 
 The program is a std-only Rust binary under `src/`. `Cargo.toml` has an empty `[dependencies]` list. Launchers exec that binary. MCP is `wikifier mcp`.
 
@@ -163,6 +188,7 @@ The program is a std-only Rust binary under `src/`. `Cargo.toml` has an empty `[
 - `seed-source-hashes` writes the current hash onto Green rows and does not change status. `--force` replaces a hash that is already stored. `seed-health` still adds Initial-stub rows. `heal-stubs` promotes a stub whose wiki is at least 350 characters (`--min-wiki-length` overrides).
 - Health stubs from `update-maps` follow `monitored_paths.txt` when that file lists real paths. If the file is absent, empty, or only a bare `.`, every mapped file is seeded.
 - The scan ignores comments and strings. It does not use CPython `ast`. It does read `tsconfig.json` `paths`, `package.json` `exports`, and npm `workspaces` (`*` directory globs). Named re-exports are the barrel follow. Rust reads the root `Cargo.toml` `[package].name`, `[lib].name`, and `[workspace] members` (globs included; hyphens become underscores). It resolves `crate::`, `self::`, `super::`, those crate names, and `mod` to files. `crate::` stays in the file's crate (`tests/*.rs` and `src/bin/*.rs` are their own crates, and a workspace member does not share `crate::` with another member). A package or lib name points at that member's library. Accuracy is `accuracy_fixtures_match_frozen_edges`, including the Rust crate layout. This parser has not been run on Babylon.js.
+- MCP tools are in groups (`core` always on, `notes`, `health`, `map`, `cycles`, `status`; the table is in the README). `WIKIFIER_TOOLS` / `WIKIFIER_DISABLE` in the server's environment hide groups or single tools from `tools/list`; a hidden tool called anyway returns `isError` naming the switch. An unknown name, or `core` in `WIKIFIER_DISABLE`, stops the server (exit 2). A recommended lean setting is `WIKIFIER_DISABLE=map,cycles,status`, which keeps the whole session loop.
 - MCP `tools/call` sets `isError` when the payload has `success: false`. `resources/read` and `prompts/get` answer. Prompts name the tools to call. Optional arguments include `format` (`text` or `json`), `timeout_s`, `directory`, `detail`, `low_confidence_only`, `unresolved_only`, `depth`, `recursive`, `max_files`, `limit`, `max_items`, and a `reasons` object. A call waits at most `timeout_s` or `WIKIFIER_MCP_DEADLINE_S` seconds (default 60) and then returns `timed_out` and `may_still_complete`. An identical journal action, file, and reason inside 120 seconds sets `duplicate_skipped` and does not append another line. A call that leaves out a required argument other than `project_root` returns `error_type: "InvalidArguments"` with the accepted and received argument names. Over MCP, `update_maps` omits the edge list unless `edges: true` (`edges_persisted` is the count), and `health` takes `limit` (with `entries_total`) and `summary`. The CLI default is JSON. `--text` prints prose. `health --format text` does the same for health.
 - Commands that write health, pending, the map, or the cache take `.wikifier_staging/.lock` before the cache lock. The lock is re-entrant on the same thread, waits 30 seconds, and is stolen when the recorded pid is dead. A timeout returns `error_type: "LockTimeoutError"` and `timed_out: true`.
 - `init` keeps a path list that already has a non-comment entry. When a list is missing it writes the map roots: `src/` when it exists, otherwise every top-level directory that holds a source file (for example `crates/` and `tests/` in a Cargo workspace), otherwise `src/`. It also writes `exclude_patterns.txt`, empty `file_health.md`, `pending_updates.md`, `library.md`, `.wikifier/config`, `.wikifier/marker`, and the `journal/` and `Logged_issues/` directories when those paths are absent. `--no-copy` skips `index.html`. Otherwise `index.html` is copied only when it is missing.

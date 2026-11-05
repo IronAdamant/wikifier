@@ -2,7 +2,6 @@
 
 - src/jsonutil.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/legacy_cache.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
-- src/lib.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/main.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/proc.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/project_lock.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
@@ -26,3 +25,4 @@
 - tests/parity_fixes.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/agent_args.rs: LLM/agent edit — new: agent-style file args, missing args, lean MCP outputs, init roots, CRLF (claude/windows-verify)
 - tests/speed_paths.rs: new: fast paths give the slow paths' answers (claude/windows-verify speed) — refresh the wiki, then mark-green
+- tests/tool_groups.rs: MCP tool groups with WIKIFIER_TOOLS/WIKIFIER_DISABLE per the suite convention (claude/tool-groups) — refresh the wiki, then mark-green

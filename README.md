@@ -21,11 +21,11 @@ Download a binary from the [GitHub releases](https://github.com/IronAdamant/wiki
 Check `SHA256SUMS`, unpack, and put `wikifier` (`wikifier.exe` on Windows) on your `PATH`:
 
 ```bash
-# Linux x86_64, 5.1.0
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.1.0/SHA256SUMS
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.1.0/wikifier-5.1.0-x86_64-unknown-linux-gnu.tar.gz
+# Linux x86_64, 5.2.0
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.2.0/SHA256SUMS
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.2.0/wikifier-5.2.0-x86_64-unknown-linux-gnu.tar.gz
 sha256sum --check --ignore-missing SHA256SUMS
-tar -xzf wikifier-5.1.0-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf wikifier-5.2.0-x86_64-unknown-linux-gnu.tar.gz
 ./wikifier --version
 ```
 
@@ -59,6 +59,52 @@ Or add it to a project's `.mcp.json`:
 ```
 
 Every tool takes `project_root` (an absolute path). Without it the server uses `WIKIFIER_PROJECT_ROOT`, then its working directory. A call with a missing argument or an unknown file fails with a message that names the fix, and a failed call sets `isError`. To keep replies small, MCP `session_bootstrap` lists at most 100 files unless you pass `limit` (`files_total` gives the full count, `limit: 0` lists every file), and `update_maps` leaves out the edge list unless you pass `edges: true`. Then give the agent the short prompt in [`skills/run.md`](skills/run.md#paste-into-new-sessions). Any agent that can run shell commands can use the CLI instead: the daily tools have twins such as `wikifier session-bootstrap`, `prepare-edit`, and `record-change` that print the same JSON (the mapping is in `skills/run.md`).
+
+### Tool groups
+
+The 31 MCP tools are in six groups. The agent picks the groups a project needs with one line in the project's AGENTS.md (see Choosing groups below); an operator can override that in the MCP client's `env` block. The CLI is not affected. `WIKIFIER_TOOLS` is an allowlist and `WIKIFIER_DISABLE` hides groups or single tools after it; both take comma-separated group or tool names, ignore case and spaces, and `WIKIFIER_TOOLS` also accepts `all`. With neither set, the listing is exactly what it was; `initialize` always advertises `tools.listChanged`, so an edit to the AGENTS.md block takes effect without a restart. A block inside another fenced block (a docs example) is ignored. An unknown name, or `core` or one of its tools in `WIKIFIER_DISABLE`, stops the server with exit code 2 and a one-line message, so a mistake shows up as a failed server. An empty value counts as unset. A switched-off tool, if called, returns `isError` naming the switch to change.
+
+| Group | Tools | Overlaps with |
+|---|---|---|
+| `core` (always on) | `session_bootstrap`, `prepare_edit`, `get_dependencies`, `get_dependents`, `get_file_wiki`, `list_paths`, `suggest_next_actions`, `update_maps` | — |
+| `notes` | `record_change`, `record_changes`, `record_deletion`, `search_journal`, `why_file`, `journal` | Trammel notes (`add_note`) |
+| `health` | `check_changes`, `mark_green`, `verify_wikis`, `health`, `validate`, `list_healable_stubs`, `heal_stubs`, `seed_source_content_hashes` | — |
+| `map` | `get_resolution_diagnostics`, `get_barrel_reports`, `get_incremental_status` | — |
+| `cycles` | `get_cycles` | — |
+| `status` | `list_core_tools`, `get_project_status`, `get_current_project_root`, `issues`, `get_files_needing_attention` | — |
+
+`tools/list` is 22.7 KB with every group on. The recommended lean setting keeps the whole daily loop and drops the diagnostics and the tools that repeat bootstrap: 22 tools, 16.8 KB.
+
+```json
+"env": {"WIKIFIER_DISABLE": "map,cycles,status"}
+```
+
+`WIKIFIER_TOOLS=core` alone is 8 tools and 6.6 KB, for an agent that only looks things up. Turning `notes` off also turns off `record_change`, which marks a file for its wiki refresh, so keep `notes` on unless another tool records the changes.
+
+### Choosing groups
+
+You, the agent, choose which Wikifier tool groups a project needs. Add one line for `wikifier` to the `agent-tools` block of the project's AGENTS.md: a fenced code block whose info string is `agent-tools`, in the project root the server uses (`WIKIFIER_PROJECT_ROOT`, else its working directory). The server re-reads the file when it changes and tells the client the tool list changed, so no restart is needed. `WIKIFIER_TOOLS` / `WIKIFIER_DISABLE` in the server's environment override the line, key by key. A mistake in the line is reported as a warning in the `initialize` instructions and the line is ignored.
+
+| Group | What it is for | Turn it off when |
+|---|---|---|
+| `core` | bootstrap, lookups, dependencies, file wikis, `update_maps` | never: always on |
+| `notes` | `record_change` and the journal: why each file changed, handoff reasons | another tool keeps the change notes (for example Trammel notes) and you do not maintain wikis |
+| `health` | `check_changes`, `mark_green`, wiki verification | you only look things up and do not maintain wikis |
+| `map` | import-resolution and barrel diagnostics | you are not debugging the import map (most sessions) |
+| `cycles` | the import-cycle report | you are not untangling dependencies |
+| `status` | repeats of bootstrap: project status, issues, the tool catalogue | almost always |
+
+One agent maintaining wikis (the usual case):
+
+```agent-tools
+wikifier: disable map, cycles, status
+```
+
+Lookups only:
+
+```agent-tools
+wikifier: tools core
+```
 
 ## Quick start
 
