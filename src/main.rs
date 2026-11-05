@@ -16,11 +16,24 @@ fn main() -> ExitCode {
     }
     let (root, explicit_target, rest) = extract_target(&args);
     args = rest;
-    if args.is_empty() || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
+    if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         print_help();
         return ExitCode::SUCCESS;
     }
     let command = args.remove(0).replace('_', "-");
+    // `<command> --help` and `help <command>` print help and run nothing. Before this,
+    // `init --help` ran init and wrote ten files.
+    if command == "help" {
+        match args.first() {
+            Some(topic) => print_command_help(&topic.replace('_', "-")),
+            None => print_help(),
+        }
+        return ExitCode::SUCCESS;
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_command_help(&command);
+        return ExitCode::SUCCESS;
+    }
     if command == "mcp" {
         if let Err(e) = wikifier::mcp::serve_stdio() {
             eprintln!("error: {e}");
@@ -205,4 +218,61 @@ fn print_help() {
             .collect::<Vec<_>>()
             .join("\n")
     ));
+}
+
+/// One usage line and one sentence per command, for `wikifier <command> --help`.
+fn command_help(command: &str) -> Option<(&'static str, &'static str)> {
+    Some(match command {
+        "check-changes" => ("check-changes", "Compare watched files with their Green baselines; mark drifted files Yellow and list them."),
+        "record-change" => ("record-change FILE WHY", "Journal why FILE changed, mark it actionable, and add its pending item."),
+        "mark-green" => ("mark-green FILE [WHY] [--force]", "Check FILE's wiki against its public symbols and mark it Green. --force needs WHY."),
+        "record-changes" => ("record-changes [-r PATH=WHY]... [--reasons FILE] [--default WHY] [--only P]... [--since REF] [--green] [--dry-run]", "Record every file git reports as changed, with reasons per path, glob, or dir/."),
+        "record-deletion" => ("record-deletion FILE [WHY]", "Journal a removed file, mark it Red, and drop it from the map."),
+        "session-bootstrap" => ("session-bootstrap [--directory D] [--limit N]", "Readiness, health counts, next actions, and the mapped files (capped by --limit)."),
+        "suggest-next" => ("suggest-next [--json|--text]", "The next agent actions, highest priority first."),
+        "prepare-edit" => ("prepare-edit FILE", "Health status, wiki text, dependencies, and dependents of FILE before an edit."),
+        "dependencies" => ("dependencies FILE [--full]", "What FILE imports. --full adds per-edge confidence records."),
+        "dependents" => ("dependents FILE [--limit N]", "The mapped files that import FILE."),
+        "why-file" => ("why-file FILE", "The journal reasons recorded for FILE."),
+        "search-journal" => ("search-journal [TEXT] [--file F]", "Journal entries whose path or reason contains TEXT."),
+        "list-paths" => ("list-paths [PREFIX] [--depth N|--recursive] [--max-files N]", "The folder card for PREFIX: its files and subfolders."),
+        "cycles" => ("cycles [--max-items N] [--no-analysis]", "Import cycles with break hints and the most depended-on files."),
+        "journal" => ("journal [YYYY-MM-DD] [--limit N]", "Journal entries for one day (today by default)."),
+        "issues" => ("issues", "The same actions list as suggest-next."),
+        "update-maps" => ("update-maps [--full] [--directory D] [--max-files N] [--stream] [--quiet]", "Parse changed files and rewrite the dependency map, library.md, and folder cards."),
+        "health" => ("health [--summary] [--limit N] [--format text]", "The health matrix: counts and entries (Red and actionable Yellow first under --limit)."),
+        "validate" => ("validate", "Check health coverage and that the forward and reverse indexes agree."),
+        "rebuild-cache" => ("rebuild-cache", "Rebuild the reverse index from the forward index."),
+        "seed-health" => ("seed-health", "Add Initial-stub health rows for mapped files that have none."),
+        "seed-source-hashes" => ("seed-source-hashes", "Fill missing source hashes in health rows from the map."),
+        "prune-pending" => ("prune-pending", "Drop pending items whose file is gone."),
+        "prune-health" => ("prune-health [--deleted-missing]", "Drop health rows for files neither mapped nor watched; --deleted-missing also drops rows whose file is gone."),
+        "heal-stubs" => ("heal-stubs [--dry-run] [--min-wiki-length N]", "Promote Initial stubs that already have a long enough wiki."),
+        "healable-stubs" => ("healable-stubs [--min-wiki-length N]", "List Initial stubs that heal-stubs would promote."),
+        "healing-stats" => ("healing-stats", "Counts of Initial stubs and healed rows."),
+        "stale-wikis" => ("stale-wikis [--limit N]", "Files with a wiki whose source changed since mark-green."),
+        "verify-wikis" => ("verify-wikis [DIR] [--limit N]", "Re-check every Green wiki against its code; exit 1 if any fail."),
+        "prune-barrels" => ("prune-barrels [DAYS] [--max-age-days N] [--dry-run]", "Delete barrel records older than the age limit; --dry-run only counts them."),
+        "cache-status" => ("cache-status", "The cache backend and the mapped file count."),
+        "autonomous-status" => ("autonomous-status", "Readiness and scope; exit 2 on a scope error."),
+        "metrics-snapshot" => ("metrics-snapshot", "Write health counts to .wikifier_staging/metrics_latest.json and append them to metrics_history.jsonl."),
+        "list-core-tools" => ("list-core-tools", "The daily core tools and the full MCP tool list."),
+        "init" => ("init [DIR] [--no-copy]", "Create the path lists, empty health, pending, library, journal, and index.html in DIR (or --target)."),
+        "monitor" => ("monitor", "Run check-changes in a loop until stopped."),
+        "serve" => ("serve [PORT]", "Serve the dashboard and its read-only JSON API on 127.0.0.1 (default port 8787)."),
+        "daemon" => ("daemon start|stop|status|run", "Background scan-and-map loop."),
+        "mcp" => ("mcp", "MCP server on stdio. WIKIFIER_TOOLS / WIKIFIER_DISABLE pick its tool groups."),
+        "help" => ("help [COMMAND]", "This help, or one command's help."),
+        _ => return None,
+    })
+}
+
+/// `wikifier <command> --help`: print and touch nothing. An unknown command gets the list.
+fn print_command_help(command: &str) {
+    match command_help(command) {
+        Some((usage, about)) => flush_stdout(&format!(
+            "wikifier {VERSION}\n\nUsage: wikifier [--target DIR] {usage}\n\n{about}\n"
+        )),
+        None => print_help(),
+    }
 }

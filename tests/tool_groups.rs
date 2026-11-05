@@ -251,8 +251,8 @@ fn core_cannot_be_disabled() {
 }
 
 #[test]
-fn default_initialize_and_tools_list_match_the_last_release() {
-    // The same two requests the fixture was recorded with, from the 5.1.0 release binary.
+fn default_initialize_and_tools_list_match_the_recorded_replies() {
+    // The same two requests the fixture was recorded with.
     let list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
     let out = mcp(&[], &[INIT, list]);
     let golden = golden();
@@ -495,19 +495,25 @@ fn the_parser_reads_only_the_first_agent_tools_fence() {
     assert_eq!(AgentTools::parse("no block here"), AgentTools::default());
 }
 
-/// What 5.1.0 answered to `initialize` and `tools/list`, with this version's number and the
-/// one field the convention adds to every server: `capabilities.tools.listChanged`.
+/// The recorded default `initialize` and `tools/list` replies, with this version's number.
+/// The fixture changes only on purpose: 5.3.0 re-recorded it when five tools gained
+/// `limit` / `full` (compact replies). Until then it was the 5.1.0 reply plus
+/// `capabilities.tools.listChanged`, the one field the tool-group convention adds.
 fn golden() -> String {
-    std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_default_5.1.0.jsonl"),
+    let text = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_default.jsonl"),
     )
     .unwrap()
-    .replace("\r\n", "\n")
-    .replace(
-        r#""version":"5.1.0""#,
-        &format!(r#""version":"{}""#, env!("CARGO_PKG_VERSION")),
+    .replace("\r\n", "\n");
+    let key = r#""serverInfo":{"name":"wikifier","version":""#;
+    let start = text.find(key).unwrap() + key.len();
+    let end = start + text[start..].find('"').unwrap();
+    format!(
+        "{}{}{}",
+        &text[..start],
+        env!("CARGO_PKG_VERSION"),
+        &text[end..]
     )
-    .replacen(r#""tools":{}"#, r#""tools":{"listChanged":true}"#, 1)
 }
 
 /// This repository dogfoods its own MCP server. Its AGENTS.md documents the block, and those

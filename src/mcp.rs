@@ -184,12 +184,22 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
             ("max_files", integer("Cap the returned file list.")),
         ]),
         "get_cycles" => props.extend([
-            ("max_items", integer("Cap the cycle list.")),
+            ("max_items", integer("Cap the cycle list. Default 5 unless full.")),
             ("analysis", boolean("Include severity and reverse-dependency ranking. Default true.")),
+            ("full", boolean("Every cycle, every file in each cycle, and the whole reverse-dependency ranking.")),
         ]),
         "health" => props.extend([
-            ("limit", integer("Return at most this many entries. entries_total gives the full count.")),
+            ("limit", integer("Entries to return, most actionable first. Default 10 unless full. entries_total gives the full count.")),
             ("summary", boolean("Return only the green, yellow, and red counts.")),
+            ("full", boolean("Every entry, with source hashes.")),
+        ]),
+        "get_dependents" | "prepare_edit" => props.extend([
+            ("limit", integer("Dependents to list: default 50 for get_dependents, 25 for prepare_edit, unless full. dependents_total and dependent_dirs summarise the rest.")),
+            ("full", boolean("List every dependent.")),
+        ]),
+        "get_resolution_diagnostics" => props.extend([
+            ("limit", integer("Notes and low-confidence edges to list. Default 20 unless full; *_total gives the counts.")),
+            ("full", boolean("Every note and edge.")),
         ]),
         "session_bootstrap" | "get_project_status" => props.push((
             "limit",
@@ -263,7 +273,7 @@ fn tool_spec(
             &[],
         ),
         "prepare_edit" => (
-            "Look up health, wiki text, dependencies, and dependents before editing a file.",
+            "Look up health, wiki text, dependencies, and dependents (first 25) before editing a file.",
             &["project_root", "file"],
             &[],
         ),
@@ -303,17 +313,17 @@ fn tool_spec(
             &[],
         ),
         "get_dependents" => (
-            "Return the mapped files that import a given file.",
+            "Return the mapped files that import a given file (first 50 by default, with a per-directory count of the rest).",
             &["project_root", "file"],
             &[],
         ),
         "get_cycles" => (
-            "Return import cycles in the mapped graph.",
+            "Return import cycles in the mapped graph (5 by default, 10 files each; full for all).",
             &["project_root"],
             &[],
         ),
         "get_resolution_diagnostics" => (
-            "Return resolution and barrel diagnostics for the current map.",
+            "Return resolution diagnostics: reason counts plus the first 20 notes and low-confidence edges (full for all).",
             &["project_root"],
             &[],
         ),
@@ -353,7 +363,7 @@ fn tool_spec(
             &[],
         ),
         "health" => (
-            "Return the health matrix entries and the green, yellow, and red counts.",
+            "Return the green, yellow, and red counts and the 10 most actionable health entries (full for all).",
             &["project_root"],
             &[],
         ),
@@ -721,6 +731,31 @@ fn call_tool(msg: &Json) -> Json {
     {
         flags.insert("limit".into(), MCP_BOOTSTRAP_FILES.to_string());
     }
+    // Tools whose reply grows with the repository answer compactly unless `full: true`.
+    let compact_limit = if arg_on(args.as_ref(), "full") {
+        None
+    } else {
+        crate::mcp_compact::default_limit(&name).map(|default| {
+            flags
+                .get("limit")
+                .and_then(|s| s.parse::<usize>().ok())
+                .filter(|n| *n > 0)
+                .unwrap_or(default)
+        })
+    };
+    if let Some(limit) = compact_limit {
+        match name.as_str() {
+            // The compact form ranks every entry first, so the API must return them all.
+            "health" => {
+                flags.remove("limit");
+                flags.remove("max-items");
+            }
+            "get_cycles" => {
+                flags.insert("max-items".into(), limit.to_string());
+            }
+            _ => {}
+        }
+    }
     let textual = flags.get("format").map(|s| s == "text").unwrap_or(false);
     let tool_name = name.clone();
     let from_arg = args
@@ -765,6 +800,10 @@ fn call_tool(msg: &Json) -> Json {
             ("timed_out", Json::Bool(true)),
             ("may_still_complete", Json::Bool(true)),
         ]),
+    };
+    let value = match compact_limit {
+        Some(limit) => crate::mcp_compact::compact(&tool_name, value, limit),
+        None => value,
     };
     let value = if tool_name == "list_core_tools" && groups_state().shaped {
         with_active_groups(value)
