@@ -105,13 +105,48 @@ fn unknown_file(root: &Path, rel: &str) -> Option<Json> {
     ))
 }
 
+/// The one rule for every count cap (`limit`, `max_items`, `max_files`) on every tool,
+/// CLI and MCP: absent means the tool's default, `0` means no cap (every item, the same
+/// as MCP `full: true`), and `N` means at most N. A value that is not a whole number is
+/// ignored, as if absent. Every cap is read through [`Cap::from_flags`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cap {
+    Default,
+    All,
+    First(usize),
+}
+
+impl Cap {
+    pub fn parse(raw: Option<&str>) -> Cap {
+        match raw.map(str::trim).and_then(|s| s.parse::<usize>().ok()) {
+            None => Cap::Default,
+            Some(0) => Cap::All,
+            Some(n) => Cap::First(n),
+        }
+    }
+
+    /// The first of `keys` present in `flags`.
+    pub fn from_flags(flags: &BTreeMap<String, String>, keys: &[&str]) -> Cap {
+        Cap::parse(
+            keys.iter()
+                .find_map(|key| flags.get(*key))
+                .map(|s| s.as_str()),
+        )
+    }
+
+    /// The cap for a tool whose default is every item (the API and the CLI).
+    pub fn max(self) -> Option<usize> {
+        match self {
+            Cap::First(n) => Some(n),
+            Cap::Default | Cap::All => None,
+        }
+    }
+}
+
 /// `limit` caps the bootstrap `files` list and adds `files_total`. `0` or no limit keeps
 /// every file. `map_index` and `list_paths` are the way to orient on a large tree.
 fn cap_files(mut value: Json, flags: &BTreeMap<String, String>) -> Json {
-    let limit = flags
-        .get("limit")
-        .and_then(|s| s.parse::<usize>().ok())
-        .filter(|n| *n > 0);
+    let limit = Cap::from_flags(flags, &["limit"]).max();
     if let (Some(limit), Some(Json::Array(files))) = (limit, value.get("files")) {
         if files.len() > limit {
             let total = files.len();
@@ -1132,14 +1167,16 @@ pub fn check_changes(root: &Path) -> Json {
             watched.insert(entry);
         }
     }
-    let cap = std::env::var("WIKIFIER_CHECK_CHANGES_MAX")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(2000);
+    // Same rule as every cap: unset is the default (2000), 0 is no cap.
+    let cap = match Cap::parse(std::env::var("WIKIFIER_CHECK_CHANGES_MAX").ok().as_deref()) {
+        Cap::Default => Some(2000),
+        Cap::All => None,
+        Cap::First(n) => Some(n),
+    };
     let mut watched: Vec<String> = watched.into_iter().collect();
     watched.sort();
-    let truncated = watched.len() > cap;
-    if truncated {
+    let truncated = cap.is_some_and(|cap| watched.len() > cap);
+    if let Some(cap) = cap.filter(|_| truncated) {
         watched.truncate(cap);
     }
     let reason = "content changed since last mark-green (check-changes)";
@@ -1260,7 +1297,8 @@ pub fn check_changes(root: &Path) -> Json {
         value.insert(
             "warnings",
             Json::Array(vec![Json::String(format!(
-                "check-changes stopped at {cap} files (WIKIFIER_CHECK_CHANGES_MAX)"
+                "check-changes stopped at {} files (WIKIFIER_CHECK_CHANGES_MAX; 0 means no cap)",
+                cap.unwrap_or(0)
             ))]),
         );
     }
@@ -3417,7 +3455,19 @@ pub fn dispatch(
             flags,
         ),
         "suggest-next" | "suggest" | "suggest-next-actions" | "suggest_next_actions" => {
-            suggest_next_scoped(root, flag_text(flags, "directory"))
+            let mut value = suggest_next_scoped(root, flag_text(flags, "directory"));
+            if let (Some(limit), Some(Json::Array(actions))) = (
+                Cap::from_flags(flags, &["limit"]).max(),
+                value.get("actions"),
+            ) {
+                if actions.len() > limit {
+                    let total = actions.len();
+                    let kept = actions[..limit].to_vec();
+                    value.insert("actions", Json::Array(kept));
+                    value.insert("actions_total", Json::Int(total as i64));
+                }
+            }
+            value
         }
         "prepare-edit" | "prepare_edit" | "lookup" | "preflight" => prepare_edit(root, file),
         "dependencies" | "deps" | "get_dependencies" => {
@@ -3440,10 +3490,7 @@ pub fn dispatch(
             } else {
                 flags.get("depth").and_then(|s| s.parse().ok()).unwrap_or(1)
             };
-            let max_files = flags
-                .get("max-files")
-                .or_else(|| flags.get("max_files"))
-                .and_then(|s| s.parse().ok());
+            let max_files = Cap::from_flags(flags, &["max-files", "max_files"]).max();
             list_paths_at(
                 root,
                 flags.get("prefix").map(|s| s.as_str()).unwrap_or(file),
@@ -3455,10 +3502,7 @@ pub fn dispatch(
             let full = flag_on(flags, "full");
             let quiet = flag_on(flags, "quiet");
             let directory = flags.get("directory").cloned().filter(|s| s != "true");
-            let max_files = flags
-                .get("max-files")
-                .or_else(|| flags.get("max_files"))
-                .and_then(|s| s.parse().ok());
+            let max_files = Cap::from_flags(flags, &["max-files", "max_files"]).max();
             let stream = flag_on(flags, "stream");
             update_maps_run(
                 root,
@@ -3478,7 +3522,7 @@ pub fn dispatch(
                 flags.get("format").map(|s| s.as_str()).unwrap_or("json")
             };
             let mut value = health_view(root, flag_text(flags, "directory"), format);
-            let limit = flags.get("limit").and_then(|s| s.parse::<usize>().ok());
+            let limit = Cap::from_flags(flags, &["limit"]).max();
             if let (Some(limit), Some(Json::Array(rows))) = (limit, value.get("entries")) {
                 if rows.len() > limit {
                     let total = rows.len();
@@ -3539,7 +3583,7 @@ pub fn dispatch(
                     ])
                 })
                 .collect();
-            if let Some(limit) = flags.get("limit").and_then(|s| s.parse::<usize>().ok()) {
+            if let Some(limit) = Cap::from_flags(flags, &["limit"]).max() {
                 entries.truncate(limit);
             }
             ok(vec![
@@ -3588,7 +3632,7 @@ pub fn dispatch(
                     text_ok && file_ok
                 })
                 .collect::<Vec<_>>();
-            if let Some(limit) = flags.get("limit").and_then(|s| s.parse::<usize>().ok()) {
+            if let Some(limit) = Cap::from_flags(flags, &["limit"]).max() {
                 entries.truncate(limit);
             }
             ok(vec![(
@@ -3613,17 +3657,14 @@ pub fn dispatch(
         },
         "issues" => suggest_next_scoped(root, flag_text(flags, "directory")),
         "cycles" | "get_cycles" => {
-            let max_items = flags
-                .get("max-items")
-                .or_else(|| flags.get("max_items"))
-                .and_then(|s| s.parse().ok());
+            let max_items = Cap::from_flags(flags, &["max-items", "max_items"]).max();
             cycles_view(root, !flag_on(flags, "no-analysis"), max_items)
         }
         "verify-wikis" | "verify_wikis" => {
             let prefix = flag_text(flags, "directory")
                 .map(|s| s.to_string())
                 .or_else(|| positional.first().filter(|s| !s.is_empty()).cloned());
-            let limit = flags.get("limit").and_then(|s| s.parse().ok());
+            let limit = Cap::from_flags(flags, &["limit"]).max();
             verify_wikis_under(root, prefix.as_deref(), limit)
         }
         "autonomous-status" | "readiness" => {
@@ -3738,7 +3779,7 @@ pub fn dispatch(
         "stale-wikis" | "detect-stale" => stale_wikis_in(
             root,
             flag_text(flags, "directory").or(positional.first().map(|s| s.as_str())),
-            flags.get("limit").and_then(|s| s.parse().ok()),
+            Cap::from_flags(flags, &["limit"]).max(),
         ),
         "prune-barrels" | "prune-brc" | "gc-barrels" => {
             let days = positional

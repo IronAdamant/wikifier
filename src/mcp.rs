@@ -181,33 +181,42 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
         "list_paths" => props.extend([
             ("depth", integer("1 is the folder card. 0 lists every file under the prefix.")),
             ("recursive", boolean("Same as depth 0.")),
-            ("max_files", integer("Cap the returned file list.")),
+            ("max_files", integer("Cap the returned file list. Unset or 0 lists every file.")),
         ]),
         "get_cycles" => props.extend([
-            ("max_items", integer("Cap the cycle list. Default 5 unless full.")),
+            ("max_items", integer("Cycles to list. Default 5; 0 lists every cycle, the same as full.")),
             ("analysis", boolean("Include severity and reverse-dependency ranking. Default true.")),
             ("full", boolean("Every cycle, every file in each cycle, and the whole reverse-dependency ranking.")),
         ]),
         "health" => props.extend([
-            ("limit", integer("Entries to return, most actionable first. Default 10 unless full. entries_total gives the full count.")),
+            ("limit", integer("Entries to return, most actionable first. Default 10; 0 returns every entry, the same as full. entries_total gives the full count.")),
             ("summary", boolean("Return only the green, yellow, and red counts.")),
             ("full", boolean("Every entry, with source hashes.")),
         ]),
         "get_dependents" | "prepare_edit" => props.extend([
-            ("limit", integer("Dependents to list: default 50 for get_dependents, 25 for prepare_edit, unless full. dependents_total and dependent_dirs summarise the rest.")),
+            ("limit", integer("Dependents to list: default 50 for get_dependents, 25 for prepare_edit; 0 lists every dependent, the same as full. dependents_total and dependent_dirs summarise the rest.")),
             ("full", boolean("List every dependent.")),
         ]),
         "get_resolution_diagnostics" => props.extend([
-            ("limit", integer("Notes and low-confidence edges to list. Default 20 unless full; *_total gives the counts.")),
+            ("limit", integer("Notes and low-confidence edges to list. Default 20; 0 lists all, the same as full. *_total gives the counts.")),
             ("full", boolean("Every note and edge.")),
         ]),
         "session_bootstrap" | "get_project_status" => props.push((
             "limit",
             integer("Cap the files list. Default 100 over MCP; 0 lists every file. files_total gives the count. Orient with map_index and list_paths."),
         )),
-        "verify_wikis" | "suggest_next_actions" => {
-            props.push(("limit", integer("Cap listed failures or stale rows.")));
-        }
+        "verify_wikis" => props.push((
+            "limit",
+            integer("Failures to list. Unset or 0 lists every failure."),
+        )),
+        "suggest_next_actions" => props.push((
+            "limit",
+            integer("Actions to list, highest priority first. Unset or 0 lists every action; actions_total gives the count when cut."),
+        )),
+        "journal" | "search_journal" => props.push((
+            "limit",
+            integer("Entries to list. Unset or 0 lists every entry."),
+        )),
         "record_changes" => props.push(("reasons", Json::obj(vec![
             ("type", Json::String("object".into())),
             ("description", Json::String("Map of path, glob, or dir/ to a reason. A string array of PATH=REASON lines also works.".into())),
@@ -735,12 +744,13 @@ fn call_tool(msg: &Json) -> Json {
     let compact_limit = if arg_on(args.as_ref(), "full") {
         None
     } else {
-        crate::mcp_compact::default_limit(&name).map(|default| {
-            flags
-                .get("limit")
-                .and_then(|s| s.parse::<usize>().ok())
-                .filter(|n| *n > 0)
-                .unwrap_or(default)
+        // `limit: 0` is "no cap", the same as `full: true` (api::Cap).
+        crate::mcp_compact::default_limit(&name).and_then(|default| {
+            match api::Cap::from_flags(&flags, &["limit"]) {
+                api::Cap::Default => Some(default),
+                api::Cap::All => None,
+                api::Cap::First(n) => Some(n),
+            }
         })
     };
     if let Some(limit) = compact_limit {
