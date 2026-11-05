@@ -8,7 +8,7 @@ use crate::artifacts::{self, HealthRow, JournalEntry};
 use crate::cache::{self, FileUpdate, Session};
 use crate::jsonutil::Json;
 use crate::scope::{self, Scope};
-use crate::sha256::{file_sha256_prefixed, sha256_prefixed};
+use crate::sha256::{content_sha256_prefixed, file_sha256_prefixed};
 use crate::timeutil::local_stamp;
 
 pub struct MapRun {
@@ -292,7 +292,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             continue;
         }
         let bytes = fs::read(file).unwrap_or_default();
-        let hash = sha256_prefixed(&bytes);
+        let hash = content_sha256_prefixed(&bytes);
         let (mtime, size) = if mtime == 0 && size == 0 {
             cache::stat_ns(file).unwrap_or((0, bytes.len() as u64))
         } else {
