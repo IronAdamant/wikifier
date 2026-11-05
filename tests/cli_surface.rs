@@ -165,6 +165,58 @@ fn mcp_stdio_is_newline_delimited_json() {
     let _ = std::fs::remove_dir_all(root);
 }
 
+/// The launcher must pass the binary's exit code through. `wikifier.bat` used to read
+/// `%ERRORLEVEL%` inside a parenthesized block, which expands before the command runs,
+/// so every failure exited 0.
+#[test]
+fn launcher_passes_exit_code_through() {
+    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let launch = |arg: &str| {
+        let mut cmd = if cfg!(windows) {
+            let mut c = Command::new("cmd");
+            c.arg("/c").arg(here.join("wikifier.bat"));
+            c
+        } else {
+            let mut c = Command::new("bash");
+            c.arg(here.join("wikifier.sh"));
+            c
+        };
+        cmd.arg(arg).env("WIKIFIER_BIN", bin()).output().unwrap()
+    };
+    let ok = launch("--version");
+    assert!(ok.status.success(), "status {:?}", ok.status);
+    assert!(
+        String::from_utf8_lossy(&ok.stdout).contains(env!("CARGO_PKG_VERSION")),
+        "{}",
+        String::from_utf8_lossy(&ok.stdout)
+    );
+    let bad = launch("no-such-command");
+    assert_eq!(bad.status.code(), Some(1), "status {:?}", bad.status);
+    assert!(
+        String::from_utf8_lossy(&bad.stdout).contains("UnknownCommand"),
+        "{}",
+        String::from_utf8_lossy(&bad.stdout)
+    );
+}
+
 fn parse_line(line: &str) -> wikifier::Json {
     wikifier::jsonutil::parse(line.trim()).unwrap_or_else(|err| panic!("stdio json {err}: {line}"))
+}
+
+/// The docs that name a package version name this one. Cargo.toml is the source.
+#[test]
+fn docs_name_the_cargo_version() {
+    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let version = env!("CARGO_PKG_VERSION");
+    let read = |rel: &str| std::fs::read_to_string(here.join(rel)).unwrap();
+    for (rel, needle) in [
+        ("skills/run.md", format!("**Package {version}**")),
+        ("skills/run.md", format!("package {version})")),
+        ("AGENTS.md", format!("package {version})")),
+        ("CLAUDE.md", format!("currently **{version}**")),
+        ("README.md", format!("releases/download/v{version}/")),
+        ("CHANGELOG.md", format!("## [{version}]")),
+    ] {
+        assert!(read(rel).contains(&needle), "{rel} does not say {needle}");
+    }
 }

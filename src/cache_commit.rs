@@ -114,6 +114,8 @@ pub struct Session {
     barrels: Vec<(String, Vec<String>)>,
     removed: BTreeSet<String>,
     rewrite_index: bool,
+    sizes: Sizes,
+    reparse: BTreeSet<String>,
     _lock: LockGuard,
 }
 
@@ -131,17 +133,24 @@ impl Session {
                 rev.entry(dst.clone()).or_default().insert(rel.clone());
             }
         }
+        let check = check_entries(root, &rows, &rev);
+        let rewrite_index = rewrite_index
+            || check.rewrite
+            || !check.reparse.is_empty()
+            || !check.stale_dsts.is_empty();
         Ok(Session {
             root: root.to_path_buf(),
             rows,
             rev,
             dirty_src: BTreeMap::new(),
-            dirty_dst: BTreeSet::new(),
+            dirty_dst: check.stale_dsts,
             payloads: BTreeMap::new(),
             notes: BTreeMap::new(),
             barrels: Vec::new(),
             removed: BTreeSet::new(),
             rewrite_index,
+            sizes: check.sizes,
+            reparse: check.reparse,
             _lock: lock,
         })
     }
@@ -298,10 +307,22 @@ impl Session {
         self.barrels.push((rel.to_string(), dsts.to_vec()));
     }
 
-    pub fn commit(self) -> Result<(), String> {
-        if !self.rewrite_index && self.barrels.is_empty() {
+    /// True when [`Session::commit`] would write anything.
+    pub fn has_changes(&self) -> bool {
+        self.rewrite_index || !self.barrels.is_empty()
+    }
+
+    /// True when `rel`'s cache files failed the open check, so it must be parsed again
+    /// even though its size and mtime are unchanged.
+    pub fn needs_parse(&self, rel: &str) -> bool {
+        self.reparse.contains(rel)
+    }
+
+    pub fn commit(mut self) -> Result<(), String> {
+        if !self.has_changes() {
             return Ok(());
         }
+        let mut sizes = std::mem::take(&mut self.sizes);
         let gen = read_generation(&self.root).saturating_add(1);
         cache::atomic_write(
             &cache::commit_pending_path(&self.root),
@@ -310,6 +331,9 @@ impl Session {
         // by_dst is keyed by the importer's target. Dropping a file removes its
         // forward edges above; the reverse file for this path stays until importers change.
         for rel in &self.removed {
+            for kind in ["by_src", "payload", "notes"] {
+                sizes.remove(&(kind.to_string(), rel.clone()));
+            }
             for (sub, ext) in [
                 ("payload", "json"),
                 ("by_src", "edges"),
@@ -320,6 +344,9 @@ impl Session {
                 let _ = fs::remove_file(cache::legacy_file(&self.root, sub, rel, ext));
             }
         }
+        // Forward files (by_src, payload, notes, barrels) are written and flushed as one
+        // batch before any by_dst file, so a crash between them is repaired from by_src.
+        let mut forward: Vec<(PathBuf, Vec<u8>)> = Vec::new();
         for (rel, lines) in &self.dirty_src {
             if self.removed.contains(rel) {
                 continue;
@@ -329,28 +356,35 @@ impl Session {
             } else {
                 format!("{}\n", lines.join("\n"))
             };
-            cache::write_labeled(
-                &cache::store_file(&self.root, "by_src", rel, "edges"),
-                rel,
-                &body,
-            )?;
+            let bytes = cache::labeled(rel, &body);
+            sizes.insert(("by_src".into(), rel.clone()), bytes.len() as u64);
+            forward.push((cache::store_file(&self.root, "by_src", rel, "edges"), bytes));
         }
         for (rel, payload) in &self.payloads {
-            cache::atomic_write(
-                &cache::store_file(&self.root, "payload", rel, "json"),
-                payload.as_bytes(),
-            )?;
+            sizes.insert(("payload".into(), rel.clone()), payload.len() as u64);
+            forward.push((
+                cache::store_file(&self.root, "payload", rel, "json"),
+                payload.as_bytes().to_vec(),
+            ));
         }
         for (rel, notes) in &self.notes {
             let path = cache::store_file(&self.root, "notes", rel, "txt");
             match notes {
-                Some(body) => cache::write_labeled(&path, rel, body)?,
+                Some(body) => {
+                    let bytes = cache::labeled(rel, body);
+                    sizes.insert(("notes".into(), rel.clone()), bytes.len() as u64);
+                    forward.push((path, bytes));
+                }
                 None => {
+                    sizes.remove(&("notes".to_string(), rel.clone()));
                     let _ = fs::remove_file(&path);
                 }
             }
         }
-        for (rel, dsts) in &self.barrels {
+        // A file staged twice keeps its last record, as the serial writes did.
+        let barrels: BTreeMap<&String, &Vec<String>> =
+            self.barrels.iter().map(|(rel, dsts)| (rel, dsts)).collect();
+        for (rel, dsts) in barrels {
             let body = crate::jsonutil::Json::obj(vec![
                 ("src", crate::jsonutil::Json::String(rel.clone())),
                 (
@@ -363,24 +397,30 @@ impl Session {
                     ),
                 ),
             ]);
-            cache::atomic_write(
-                &cache::store_file(&self.root, "barrels", rel, "json"),
-                body.to_string().as_bytes(),
-            )?;
+            forward.push((
+                cache::store_file(&self.root, "barrels", rel, "json"),
+                body.to_string().into_bytes(),
+            ));
         }
-        // Reverse edges after forward edges. A crash here is repaired from by_src.
+        cache::write_derived_all(&forward)?;
+        let mut reverse: Vec<(PathBuf, Vec<u8>)> = Vec::new();
         for dst in &self.dirty_dst {
             let path = cache::store_file(&self.root, "by_dst", dst, "edges");
             let srcs = self.rev.get(dst).cloned().unwrap_or_default();
             if srcs.is_empty() {
+                sizes.remove(&("by_dst".to_string(), dst.clone()));
                 let _ = fs::remove_file(&path);
             } else {
                 let lines: Vec<String> = srcs.iter().cloned().collect();
                 let body = format!("{}\n", lines.join("\n"));
-                cache::write_labeled(&path, dst, &body)?;
+                let bytes = cache::labeled(dst, &body);
+                sizes.insert(("by_dst".into(), dst.clone()), bytes.len() as u64);
+                reverse.push((path, bytes));
             }
         }
+        cache::write_derived_all(&reverse)?;
         save_index(&self.root, &self.rows)?;
+        save_sizes(&self.root, &sizes)?;
         cache::atomic_write(
             &cache::generation_path(&self.root),
             format!("{gen}\n").as_bytes(),
@@ -389,6 +429,151 @@ impl Session {
         cache::atomic_write(&cache::names_marker(&self.root), b"fnv1a64\n")?;
         Ok(())
     }
+}
+
+/// Kinds of cache file `Session::open` checks before trusting a row: sub-directory and
+/// extension. Barrel records are auxiliary and are not checked.
+const CHECKED: &[(&str, &str)] = &[
+    ("by_src", "edges"),
+    ("payload", "json"),
+    ("notes", "txt"),
+    ("by_dst", "edges"),
+];
+
+/// Byte length of each checked cache file, keyed by kind and path.
+type Sizes = BTreeMap<(String, String), u64>;
+
+fn sizes_path(root: &Path) -> PathBuf {
+    cache::cache_root(root).join("sizes.tsv")
+}
+
+/// The recorded sizes, or `None` when the file is missing or any line is malformed.
+fn read_sizes(root: &Path) -> Option<Sizes> {
+    let text = fs::read_to_string(sizes_path(root)).ok()?;
+    let mut out = Sizes::new();
+    for line in text.lines() {
+        let mut parts = line.splitn(3, '\t');
+        let (Some(kind), Some(len), Some(rel)) = (parts.next(), parts.next(), parts.next()) else {
+            return None;
+        };
+        if rel.is_empty() || !CHECKED.iter().any(|(k, _)| *k == kind) {
+            return None;
+        }
+        out.insert((kind.to_string(), rel.to_string()), len.parse().ok()?);
+    }
+    Some(out)
+}
+
+fn save_sizes(root: &Path, sizes: &Sizes) -> Result<(), String> {
+    let mut body = String::new();
+    for ((kind, rel), len) in sizes {
+        body.push_str(&format!("{kind}\t{len}\t{rel}\n"));
+    }
+    cache::atomic_write(&sizes_path(root), body.as_bytes())
+}
+
+/// File name to byte length for one cache directory, from a single listing.
+fn listed_sizes(dir: &Path) -> HashMap<String, u64> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return HashMap::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|ent| {
+            let len = ent.metadata().ok()?.len();
+            Some((ent.file_name().to_string_lossy().into_owned(), len))
+        })
+        .collect()
+}
+
+/// What `Session::open` found wrong with the cache files.
+struct EntryCheck {
+    sizes: Sizes,
+    reparse: BTreeSet<String>,
+    stale_dsts: BTreeSet<String>,
+    rewrite: bool,
+}
+
+/// Compare every checked cache file with its recorded size (one directory listing per
+/// kind). A file with no recorded size is read and its content checked once. A missing,
+/// resized, or malformed file is a miss: its source is parsed again, or its `by_dst`
+/// record is rewritten from the index. This is what lets the cache skip fsync.
+fn check_entries(
+    root: &Path,
+    rows: &BTreeMap<String, Row>,
+    rev: &BTreeMap<String, BTreeSet<String>>,
+) -> EntryCheck {
+    let recorded = read_sizes(root);
+    let mut check = EntryCheck {
+        sizes: Sizes::new(),
+        reparse: BTreeSet::new(),
+        stale_dsts: BTreeSet::new(),
+        rewrite: recorded.is_none(),
+    };
+    let recorded = recorded.unwrap_or_default();
+    let listed: HashMap<&str, HashMap<String, u64>> = CHECKED
+        .iter()
+        .map(|(kind, _)| (*kind, listed_sizes(&cache::cache_root(root).join(kind))))
+        .collect();
+    let mut verify = |kind: &str, ext: &str, rel: &str, required: bool| -> bool {
+        let name = format!("{}.{ext}", cache::enc(rel));
+        let actual = listed.get(kind).and_then(|dir| dir.get(&name)).copied();
+        let key = (kind.to_string(), rel.to_string());
+        if let Some(len) = recorded.get(&key) {
+            if actual == Some(*len) {
+                check.sizes.insert(key, *len);
+                return true;
+            }
+            return false;
+        }
+        let Some(len) = actual else {
+            return !required;
+        };
+        let path = cache::store_file(root, kind, rel, ext);
+        let bytes = fs::read(&path).unwrap_or_default();
+        let ok = match kind {
+            "by_src" => cache::labeled_lines(&bytes, rel).is_some_and(|lines| {
+                let dsts: BTreeSet<String> = lines.iter().map(|l| cache::dst_of(l)).collect();
+                rows.get(rel).is_some_and(|row| row.dsts == dsts)
+            }),
+            "notes" => cache::labeled_lines(&bytes, rel).is_some_and(|lines| {
+                lines
+                    .iter()
+                    .all(|l| l.starts_with("E\t") || l.starts_with("U\t"))
+            }),
+            "payload" => std::str::from_utf8(&bytes)
+                .ok()
+                .and_then(|text| crate::jsonutil::parse(text).ok())
+                .is_some_and(|json| json.get("rel").and_then(|v| v.as_str()) == Some(rel)),
+            _ => cache::labeled_lines(&bytes, rel).is_some_and(|lines| {
+                let srcs: BTreeSet<String> = lines.into_iter().collect();
+                rev.get(rel).is_some_and(|want| *want == srcs)
+            }),
+        };
+        if ok {
+            check.sizes.insert(key, len);
+            check.rewrite = true;
+        }
+        ok
+    };
+    let mut reparse = BTreeSet::new();
+    for rel in rows.keys() {
+        let src_ok = verify("by_src", "edges", rel, true);
+        let payload_ok = verify("payload", "json", rel, false);
+        let notes_ok = verify("notes", "txt", rel, false);
+        if !(src_ok && payload_ok && notes_ok) {
+            reparse.insert(rel.clone());
+        }
+    }
+    let mut stale = BTreeSet::new();
+    for (dst, srcs) in rev {
+        if !srcs.is_empty() && !verify("by_dst", "edges", dst, true) {
+            stale.insert(dst.clone());
+        }
+    }
+    check.reparse = reparse;
+    check.stale_dsts = stale;
+    check
 }
 
 fn read_generation(root: &Path) -> u64 {
@@ -422,6 +607,22 @@ fn index_record_lines(root: &Path) -> Vec<String> {
         .lines()
         .map(|line| line.trim_end_matches('\r').trim_start().to_string())
         .filter(|line| !line.is_empty())
+        .collect()
+}
+
+/// Each indexed file with its resolved targets, or `None` for a row from before targets
+/// were stored in the index.
+pub(crate) fn index_targets(root: &Path) -> Vec<(String, Option<BTreeSet<String>>)> {
+    index_record_lines(root)
+        .into_iter()
+        .filter_map(|line| {
+            let mut parts = line.split('\t');
+            let rel = parts.next().unwrap_or("").to_string();
+            if rel.is_empty() {
+                return None;
+            }
+            Some((rel, parts.nth(3).map(parse_dsts)))
+        })
         .collect()
 }
 
@@ -674,6 +875,8 @@ pub fn rebuild(root: &Path) -> Result<(), String> {
 }
 
 fn rebuild_locked(root: &Path) -> Result<(), String> {
+    // by_dst is rewritten from scratch; the next open re-reads every file for its size.
+    let _ = fs::remove_file(sizes_path(root));
     let (old, _) = load_rows(root);
     let names = hash_to_rel(root);
     let mut orphans = Vec::new();
@@ -699,11 +902,18 @@ fn rebuild_locked(root: &Path) -> Result<(), String> {
             rev.entry(dst.clone()).or_default().insert(src.clone());
         }
     }
-    for (dst, srcs) in &rev {
-        let lines: Vec<String> = srcs.iter().cloned().collect();
-        let body = format!("{}\n", lines.join("\n"));
-        cache::write_labeled(&cache::store_file(root, "by_dst", dst, "edges"), dst, &body)?;
-    }
+    let reverse: Vec<(PathBuf, Vec<u8>)> = rev
+        .iter()
+        .map(|(dst, srcs)| {
+            let lines: Vec<String> = srcs.iter().cloned().collect();
+            let body = format!("{}\n", lines.join("\n"));
+            (
+                cache::store_file(root, "by_dst", dst, "edges"),
+                cache::labeled(dst, &body),
+            )
+        })
+        .collect();
+    cache::write_derived_all(&reverse)?;
     let mut rows = BTreeMap::new();
     for (rel, dsts) in &forward {
         let prev = old.get(rel);

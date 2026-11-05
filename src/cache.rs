@@ -103,6 +103,16 @@ pub(crate) fn names_marker(root: &Path) -> PathBuf {
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    write_replace(path, bytes, true)?;
+    fsync_dir(parent);
+    Ok(())
+}
+
+/// Write a temp file beside `path` and rename it into place, so a reader never sees a
+/// torn file. `durable` also syncs the data before the rename and writes the rename
+/// through; the parent directory must exist and the caller flushes it.
+fn write_replace(path: &Path, bytes: &[u8], durable: bool) -> Result<(), String> {
+    let parent = path.parent().unwrap_or(Path::new("."));
     let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("cache");
     let tmp = parent.join(format!(".{file_name}.{}.{seq}.tmp", std::process::id()));
@@ -113,44 +123,110 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
             .open(&tmp)
             .map_err(|e| e.to_string())?;
         file.write_all(bytes).map_err(|e| e.to_string())?;
-        file.sync_all().map_err(|e| e.to_string())?;
+        if durable {
+            file.sync_all().map_err(|e| e.to_string())?;
+        }
         Ok(())
     })();
     if let Err(err) = write_result {
         let _ = fs::remove_file(&tmp);
         return Err(err);
     }
-    if let Err(err) = replace_file(&tmp, path) {
+    if let Err(err) = replace_file(&tmp, path, durable) {
         let _ = fs::remove_file(&tmp);
         return Err(err);
     }
-    fsync_dir(parent);
     Ok(())
 }
 
-pub(crate) fn write_labeled(path: &Path, rel: &str, body: &str) -> Result<(), String> {
+/// Write many derived cache files: each goes to a temp file and is renamed into place, so a
+/// reader never sees a torn file, but nothing is synced. The cache can be rebuilt from the
+/// sources, and `Session::open` treats a file whose size or content does not check out as
+/// a miss and parses that source again. Writes run on several threads.
+pub(crate) fn write_derived_all(entries: &[(PathBuf, Vec<u8>)]) -> Result<(), String> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let parents: BTreeSet<PathBuf> = entries
+        .iter()
+        .map(|(path, _)| path.parent().unwrap_or(Path::new(".")).to_path_buf())
+        .collect();
+    for dir in &parents {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, 16);
+    let chunk = entries.len().div_ceil(threads).max(1);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = entries
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .try_for_each(|(path, bytes)| write_replace(path, bytes, false))
+                })
+            })
+            .collect();
+        workers.into_iter().try_for_each(|worker| {
+            worker
+                .join()
+                .unwrap_or_else(|_| Err("cache writer thread panicked".to_string()))
+        })
+    })
+}
+
+/// The bytes of an edge or notes file: an `@<TAB><rel>` header line, then the body.
+pub(crate) fn labeled(rel: &str, body: &str) -> Vec<u8> {
     let mut text = format!("@\t{rel}\n");
     text.push_str(body);
     if !text.ends_with('\n') {
         text.push('\n');
     }
-    atomic_write(path, text.as_bytes())
+    text.into_bytes()
 }
 
-fn replace_file(from: &Path, to: &Path) -> Result<(), String> {
+/// Body lines of a labeled cache file written for `rel`: valid UTF-8, no NUL, an
+/// `@<TAB><rel>` header and a final newline. `None` for a torn or foreign file.
+pub(crate) fn labeled_lines(bytes: &[u8], rel: &str) -> Option<Vec<String>> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let body = text.strip_prefix(&format!("@\t{rel}\n"))?;
+    if text.contains('\0') || !text.ends_with('\n') {
+        return None;
+    }
+    Some(
+        body.lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty())
+            .collect(),
+    )
+}
+
+/// Body lines of `rel`'s record of one kind: `Some(empty)` when there is no file, `None`
+/// when the file is there but does not check out.
+fn record_lines(root: &Path, sub: &str, rel: &str, ext: &str) -> Option<Vec<String>> {
+    match fs::read(read_file(root, sub, rel, ext)) {
+        Ok(bytes) => labeled_lines(&bytes, rel),
+        Err(_) => Some(Vec::new()),
+    }
+}
+
+fn replace_file(from: &Path, to: &Path, durable: bool) -> Result<(), String> {
     #[cfg(windows)]
     {
-        replace_file_windows(from, to)
+        replace_file_windows(from, to, durable)
     }
     #[cfg(not(windows))]
     {
+        let _ = durable;
         fs::rename(from, to)
             .map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
     }
 }
 
 #[cfg(windows)]
-fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
+fn replace_file_windows(from: &Path, to: &Path, durable: bool) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
     const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
@@ -169,7 +245,11 @@ fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
         MoveFileExW(
             src.as_ptr(),
             dst.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            if durable {
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+            } else {
+                MOVEFILE_REPLACE_EXISTING
+            },
         )
     };
     if ok == 0 {
@@ -260,10 +340,9 @@ pub(crate) fn dst_of(line: &str) -> String {
 }
 
 pub fn load_dependencies(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    let mut dsts: Vec<String> = content_lines(&by_src_path(root, rel))
+    let mut dsts: Vec<String> = load_internal_edges(root, rel)
         .into_iter()
-        .map(|line| dst_of(&line))
-        .filter(|s| !s.is_empty())
+        .map(|edge| edge.path)
         .collect();
     dsts.sort();
     dsts.dedup();
@@ -351,39 +430,11 @@ pub struct DependencyView {
     pub unresolved: Vec<(String, i64, String)>,
 }
 
-fn notes_path(root: &Path, rel: &str) -> PathBuf {
-    read_file(root, "notes", rel, "txt")
-}
-
 pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, String> {
-    let mut internal = Vec::new();
-    for line in content_lines(&by_src_path(root, rel)) {
-        let mut parts = line.split('\t');
-        let path = parts.next().unwrap_or("").trim().to_string();
-        if path.is_empty() {
-            continue;
-        }
-        let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
-        let names = parts
-            .next()
-            .unwrap_or("")
-            .split(',')
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect();
-        let (conditional, dynamic, via_barrel) = parse_flags(parts.next().unwrap_or(""));
-        internal.push(InternalEdge {
-            path,
-            line: line_no,
-            names,
-            conditional,
-            dynamic,
-            via_barrel,
-        });
-    }
+    let internal = load_internal_edges(root, rel);
     let mut external = Vec::new();
     let mut unresolved = Vec::new();
-    for line in read_lines(&notes_path(root, rel)) {
+    for line in record_lines(root, "notes", rel, "txt").unwrap_or_default() {
         let mut parts = line.split('\t');
         match parts.next().unwrap_or("") {
             "E" => {
@@ -417,8 +468,71 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
     })
 }
 
+/// The internal edges of one file from its `by_src` record, without the notes file.
+/// A record that does not check out is a miss: the targets come from `index.tsv`, without
+/// line numbers or flags, until the next `update-maps` parses the file again.
+pub fn load_internal_edges(root: &Path, rel: &str) -> Vec<InternalEdge> {
+    let Some(lines) = record_lines(root, "by_src", rel, "edges") else {
+        return index_dsts(root, rel)
+            .into_iter()
+            .map(|path| InternalEdge {
+                path,
+                line: 0,
+                names: Vec::new(),
+                conditional: false,
+                dynamic: false,
+                via_barrel: false,
+            })
+            .collect();
+    };
+    let mut internal = Vec::new();
+    for line in lines {
+        let mut parts = line.split('\t');
+        let path = parts.next().unwrap_or("").trim().to_string();
+        if path.is_empty() {
+            continue;
+        }
+        let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
+        let names = parts
+            .next()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        let (conditional, dynamic, via_barrel) = parse_flags(parts.next().unwrap_or(""));
+        internal.push(InternalEdge {
+            path,
+            line: line_no,
+            names,
+            conditional,
+            dynamic,
+            via_barrel,
+        });
+    }
+    internal
+}
+
+/// `rel`'s targets as `index.tsv` records them.
+fn index_dsts(root: &Path, rel: &str) -> BTreeSet<String> {
+    crate::cache_commit::index_targets(root)
+        .into_iter()
+        .find(|(src, _)| src == rel)
+        .and_then(|(_, dsts)| dsts)
+        .unwrap_or_default()
+}
+
+/// Files that import `rel`. A `by_dst` record that does not check out is a miss: the
+/// importers come from the targets in `index.tsv`.
 pub fn load_dependents(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    let mut srcs = content_lines(&read_file(root, "by_dst", rel, "edges"));
+    let mut srcs = match record_lines(root, "by_dst", rel, "edges") {
+        Some(lines) => lines,
+        None => crate::cache_commit::index_targets(root)
+            .into_iter()
+            .filter(|(_, dsts)| dsts.as_ref().is_some_and(|d| d.contains(rel)))
+            .map(|(src, _)| src)
+            .collect(),
+    };
     srcs.sort();
     srcs.dedup();
     Ok(srcs)
@@ -481,6 +595,22 @@ pub fn indexed_rows(root: &Path) -> Vec<(String, u128, u64, String)> {
         .collect()
 }
 
+/// Index rows by path: `(mtime_ns, size, content hash)`.
+pub fn index_by_path(root: &Path) -> std::collections::HashMap<String, (u128, u64, String)> {
+    indexed_rows(root)
+        .into_iter()
+        .map(|(rel, mtime, size, hash)| (rel, (mtime, size, hash)))
+        .collect()
+}
+
+/// The content hash stored for `path` when its size and mtime still match the index row,
+/// the same rule `update-maps` uses to skip a file. `None` means read and hash the file.
+pub fn hash_if_unchanged(path: &Path, row: Option<&(u128, u64, String)>) -> Option<String> {
+    let (mtime, size, hash) = row?;
+    (*mtime != 0 && hash.starts_with("sha256:") && stat_ns(path) == Some((*mtime, *size)))
+        .then(|| hash.clone())
+}
+
 pub fn payload_bytes(root: &Path, rel: &str) -> Option<Vec<u8>> {
     fs::read(payload_path(root, rel)).ok()
 }
@@ -496,14 +626,22 @@ pub fn stat_ns(path: &Path) -> Option<(u128, u64)> {
     Some((mtime, meta.len()))
 }
 
+/// Every mapped edge, self-imports left out. Read from `index.tsv`, which carries each
+/// file's resolved targets, instead of opening one `by_src` file per mapped file. An index
+/// row written before targets were recorded falls back to that file's `by_src` record.
 pub fn edges(root: &Path) -> BTreeSet<(String, String)> {
     let mut out = BTreeSet::new();
-    for rel in all_paths(root) {
-        if let Ok(dsts) = load_dependencies(root, &rel) {
-            for dst in dsts {
-                if dst != rel {
-                    out.insert((rel.clone(), dst));
-                }
+    for (rel, dsts) in crate::cache_commit::index_targets(root) {
+        let dsts = match dsts {
+            Some(dsts) => dsts,
+            None => load_dependencies(root, &rel)
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
+        };
+        for dst in dsts {
+            if dst != rel {
+                out.insert((rel.clone(), dst));
             }
         }
     }
@@ -585,4 +723,53 @@ pub fn prune_barrel_files(root: &Path, max_age_days: f64, dry_run: bool) -> Resu
         }
     }
     Ok(pruned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_derived_all_publishes_every_file_and_leaves_no_temp() {
+        let dir = std::env::temp_dir().join(format!(
+            "wk-batch-{}-{}",
+            std::process::id(),
+            TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let mut entries: Vec<(PathBuf, Vec<u8>)> = (0..300)
+            .map(|i| {
+                let sub = ["by_src", "by_dst", "payload"][i % 3];
+                (
+                    dir.join(sub).join(format!("{i}.edges")),
+                    format!("body {i}").into_bytes(),
+                )
+            })
+            .collect();
+        write_derived_all(&entries).unwrap();
+        // A second batch replaces existing files in place.
+        for (i, entry) in entries.iter_mut().enumerate() {
+            entry.1 = format!("second {i}").into_bytes();
+        }
+        write_derived_all(&entries).unwrap();
+        for (i, (path, _)) in entries.iter().enumerate() {
+            assert_eq!(fs::read_to_string(path).unwrap(), format!("second {i}"));
+        }
+        for sub in ["by_src", "by_dst", "payload"] {
+            let leftovers: Vec<_> = fs::read_dir(dir.join(sub))
+                .unwrap()
+                .flatten()
+                .filter(|ent| ent.file_name().to_string_lossy().ends_with(".tmp"))
+                .collect();
+            assert!(leftovers.is_empty(), "{sub}: {leftovers:?}");
+        }
+        assert!(write_derived_all(&[]).is_ok());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn labeled_adds_the_header_and_a_final_newline() {
+        assert_eq!(labeled("src/a.rs", "x"), b"@\tsrc/a.rs\nx\n".to_vec());
+        assert_eq!(labeled("src/a.rs", ""), b"@\tsrc/a.rs\n".to_vec());
+    }
 }

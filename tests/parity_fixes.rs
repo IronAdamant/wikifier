@@ -104,9 +104,11 @@ fn js_comment_exports_are_not_public() {
 }
 
 #[test]
-fn pending_line_uses_the_python_shape() {
+fn pending_line_names_the_reason_and_the_next_step() {
     let root = scratch("pend");
     fs::write(root.join("src/a.py"), "x = 1\n").unwrap();
+    let empty = "# Pending Updates\n\n(no pending items — run check-changes after making edits)\n";
+    fs::write(root.join("pending_updates.md"), empty).unwrap();
     assert_eq!(
         api::record_change(&root, "src/a.py", "first reason")
             .get("success")
@@ -115,9 +117,20 @@ fn pending_line_uses_the_python_shape() {
     );
     let text = fs::read_to_string(root.join("pending_updates.md")).unwrap();
     assert!(
-        text.contains("- src/a.py: LLM/agent edit — first reason"),
+        text.contains("- src/a.py: first reason — refresh the wiki, then mark-green"),
         "{text}"
     );
+    assert!(!text.contains("no pending items"), "{text}");
+
+    fs::write(root.join("src/a.py.wiki.md"), "# a\n\nSets `x`.\n").unwrap();
+    let marked = api::mark_green(&root, "src/a.py", "wiki (pend-1)", false);
+    assert_eq!(
+        marked.get("success").and_then(|v| v.as_bool()),
+        Some(true),
+        "{marked}"
+    );
+    let text = fs::read_to_string(root.join("pending_updates.md")).unwrap();
+    assert_eq!(text, empty);
     let _ = fs::remove_dir_all(&root);
 }
 

@@ -55,7 +55,15 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
             ("max_items", integer("Cap the cycle list.")),
             ("analysis", boolean("Include severity and reverse-dependency ranking. Default true.")),
         ]),
-        "verify_wikis" | "health" | "suggest_next_actions" | "session_bootstrap" | "get_project_status" => {
+        "health" => props.extend([
+            ("limit", integer("Return at most this many entries. entries_total gives the full count.")),
+            ("summary", boolean("Return only the green, yellow, and red counts.")),
+        ]),
+        "session_bootstrap" | "get_project_status" => props.push((
+            "limit",
+            integer("Cap the files list. Default 100 over MCP; 0 lists every file. files_total gives the count. Orient with map_index and list_paths."),
+        )),
+        "verify_wikis" | "suggest_next_actions" => {
             props.push(("limit", integer("Cap listed failures or stale rows.")));
         }
         "record_changes" => props.push(("reasons", Json::obj(vec![
@@ -64,10 +72,18 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
         ]))),
         "heal_stubs" | "list_healable_stubs" => props.push(("min_wiki_length", integer("Minimum wiki length. Default 350."))),
         "mark_green" => props.push(("force", boolean("Override a failed wiki check. Requires a reason."))),
+        "update_maps" => props.extend([
+            ("full", boolean("Rehash every file instead of skipping unchanged size and mtime.")),
+            ("max_files", integer("Parse at most this many changed files. Re-run while files_remaining_dirty > 0.")),
+            ("edges", boolean("Include the whole edge list. Off by default: it runs to hundreds of KB on a mid-size repo. Use get_dependencies for one file.")),
+        ]),
         _ => {}
     }
     props
 }
+
+/// Files listed by an MCP `session_bootstrap` that passes no `limit`.
+const MCP_BOOTSTRAP_FILES: usize = 100;
 
 fn string_prop(description: &str) -> Json {
     Json::obj(vec![
@@ -385,6 +401,9 @@ fn call_tool(msg: &Json) -> Json {
         .unwrap_or("")
         .to_string();
     let args = params.and_then(|p| p.get("arguments")).cloned();
+    if let Some(err) = missing_required(&name, args.as_ref()) {
+        return tool_result(err, false, &name);
+    }
     let root = args
         .as_ref()
         .and_then(|a| a.get("project_root"))
@@ -475,7 +494,7 @@ fn call_tool(msg: &Json) -> Json {
         }
     }
     for key in [
-        "full", "quiet", "stream", "green", "force", "dry_run", "dry-run",
+        "full", "quiet", "stream", "green", "force", "dry_run", "dry-run", "summary",
     ] {
         if arg_on(args.as_ref(), key) {
             let stored = if key == "dry_run" { "dry-run" } else { key };
@@ -524,6 +543,18 @@ fn call_tool(msg: &Json) -> Json {
             _ => {}
         }
     }
+    // Over MCP the edge list is opt-in. Its size grows with the repo and every byte lands in
+    // the agent's context; `edges_persisted` still reports the count.
+    if name == "update_maps" && !arg_on(args.as_ref(), "edges") {
+        flags.insert("quiet".into(), "true".into());
+    }
+    // The bootstrap file list grows with the repo (about 21 KB at 587 files). Over MCP it
+    // is capped unless the caller asks; map_index already gives the folder counts.
+    if matches!(name.as_str(), "session_bootstrap" | "get_project_status")
+        && !flags.contains_key("limit")
+    {
+        flags.insert("limit".into(), MCP_BOOTSTRAP_FILES.to_string());
+    }
     let textual = flags.get("format").map(|s| s == "text").unwrap_or(false);
     let tool_name = name.clone();
     let from_arg = args
@@ -570,6 +601,58 @@ fn call_tool(msg: &Json) -> Json {
         ]),
     };
     tool_result(value, textual, &tool_name)
+}
+
+/// A required argument the client left out fails the call and names the accepted fields,
+/// so an agent that guessed `file_path` or `path` can retry at once. Without this the tool
+/// ran with an empty path and answered `success: true` with every field empty.
+/// `project_root` is exempt: it falls back to WIKIFIER_PROJECT_ROOT, then the cwd.
+fn missing_required(name: &str, args: Option<&Json>) -> Option<Json> {
+    if !MCP_TOOLS.contains(&name) {
+        return None;
+    }
+    let (_, required, _) = tool_spec(name);
+    let present = |key: &str| {
+        let value = args.and_then(|a| a.get(key)).or_else(|| {
+            (key == "query")
+                .then(|| args.and_then(|a| a.get("text")))
+                .flatten()
+        });
+        matches!(value, Some(Json::String(text)) if !text.trim().is_empty())
+    };
+    let missing: Vec<&str> = required
+        .iter()
+        .copied()
+        .filter(|field| *field != "project_root" && !present(field))
+        .collect();
+    if missing.is_empty() {
+        return None;
+    }
+    let names = |value: Option<&Json>| {
+        value
+            .and_then(|v| v.as_object())
+            .map(|map| map.keys().cloned().collect::<Vec<_>>().join(", "))
+            .unwrap_or_default()
+    };
+    let schema = tool_schema(name);
+    let accepted = names(schema.get("inputSchema").and_then(|s| s.get("properties")));
+    let given = names(args);
+    let given = if given.is_empty() {
+        "none".to_string()
+    } else {
+        given
+    };
+    Some(Json::obj(vec![
+        ("success", Json::Bool(false)),
+        (
+            "error",
+            Json::String(format!(
+                "{name} needs {} as a non-empty string. Accepted arguments: {accepted}. Received: {given}.",
+                missing.join(", ")
+            )),
+        ),
+        ("error_type", Json::String("InvalidArguments".into())),
+    ]))
 }
 
 fn tool_result(value: Json, textual: bool, tool_name: &str) -> Json {

@@ -1,0 +1,4 @@
+# Launchers: bash needs LF, cmd.exe needs CRLF (labels misparse in LF-only batch files).
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

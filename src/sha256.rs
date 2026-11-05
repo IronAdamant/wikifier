@@ -95,9 +95,28 @@ pub fn sha256_prefixed(data: &[u8]) -> String {
     format!("sha256:{}", sha256_hex(data))
 }
 
+/// Content identity for health baselines: CRLF counts as LF. A Windows checkout with
+/// `core.autocrlf` has CRLF files whose Green baselines were hashed from LF elsewhere;
+/// hashing raw bytes flipped every one of them to dirty.
+pub fn content_sha256_prefixed(data: &[u8]) -> String {
+    const CR: u8 = 13;
+    const LF: u8 = 10;
+    if !data.windows(2).any(|pair| pair == [CR, LF]) {
+        return sha256_prefixed(data);
+    }
+    let mut unix = Vec::with_capacity(data.len());
+    for (i, byte) in data.iter().enumerate() {
+        if *byte == CR && data.get(i + 1) == Some(&LF) {
+            continue;
+        }
+        unix.push(*byte);
+    }
+    sha256_prefixed(&unix)
+}
+
 pub fn file_sha256_prefixed(path: &std::path::Path) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
-    Some(sha256_prefixed(&bytes))
+    Some(content_sha256_prefixed(&bytes))
 }
 
 #[cfg(test)]
@@ -111,5 +130,14 @@ mod tests {
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
         assert!(sha256_prefixed(b"abc").starts_with("sha256:"));
+    }
+
+    #[test]
+    fn content_hash_treats_crlf_as_lf() {
+        let unix = content_sha256_prefixed(&[b'a', 10, b'b', 10]);
+        assert_eq!(unix, sha256_prefixed(&[b'a', 10, b'b', 10]));
+        assert_eq!(content_sha256_prefixed(&[b'a', 13, 10, b'b', 13, 10]), unix);
+        assert_eq!(content_sha256_prefixed(&[b'a', 13, 10, b'b', 10]), unix);
+        assert_ne!(content_sha256_prefixed(&[b'a', 13, b'b', 10]), unix);
     }
 }

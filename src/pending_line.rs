@@ -24,6 +24,10 @@ pub fn format_item(rel: &str, message: &str) -> String {
     format!("- {rel}: {message}\n")
 }
 
+/// The line an empty queue shows. It goes when the first item arrives and comes back when
+/// the last one leaves, so the file never says "no pending items" above a list of items.
+pub const EMPTY_NOTE: &str = "(no pending items — run check-changes after making edits)";
+
 /// Append `message` for `rel` when that file is not already listed.
 pub fn append_item(text: &str, rel: &str, message: &str) -> String {
     if text.lines().any(|line| file_of(line) == Some(rel)) {
@@ -32,17 +36,38 @@ pub fn append_item(text: &str, rel: &str, message: &str) -> String {
     let mut out = if text.trim().is_empty() {
         "# Pending Updates\n\n".to_string()
     } else {
-        text.to_string()
+        text.lines()
+            .filter(|line| line.trim() != EMPTY_NOTE)
+            .map(|line| format!("{line}\n"))
+            .collect()
     };
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
     out.push_str(&format_item(rel, message));
     out
 }
 
+/// `text` without the item for `rel`. The empty-queue note returns with the last item.
+pub fn remove_item(text: &str, rel: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        if file_of(line) != Some(rel) {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    let empty = out.lines().all(|line| file_of(line).is_none());
+    if empty && !out.contains(EMPTY_NOTE) {
+        if !out.ends_with("\n\n") {
+            out.push('\n');
+        }
+        out.push_str(EMPTY_NOTE);
+        out.push('\n');
+    }
+    out
+}
+
+/// A `record-change` item: the agent's reason, then what closes the item.
 pub fn record_message(reason: &str) -> String {
-    format!("LLM/agent edit — {reason}")
+    format!("{reason} — refresh the wiki, then mark-green")
 }
 
 pub const CHECK_MESSAGE: &str = "Content change detected — review, refresh wiki, then mark-green";

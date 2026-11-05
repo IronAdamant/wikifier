@@ -1,6 +1,6 @@
 //! One function per agent-facing operation. CLI and MCP both call these.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,7 +8,7 @@ use crate::artifacts::{self, HealthRow, JournalEntry};
 use crate::cache::{self, FileUpdate, Session};
 use crate::jsonutil::Json;
 use crate::scope::{self, Scope};
-use crate::sha256::{file_sha256_prefixed, sha256_prefixed};
+use crate::sha256::{content_sha256_prefixed, file_sha256_prefixed};
 use crate::timeutil::local_stamp;
 
 pub struct MapRun {
@@ -82,6 +82,45 @@ fn fail(error_type: &str, error: impl Into<String>) -> Json {
         ("error", Json::String(error.into())),
         ("error_type", Json::String(error_type.into())),
     ])
+}
+
+/// A lookup on a path that is neither on disk nor in the map fails with a next step,
+/// instead of a `success: true` reply whose fields are all empty.
+fn unknown_file(root: &Path, rel: &str) -> Option<Json> {
+    if rel.is_empty() {
+        return Some(fail(
+            "ValueError",
+            "file is required: pass a project-relative path such as src/main.rs",
+        ));
+    }
+    if root.join(rel).exists() || cache::all_paths(root).iter().any(|p| p == rel) {
+        return None;
+    }
+    Some(fail(
+        "FileNotFound",
+        format!(
+            "{rel} is not on disk under {} and not in the map. Pass a path relative to the project root; list_paths shows the mapped files.",
+            root.display()
+        ),
+    ))
+}
+
+/// `limit` caps the bootstrap `files` list and adds `files_total`. `0` or no limit keeps
+/// every file. `map_index` and `list_paths` are the way to orient on a large tree.
+fn cap_files(mut value: Json, flags: &BTreeMap<String, String>) -> Json {
+    let limit = flags
+        .get("limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n > 0);
+    if let (Some(limit), Some(Json::Array(files))) = (limit, value.get("files")) {
+        if files.len() > limit {
+            let total = files.len();
+            let kept = files[..limit].to_vec();
+            value.insert("files", Json::Array(kept));
+            value.insert("files_total", Json::Int(total as i64));
+        }
+    }
+    value
 }
 
 fn root_or_err(root: Option<&Path>) -> Result<PathBuf, Json> {
@@ -278,7 +317,9 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         seen.insert(rel.clone());
         let (mtime, size) = cache::stat_ns(file).unwrap_or((0, 0));
         let known = session.known(&rel);
+        let reparse = session.needs_parse(&rel);
         let stat_hit = !full
+            && !reparse
             && known
                 .as_ref()
                 .is_some_and(|(old_mtime, old_size, old_hash)| {
@@ -292,7 +333,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             continue;
         }
         let bytes = fs::read(file).unwrap_or_default();
-        let hash = sha256_prefixed(&bytes);
+        let hash = content_sha256_prefixed(&bytes);
         let (mtime, size) = if mtime == 0 && size == 0 {
             cache::stat_ns(file).unwrap_or((0, bytes.len() as u64))
         } else {
@@ -300,7 +341,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         };
         hashed += 1;
         if let Some((_, _, old_hash)) = &known {
-            if old_hash == &hash && old_hash.starts_with("sha256:") {
+            if !reparse && old_hash == &hash && old_hash.starts_with("sha256:") {
                 session.note_stat(&rel, mtime, size);
                 continue;
             }
@@ -430,6 +471,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
     } else {
         edge_pairs.len() as i64
     };
+    let cache_changed = session.has_changes();
     if let Err(err) = session.commit() {
         let kind = if err.contains("locked") {
             "CacheLocked"
@@ -439,8 +481,10 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
-    if let Err(err) = crate::maps_out::write(root) {
-        warnings.push(format!("map artifacts: {err}"));
+    if cache_changed || !crate::maps_out::current(root) {
+        if let Err(err) = crate::maps_out::write(root) {
+            warnings.push(format!("map artifacts: {err}"));
+        }
     }
     let map_complete = files_remaining_dirty == 0;
     let status = Json::obj(vec![
@@ -524,6 +568,7 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
     let stamp = local_stamp();
     let mut changed = false;
     let scoped = monitored_seed_prefixes(root);
+    let indexed = cache::index_by_path(root);
     for rel in cache::all_paths(root) {
         if let Some(prefixes) = &scoped {
             if !prefixes.iter().any(|prefix| under_prefix(prefix, &rel)) {
@@ -533,7 +578,9 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
         if known.contains(&rel) {
             continue;
         }
-        let hash = file_sha256_prefixed(&root.join(&rel)).unwrap_or_default();
+        let path = root.join(&rel);
+        let hash = cache::hash_if_unchanged(&path, indexed.get(&rel))
+            .unwrap_or_else(|| file_sha256_prefixed(&path).unwrap_or_default());
         rows.push(HealthRow::new(
             rel,
             "🟡 Yellow",
@@ -631,7 +678,11 @@ pub fn load_dependencies(root: &Path, rel: &str) -> Json {
 
 pub fn dependency_report(root: &Path, rel: &str, full: bool) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
-    let rel = rel.trim_start_matches("./");
+    let rel = scope::rel_arg(root, rel);
+    let rel = rel.as_str();
+    if let Some(err) = unknown_file(root, rel) {
+        return err;
+    }
     match cache::load_dependency_view(root, rel) {
         Ok(view) => {
             let cycled = if full {
@@ -717,6 +768,11 @@ fn edge_record(edge: &cache::InternalEdge, full: bool, in_cycle: bool) -> Json {
 
 pub fn load_dependents(root: &Path, rel: &str) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
+    let rel = scope::rel_arg(root, rel);
+    let rel = rel.as_str();
+    if let Some(err) = unknown_file(root, rel) {
+        return err;
+    }
     match cache::load_dependents(root, rel) {
         Ok(srcs) => ok(vec![
             ("file", Json::String(rel.into())),
@@ -1089,9 +1145,15 @@ pub fn check_changes(root: &Path) -> Json {
     let reason = "content changed since last mark-green (check-changes)";
     let mut dirty = Vec::new();
     let mut changed_rows = false;
+    let indexed = cache::index_by_path(root);
+    let mut row_at: HashMap<String, usize> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| (row.file.clone(), i))
+        .collect();
     for rel in watched {
         let path = root.join(&rel);
-        let idx = rows.iter().position(|r| r.file == rel);
+        let idx = row_at.get(&rel).copied();
         if !path.is_file() {
             dirty.push(rel.clone());
             let already = idx.map(|i| is_red(&rows[i].status)).unwrap_or(false);
@@ -1111,6 +1173,7 @@ pub fn check_changes(root: &Path) -> Json {
                 if let Some(i) = idx {
                     rows[i] = row;
                 } else {
+                    row_at.insert(rel.clone(), rows.len());
                     rows.push(row);
                 }
                 let _ = artifacts::append_journal(root, "check-changes", &rel, "missing on disk");
@@ -1118,7 +1181,6 @@ pub fn check_changes(root: &Path) -> Json {
             }
             continue;
         }
-        let live = file_sha256_prefixed(&path).unwrap_or_default();
         let baseline = idx.and_then(|i| {
             let h = rows[i].source_hash.clone();
             if h.starts_with("sha256:") {
@@ -1127,13 +1189,16 @@ pub fn check_changes(root: &Path) -> Json {
                 None
             }
         });
+        let index_row = indexed.get(&rel);
+        // Stat first: a file whose size and mtime still match its cache row has the content
+        // hash recorded there (the rule update-maps skips by). Read and hash it only when
+        // the stat moved or that hash is not the baseline being checked.
+        let live = cache::hash_if_unchanged(&path, index_row)
+            .filter(|hash| baseline.as_ref().is_none_or(|base| base == hash))
+            .unwrap_or_else(|| file_sha256_prefixed(&path).unwrap_or_default());
         let drifted = match &baseline {
             Some(base) => live != *base,
-            None => cache::indexed_rows(root)
-                .into_iter()
-                .find(|r| r.0 == rel)
-                .map(|r| r.3 != live)
-                .unwrap_or(false),
+            None => index_row.map(|r| r.2 != live).unwrap_or(false),
         };
         if !drifted {
             continue;
@@ -1166,6 +1231,7 @@ pub fn check_changes(root: &Path) -> Json {
             if let Some(i) = idx {
                 rows[i] = row;
             } else {
+                row_at.insert(rel.clone(), rows.len());
                 rows.push(row);
             }
             let _ = artifacts::append_journal(root, "check-changes", &rel, reason);
@@ -1173,7 +1239,7 @@ pub fn check_changes(root: &Path) -> Json {
             let text = fs::read_to_string(&pending).unwrap_or_default();
             let text =
                 crate::pending_line::append_item(&text, &rel, crate::pending_line::CHECK_MESSAGE);
-            let _ = fs::write(&pending, text);
+            let _ = artifacts::write_durable(&pending, text.as_bytes());
             changed_rows = true;
         }
     }
@@ -1202,8 +1268,12 @@ pub fn check_changes(root: &Path) -> Json {
 }
 
 pub fn prepare_edit(root: &Path, file: &str) -> Json {
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let _ = crate::legacy_cache::import_if_empty(root);
+    if let Some(err) = unknown_file(root, rel) {
+        return err;
+    }
     let deps = cache::load_dependencies(root, rel).unwrap_or_default();
     let importers = cache::load_dependents(root, rel).unwrap_or_default();
     let row = artifacts::read_health(root)
@@ -1244,7 +1314,8 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
         Ok(lock) => lock,
         Err(err) => return err,
     };
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let path = root.join(rel);
     if !path.is_file() {
         return fail("FileNotFound", format!("file does not exist: {rel}"));
@@ -1268,7 +1339,7 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
     let text = fs::read_to_string(&pending).unwrap_or_default();
     let text =
         crate::pending_line::append_item(&text, rel, &crate::pending_line::record_message(reason));
-    if fs::write(&pending, text).is_err() {
+    if artifacts::write_durable(&pending, text.as_bytes()).is_err() {
         return fail("PendingError", "could not write pending_updates.md");
     }
     ok(vec![
@@ -1283,7 +1354,8 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
         Ok(lock) => lock,
         Err(err) => return err,
     };
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let path = root.join(rel);
     if !path.is_file() {
         return fail("FileNotFound", format!("file does not exist: {rel}"));
@@ -1629,7 +1701,6 @@ pub fn cycles(root: &Path) -> Json {
 pub fn cycles_view(root: &Path, analysis: bool, max_items: Option<usize>) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
     let edges = cache::edges(root);
-    let meta = edge_meta(root);
     let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (src, dst) in &edges {
         graph.entry(src.clone()).or_default().push(dst.clone());
@@ -1637,6 +1708,7 @@ pub fn cycles_view(root: &Path, analysis: bool, max_items: Option<usize>) -> Jso
     }
     let sccs = tarjan(&graph);
     let cyclic: Vec<Vec<String>> = sccs.into_iter().filter(|c| c.len() > 1).collect();
+    let meta = edge_meta(root, cyclic.iter().flatten());
     let value = ok(vec![
         ("count", Json::Int(cyclic.len() as i64)),
         (
@@ -1710,13 +1782,17 @@ pub fn cycles_view(root: &Path, analysis: bool, max_items: Option<usize>) -> Jso
     value
 }
 
-fn edge_meta(root: &Path) -> BTreeMap<(String, String), cache::InternalEdge> {
+/// Edge flags for the given source files only. `cycles` needs them for files inside a
+/// cycle, so it no longer opens every mapped file's records.
+fn edge_meta<'a>(
+    root: &Path,
+    files: impl Iterator<Item = &'a String>,
+) -> BTreeMap<(String, String), cache::InternalEdge> {
     let mut out = BTreeMap::new();
-    for rel in cache::all_paths(root) {
-        if let Ok(view) = cache::load_dependency_view(root, &rel) {
-            for edge in view.internal {
-                out.insert((rel.clone(), edge.path.clone()), edge);
-            }
+    let files: BTreeSet<&String> = files.collect();
+    for rel in files {
+        for edge in cache::load_internal_edges(root, rel) {
+            out.insert((rel.clone(), edge.path.clone()), edge);
         }
     }
     out
@@ -2231,7 +2307,8 @@ pub fn record_deletion(root: &Path, file: &str, reason: &str) -> Json {
         Ok(lock) => lock,
         Err(err) => return err,
     };
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let written = match artifacts::append_journal(root, "record-deletion", rel, reason) {
         Ok(written) => written,
         Err(e) => return fail("JournalError", e),
@@ -2274,18 +2351,17 @@ pub fn record_deletion(root: &Path, file: &str, reason: &str) -> Json {
 fn drop_pending_line(root: &Path, rel: &str) {
     let path = root.join("pending_updates.md");
     let text = fs::read_to_string(&path).unwrap_or_default();
-    if text.is_empty() {
+    if text.is_empty()
+        || !text
+            .lines()
+            .any(|line| crate::pending_line::file_of(line) == Some(rel))
+    {
         return;
     }
-    let mut out = String::new();
-    for line in text.lines() {
-        let hit = crate::pending_line::file_of(line) == Some(rel);
-        if !hit {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    let _ = fs::write(path, out);
+    let _ = artifacts::write_durable(
+        &path,
+        crate::pending_line::remove_item(&text, rel).as_bytes(),
+    );
 }
 
 pub fn heal_stubs(root: &Path, min_len: usize, dry_run: bool) -> Json {
@@ -2361,7 +2437,7 @@ pub fn prune_health_opts(root: &Path, deleted_missing: bool) -> Json {
                 out.push('\n');
             }
         }
-        let _ = fs::write(pending, out);
+        let _ = artifacts::write_durable(&pending, out.as_bytes());
     }
     ok(vec![
         ("changed", Json::Int(changed as i64)),
@@ -2396,7 +2472,7 @@ pub fn prune_pending(root: &Path) -> Json {
             out.push('\n');
         }
     }
-    let _ = fs::write(path, out);
+    let _ = artifacts::write_durable(&path, out.as_bytes());
     ok(vec![("changed", Json::Int(changed))])
 }
 
@@ -3316,7 +3392,11 @@ pub fn dispatch(
     positional: &[String],
     flags: &BTreeMap<String, String>,
 ) -> Json {
-    let file = positional.first().map(|s| s.as_str()).unwrap_or("");
+    let file_arg = positional
+        .first()
+        .map(|s| scope::rel_arg(root, s))
+        .unwrap_or_default();
+    let file = file_arg.as_str();
     let reason = if positional.len() > 1 {
         positional[1..].join(" ")
     } else {
@@ -3332,9 +3412,10 @@ pub fn dispatch(
             flags.get("force").map(|s| s == "true").unwrap_or(false),
         ),
         "record-deletion" | "record_deletion" => record_deletion(root, file, &reason),
-        "session-bootstrap" | "bootstrap" | "session-start" | "session_bootstrap" => {
-            session_bootstrap_scoped(root, flag_text(flags, "directory"))
-        }
+        "session-bootstrap" | "bootstrap" | "session-start" | "session_bootstrap" => cap_files(
+            session_bootstrap_scoped(root, flag_text(flags, "directory")),
+            flags,
+        ),
         "suggest-next" | "suggest" | "suggest-next-actions" | "suggest_next_actions" => {
             suggest_next_scoped(root, flag_text(flags, "directory"))
         }
@@ -3396,7 +3477,17 @@ pub fn dispatch(
             } else {
                 flags.get("format").map(|s| s.as_str()).unwrap_or("json")
             };
-            health_view(root, flag_text(flags, "directory"), format)
+            let mut value = health_view(root, flag_text(flags, "directory"), format);
+            let limit = flags.get("limit").and_then(|s| s.parse::<usize>().ok());
+            if let (Some(limit), Some(Json::Array(rows))) = (limit, value.get("entries")) {
+                if rows.len() > limit {
+                    let total = rows.len();
+                    let kept = rows[..limit].to_vec();
+                    value.insert("entries", Json::Array(kept));
+                    value.insert("entries_total", Json::Int(total as i64));
+                }
+            }
+            value
         }
         "cache-status" | "cache" => cache_status(root),
         "list-core-tools" | "list_core_tools" => ok(vec![
@@ -3554,12 +3645,18 @@ pub fn dispatch(
             ])
         }
         "init" => init_project(root, flag_on(flags, "no-copy")),
-        "get_project_status" => session_bootstrap_scoped(root, flag_text(flags, "directory")),
+        "get_project_status" => cap_files(
+            session_bootstrap_scoped(root, flag_text(flags, "directory")),
+            flags,
+        ),
         "get_current_project_root" => ok(vec![(
             "project_root",
             Json::String(root.display().to_string()),
         )]),
         "get_file_wiki" => {
+            if let Some(err) = unknown_file(root, file) {
+                return err;
+            }
             let (path, wiki) = crate::wiki_files::read_wiki(root, file);
             ok(vec![
                 ("file", Json::String(file.into())),
@@ -3816,16 +3913,16 @@ fn init_project(root: &Path, no_copy: bool) -> Json {
         created.push(rel.to_string());
         true
     };
-    let map_body = "\
-# map_paths.txt — import-map package roots for update-maps
-# One directory per line. No bare \".\".
-src/
-";
-    let monitored_body = "\
-# monitored_paths.txt — wiki and health watch list
-# Mapped sources are watched even when they are not listed here.
-src/
-";
+    let roots = scope::default_map_roots(root)
+        .into_iter()
+        .map(|dir| format!("{dir}\n"))
+        .collect::<String>();
+    let map_body = format!(
+        "# map_paths.txt — import-map package roots for update-maps\n# One directory per line. No bare \".\".\n{roots}"
+    );
+    let monitored_body = format!(
+        "# monitored_paths.txt — wiki and health watch list\n# Mapped sources are watched even when they are not listed here.\n{roots}"
+    );
     let exclude_body = "\
 node_modules
 .git
@@ -3841,16 +3938,15 @@ target
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
 ";
-    let pending_body =
-        "# Pending Updates\n\n(no pending items — run check-changes after making edits)\n";
+    let pending_body = format!("# Pending Updates\n\n{}\n", crate::pending_line::EMPTY_NOTE);
     let library_body = "# Library & Imports Map\n\nRun `wikifier update-maps` to populate.\n";
     if !path_list_has_entries(root, "map_paths.txt")
-        && !write_new("map_paths.txt", map_body, &mut created)
+        && !write_new("map_paths.txt", &map_body, &mut created)
     {
         return fail("InitError", "could not write map_paths.txt");
     }
     if !path_list_has_entries(root, "monitored_paths.txt")
-        && !write_new("monitored_paths.txt", monitored_body, &mut created)
+        && !write_new("monitored_paths.txt", &monitored_body, &mut created)
     {
         return fail("InitError", "could not write monitored_paths.txt");
     }
@@ -3860,7 +3956,7 @@ target
     if !write_new("file_health.md", health_body, &mut created) {
         return fail("InitError", "could not write file_health.md");
     }
-    if !write_new("pending_updates.md", pending_body, &mut created) {
+    if !write_new("pending_updates.md", &pending_body, &mut created) {
         return fail("InitError", "could not write pending_updates.md");
     }
     if !write_new("library.md", library_body, &mut created) {

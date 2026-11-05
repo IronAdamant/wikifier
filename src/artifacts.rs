@@ -54,6 +54,13 @@ impl HealthRow {
     }
 }
 
+/// Replace a user-facing state file (health, journal, pending) atomically and durably: temp
+/// file, sync, rename, directory flush. Unlike the derived cache, these hold the agents'
+/// recorded reasons and baselines and cannot be rebuilt from the sources.
+pub fn write_durable(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    crate::cache::atomic_write(path, bytes)
+}
+
 pub fn read_health(root: &Path) -> Vec<HealthRow> {
     let json_path = root.join("file_health.json");
     if json_path.is_file() {
@@ -205,7 +212,10 @@ pub fn write_health(root: &Path, rows: &[HealthRow]) -> Result<(), String> {
             ),
         ),
     ]);
-    fs::write(root.join("file_health.json"), stable.to_string()).map_err(|e| e.to_string())?;
+    write_durable(
+        &root.join("file_health.json"),
+        stable.to_string().as_bytes(),
+    )?;
     let mut md = String::from("# Documentation Health Matrix\n\n| File | Status | Last Updated | Reason / Intent |\n|------|--------|--------------|-----------------|\n");
     let mut ordered = rows.to_vec();
     ordered.sort_by(|a, b| a.file.cmp(&b.file));
@@ -218,7 +228,7 @@ pub fn write_health(root: &Path, rows: &[HealthRow]) -> Result<(), String> {
             row.reason.replace('|', "/")
         ));
     }
-    fs::write(root.join("file_health.md"), md).map_err(|e| e.to_string())?;
+    write_durable(&root.join("file_health.md"), md.as_bytes())?;
     Ok(())
 }
 
@@ -332,7 +342,7 @@ pub fn append_journal(
     let block = format!("## [{stamp}] {action}\n**File:** {file}\n**Reason:** {reason}\n\n");
     let mut body = existing;
     body.push_str(&block);
-    fs::write(&path, body).map_err(|e| e.to_string())?;
+    write_durable(&path, body.as_bytes())?;
     Ok(JournalWrite {
         stamp,
         journaled: true,

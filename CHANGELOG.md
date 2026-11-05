@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-11-05
+
+Agent-facing fixes found by driving the MCP server like an agent on real repositories, Windows fixes, and a speed pass. Protocol stays v0.7.
+
+**MCP clients, note:** `session_bootstrap` and `get_project_status` now list at most 100 files unless the call passes `limit` (`files_total` gives the full count, `limit: 0` lists every file), and `update_maps` leaves out the edge list unless `edges: true`. Orient with `map_index` and `list_paths`. The CLI defaults for both commands are unchanged.
+
+### Fixed
+- Windows: `wikifier.bat` passes the binary's exit code through. It read `%ERRORLEVEL%` inside a parenthesized block, so every failure exited 0.
+- Windows: health baselines hash CRLF as LF (`content_sha256_prefixed`). A `core.autocrlf` checkout no longer flips every Green file to dirty (51 files in this repo).
+- A file argument written with `\` separators or as an absolute path under the root names the same row as `src/a.rs`. Before, an absolute path returned empty lookups and a backslash path created a second health row.
+- `prepare_edit`, `get_dependencies`, `get_dependents`, and `get_file_wiki` return `FileNotFound` with a `list_paths` hint for a path that is neither on disk nor in the map, instead of `success: true` with empty fields.
+- MCP `tools/call` with a missing required argument (for example `file_path` instead of `file`) returns `InvalidArguments` naming the accepted and received arguments. Before, the tool ran with an empty path and reported success.
+- `health --limit N` (and MCP `limit`) caps the entry list and adds `entries_total`. The argument was advertised and ignored.
+- `pending_updates.md` no longer says "(no pending items …)" above a list of items. The note is dropped when the first item arrives and comes back when the last one is removed. This was carried over from the Python package.
+- A `record-change` pending item reads `- path: <reason> — refresh the wiki, then mark-green` instead of the Python wording `LLM/agent edit — <reason>`.
+
+### Performance
+Same outputs: on a 587-file Cargo workspace the cache files, `library.md`, folder cards, health hashes, and the `update-maps`, `cycles`, `dependencies --full`, `dependents`, `check-changes`, and `session-bootstrap` output were byte-identical before and after (CLI, timestamps aside). Warm MCP calls there, median of 5 on Windows 11: `check_changes` 353 → 53 ms, `update_maps` 708 → 50 ms, `get_cycles` 317 → 39 ms, `session_bootstrap` 33 → 16 ms and 21.7 → 4.7 KB. Cold `update-maps` (CLI, runs interleaved on a loaded machine, median of 3) went from 18.7 s to 6.4 s.
+- Derived cache files (`by_src`, `by_dst`, `payload`, `notes`, barrel records) are written on several threads through a temp file and a rename, so a reader never sees a torn file, and are no longer synced. `wk_cache/sizes.tsv` records each file's length; `update-maps` compares it with one directory listing per kind and treats a missing, resized, or unreadable file as a miss: the source is parsed again or the `by_dst` record is rewritten from the index. Without `sizes.tsv` every file is read and checked once. Lookups that meet a bad record answer from `index.tsv`. On this Windows machine the sync change made no measurable difference to a cold map (median 11.9 s with batched syncs, 12.5 s without, same copy, interleaved, machine at about 80% load): the remaining cost is creating about 2,000 small files.
+- `file_health.json`, `file_health.md`, the journal, and `pending_updates.md` are now replaced through a synced temp file and a rename. They were plain overwrites with no sync.
+- A full map scans each file once; the second JS/TS/Rust resolution pass reuses those scans. Import line numbers come from one substring search per distinct spec instead of a line-by-line scan per import. JS/TS barrel follow-through builds its sorted scan table once instead of once per imported name.
+- `cycles` and `dependencies --full` read edges from `index.tsv` instead of one `by_src` file per mapped file, and `cycles` loads edge flags only for files inside a cycle. `library.md` reads `by_src` records without the notes files.
+- `update-maps` keeps `library.md` and the folder cards when the cache commit changed nothing.
+- `check-changes` and health seeding take a mapped file's content hash from its cache row when size and mtime match (the rule `update-maps` already used), and read the file otherwise or when that hash is not the baseline. Health rows are found by path through a map, not a scan per file.
+- The file walk takes directory and file types from the directory entry instead of two `stat` calls per entry.
+
+### Changed
+- `init` seeds `map_paths.txt` and `monitored_paths.txt` with `src/` when it exists, otherwise with each top-level directory that holds source (a Cargo workspace's `crates/`, a Python package directory, `tests/`). Before, a project without `src/` hit a scope error on the first `update-maps`.
+- MCP `update_maps` omits the edge list unless `edges: true`; `edges_persisted` still gives the count. On a 587-file Cargo workspace the list was about 280 KB. The schema now lists `full`, `max_files`, and `edges`; `health` lists `limit` and `summary`.
+- `.gitattributes` keeps `*.sh` LF and `*.bat` / `*.ps1` CRLF on every checkout.
+- `session-bootstrap --limit N` (MCP `limit`) caps the `files` list and adds `files_total`. Over MCP the default cap is 100; `limit: 0` lists every file. `map_index` and `list_paths` are the way to orient on a large tree.
+
 ## [5.0.0] - 2026-11-03
 
 First release of the std-only Rust rewrite. `[dependencies]` is empty: no crates.io crates and no Python runtime. The binary implements the Python 4.7 agent contract. Protocol v0.7 stays. `pip install wikifier` still installs that Python 4.7 package.
