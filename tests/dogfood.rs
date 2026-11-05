@@ -289,6 +289,7 @@ fn prepare_edit_on_this_repo_lists_api_dependents() {
         "tests/protocol_v07.rs",
         "tests/robustness.rs",
         "tests/skip_maps.rs",
+        "tests/speed_paths.rs",
     ];
     assert_eq!(dependents, expected, "prepare-edit src/api.rs dependents");
 

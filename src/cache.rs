@@ -103,6 +103,15 @@ pub(crate) fn names_marker(root: &Path) -> PathBuf {
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    write_replace(path, bytes)?;
+    fsync_dir(parent);
+    Ok(())
+}
+
+/// Write a temp file beside `path`, sync it, and rename it into place.
+/// The parent directory must exist; the caller flushes it.
+fn write_replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let parent = path.parent().unwrap_or(Path::new("."));
     let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("cache");
     let tmp = parent.join(format!(".{file_name}.{}.{seq}.tmp", std::process::id()));
@@ -124,17 +133,60 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         let _ = fs::remove_file(&tmp);
         return Err(err);
     }
-    fsync_dir(parent);
     Ok(())
 }
 
-pub(crate) fn write_labeled(path: &Path, rel: &str, body: &str) -> Result<(), String> {
+/// Write many cache files with the guarantees of [`atomic_write`]: each file is synced and
+/// renamed into place, and every parent directory is flushed before this returns. The
+/// per-file syncs run on several threads and each directory is flushed once, not once per
+/// file. Serial flushes were most of a cold `update-maps` (about 2,100 files on a
+/// 587-file workspace).
+pub(crate) fn atomic_write_all(entries: &[(PathBuf, Vec<u8>)]) -> Result<(), String> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    let parents: BTreeSet<PathBuf> = entries
+        .iter()
+        .map(|(path, _)| path.parent().unwrap_or(Path::new(".")).to_path_buf())
+        .collect();
+    for dir in &parents {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, 16);
+    let chunk = entries.len().div_ceil(threads).max(1);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = entries
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .try_for_each(|(path, bytes)| write_replace(path, bytes))
+                })
+            })
+            .collect();
+        workers.into_iter().try_for_each(|worker| {
+            worker
+                .join()
+                .unwrap_or_else(|_| Err("cache writer thread panicked".to_string()))
+        })
+    })?;
+    for dir in &parents {
+        fsync_dir(dir);
+    }
+    Ok(())
+}
+
+/// The bytes of an edge or notes file: an `@<TAB><rel>` header line, then the body.
+pub(crate) fn labeled(rel: &str, body: &str) -> Vec<u8> {
     let mut text = format!("@\t{rel}\n");
     text.push_str(body);
     if !text.ends_with('\n') {
         text.push('\n');
     }
-    atomic_write(path, text.as_bytes())
+    text.into_bytes()
 }
 
 fn replace_file(from: &Path, to: &Path) -> Result<(), String> {
@@ -356,31 +408,7 @@ fn notes_path(root: &Path, rel: &str) -> PathBuf {
 }
 
 pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, String> {
-    let mut internal = Vec::new();
-    for line in content_lines(&by_src_path(root, rel)) {
-        let mut parts = line.split('\t');
-        let path = parts.next().unwrap_or("").trim().to_string();
-        if path.is_empty() {
-            continue;
-        }
-        let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
-        let names = parts
-            .next()
-            .unwrap_or("")
-            .split(',')
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect();
-        let (conditional, dynamic, via_barrel) = parse_flags(parts.next().unwrap_or(""));
-        internal.push(InternalEdge {
-            path,
-            line: line_no,
-            names,
-            conditional,
-            dynamic,
-            via_barrel,
-        });
-    }
+    let internal = load_internal_edges(root, rel);
     let mut external = Vec::new();
     let mut unresolved = Vec::new();
     for line in read_lines(&notes_path(root, rel)) {
@@ -415,6 +443,36 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
         external,
         unresolved,
     })
+}
+
+/// The internal edges of one file from its `by_src` record, without the notes file.
+pub fn load_internal_edges(root: &Path, rel: &str) -> Vec<InternalEdge> {
+    let mut internal = Vec::new();
+    for line in content_lines(&by_src_path(root, rel)) {
+        let mut parts = line.split('\t');
+        let path = parts.next().unwrap_or("").trim().to_string();
+        if path.is_empty() {
+            continue;
+        }
+        let line_no = parts.next().unwrap_or("0").parse().unwrap_or(0);
+        let names = parts
+            .next()
+            .unwrap_or("")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        let (conditional, dynamic, via_barrel) = parse_flags(parts.next().unwrap_or(""));
+        internal.push(InternalEdge {
+            path,
+            line: line_no,
+            names,
+            conditional,
+            dynamic,
+            via_barrel,
+        });
+    }
+    internal
 }
 
 pub fn load_dependents(root: &Path, rel: &str) -> Result<Vec<String>, String> {
@@ -481,6 +539,22 @@ pub fn indexed_rows(root: &Path) -> Vec<(String, u128, u64, String)> {
         .collect()
 }
 
+/// Index rows by path: `(mtime_ns, size, content hash)`.
+pub fn index_by_path(root: &Path) -> std::collections::HashMap<String, (u128, u64, String)> {
+    indexed_rows(root)
+        .into_iter()
+        .map(|(rel, mtime, size, hash)| (rel, (mtime, size, hash)))
+        .collect()
+}
+
+/// The content hash stored for `path` when its size and mtime still match the index row,
+/// the same rule `update-maps` uses to skip a file. `None` means read and hash the file.
+pub fn hash_if_unchanged(path: &Path, row: Option<&(u128, u64, String)>) -> Option<String> {
+    let (mtime, size, hash) = row?;
+    (*mtime != 0 && hash.starts_with("sha256:") && stat_ns(path) == Some((*mtime, *size)))
+        .then(|| hash.clone())
+}
+
 pub fn payload_bytes(root: &Path, rel: &str) -> Option<Vec<u8>> {
     fs::read(payload_path(root, rel)).ok()
 }
@@ -496,14 +570,22 @@ pub fn stat_ns(path: &Path) -> Option<(u128, u64)> {
     Some((mtime, meta.len()))
 }
 
+/// Every mapped edge, self-imports left out. Read from `index.tsv`, which carries each
+/// file's resolved targets, instead of opening one `by_src` file per mapped file. An index
+/// row written before targets were recorded falls back to that file's `by_src` record.
 pub fn edges(root: &Path) -> BTreeSet<(String, String)> {
     let mut out = BTreeSet::new();
-    for rel in all_paths(root) {
-        if let Ok(dsts) = load_dependencies(root, &rel) {
-            for dst in dsts {
-                if dst != rel {
-                    out.insert((rel.clone(), dst));
-                }
+    for (rel, dsts) in crate::cache_commit::index_targets(root) {
+        let dsts = match dsts {
+            Some(dsts) => dsts,
+            None => load_dependencies(root, &rel)
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
+        };
+        for dst in dsts {
+            if dst != rel {
+                out.insert((rel.clone(), dst));
             }
         }
     }
@@ -585,4 +667,53 @@ pub fn prune_barrel_files(root: &Path, max_age_days: f64, dry_run: bool) -> Resu
         }
     }
     Ok(pruned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atomic_write_all_publishes_every_file_and_leaves_no_temp() {
+        let dir = std::env::temp_dir().join(format!(
+            "wk-batch-{}-{}",
+            std::process::id(),
+            TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let mut entries: Vec<(PathBuf, Vec<u8>)> = (0..300)
+            .map(|i| {
+                let sub = ["by_src", "by_dst", "payload"][i % 3];
+                (
+                    dir.join(sub).join(format!("{i}.edges")),
+                    format!("body {i}").into_bytes(),
+                )
+            })
+            .collect();
+        atomic_write_all(&entries).unwrap();
+        // A second batch replaces existing files in place.
+        for (i, entry) in entries.iter_mut().enumerate() {
+            entry.1 = format!("second {i}").into_bytes();
+        }
+        atomic_write_all(&entries).unwrap();
+        for (i, (path, _)) in entries.iter().enumerate() {
+            assert_eq!(fs::read_to_string(path).unwrap(), format!("second {i}"));
+        }
+        for sub in ["by_src", "by_dst", "payload"] {
+            let leftovers: Vec<_> = fs::read_dir(dir.join(sub))
+                .unwrap()
+                .flatten()
+                .filter(|ent| ent.file_name().to_string_lossy().ends_with(".tmp"))
+                .collect();
+            assert!(leftovers.is_empty(), "{sub}: {leftovers:?}");
+        }
+        assert!(atomic_write_all(&[]).is_ok());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn labeled_adds_the_header_and_a_final_newline() {
+        assert_eq!(labeled("src/a.rs", "x"), b"@\tsrc/a.rs\nx\n".to_vec());
+        assert_eq!(labeled("src/a.rs", ""), b"@\tsrc/a.rs\n".to_vec());
+    }
 }

@@ -278,9 +278,14 @@ fn walk(root: &Path, dir: &Path, ex_names: &[String], ex_globs: &[String], out: 
         if ex_names.iter().any(|n| n == &name) || ex_globs.iter().any(|g| fnmatch(g, &name)) {
             continue;
         }
-        if path.is_dir() {
+        // The directory entry already knows its type; a symlink still follows its target.
+        let (is_dir, is_file) = match ent.file_type() {
+            Ok(kind) if !kind.is_symlink() => (kind.is_dir(), kind.is_file()),
+            _ => (path.is_dir(), path.is_file()),
+        };
+        if is_dir {
             walk(root, &path, ex_names, ex_globs, out);
-        } else if path.is_file() && is_source(&path) && path.starts_with(root) {
+        } else if is_file && is_source(&path) && path.starts_with(root) {
             out.push(path);
         }
     }

@@ -1,6 +1,6 @@
 //! One function per agent-facing operation. CLI and MCP both call these.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -103,6 +103,24 @@ fn unknown_file(root: &Path, rel: &str) -> Option<Json> {
             root.display()
         ),
     ))
+}
+
+/// `limit` caps the bootstrap `files` list and adds `files_total`. `0` or no limit keeps
+/// every file. `map_index` and `list_paths` are the way to orient on a large tree.
+fn cap_files(mut value: Json, flags: &BTreeMap<String, String>) -> Json {
+    let limit = flags
+        .get("limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n > 0);
+    if let (Some(limit), Some(Json::Array(files))) = (limit, value.get("files")) {
+        if files.len() > limit {
+            let total = files.len();
+            let kept = files[..limit].to_vec();
+            value.insert("files", Json::Array(kept));
+            value.insert("files_total", Json::Int(total as i64));
+        }
+    }
+    value
 }
 
 fn root_or_err(root: Option<&Path>) -> Result<PathBuf, Json> {
@@ -451,6 +469,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
     } else {
         edge_pairs.len() as i64
     };
+    let cache_changed = session.has_changes();
     if let Err(err) = session.commit() {
         let kind = if err.contains("locked") {
             "CacheLocked"
@@ -460,8 +479,10 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
-    if let Err(err) = crate::maps_out::write(root) {
-        warnings.push(format!("map artifacts: {err}"));
+    if cache_changed || !crate::maps_out::current(root) {
+        if let Err(err) = crate::maps_out::write(root) {
+            warnings.push(format!("map artifacts: {err}"));
+        }
     }
     let map_complete = files_remaining_dirty == 0;
     let status = Json::obj(vec![
@@ -545,6 +566,7 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
     let stamp = local_stamp();
     let mut changed = false;
     let scoped = monitored_seed_prefixes(root);
+    let indexed = cache::index_by_path(root);
     for rel in cache::all_paths(root) {
         if let Some(prefixes) = &scoped {
             if !prefixes.iter().any(|prefix| under_prefix(prefix, &rel)) {
@@ -554,7 +576,9 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
         if known.contains(&rel) {
             continue;
         }
-        let hash = file_sha256_prefixed(&root.join(&rel)).unwrap_or_default();
+        let path = root.join(&rel);
+        let hash = cache::hash_if_unchanged(&path, indexed.get(&rel))
+            .unwrap_or_else(|| file_sha256_prefixed(&path).unwrap_or_default());
         rows.push(HealthRow::new(
             rel,
             "🟡 Yellow",
@@ -1119,9 +1143,15 @@ pub fn check_changes(root: &Path) -> Json {
     let reason = "content changed since last mark-green (check-changes)";
     let mut dirty = Vec::new();
     let mut changed_rows = false;
+    let indexed = cache::index_by_path(root);
+    let mut row_at: HashMap<String, usize> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| (row.file.clone(), i))
+        .collect();
     for rel in watched {
         let path = root.join(&rel);
-        let idx = rows.iter().position(|r| r.file == rel);
+        let idx = row_at.get(&rel).copied();
         if !path.is_file() {
             dirty.push(rel.clone());
             let already = idx.map(|i| is_red(&rows[i].status)).unwrap_or(false);
@@ -1141,6 +1171,7 @@ pub fn check_changes(root: &Path) -> Json {
                 if let Some(i) = idx {
                     rows[i] = row;
                 } else {
+                    row_at.insert(rel.clone(), rows.len());
                     rows.push(row);
                 }
                 let _ = artifacts::append_journal(root, "check-changes", &rel, "missing on disk");
@@ -1148,7 +1179,6 @@ pub fn check_changes(root: &Path) -> Json {
             }
             continue;
         }
-        let live = file_sha256_prefixed(&path).unwrap_or_default();
         let baseline = idx.and_then(|i| {
             let h = rows[i].source_hash.clone();
             if h.starts_with("sha256:") {
@@ -1157,13 +1187,16 @@ pub fn check_changes(root: &Path) -> Json {
                 None
             }
         });
+        let index_row = indexed.get(&rel);
+        // Stat first: a file whose size and mtime still match its cache row has the content
+        // hash recorded there (the rule update-maps skips by). Read and hash it only when
+        // the stat moved or that hash is not the baseline being checked.
+        let live = cache::hash_if_unchanged(&path, index_row)
+            .filter(|hash| baseline.as_ref().is_none_or(|base| base == hash))
+            .unwrap_or_else(|| file_sha256_prefixed(&path).unwrap_or_default());
         let drifted = match &baseline {
             Some(base) => live != *base,
-            None => cache::indexed_rows(root)
-                .into_iter()
-                .find(|r| r.0 == rel)
-                .map(|r| r.3 != live)
-                .unwrap_or(false),
+            None => index_row.map(|r| r.2 != live).unwrap_or(false),
         };
         if !drifted {
             continue;
@@ -1196,6 +1229,7 @@ pub fn check_changes(root: &Path) -> Json {
             if let Some(i) = idx {
                 rows[i] = row;
             } else {
+                row_at.insert(rel.clone(), rows.len());
                 rows.push(row);
             }
             let _ = artifacts::append_journal(root, "check-changes", &rel, reason);
@@ -1665,7 +1699,6 @@ pub fn cycles(root: &Path) -> Json {
 pub fn cycles_view(root: &Path, analysis: bool, max_items: Option<usize>) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
     let edges = cache::edges(root);
-    let meta = edge_meta(root);
     let mut graph: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (src, dst) in &edges {
         graph.entry(src.clone()).or_default().push(dst.clone());
@@ -1673,6 +1706,7 @@ pub fn cycles_view(root: &Path, analysis: bool, max_items: Option<usize>) -> Jso
     }
     let sccs = tarjan(&graph);
     let cyclic: Vec<Vec<String>> = sccs.into_iter().filter(|c| c.len() > 1).collect();
+    let meta = edge_meta(root, cyclic.iter().flatten());
     let value = ok(vec![
         ("count", Json::Int(cyclic.len() as i64)),
         (
@@ -1746,13 +1780,17 @@ pub fn cycles_view(root: &Path, analysis: bool, max_items: Option<usize>) -> Jso
     value
 }
 
-fn edge_meta(root: &Path) -> BTreeMap<(String, String), cache::InternalEdge> {
+/// Edge flags for the given source files only. `cycles` needs them for files inside a
+/// cycle, so it no longer opens every mapped file's records.
+fn edge_meta<'a>(
+    root: &Path,
+    files: impl Iterator<Item = &'a String>,
+) -> BTreeMap<(String, String), cache::InternalEdge> {
     let mut out = BTreeMap::new();
-    for rel in cache::all_paths(root) {
-        if let Ok(view) = cache::load_dependency_view(root, &rel) {
-            for edge in view.internal {
-                out.insert((rel.clone(), edge.path.clone()), edge);
-            }
+    let files: BTreeSet<&String> = files.collect();
+    for rel in files {
+        for edge in cache::load_internal_edges(root, rel) {
+            out.insert((rel.clone(), edge.path.clone()), edge);
         }
     }
     out
@@ -3373,9 +3411,10 @@ pub fn dispatch(
             flags.get("force").map(|s| s == "true").unwrap_or(false),
         ),
         "record-deletion" | "record_deletion" => record_deletion(root, file, &reason),
-        "session-bootstrap" | "bootstrap" | "session-start" | "session_bootstrap" => {
-            session_bootstrap_scoped(root, flag_text(flags, "directory"))
-        }
+        "session-bootstrap" | "bootstrap" | "session-start" | "session_bootstrap" => cap_files(
+            session_bootstrap_scoped(root, flag_text(flags, "directory")),
+            flags,
+        ),
         "suggest-next" | "suggest" | "suggest-next-actions" | "suggest_next_actions" => {
             suggest_next_scoped(root, flag_text(flags, "directory"))
         }
@@ -3605,7 +3644,10 @@ pub fn dispatch(
             ])
         }
         "init" => init_project(root, flag_on(flags, "no-copy")),
-        "get_project_status" => session_bootstrap_scoped(root, flag_text(flags, "directory")),
+        "get_project_status" => cap_files(
+            session_bootstrap_scoped(root, flag_text(flags, "directory")),
+            flags,
+        ),
         "get_current_project_root" => ok(vec![(
             "project_root",
             Json::String(root.display().to_string()),

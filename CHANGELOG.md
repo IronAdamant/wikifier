@@ -17,10 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP `tools/call` with a missing required argument (for example `file_path` instead of `file`) returns `InvalidArguments` naming the accepted and received arguments. Before, the tool ran with an empty path and reported success.
 - `health --limit N` (and MCP `limit`) caps the entry list and adds `entries_total`. The argument was advertised and ignored.
 
+### Performance
+Same outputs: on a 587-file Cargo workspace the cache files, `library.md`, folder cards, health hashes, and the `update-maps`, `cycles`, `dependencies --full`, `dependents`, `check-changes`, and `session-bootstrap` output were byte-identical before and after (CLI, timestamps aside). Warm MCP calls there, median of 5 on Windows 11: `check_changes` 353 → 53 ms, `update_maps` 708 → 50 ms, `get_cycles` 317 → 39 ms, `session_bootstrap` 33 → 16 ms and 21.7 → 4.7 KB. Cold `update-maps` (CLI, runs interleaved on a loaded machine, median of 3) went from 18.7 s to 6.4 s.
+- A cache commit writes its files on several threads and flushes each directory once, not once per file. Every file is still synced and renamed into place, and forward files still land before `by_dst`.
+- A full map scans each file once; the second JS/TS/Rust resolution pass reuses those scans. Import line numbers come from one substring search per distinct spec instead of a line-by-line scan per import. JS/TS barrel follow-through builds its sorted scan table once instead of once per imported name.
+- `cycles` and `dependencies --full` read edges from `index.tsv` instead of one `by_src` file per mapped file, and `cycles` loads edge flags only for files inside a cycle. `library.md` reads `by_src` records without the notes files.
+- `update-maps` keeps `library.md` and the folder cards when the cache commit changed nothing.
+- `check-changes` and health seeding take a mapped file's content hash from its cache row when size and mtime match (the rule `update-maps` already used), and read the file otherwise or when that hash is not the baseline. Health rows are found by path through a map, not a scan per file.
+- The file walk takes directory and file types from the directory entry instead of two `stat` calls per entry.
+
 ### Changed
 - `init` seeds `map_paths.txt` and `monitored_paths.txt` with `src/` when it exists, otherwise with each top-level directory that holds source (a Cargo workspace's `crates/`, a Python package directory, `tests/`). Before, a project without `src/` hit a scope error on the first `update-maps`.
 - MCP `update_maps` omits the edge list unless `edges: true`; `edges_persisted` still gives the count. On a 587-file Cargo workspace the list was about 280 KB. The schema now lists `full`, `max_files`, and `edges`; `health` lists `limit` and `summary`.
 - `.gitattributes` keeps `*.sh` LF and `*.bat` / `*.ps1` CRLF on every checkout.
+- `session-bootstrap --limit N` (MCP `limit`) caps the `files` list and adds `files_total`. Over MCP the default cap is 100; `limit: 0` lists every file. `map_index` and `list_paths` are the way to orient on a large tree.
 
 ## [5.0.0] - 2026-11-03
 

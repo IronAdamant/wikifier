@@ -136,9 +136,19 @@ pub fn resolve_project(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTree
         scans.insert(rel.clone(), scan_file(f));
         rels.push(rel);
     }
-    let resolver = Resolver::build(root, &rels);
+    resolve_scanned(root, &rels, &scans)
+}
+
+/// [`resolve_project`] over scans already in hand, so a full map does not read and scan
+/// every non-Python file twice.
+fn resolve_scanned(
+    root: &Path,
+    rels: &[String],
+    scans: &BTreeMap<String, Scan>,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let resolver = Resolver::build(root, rels);
     let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for rel in &rels {
+    for rel in rels {
         let scan = scans.get(rel).cloned().unwrap_or_default();
         let mut dsts = BTreeSet::new();
         let lang = language(Path::new(rel)).unwrap_or("");
@@ -152,7 +162,7 @@ pub fn resolve_project(root: &Path, files: &[PathBuf]) -> BTreeMap<String, BTree
                     && !imp.names.is_empty()
                 {
                     for name in &imp.names {
-                        if let Some(def) = defining_file(&resolver, &scans, &target, name, 0) {
+                        if let Some(def) = defining_file(&resolver, scans, &target, name, 0) {
                             if &def != rel && def != target {
                                 dsts.insert(def);
                             }
@@ -2834,6 +2844,35 @@ fn exists_exact(base: &Path, candidate: &Path) -> bool {
 #[cfg(test)]
 mod dbg_scan {
     #[test]
+    fn line_of_matches_the_line_by_line_scan() {
+        let texts = [
+            "use a::b;@N@fn f() { a::b::c(); }@N@",
+            "x@R@@N@use crate::m::{n, o};@R@@N@m::n();@R@@N@",
+            "",
+            "one line, no newline",
+        ];
+        let needles: [&[&str]; 6] = [
+            &["a::b"],
+            &["crate::m::n"],
+            &["m::n", "use"],
+            &["missing"],
+            &["", "fn"],
+            &["line"],
+        ];
+        for text in texts {
+            let text = text.replace("@N@", "\n").replace("@R@", "\r");
+            for set in needles {
+                let set: Vec<String> = set.iter().map(|s| s.to_string()).collect();
+                assert_eq!(
+                    super::line_of(&text, &set),
+                    super::line_of_by_lines(&text, &set),
+                    "{text:?} {set:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn dynamic_import_spec() {
         let src = "import { add } from '@acme/core';\nimport { log } from '@app/util';\nimport type { Config } from './types';\nconst lazy = () => import('./lazy');\nimport React from 'react';\nlog(add(1, 2));\n";
         let scan = super::scan_js(src);
@@ -2961,7 +3000,32 @@ pub struct Analysis {
     pub warnings: Vec<String>,
 }
 
+/// 1-based number of the first line that contains any needle, else 1. A needle without a
+/// line break matches inside one line, so the earliest byte match gives the same line as a
+/// line-by-line scan, without the per-line loop (most of a cold map on a large crate).
 fn line_of(text: &str, needles: &[String]) -> i64 {
+    let mut first: Option<usize> = None;
+    for needle in needles.iter().filter(|n| !n.is_empty()) {
+        if needle.contains(['\n', '\r']) {
+            return line_of_by_lines(text, needles);
+        }
+        if let Some(at) = text.find(needle.as_str()) {
+            first = Some(first.map_or(at, |seen| seen.min(at)));
+        }
+    }
+    match first {
+        Some(at) => {
+            text.as_bytes()[..at]
+                .iter()
+                .filter(|b| **b == b'\n')
+                .count() as i64
+                + 1
+        }
+        None => 1,
+    }
+}
+
+fn line_of_by_lines(text: &str, needles: &[String]) -> i64 {
     for (i, line) in text.lines().enumerate() {
         if needles
             .iter()
@@ -3044,11 +3108,18 @@ fn analyze_files_filtered(
     // The full-tree path keeps the second resolution pass. A partial update
     // resolves changed files against the whole universe below.
     let js_edges = if only.is_none() {
-        resolve_project(root, &other_files)
+        let other_rels: Vec<String> = other_files.iter().map(|f| rel_of(root, f)).collect();
+        let other_scans: BTreeMap<String, Scan> = other_rels
+            .iter()
+            .map(|rel| (rel.clone(), scans.get(rel).cloned().unwrap_or_default()))
+            .collect();
+        resolve_scanned(root, &other_rels, &other_scans)
     } else {
         BTreeMap::new()
     };
     let resolver = Resolver::build(root, &rels);
+    // Barrel follow-through wants the scans sorted. Build that copy once, not per name.
+    let mut sorted_scans: Option<BTreeMap<String, Scan>> = None;
     let mut out = BTreeMap::new();
     for rel in &rels {
         if only.as_ref().is_some_and(|set| !set.contains(rel)) {
@@ -3098,9 +3169,13 @@ fn analyze_files_filtered(
                 }
             }
         } else if !lang.is_empty() {
+            // A spec repeats across imports (every `a::b` path in a Rust file); find its line once.
+            let mut lines_seen: HashMap<&str, i64> = HashMap::new();
             for imp in &scan.imports {
                 let target = resolver.resolve(rel, &imp.spec, lang, imp.inline_depth);
-                let line = line_of(&text, &[imp.spec.clone()]);
+                let line = *lines_seen
+                    .entry(imp.spec.as_str())
+                    .or_insert_with(|| line_of(&text, std::slice::from_ref(&imp.spec)));
                 let dynamic = imp.kind == Kind::Dynamic;
                 match target {
                     Some(dst) if dst != *rel => {
@@ -3117,19 +3192,10 @@ fn analyze_files_filtered(
                             && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom)
                         {
                             for name in &imp.names {
-                                if let Some(def) = defining_file(
-                                    &resolver,
-                                    &{
-                                        let mut m = BTreeMap::new();
-                                        for (k, v) in &scans {
-                                            m.insert(k.clone(), v.clone());
-                                        }
-                                        m
-                                    },
-                                    &dst,
-                                    name,
-                                    0,
-                                ) {
+                                let sorted = sorted_scans.get_or_insert_with(|| {
+                                    scans.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+                                });
+                                if let Some(def) = defining_file(&resolver, sorted, &dst, name, 0) {
                                     if def != *rel && def != dst && !facts.dsts.contains(&def) {
                                         add_edge(
                                             &mut facts,

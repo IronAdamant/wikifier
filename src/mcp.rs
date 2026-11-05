@@ -59,7 +59,11 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
             ("limit", integer("Return at most this many entries. entries_total gives the full count.")),
             ("summary", boolean("Return only the green, yellow, and red counts.")),
         ]),
-        "verify_wikis" | "suggest_next_actions" | "session_bootstrap" | "get_project_status" => {
+        "session_bootstrap" | "get_project_status" => props.push((
+            "limit",
+            integer("Cap the files list. Default 100 over MCP; 0 lists every file. files_total gives the count. Orient with map_index and list_paths."),
+        )),
+        "verify_wikis" | "suggest_next_actions" => {
             props.push(("limit", integer("Cap listed failures or stale rows.")));
         }
         "record_changes" => props.push(("reasons", Json::obj(vec![
@@ -77,6 +81,9 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
     }
     props
 }
+
+/// Files listed by an MCP `session_bootstrap` that passes no `limit`.
+const MCP_BOOTSTRAP_FILES: usize = 100;
 
 fn string_prop(description: &str) -> Json {
     Json::obj(vec![
@@ -540,6 +547,13 @@ fn call_tool(msg: &Json) -> Json {
     // the agent's context; `edges_persisted` still reports the count.
     if name == "update_maps" && !arg_on(args.as_ref(), "edges") {
         flags.insert("quiet".into(), "true".into());
+    }
+    // The bootstrap file list grows with the repo (about 21 KB at 587 files). Over MCP it
+    // is capped unless the caller asks; map_index already gives the folder counts.
+    if matches!(name.as_str(), "session_bootstrap" | "get_project_status")
+        && !flags.contains_key("limit")
+    {
+        flags.insert("limit".into(), MCP_BOOTSTRAP_FILES.to_string());
     }
     let textual = flags.get("format").map(|s| s == "text").unwrap_or(false);
     let tool_name = name.clone();

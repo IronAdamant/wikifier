@@ -298,8 +298,13 @@ impl Session {
         self.barrels.push((rel.to_string(), dsts.to_vec()));
     }
 
+    /// True when [`Session::commit`] would write anything.
+    pub fn has_changes(&self) -> bool {
+        self.rewrite_index || !self.barrels.is_empty()
+    }
+
     pub fn commit(self) -> Result<(), String> {
-        if !self.rewrite_index && self.barrels.is_empty() {
+        if !self.has_changes() {
             return Ok(());
         }
         let gen = read_generation(&self.root).saturating_add(1);
@@ -320,6 +325,9 @@ impl Session {
                 let _ = fs::remove_file(cache::legacy_file(&self.root, sub, rel, ext));
             }
         }
+        // Forward files (by_src, payload, notes, barrels) are written and flushed as one
+        // batch before any by_dst file, so a crash between them is repaired from by_src.
+        let mut forward: Vec<(PathBuf, Vec<u8>)> = Vec::new();
         for (rel, lines) in &self.dirty_src {
             if self.removed.contains(rel) {
                 continue;
@@ -329,28 +337,30 @@ impl Session {
             } else {
                 format!("{}\n", lines.join("\n"))
             };
-            cache::write_labeled(
-                &cache::store_file(&self.root, "by_src", rel, "edges"),
-                rel,
-                &body,
-            )?;
+            forward.push((
+                cache::store_file(&self.root, "by_src", rel, "edges"),
+                cache::labeled(rel, &body),
+            ));
         }
         for (rel, payload) in &self.payloads {
-            cache::atomic_write(
-                &cache::store_file(&self.root, "payload", rel, "json"),
-                payload.as_bytes(),
-            )?;
+            forward.push((
+                cache::store_file(&self.root, "payload", rel, "json"),
+                payload.as_bytes().to_vec(),
+            ));
         }
         for (rel, notes) in &self.notes {
             let path = cache::store_file(&self.root, "notes", rel, "txt");
             match notes {
-                Some(body) => cache::write_labeled(&path, rel, body)?,
+                Some(body) => forward.push((path, cache::labeled(rel, body))),
                 None => {
                     let _ = fs::remove_file(&path);
                 }
             }
         }
-        for (rel, dsts) in &self.barrels {
+        // A file staged twice keeps its last record, as the serial writes did.
+        let barrels: BTreeMap<&String, &Vec<String>> =
+            self.barrels.iter().map(|(rel, dsts)| (rel, dsts)).collect();
+        for (rel, dsts) in barrels {
             let body = crate::jsonutil::Json::obj(vec![
                 ("src", crate::jsonutil::Json::String(rel.clone())),
                 (
@@ -363,12 +373,13 @@ impl Session {
                     ),
                 ),
             ]);
-            cache::atomic_write(
-                &cache::store_file(&self.root, "barrels", rel, "json"),
-                body.to_string().as_bytes(),
-            )?;
+            forward.push((
+                cache::store_file(&self.root, "barrels", rel, "json"),
+                body.to_string().into_bytes(),
+            ));
         }
-        // Reverse edges after forward edges. A crash here is repaired from by_src.
+        cache::atomic_write_all(&forward)?;
+        let mut reverse: Vec<(PathBuf, Vec<u8>)> = Vec::new();
         for dst in &self.dirty_dst {
             let path = cache::store_file(&self.root, "by_dst", dst, "edges");
             let srcs = self.rev.get(dst).cloned().unwrap_or_default();
@@ -377,9 +388,10 @@ impl Session {
             } else {
                 let lines: Vec<String> = srcs.iter().cloned().collect();
                 let body = format!("{}\n", lines.join("\n"));
-                cache::write_labeled(&path, dst, &body)?;
+                reverse.push((path, cache::labeled(dst, &body)));
             }
         }
+        cache::atomic_write_all(&reverse)?;
         save_index(&self.root, &self.rows)?;
         cache::atomic_write(
             &cache::generation_path(&self.root),
@@ -422,6 +434,22 @@ fn index_record_lines(root: &Path) -> Vec<String> {
         .lines()
         .map(|line| line.trim_end_matches('\r').trim_start().to_string())
         .filter(|line| !line.is_empty())
+        .collect()
+}
+
+/// Each indexed file with its resolved targets, or `None` for a row from before targets
+/// were stored in the index.
+pub(crate) fn index_targets(root: &Path) -> Vec<(String, Option<BTreeSet<String>>)> {
+    index_record_lines(root)
+        .into_iter()
+        .filter_map(|line| {
+            let mut parts = line.split('\t');
+            let rel = parts.next().unwrap_or("").to_string();
+            if rel.is_empty() {
+                return None;
+            }
+            Some((rel, parts.nth(3).map(parse_dsts)))
+        })
         .collect()
 }
 
@@ -699,11 +727,18 @@ fn rebuild_locked(root: &Path) -> Result<(), String> {
             rev.entry(dst.clone()).or_default().insert(src.clone());
         }
     }
-    for (dst, srcs) in &rev {
-        let lines: Vec<String> = srcs.iter().cloned().collect();
-        let body = format!("{}\n", lines.join("\n"));
-        cache::write_labeled(&cache::store_file(root, "by_dst", dst, "edges"), dst, &body)?;
-    }
+    let reverse: Vec<(PathBuf, Vec<u8>)> = rev
+        .iter()
+        .map(|(dst, srcs)| {
+            let lines: Vec<String> = srcs.iter().cloned().collect();
+            let body = format!("{}\n", lines.join("\n"));
+            (
+                cache::store_file(root, "by_dst", dst, "edges"),
+                cache::labeled(dst, &body),
+            )
+        })
+        .collect();
+    cache::atomic_write_all(&reverse)?;
     let mut rows = BTreeMap::new();
     for (rel, dsts) in &forward {
         let prev = old.get(rel);
