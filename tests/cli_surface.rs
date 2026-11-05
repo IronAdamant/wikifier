@@ -220,3 +220,50 @@ fn docs_name_the_cargo_version() {
         assert!(read(rel).contains(&needle), "{rel} does not say {needle}");
     }
 }
+
+/// `<command> --help`, `<command> -h`, and `help <command>` print help and change nothing.
+/// `init --help` used to run init and write ten files.
+#[test]
+fn every_subcommand_help_prints_and_touches_nothing() {
+    let dir = std::env::temp_dir().join(format!(
+        "wk-help-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    for command in wikifier::api::CLI_COMMANDS {
+        for args in [
+            vec![*command, "--help"],
+            vec![*command, "-h"],
+            vec!["help", command],
+        ] {
+            let out = Command::new(bin())
+                .arg("--target")
+                .arg(&dir)
+                .args(&args)
+                .stdin(Stdio::null())
+                .output()
+                .unwrap();
+            let text = String::from_utf8_lossy(&out.stdout);
+            assert!(out.status.success(), "{args:?}: {:?}", out.status);
+            assert!(text.contains("Usage: wikifier"), "{args:?}: {text}");
+            if *command != "help" {
+                assert!(text.contains(&format!("] {command}")), "{args:?}: {text}");
+            }
+            let left: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().collect();
+            assert!(left.is_empty(), "{args:?} wrote {left:?}");
+        }
+    }
+    // `init --help` with a positional directory also writes nothing there.
+    let out = Command::new(bin())
+        .current_dir(&dir)
+        .args(["init", ".", "--help"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
