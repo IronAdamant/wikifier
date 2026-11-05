@@ -16,8 +16,8 @@ use crate::mcp_groups::{AgentTools, Selection, DISABLE_VAR, TOOLS_VAR};
 pub struct GroupState {
     pub selection: Selection,
     pub warnings: Vec<String>,
-    /// A switch is set or AGENTS.md has an `agent-tools` block. Only then does `initialize`
-    /// advertise `listChanged` and carry the groups line; otherwise every reply is as before.
+    /// A switch is set or AGENTS.md has an `agent-tools` block. Only then do `initialize`
+    /// and `list_core_tools` carry the groups line.
     pub shaped: bool,
     agents: Option<PathBuf>,
     stamp: Option<(std::time::SystemTime, u64)>,
@@ -481,13 +481,9 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
 
 fn initialize() -> Json {
     let state = groups_state();
-    // listChanged only when groups are in play, so a server with no switch and no block
-    // answers exactly as 5.1.0 did.
-    let tools = if state.shaped {
-        Json::obj(vec![("listChanged", Json::Bool(true))])
-    } else {
-        Json::obj(vec![])
-    };
+    // listChanged is always advertised: an agent may add an agent-tools block mid-session.
+    // It is the one field that differs from 5.1.0 when no switch and no block are set.
+    let tools = Json::obj(vec![("listChanged", Json::Bool(true))]);
     let mut value = Json::obj(vec![
         ("protocolVersion", Json::String("2024-11-05".into())),
         (

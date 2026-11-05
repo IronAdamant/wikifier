@@ -272,7 +272,8 @@ impl Selection {
 /// This tool's lines from the first fenced `agent-tools` block of an AGENTS.md.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentTools {
-    /// An `agent-tools` block exists, whether or not it has a wikifier line.
+    /// An `agent-tools` block exists, whether or not it has a wikifier line. A block inside
+    /// another fence (a docs example) is text, not config.
     pub found: bool,
     pub tools: Option<String>,
     pub disable: Option<String>,

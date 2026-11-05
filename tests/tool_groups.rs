@@ -53,7 +53,11 @@ fn mcp_in(dir: &std::path::Path, env: &[(&str, &str)], lines: &[&str]) -> Output
     {
         let mut stdin = child.stdin.take().unwrap();
         for line in lines {
-            writeln!(stdin, "{line}").unwrap();
+            // A server that refused its switches has already exited (exit 2); writing to
+            // it then fails with a broken pipe on Unix, and the exit status is what counts.
+            if writeln!(stdin, "{line}").is_err() {
+                break;
+            }
         }
     }
     child.wait_with_output().unwrap()
@@ -251,15 +255,7 @@ fn default_initialize_and_tools_list_match_the_last_release() {
     // The same two requests the fixture was recorded with, from the 5.1.0 release binary.
     let list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
     let out = mcp(&[], &[INIT, list]);
-    let golden = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_default_5.1.0.jsonl"),
-    )
-    .unwrap()
-    .replace("\r\n", "\n")
-    .replace(
-        "\"version\":\"5.1.0\"",
-        &format!("\"version\":\"{}\"", env!("CARGO_PKG_VERSION")),
-    );
+    let golden = golden();
     assert_eq!(String::from_utf8_lossy(&out.stdout), golden);
 }
 
@@ -437,15 +433,7 @@ fn no_block_leaves_every_reply_as_before() {
     )
     .unwrap();
     assert_eq!(mcp_in(&dir, &[], &[INIT, list]).stdout, bare);
-    let golden = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_default_5.1.0.jsonl"),
-    )
-    .unwrap()
-    .replace("\r\n", "\n")
-    .replace(
-        "\"version\":\"5.1.0\"",
-        &format!("\"version\":\"{}\"", env!("CARGO_PKG_VERSION")),
-    );
+    let golden = golden();
     assert_eq!(String::from_utf8_lossy(&bare), golden);
 }
 
@@ -505,4 +493,40 @@ fn the_parser_reads_only_the_first_agent_tools_fence() {
     assert_eq!(parsed.disable.as_deref(), Some("cycles,status"));
     assert!(parsed.warnings.is_empty());
     assert_eq!(AgentTools::parse("no block here"), AgentTools::default());
+}
+
+/// What 5.1.0 answered to `initialize` and `tools/list`, with this version's number and the
+/// one field the convention adds to every server: `capabilities.tools.listChanged`.
+fn golden() -> String {
+    std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp_default_5.1.0.jsonl"),
+    )
+    .unwrap()
+    .replace("\r\n", "\n")
+    .replace(
+        r#""version":"5.1.0""#,
+        &format!(r#""version":"{}""#, env!("CARGO_PKG_VERSION")),
+    )
+    .replacen(r#""tools":{}"#, r#""tools":{"listChanged":true}"#, 1)
+}
+
+/// This repository dogfoods its own MCP server. Its AGENTS.md documents the block, and those
+/// examples must switch nothing: the repo keeps every tool.
+#[test]
+fn this_repos_agents_md_examples_switch_nothing() {
+    use wikifier::mcp_groups::AgentTools;
+    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let text = std::fs::read_to_string(here.join("AGENTS.md")).unwrap();
+    assert!(text.contains("wikifier: disable map, cycles, status"));
+    let parsed = AgentTools::parse(&text);
+    assert!(!parsed.found, "{parsed:?}");
+    assert_eq!(parsed.tools, None);
+    assert_eq!(parsed.disable, None);
+    let got = replies(&mcp_in(&here, &[], &[INIT, LIST]));
+    assert_eq!(instructions_of(&got[0]), "");
+    assert_eq!(names_of(&got[1]).len(), MCP_TOOLS.len());
+    // The convention's own example shape, a block inside a markdown fence, is text too.
+    let nested =
+        AgentTools::parse("````markdown\n```agent-tools\nwikifier: disable notes\n```\n````\n");
+    assert_eq!(nested, AgentTools::default());
 }
