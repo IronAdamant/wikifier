@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.2.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
+Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.3.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
 
 ## What this program is
 

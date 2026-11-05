@@ -9,7 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [5.2.0] - 2026-11-05
+## [5.3.0] - 2026-11-05
+
+Fixes from the live test on Specula (a 587-file Cargo workspace).
+
+### Fixed
+- `wikifier <command> --help` (and `-h`) printed nothing useful and ran the command: `init --help` wrote ten files. Every subcommand now prints its usage line and a one-sentence description and touches nothing; `wikifier help <command>` does the same.
+
+### Changed
+- MCP replies that grow with the repository are compact by default; `full: true` returns everything and `limit` sets the count. The CLI output is unchanged.
+  - `health`: the counts plus the 10 most actionable entries (Red, then changed Yellow, then Initial stubs, then Green), without source hashes; `entries_total` gives the full count.
+  - `get_cycles`: 5 cycles (as `max_items: 5`), at most 10 files each (`size` keeps the count, `files_truncated` marks a cut), and the top 5 of the reverse-dependency ranking.
+  - `get_dependents`: the first 50 dependents, plus `dependents_total` and `dependent_dirs` (importers per directory, top 20) when there are more. `prepare_edit` lists the first 25 the same way.
+  - `get_resolution_diagnostics`: the reason counts plus the first 20 notes and actionable low-confidence edges (`notes_total`, `actionable_low_conf_edges_total`).
+  - Reply sizes on Specula, whole JSON-RPC line, before → after: `health` 307,768 → 4,020 B; `get_resolution_diagnostics` 346,713 → 7,979 B; `get_cycles` 47,206 → 6,354 B; `get_dependents` of `specula-core/src/lib.rs` (216 importers) 16,146 → 5,976 B; `prepare_edit` of that file 19,222 → 7,158 B.
+- The tool schemas of those five tools list `full` and `limit`, so the default `tools/list` is 23.8 KB (it was 22.7 KB); with the recommended `WIKIFIER_DISABLE=map,cycles,status` it is 17.5 KB, and with `WIKIFIER_TOOLS=core` 7.2 KB. `tests/fixtures/mcp_default.jsonl` was re-recorded for that.
+
 
 ### Added
 - MCP tool groups, following the suite-wide convention. Every tool is in one of six groups: `core` (always on), `notes`, `health`, `map`, `cycles`, `status`. `WIKIFIER_TOOLS` (allowlist) and `WIKIFIER_DISABLE` (applied after it) take group or tool names, ignore case and spaces, and `WIKIFIER_TOOLS` accepts `all`. Switched-off tools are absent from `tools/list`; calling one returns `isError` with `tool "<name>" is disabled (group "<group>") by <VAR>; …`. An unknown name, or `core` or one of its tools in `WIKIFIER_DISABLE`, prints one line to stderr and exits 2. An empty or whitespace-only value counts as unset. When either variable is set, `initialize` carries an `instructions` line naming the active groups and `list_core_tools` adds a `groups` line and lists only the exposed tools. With neither set, `tools/list` and every other reply are byte-identical to 5.1.0, except that `initialize` now always advertises `capabilities.tools.listChanged: true`. The CLI ignores both variables.

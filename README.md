@@ -21,11 +21,11 @@ Download a binary from the [GitHub releases](https://github.com/IronAdamant/wiki
 Check `SHA256SUMS`, unpack, and put `wikifier` (`wikifier.exe` on Windows) on your `PATH`:
 
 ```bash
-# Linux x86_64, 5.2.0
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.2.0/SHA256SUMS
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.2.0/wikifier-5.2.0-x86_64-unknown-linux-gnu.tar.gz
+# Linux x86_64, 5.3.0
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.3.0/SHA256SUMS
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.3.0/wikifier-5.3.0-x86_64-unknown-linux-gnu.tar.gz
 sha256sum --check --ignore-missing SHA256SUMS
-tar -xzf wikifier-5.2.0-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf wikifier-5.3.0-x86_64-unknown-linux-gnu.tar.gz
 ./wikifier --version
 ```
 
@@ -73,13 +73,13 @@ The 31 MCP tools are in six groups. The agent picks the groups a project needs w
 | `cycles` | `get_cycles` | — |
 | `status` | `list_core_tools`, `get_project_status`, `get_current_project_root`, `issues`, `get_files_needing_attention` | — |
 
-`tools/list` is 22.7 KB with every group on. The recommended lean setting keeps the whole daily loop and drops the diagnostics and the tools that repeat bootstrap: 22 tools, 16.8 KB.
+`tools/list` is 23.8 KB with every group on. The recommended lean setting keeps the whole daily loop and drops the diagnostics and the tools that repeat bootstrap: 22 tools, 17.5 KB.
 
 ```json
 "env": {"WIKIFIER_DISABLE": "map,cycles,status"}
 ```
 
-`WIKIFIER_TOOLS=core` alone is 8 tools and 6.6 KB, for an agent that only looks things up. Turning `notes` off also turns off `record_change`, which marks a file for its wiki refresh, so keep `notes` on unless another tool records the changes.
+`WIKIFIER_TOOLS=core` alone is 8 tools and 7.2 KB, for an agent that only looks things up. Turning `notes` off also turns off `record_change`, which marks a file for its wiki refresh, so keep `notes` on unless another tool records the changes.
 
 ### Choosing groups
 

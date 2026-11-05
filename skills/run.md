@@ -1,6 +1,6 @@
 # Wikifier Agent Protocol v0.7
 
-**Package 5.2.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
+**Package 5.3.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
 This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference. In the Wikifier repository, `AGENTS.md` is the entry point and points here.
 
@@ -67,7 +67,7 @@ wikifier: tools core
 ### Paste into new sessions
 
 ```
-You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.2.0).
+You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.3.0).
 It is an agent-to-agent wiki: look things up (health, file wikis, deps) instead of re-reading sources.
 
 SELECTIVE WORK: only update 🔴 Red and actionable 🟡 Yellow files; never re-wiki 🟢 Green files;
@@ -139,6 +139,8 @@ A change that leaves the public surface alone (a bug fix inside a function) pass
 - Every library/MCP call returns a dict with `success`. Operational failures (missing root, missing file, path outside the project, lock timeout, I/O) return `{"success": false, "error", "error_type"}`; lock timeouts add `timed_out: true`.
 - MCP mutators run under a deadline (`WIKIFIER_MCP_DEADLINE_S`, default 60s). On `timed_out` the call may still complete in the background (`may_still_complete: true`) — check `why_file` before retrying. Identical `record_change` retries within 120s are de-duplicated in the journal (`duplicate_skipped: true`).
 - Request `format="json"` for decisions; text output is for humans.
+- Over MCP, replies that grow with the repository are compact unless `full: true`: `health` gives the counts and the 10 most actionable entries, `get_cycles` 5 cycles with at most 10 files each, `get_dependents` 50 dependents (`prepare_edit` 25) plus `dependents_total` and `dependent_dirs`, `get_resolution_diagnostics` the reason counts plus 20 notes. `limit` sets the count. The CLI returns everything.
+- Every CLI command takes `--help` / `-h` (and `wikifier help <command>`): it prints the usage line and runs nothing.
 - Tolerate additive fields; never assume an exact key set.
 
 ### Scale (CLI-at-scale policy)
@@ -172,7 +174,7 @@ The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` la
 
 There is no Python library. Agents call the CLI or `wikifier mcp`. The same functions live in the Rust crate (`src/api.rs`) and both fronts call them.
 
-### Implementation (package 5.2.0, protocol stays v0.7)
+### Implementation (package 5.3.0, protocol stays v0.7)
 
 The program is a std-only Rust binary under `src/`. `Cargo.toml` has an empty `[dependencies]` list. Launchers exec that binary. MCP is `wikifier mcp`.
 
