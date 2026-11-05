@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wikifier is a **zero-dependency, agent-to-agent codebase wiki**: it gives AI agents a token-efficient, queryable map of a codebase (health matrix, dependency graph, per-file wiki summaries) so they can look things up instead of re-reading full sources. The human layer (`index.html` dashboard) is strictly secondary — a read-only viewer of the same artifacts. It is deliberately NOT a general human documentation tool.
 
-**This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). `AGENTS.md` is the entry point for any coding agent. The authoritative contract is `skills/run.md` (Agent Protocol v0.7, package 5.1.0). Read it before substantive work.
+**This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). `AGENTS.md` is the entry point for any coding agent. The authoritative contract is `skills/run.md` (Agent Protocol v0.7, package 5.2.0). Read it before substantive work.
 
 **USE WIKIFIER FIRST (non-negotiable in this repo, preferred on any managed target):** At session start call `session_bootstrap` (MCP or `wikifier session-bootstrap`). Prefer Core daily tools (`list_core_tools`): bootstrap, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green`. Look up via map/wiki/deps before re-reading full sources. Selective work only (🔴 / actionable 🟡). Never skip `record_change` after edits.
 
@@ -56,7 +56,7 @@ wikifier mcp                           # MCP server on stdio
 
 ## Architecture
 
-Pipeline: **scan → parse → resolve → cache → health → artifacts**, implemented in Rust under `src/` (version in `Cargo.toml`, currently **5.1.0**). The Python package is no longer in this repository. `pip install wikifier` still installs Python 4.7. CLI (`src/main.rs`) and MCP (`src/mcp.rs`) both call `src/api.rs`. Every function returns a JSON object with `success`. Operational failures return `{"success": false, "error", "error_type"}`.
+Pipeline: **scan → parse → resolve → cache → health → artifacts**, implemented in Rust under `src/` (version in `Cargo.toml`, currently **5.2.0**). The Python package is no longer in this repository. `pip install wikifier` still installs Python 4.7. CLI (`src/main.rs`) and MCP (`src/mcp.rs`) both call `src/api.rs`. Every function returns a JSON object with `success`. Operational failures return `{"success": false, "error", "error_type"}`.
 
 - `src/api.rs` — the library surface: `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions`, `record_change`, `record_changes`, `record_deletion`, `mark_green`, `verify_wikis`, `update_maps` / `update_maps_run`, `dependency_report`, `load_dependents`, `cycles`, `init_project`, `serve_loop`, `monitor_loop`, `daemon_ctl`. `check_changes` watches mapped files, Green files, and `monitored_paths.txt`. `record_changes` reads `git status` (git is optional).
 - `src/scope.rs` — project root, `map_paths.txt`, `monitored_paths.txt`, excludes, and the file walk. A missing configured map directory is a scope error. Three or more child projects make the root a container and the walk stops.
@@ -65,7 +65,7 @@ Pipeline: **scan → parse → resolve → cache → health → artifacts**, imp
 - `src/artifacts.rs` — `file_health.json` (schema version 2) plus the `file_health.md` view, pending lines, and the journal. Identical journal retries within 120 seconds are skipped. `mark_green` stores `public_symbols`, `wiki_hash`, and `source_mtime_ns`, and refuses a Python or JS/TS wiki that misses the current public names, still mentions a removed name in backticks, or is unchanged after the public surface changed.
 - `src/maps_out.rs` — `library.md` (a file tree, a Mermaid block capped at 80 edges, and the dependency table) and sharded folder cards at `.wikifier_staging/maps/_root.json` and `maps/{prefix}/_index.json`.
 - `src/project_lock.rs` — advisory lock `.wikifier_staging/.lock`, taken before the cache lock, re-entrant per thread, 30 second wait, stolen when the recorded pid is dead.
-- `src/mcp.rs` — stdio JSON-RPC. `isError` follows `success: false`. `resources/read` and `prompts/get` are implemented. Deadline `WIKIFIER_MCP_DEADLINE_S` (default 60).
+- `src/mcp.rs` — stdio JSON-RPC. `isError` follows `success: false`. `src/mcp_groups.rs` holds the tool groups, the AGENTS.md `agent-tools` block parser, and the `WIKIFIER_TOOLS` / `WIKIFIER_DISABLE` switches (MCP only; an env mistake exits 2, a block mistake is a warning). This repo's AGENTS.md has no `agent-tools` block on purpose: dogfooding keeps every tool. `resources/read` and `prompts/get` are implemented. Deadline `WIKIFIER_MCP_DEADLINE_S` (default 60).
 
 Generated artifacts (in the target project root): `file_health.md/.json`, `library.md`, `pending_updates.md`, `journal/YYYY/MM/DD.md`, per-file `*.wiki.md`, `.wikifier_staging/` (`wk_cache`, folder maps, `incremental_status.json`, locks, daemon state). Scoping: `monitored_paths.txt` (extra watch list), `map_paths.txt` (import-map roots), `exclude_patterns.txt`. This repo's map roots are `src/` and `tests/`.
 

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.1.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
+Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.2.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
 
 ## What this program is
 
@@ -25,6 +25,33 @@ On this repo, or on any Wikifier-managed tree:
 Many files: `wikifier record-changes -r "path/or/glob=why" --only <your files> --green`.
 
 Prefer the CLI when the connected MCP server is still `python3 -m wikifier.mcp.server` or `wikifier-mcp`. Those entry points belong to the archived package and the handshake fails. Pass `project_root=` on every MCP call for a tree that is not the server's cwd.
+
+## Choosing groups
+
+You, the agent, choose which Wikifier tool groups a project needs. Add one line for `wikifier` to the `agent-tools` block of the project's AGENTS.md: a fenced code block whose info string is `agent-tools`, in the project root the server uses (`WIKIFIER_PROJECT_ROOT`, else its working directory). The server re-reads the file when it changes and tells the client the tool list changed, so no restart is needed. `WIKIFIER_TOOLS` / `WIKIFIER_DISABLE` in the server's environment override the line, key by key. A mistake in the line is reported as a warning in the `initialize` instructions and the line is ignored.
+
+| Group | What it is for | Turn it off when |
+|---|---|---|
+| `core` | bootstrap, lookups, dependencies, file wikis, `update_maps` | never: always on |
+| `notes` | `record_change` and the journal: why each file changed, handoff reasons | another tool keeps the change notes (for example Trammel notes) and you do not maintain wikis |
+| `health` | `check_changes`, `mark_green`, wiki verification | you only look things up and do not maintain wikis |
+| `map` | import-resolution and barrel diagnostics | you are not debugging the import map (most sessions) |
+| `cycles` | the import-cycle report | you are not untangling dependencies |
+| `status` | repeats of bootstrap: project status, issues, the tool catalogue | almost always |
+
+This repository has no `agent-tools` block, so it keeps every tool for dogfooding. The lines below go inside a block fenced with ```` ```agent-tools ```` in the target project.
+
+One agent maintaining wikis (the usual case):
+
+```text
+wikifier: disable map, cycles, status
+```
+
+Lookups only:
+
+```text
+wikifier: tools core
+```
 
 ## Hard rules
 
