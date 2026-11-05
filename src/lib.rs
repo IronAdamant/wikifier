@@ -12,6 +12,7 @@ mod legacy_cache;
 mod low_conf;
 pub mod maps_out;
 pub mod mcp;
+pub mod mcp_compact;
 pub mod mcp_groups;
 pub mod parse;
 mod pending_line;
