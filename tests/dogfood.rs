@@ -282,6 +282,7 @@ fn prepare_edit_on_this_repo_lists_api_dependents() {
         "src/lib.rs",
         "src/main.rs",
         "src/mcp.rs",
+        "tests/agent_args.rs",
         "tests/cli_surface.rs",
         "tests/contract_gaps.rs",
         "tests/parity_fixes.rs",

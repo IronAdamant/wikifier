@@ -84,6 +84,27 @@ fn fail(error_type: &str, error: impl Into<String>) -> Json {
     ])
 }
 
+/// A lookup on a path that is neither on disk nor in the map fails with a next step,
+/// instead of a `success: true` reply whose fields are all empty.
+fn unknown_file(root: &Path, rel: &str) -> Option<Json> {
+    if rel.is_empty() {
+        return Some(fail(
+            "ValueError",
+            "file is required: pass a project-relative path such as src/main.rs",
+        ));
+    }
+    if root.join(rel).exists() || cache::all_paths(root).iter().any(|p| p == rel) {
+        return None;
+    }
+    Some(fail(
+        "FileNotFound",
+        format!(
+            "{rel} is not on disk under {} and not in the map. Pass a path relative to the project root; list_paths shows the mapped files.",
+            root.display()
+        ),
+    ))
+}
+
 fn root_or_err(root: Option<&Path>) -> Result<PathBuf, Json> {
     let root = match root {
         Some(p) => p.to_path_buf(),
@@ -631,7 +652,11 @@ pub fn load_dependencies(root: &Path, rel: &str) -> Json {
 
 pub fn dependency_report(root: &Path, rel: &str, full: bool) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
-    let rel = rel.trim_start_matches("./");
+    let rel = scope::rel_arg(root, rel);
+    let rel = rel.as_str();
+    if let Some(err) = unknown_file(root, rel) {
+        return err;
+    }
     match cache::load_dependency_view(root, rel) {
         Ok(view) => {
             let cycled = if full {
@@ -717,6 +742,11 @@ fn edge_record(edge: &cache::InternalEdge, full: bool, in_cycle: bool) -> Json {
 
 pub fn load_dependents(root: &Path, rel: &str) -> Json {
     let _ = crate::legacy_cache::import_if_empty(root);
+    let rel = scope::rel_arg(root, rel);
+    let rel = rel.as_str();
+    if let Some(err) = unknown_file(root, rel) {
+        return err;
+    }
     match cache::load_dependents(root, rel) {
         Ok(srcs) => ok(vec![
             ("file", Json::String(rel.into())),
@@ -1202,8 +1232,12 @@ pub fn check_changes(root: &Path) -> Json {
 }
 
 pub fn prepare_edit(root: &Path, file: &str) -> Json {
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let _ = crate::legacy_cache::import_if_empty(root);
+    if let Some(err) = unknown_file(root, rel) {
+        return err;
+    }
     let deps = cache::load_dependencies(root, rel).unwrap_or_default();
     let importers = cache::load_dependents(root, rel).unwrap_or_default();
     let row = artifacts::read_health(root)
@@ -1244,7 +1278,8 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
         Ok(lock) => lock,
         Err(err) => return err,
     };
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let path = root.join(rel);
     if !path.is_file() {
         return fail("FileNotFound", format!("file does not exist: {rel}"));
@@ -1283,7 +1318,8 @@ pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
         Ok(lock) => lock,
         Err(err) => return err,
     };
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let path = root.join(rel);
     if !path.is_file() {
         return fail("FileNotFound", format!("file does not exist: {rel}"));
@@ -2231,7 +2267,8 @@ pub fn record_deletion(root: &Path, file: &str, reason: &str) -> Json {
         Ok(lock) => lock,
         Err(err) => return err,
     };
-    let rel = file.trim_start_matches("./");
+    let rel = scope::rel_arg(root, file);
+    let rel = rel.as_str();
     let written = match artifacts::append_journal(root, "record-deletion", rel, reason) {
         Ok(written) => written,
         Err(e) => return fail("JournalError", e),
@@ -3316,7 +3353,11 @@ pub fn dispatch(
     positional: &[String],
     flags: &BTreeMap<String, String>,
 ) -> Json {
-    let file = positional.first().map(|s| s.as_str()).unwrap_or("");
+    let file_arg = positional
+        .first()
+        .map(|s| scope::rel_arg(root, s))
+        .unwrap_or_default();
+    let file = file_arg.as_str();
     let reason = if positional.len() > 1 {
         positional[1..].join(" ")
     } else {
@@ -3396,7 +3437,17 @@ pub fn dispatch(
             } else {
                 flags.get("format").map(|s| s.as_str()).unwrap_or("json")
             };
-            health_view(root, flag_text(flags, "directory"), format)
+            let mut value = health_view(root, flag_text(flags, "directory"), format);
+            let limit = flags.get("limit").and_then(|s| s.parse::<usize>().ok());
+            if let (Some(limit), Some(Json::Array(rows))) = (limit, value.get("entries")) {
+                if rows.len() > limit {
+                    let total = rows.len();
+                    let kept = rows[..limit].to_vec();
+                    value.insert("entries", Json::Array(kept));
+                    value.insert("entries_total", Json::Int(total as i64));
+                }
+            }
+            value
         }
         "cache-status" | "cache" => cache_status(root),
         "list-core-tools" | "list_core_tools" => ok(vec![
@@ -3560,6 +3611,9 @@ pub fn dispatch(
             Json::String(root.display().to_string()),
         )]),
         "get_file_wiki" => {
+            if let Some(err) = unknown_file(root, file) {
+                return err;
+            }
             let (path, wiki) = crate::wiki_files::read_wiki(root, file);
             ok(vec![
                 ("file", Json::String(file.into())),
@@ -3816,16 +3870,16 @@ fn init_project(root: &Path, no_copy: bool) -> Json {
         created.push(rel.to_string());
         true
     };
-    let map_body = "\
-# map_paths.txt — import-map package roots for update-maps
-# One directory per line. No bare \".\".
-src/
-";
-    let monitored_body = "\
-# monitored_paths.txt — wiki and health watch list
-# Mapped sources are watched even when they are not listed here.
-src/
-";
+    let roots = scope::default_map_roots(root)
+        .into_iter()
+        .map(|dir| format!("{dir}\n"))
+        .collect::<String>();
+    let map_body = format!(
+        "# map_paths.txt — import-map package roots for update-maps\n# One directory per line. No bare \".\".\n{roots}"
+    );
+    let monitored_body = format!(
+        "# monitored_paths.txt — wiki and health watch list\n# Mapped sources are watched even when they are not listed here.\n{roots}"
+    );
     let exclude_body = "\
 node_modules
 .git
@@ -3845,12 +3899,12 @@ target
         "# Pending Updates\n\n(no pending items — run check-changes after making edits)\n";
     let library_body = "# Library & Imports Map\n\nRun `wikifier update-maps` to populate.\n";
     if !path_list_has_entries(root, "map_paths.txt")
-        && !write_new("map_paths.txt", map_body, &mut created)
+        && !write_new("map_paths.txt", &map_body, &mut created)
     {
         return fail("InitError", "could not write map_paths.txt");
     }
     if !path_list_has_entries(root, "monitored_paths.txt")
-        && !write_new("monitored_paths.txt", monitored_body, &mut created)
+        && !write_new("monitored_paths.txt", &monitored_body, &mut created)
     {
         return fail("InitError", "could not write monitored_paths.txt");
     }

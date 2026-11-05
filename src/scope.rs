@@ -313,3 +313,73 @@ pub fn rel_of(root: &Path, path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("/")
 }
+
+/// Map roots for a fresh `init`: `src/` when it exists, else every top-level directory that
+/// holds a source file (a Cargo workspace's `crates/`, a Python package dir, `tests/`).
+/// Falls back to `src/` so the scope error still names a directory to create.
+pub fn default_map_roots(root: &Path) -> Vec<String> {
+    if root.join("src").is_dir() {
+        return vec!["src/".to_string()];
+    }
+    let mut found: Vec<String> = fs::read_dir(root)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|ent| ent.path().is_dir())
+                .map(|ent| ent.file_name().to_string_lossy().into_owned())
+                .filter(|name| !skip_dir(name) && has_source(&root.join(name), 6))
+                .map(|name| format!("{name}/"))
+                .collect()
+        })
+        .unwrap_or_default();
+    found.sort();
+    if found.is_empty() {
+        found.push("src/".to_string());
+    }
+    found
+}
+
+fn skip_dir(name: &str) -> bool {
+    name.starts_with('.') || DEFAULT_EXCLUDES.contains(&name)
+}
+
+fn has_source(dir: &Path, depth: usize) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    let mut subdirs = Vec::new();
+    for ent in entries.flatten() {
+        let path = ent.path();
+        if path.is_dir() {
+            if depth > 0 && !skip_dir(&ent.file_name().to_string_lossy()) {
+                subdirs.push(path);
+            }
+        } else if is_source(&path) {
+            return true;
+        }
+    }
+    subdirs.into_iter().any(|sub| has_source(&sub, depth - 1))
+}
+
+/// A caller's file argument as the map and health key: project-relative and `/`-separated.
+/// Accepts `./src/a.rs`, `src\a.rs`, and an absolute path under `root`, so a Windows agent
+/// does not get an empty lookup or a second health row for the same file.
+pub fn rel_arg(root: &Path, file: &str) -> String {
+    let path = Path::new(file);
+    if path.is_absolute() {
+        if let Ok(rel) = path.strip_prefix(root) {
+            return rel_of(Path::new(""), rel);
+        }
+        if let (Ok(real_root), Ok(real_path)) = (root.canonicalize(), path.canonicalize()) {
+            if let Ok(rel) = real_path.strip_prefix(&real_root) {
+                return rel_of(Path::new(""), rel);
+            }
+        }
+    }
+    let slashed = file.replace('\\', "/");
+    let mut rel = slashed.as_str();
+    while let Some(rest) = rel.strip_prefix("./") {
+        rel = rest;
+    }
+    rel.to_string()
+}

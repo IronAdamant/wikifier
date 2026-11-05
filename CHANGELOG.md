@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Windows: `wikifier.bat` passes the binary's exit code through. It read `%ERRORLEVEL%` inside a parenthesized block, so every failure exited 0.
+- Windows: health baselines hash CRLF as LF (`content_sha256_prefixed`). A `core.autocrlf` checkout no longer flips every Green file to dirty (51 files in this repo).
+- A file argument written with `\` separators or as an absolute path under the root names the same row as `src/a.rs`. Before, an absolute path returned empty lookups and a backslash path created a second health row.
+- `prepare_edit`, `get_dependencies`, `get_dependents`, and `get_file_wiki` return `FileNotFound` with a `list_paths` hint for a path that is neither on disk nor in the map, instead of `success: true` with empty fields.
+- MCP `tools/call` with a missing required argument (for example `file_path` instead of `file`) returns `InvalidArguments` naming the accepted and received arguments. Before, the tool ran with an empty path and reported success.
+- `health --limit N` (and MCP `limit`) caps the entry list and adds `entries_total`. The argument was advertised and ignored.
+
+### Changed
+- `init` seeds `map_paths.txt` and `monitored_paths.txt` with `src/` when it exists, otherwise with each top-level directory that holds source (a Cargo workspace's `crates/`, a Python package directory, `tests/`). Before, a project without `src/` hit a scope error on the first `update-maps`.
+- MCP `update_maps` omits the edge list unless `edges: true`; `edges_persisted` still gives the count. On a 587-file Cargo workspace the list was about 280 KB. The schema now lists `full`, `max_files`, and `edges`; `health` lists `limit` and `summary`.
+- `.gitattributes` keeps `*.sh` LF and `*.bat` / `*.ps1` CRLF on every checkout.
+
 ## [5.0.0] - 2026-11-03
 
 First release of the std-only Rust rewrite. `[dependencies]` is empty: no crates.io crates and no Python runtime. The binary implements the Python 4.7 agent contract. Protocol v0.7 stays. `pip install wikifier` still installs that Python 4.7 package.
