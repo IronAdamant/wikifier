@@ -2349,18 +2349,14 @@ pub fn record_deletion(root: &Path, file: &str, reason: &str) -> Json {
 fn drop_pending_line(root: &Path, rel: &str) {
     let path = root.join("pending_updates.md");
     let text = fs::read_to_string(&path).unwrap_or_default();
-    if text.is_empty() {
+    if text.is_empty()
+        || !text
+            .lines()
+            .any(|line| crate::pending_line::file_of(line) == Some(rel))
+    {
         return;
     }
-    let mut out = String::new();
-    for line in text.lines() {
-        let hit = crate::pending_line::file_of(line) == Some(rel);
-        if !hit {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    let _ = fs::write(path, out);
+    let _ = fs::write(path, crate::pending_line::remove_item(&text, rel));
 }
 
 pub fn heal_stubs(root: &Path, min_len: usize, dry_run: bool) -> Json {
@@ -3937,8 +3933,7 @@ target
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
 ";
-    let pending_body =
-        "# Pending Updates\n\n(no pending items — run check-changes after making edits)\n";
+    let pending_body = format!("# Pending Updates\n\n{}\n", crate::pending_line::EMPTY_NOTE);
     let library_body = "# Library & Imports Map\n\nRun `wikifier update-maps` to populate.\n";
     if !path_list_has_entries(root, "map_paths.txt")
         && !write_new("map_paths.txt", &map_body, &mut created)
@@ -3956,7 +3951,7 @@ target
     if !write_new("file_health.md", health_body, &mut created) {
         return fail("InitError", "could not write file_health.md");
     }
-    if !write_new("pending_updates.md", pending_body, &mut created) {
+    if !write_new("pending_updates.md", &pending_body, &mut created) {
         return fail("InitError", "could not write pending_updates.md");
     }
     if !write_new("library.md", library_body, &mut created) {

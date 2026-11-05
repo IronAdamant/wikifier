@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `prepare_edit`, `get_dependencies`, `get_dependents`, and `get_file_wiki` return `FileNotFound` with a `list_paths` hint for a path that is neither on disk nor in the map, instead of `success: true` with empty fields.
 - MCP `tools/call` with a missing required argument (for example `file_path` instead of `file`) returns `InvalidArguments` naming the accepted and received arguments. Before, the tool ran with an empty path and reported success.
 - `health --limit N` (and MCP `limit`) caps the entry list and adds `entries_total`. The argument was advertised and ignored.
+- `pending_updates.md` no longer says "(no pending items …)" above a list of items. The note is dropped when the first item arrives and comes back when the last one is removed. This was carried over from the Python package.
+- A `record-change` pending item reads `- path: <reason> — refresh the wiki, then mark-green` instead of the Python wording `LLM/agent edit — <reason>`.
 
 ### Performance
 Same outputs: on a 587-file Cargo workspace the cache files, `library.md`, folder cards, health hashes, and the `update-maps`, `cycles`, `dependencies --full`, `dependents`, `check-changes`, and `session-bootstrap` output were byte-identical before and after (CLI, timestamps aside). Warm MCP calls there, median of 5 on Windows 11: `check_changes` 353 → 53 ms, `update_maps` 708 → 50 ms, `get_cycles` 317 → 39 ms, `session_bootstrap` 33 → 16 ms and 21.7 → 4.7 KB. Cold `update-maps` (CLI, runs interleaved on a loaded machine, median of 3) went from 18.7 s to 6.4 s.
