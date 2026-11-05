@@ -317,7 +317,9 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         seen.insert(rel.clone());
         let (mtime, size) = cache::stat_ns(file).unwrap_or((0, 0));
         let known = session.known(&rel);
+        let reparse = session.needs_parse(&rel);
         let stat_hit = !full
+            && !reparse
             && known
                 .as_ref()
                 .is_some_and(|(old_mtime, old_size, old_hash)| {
@@ -339,7 +341,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         };
         hashed += 1;
         if let Some((_, _, old_hash)) = &known {
-            if old_hash == &hash && old_hash.starts_with("sha256:") {
+            if !reparse && old_hash == &hash && old_hash.starts_with("sha256:") {
                 session.note_stat(&rel, mtime, size);
                 continue;
             }
@@ -1237,7 +1239,7 @@ pub fn check_changes(root: &Path) -> Json {
             let text = fs::read_to_string(&pending).unwrap_or_default();
             let text =
                 crate::pending_line::append_item(&text, &rel, crate::pending_line::CHECK_MESSAGE);
-            let _ = fs::write(&pending, text);
+            let _ = artifacts::write_durable(&pending, text.as_bytes());
             changed_rows = true;
         }
     }
@@ -1337,7 +1339,7 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
     let text = fs::read_to_string(&pending).unwrap_or_default();
     let text =
         crate::pending_line::append_item(&text, rel, &crate::pending_line::record_message(reason));
-    if fs::write(&pending, text).is_err() {
+    if artifacts::write_durable(&pending, text.as_bytes()).is_err() {
         return fail("PendingError", "could not write pending_updates.md");
     }
     ok(vec![
@@ -2356,7 +2358,10 @@ fn drop_pending_line(root: &Path, rel: &str) {
     {
         return;
     }
-    let _ = fs::write(path, crate::pending_line::remove_item(&text, rel));
+    let _ = artifacts::write_durable(
+        &path,
+        crate::pending_line::remove_item(&text, rel).as_bytes(),
+    );
 }
 
 pub fn heal_stubs(root: &Path, min_len: usize, dry_run: bool) -> Json {
@@ -2432,7 +2437,7 @@ pub fn prune_health_opts(root: &Path, deleted_missing: bool) -> Json {
                 out.push('\n');
             }
         }
-        let _ = fs::write(pending, out);
+        let _ = artifacts::write_durable(&pending, out.as_bytes());
     }
     ok(vec![
         ("changed", Json::Int(changed as i64)),
@@ -2467,7 +2472,7 @@ pub fn prune_pending(root: &Path) -> Json {
             out.push('\n');
         }
     }
-    let _ = fs::write(path, out);
+    let _ = artifacts::write_durable(&path, out.as_bytes());
     ok(vec![("changed", Json::Int(changed))])
 }
 

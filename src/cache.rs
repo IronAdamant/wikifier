@@ -103,14 +103,15 @@ pub(crate) fn names_marker(root: &Path) -> PathBuf {
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    write_replace(path, bytes)?;
+    write_replace(path, bytes, true)?;
     fsync_dir(parent);
     Ok(())
 }
 
-/// Write a temp file beside `path`, sync it, and rename it into place.
-/// The parent directory must exist; the caller flushes it.
-fn write_replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
+/// Write a temp file beside `path` and rename it into place, so a reader never sees a
+/// torn file. `durable` also syncs the data before the rename and writes the rename
+/// through; the parent directory must exist and the caller flushes it.
+fn write_replace(path: &Path, bytes: &[u8], durable: bool) -> Result<(), String> {
     let parent = path.parent().unwrap_or(Path::new("."));
     let seq = TEMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("cache");
@@ -122,26 +123,27 @@ fn write_replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
             .open(&tmp)
             .map_err(|e| e.to_string())?;
         file.write_all(bytes).map_err(|e| e.to_string())?;
-        file.sync_all().map_err(|e| e.to_string())?;
+        if durable {
+            file.sync_all().map_err(|e| e.to_string())?;
+        }
         Ok(())
     })();
     if let Err(err) = write_result {
         let _ = fs::remove_file(&tmp);
         return Err(err);
     }
-    if let Err(err) = replace_file(&tmp, path) {
+    if let Err(err) = replace_file(&tmp, path, durable) {
         let _ = fs::remove_file(&tmp);
         return Err(err);
     }
     Ok(())
 }
 
-/// Write many cache files with the guarantees of [`atomic_write`]: each file is synced and
-/// renamed into place, and every parent directory is flushed before this returns. The
-/// per-file syncs run on several threads and each directory is flushed once, not once per
-/// file. Serial flushes were most of a cold `update-maps` (about 2,100 files on a
-/// 587-file workspace).
-pub(crate) fn atomic_write_all(entries: &[(PathBuf, Vec<u8>)]) -> Result<(), String> {
+/// Write many derived cache files: each goes to a temp file and is renamed into place, so a
+/// reader never sees a torn file, but nothing is synced. The cache can be rebuilt from the
+/// sources, and `Session::open` treats a file whose size or content does not check out as
+/// a miss and parses that source again. Writes run on several threads.
+pub(crate) fn write_derived_all(entries: &[(PathBuf, Vec<u8>)]) -> Result<(), String> {
     if entries.is_empty() {
         return Ok(());
     }
@@ -163,7 +165,7 @@ pub(crate) fn atomic_write_all(entries: &[(PathBuf, Vec<u8>)]) -> Result<(), Str
             .map(|part| {
                 scope.spawn(move || {
                     part.iter()
-                        .try_for_each(|(path, bytes)| write_replace(path, bytes))
+                        .try_for_each(|(path, bytes)| write_replace(path, bytes, false))
                 })
             })
             .collect();
@@ -172,11 +174,7 @@ pub(crate) fn atomic_write_all(entries: &[(PathBuf, Vec<u8>)]) -> Result<(), Str
                 .join()
                 .unwrap_or_else(|_| Err("cache writer thread panicked".to_string()))
         })
-    })?;
-    for dir in &parents {
-        fsync_dir(dir);
-    }
-    Ok(())
+    })
 }
 
 /// The bytes of an edge or notes file: an `@<TAB><rel>` header line, then the body.
@@ -189,20 +187,46 @@ pub(crate) fn labeled(rel: &str, body: &str) -> Vec<u8> {
     text.into_bytes()
 }
 
-fn replace_file(from: &Path, to: &Path) -> Result<(), String> {
+/// Body lines of a labeled cache file written for `rel`: valid UTF-8, no NUL, an
+/// `@<TAB><rel>` header and a final newline. `None` for a torn or foreign file.
+pub(crate) fn labeled_lines(bytes: &[u8], rel: &str) -> Option<Vec<String>> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let body = text.strip_prefix(&format!("@\t{rel}\n"))?;
+    if text.contains('\0') || !text.ends_with('\n') {
+        return None;
+    }
+    Some(
+        body.lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty())
+            .collect(),
+    )
+}
+
+/// Body lines of `rel`'s record of one kind: `Some(empty)` when there is no file, `None`
+/// when the file is there but does not check out.
+fn record_lines(root: &Path, sub: &str, rel: &str, ext: &str) -> Option<Vec<String>> {
+    match fs::read(read_file(root, sub, rel, ext)) {
+        Ok(bytes) => labeled_lines(&bytes, rel),
+        Err(_) => Some(Vec::new()),
+    }
+}
+
+fn replace_file(from: &Path, to: &Path, durable: bool) -> Result<(), String> {
     #[cfg(windows)]
     {
-        replace_file_windows(from, to)
+        replace_file_windows(from, to, durable)
     }
     #[cfg(not(windows))]
     {
+        let _ = durable;
         fs::rename(from, to)
             .map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
     }
 }
 
 #[cfg(windows)]
-fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
+fn replace_file_windows(from: &Path, to: &Path, durable: bool) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
     const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
@@ -221,7 +245,11 @@ fn replace_file_windows(from: &Path, to: &Path) -> Result<(), String> {
         MoveFileExW(
             src.as_ptr(),
             dst.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            if durable {
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+            } else {
+                MOVEFILE_REPLACE_EXISTING
+            },
         )
     };
     if ok == 0 {
@@ -312,10 +340,9 @@ pub(crate) fn dst_of(line: &str) -> String {
 }
 
 pub fn load_dependencies(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    let mut dsts: Vec<String> = content_lines(&by_src_path(root, rel))
+    let mut dsts: Vec<String> = load_internal_edges(root, rel)
         .into_iter()
-        .map(|line| dst_of(&line))
-        .filter(|s| !s.is_empty())
+        .map(|edge| edge.path)
         .collect();
     dsts.sort();
     dsts.dedup();
@@ -403,15 +430,11 @@ pub struct DependencyView {
     pub unresolved: Vec<(String, i64, String)>,
 }
 
-fn notes_path(root: &Path, rel: &str) -> PathBuf {
-    read_file(root, "notes", rel, "txt")
-}
-
 pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, String> {
     let internal = load_internal_edges(root, rel);
     let mut external = Vec::new();
     let mut unresolved = Vec::new();
-    for line in read_lines(&notes_path(root, rel)) {
+    for line in record_lines(root, "notes", rel, "txt").unwrap_or_default() {
         let mut parts = line.split('\t');
         match parts.next().unwrap_or("") {
             "E" => {
@@ -446,9 +469,24 @@ pub fn load_dependency_view(root: &Path, rel: &str) -> Result<DependencyView, St
 }
 
 /// The internal edges of one file from its `by_src` record, without the notes file.
+/// A record that does not check out is a miss: the targets come from `index.tsv`, without
+/// line numbers or flags, until the next `update-maps` parses the file again.
 pub fn load_internal_edges(root: &Path, rel: &str) -> Vec<InternalEdge> {
+    let Some(lines) = record_lines(root, "by_src", rel, "edges") else {
+        return index_dsts(root, rel)
+            .into_iter()
+            .map(|path| InternalEdge {
+                path,
+                line: 0,
+                names: Vec::new(),
+                conditional: false,
+                dynamic: false,
+                via_barrel: false,
+            })
+            .collect();
+    };
     let mut internal = Vec::new();
-    for line in content_lines(&by_src_path(root, rel)) {
+    for line in lines {
         let mut parts = line.split('\t');
         let path = parts.next().unwrap_or("").trim().to_string();
         if path.is_empty() {
@@ -475,8 +513,26 @@ pub fn load_internal_edges(root: &Path, rel: &str) -> Vec<InternalEdge> {
     internal
 }
 
+/// `rel`'s targets as `index.tsv` records them.
+fn index_dsts(root: &Path, rel: &str) -> BTreeSet<String> {
+    crate::cache_commit::index_targets(root)
+        .into_iter()
+        .find(|(src, _)| src == rel)
+        .and_then(|(_, dsts)| dsts)
+        .unwrap_or_default()
+}
+
+/// Files that import `rel`. A `by_dst` record that does not check out is a miss: the
+/// importers come from the targets in `index.tsv`.
 pub fn load_dependents(root: &Path, rel: &str) -> Result<Vec<String>, String> {
-    let mut srcs = content_lines(&read_file(root, "by_dst", rel, "edges"));
+    let mut srcs = match record_lines(root, "by_dst", rel, "edges") {
+        Some(lines) => lines,
+        None => crate::cache_commit::index_targets(root)
+            .into_iter()
+            .filter(|(_, dsts)| dsts.as_ref().is_some_and(|d| d.contains(rel)))
+            .map(|(src, _)| src)
+            .collect(),
+    };
     srcs.sort();
     srcs.dedup();
     Ok(srcs)
@@ -674,7 +730,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn atomic_write_all_publishes_every_file_and_leaves_no_temp() {
+    fn write_derived_all_publishes_every_file_and_leaves_no_temp() {
         let dir = std::env::temp_dir().join(format!(
             "wk-batch-{}-{}",
             std::process::id(),
@@ -690,12 +746,12 @@ mod tests {
                 )
             })
             .collect();
-        atomic_write_all(&entries).unwrap();
+        write_derived_all(&entries).unwrap();
         // A second batch replaces existing files in place.
         for (i, entry) in entries.iter_mut().enumerate() {
             entry.1 = format!("second {i}").into_bytes();
         }
-        atomic_write_all(&entries).unwrap();
+        write_derived_all(&entries).unwrap();
         for (i, (path, _)) in entries.iter().enumerate() {
             assert_eq!(fs::read_to_string(path).unwrap(), format!("second {i}"));
         }
@@ -707,7 +763,7 @@ mod tests {
                 .collect();
             assert!(leftovers.is_empty(), "{sub}: {leftovers:?}");
         }
-        assert!(atomic_write_all(&[]).is_ok());
+        assert!(write_derived_all(&[]).is_ok());
         let _ = fs::remove_dir_all(dir);
     }
 

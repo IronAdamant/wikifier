@@ -254,3 +254,135 @@ fn files(value: &Json) -> usize {
         .map(|a| a.len())
         .unwrap_or_else(|| panic!("{value}"))
 }
+
+/// Every cache file except the generation counter, by path under `wk_cache`.
+fn cache_snapshot(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn walk(dir: &Path, base: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+        for ent in fs::read_dir(dir).unwrap().flatten() {
+            let path = ent.path();
+            if path.is_dir() {
+                walk(&path, base, out);
+            } else {
+                let rel = path
+                    .strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if rel != "generation" {
+                    out.insert(rel, fs::read(&path).unwrap());
+                }
+            }
+        }
+    }
+    let base = root.join(".wikifier_staging/wk_cache");
+    let mut out = BTreeMap::new();
+    walk(&base, &base, &mut out);
+    out
+}
+
+fn answers(root: &Path) -> Vec<String> {
+    ["src/pkg/a.py", "src/pkg/b.py", "src/pkg/c.py"]
+        .iter()
+        .flat_map(|rel| {
+            [
+                api::dependency_report(root, rel, true).to_string(),
+                wikifier::load_dependents(root, rel).to_string(),
+            ]
+        })
+        .chain([api::cycles(root).to_string()])
+        .collect()
+}
+
+fn record_of(root: &Path, kind: &str, contains: &str) -> PathBuf {
+    let dir = root.join(".wikifier_staging/wk_cache").join(kind);
+    fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|ent| ent.path())
+        .find(|path| String::from_utf8_lossy(&fs::read(path).unwrap()).contains(contains))
+        .unwrap_or_else(|| panic!("no {kind} record mentioning {contains}"))
+}
+
+#[test]
+fn corrupt_and_truncated_cache_files_are_rebuilt_identically() {
+    let root = cyclic_project("heal");
+    assert!(root.join(".wikifier_staging/wk_cache/sizes.tsv").is_file());
+    let before = cache_snapshot(&root);
+    let answered = answers(&root);
+
+    // Garbage of another length in a forward record, and a truncated reverse record.
+    let by_src = record_of(&root, "by_src", "@\tsrc/pkg/a.py\n");
+    fs::write(&by_src, b"\0\0garbage").unwrap();
+    let by_dst = record_of(&root, "by_dst", "@\tsrc/pkg/a.py\n");
+    let bytes = fs::read(&by_dst).unwrap();
+    fs::write(&by_dst, &bytes[..bytes.len() / 2]).unwrap();
+
+    // Lookups treat a bad record as a miss and answer from index.tsv.
+    assert_eq!(
+        cache::load_dependencies(&root, "src/pkg/a.py").unwrap(),
+        vec!["src/pkg/b.py".to_string()]
+    );
+    let importers = cache::load_dependents(&root, "src/pkg/a.py").unwrap();
+    assert_eq!(
+        importers,
+        vec!["src/pkg/b.py".to_string(), "src/pkg/c.py".to_string()]
+    );
+
+    let healed = update_maps(&root);
+    assert_eq!(healed.get("files_parsed"), Some(&Json::Int(1)), "{healed}");
+    assert_eq!(cache_snapshot(&root), before);
+    assert_eq!(answers(&root), answered);
+
+    // Same-size damage is caught by content once the recorded sizes are gone too.
+    let notes_free = record_of(&root, "by_src", "@\tsrc/pkg/b.py\n");
+    let len = fs::read(&notes_free).unwrap().len();
+    fs::write(&notes_free, vec![0u8; len]).unwrap();
+    fs::remove_file(root.join(".wikifier_staging/wk_cache/sizes.tsv")).unwrap();
+    update_maps(&root);
+    assert_eq!(cache_snapshot(&root), before);
+    assert_eq!(answers(&root), answered);
+    let _ = fs::remove_dir_all(root);
+}
+
+/// Health, journal, and pending stay durable: each write replaces the whole file through a
+/// synced temp file, and no temp file is left beside it.
+#[test]
+fn user_state_is_replaced_whole_and_leaves_no_temp_files() {
+    let root = cyclic_project("durable");
+    let recorded = wikifier::record_change(&root, "src/pkg/a.py", "durable write (speed-2)");
+    assert_eq!(ok(&recorded), Some(true), "{recorded}");
+    let pending = fs::read_to_string(root.join("pending_updates.md")).unwrap();
+    assert!(
+        pending.contains("- src/pkg/a.py: durable write (speed-2)"),
+        "{pending}"
+    );
+    assert!(read_health(&root)
+        .iter()
+        .any(|row| row.file == "src/pkg/a.py" && row.reason == "durable write (speed-2)"));
+    let journal = wikifier::read_journal(&root, None);
+    assert!(journal
+        .iter()
+        .any(|e| e.reason == "durable write (speed-2)"));
+    let mut dirs = vec![root.clone()];
+    while let Some(dir) = dirs.pop() {
+        for ent in fs::read_dir(&dir).unwrap().flatten() {
+            let path = ent.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else {
+                assert!(
+                    !path.to_string_lossy().ends_with(".tmp"),
+                    "left behind: {}",
+                    path.display()
+                );
+            }
+        }
+    }
+    wikifier::artifacts::write_durable(&root.join("pending_updates.md"), b"# Pending Updates\n")
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(root.join("pending_updates.md")).unwrap(),
+        "# Pending Updates\n"
+    );
+    let _ = fs::remove_dir_all(root);
+}
