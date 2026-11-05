@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.3.1] - 2026-11-05
+
+### Fixed
+- `limit: 0` meant three different things. `session_bootstrap` read it as "every file", the 5.3.0 compact tools (`health`, `get_cycles`, `get_dependents`, `prepare_edit`, `get_resolution_diagnostics`) as "use the default" (so `get_dependents` still listed 50), and the CLI and the other capped tools (`health --limit`, `journal`, `search_journal`, `verify_wikis`, `stale-wikis`, `cycles --max-items`, `list-paths --max-files`, `update-maps --max-files`) as "zero items". Each tool parsed its own cap. Now one parser, `api::Cap`, reads every cap (`limit`, `max_items`, `max_files`, and `WIKIFIER_CHECK_CHANGES_MAX`) on the CLI and over MCP with one rule: absent means the tool's default, `0` means no cap (the same as MCP `full: true`), and `N` means at most N. A value that is not a whole number is ignored.
+- `suggest_next_actions` advertised `limit` and ignored it; it now caps `actions` and adds `actions_total`. `journal` and `search_journal` list `limit` in their MCP schemas.
+- On Specula (a copy), before → after with `limit: 0`: `get_dependents` of `specula-core/src/lib.rs` 50 → 216, `health` 10 → 587, `get_cycles` 5 → 30, `get_resolution_diagnostics` 20 → 1,710 notes; CLI `health --limit 0` and `cycles --max-items 0` 0 → all.
+
 ## [5.3.0] - 2026-11-05
 
 Fixes from the live test on Specula (a 587-file Cargo workspace).
