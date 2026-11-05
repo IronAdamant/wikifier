@@ -8,6 +8,138 @@ use std::time::Duration;
 
 use crate::api::{self, MCP_TOOLS};
 use crate::jsonutil::{self, Json};
+use crate::mcp_groups::{AgentTools, Selection, DISABLE_VAR, TOOLS_VAR};
+
+/// Tool-group state for this server: the selection, the block's warnings, and the AGENTS.md
+/// stamp that [`refresh`] compares before every request.
+#[derive(Clone)]
+pub struct GroupState {
+    pub selection: Selection,
+    pub warnings: Vec<String>,
+    /// A switch is set or AGENTS.md has an `agent-tools` block. Only then does `initialize`
+    /// advertise `listChanged` and carry the groups line; otherwise every reply is as before.
+    pub shaped: bool,
+    agents: Option<PathBuf>,
+    stamp: Option<(std::time::SystemTime, u64)>,
+    env_tools: Option<String>,
+    env_disable: Option<String>,
+}
+
+static STATE: std::sync::Mutex<Option<GroupState>> = std::sync::Mutex::new(None);
+
+/// The notification sent before a response when an AGENTS.md edit changed the tool list.
+pub const LIST_CHANGED: &str = r#"{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}"#;
+
+/// The tools this server exposes. Every tool until [`configure`] runs.
+pub fn active() -> Selection {
+    groups_state().selection
+}
+
+pub fn groups_state() -> GroupState {
+    STATE
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+        .unwrap_or_else(|| GroupState {
+            selection: Selection::all(),
+            warnings: Vec::new(),
+            shaped: false,
+            agents: None,
+            stamp: None,
+            env_tools: None,
+            env_disable: None,
+        })
+}
+
+impl GroupState {
+    fn load(
+        agents: Option<PathBuf>,
+        env_tools: Option<String>,
+        env_disable: Option<String>,
+    ) -> Result<Self, String> {
+        let stamp = agents.as_deref().and_then(stamp_of);
+        let block = agents
+            .as_deref()
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .map(|text| AgentTools::parse(&text))
+            .unwrap_or_default();
+        let (selection, warnings) =
+            Selection::resolve(env_tools.as_deref(), env_disable.as_deref(), &block)?;
+        Ok(GroupState {
+            selection,
+            warnings,
+            shaped: block.found || env_tools.is_some() || env_disable.is_some(),
+            agents,
+            stamp,
+            env_tools,
+            env_disable,
+        })
+    }
+
+    /// Block warnings first, then the groups line.
+    pub fn instructions(&self) -> String {
+        let mut lines = self.warnings.clone();
+        lines.push(self.selection.summary());
+        lines.join("\n")
+    }
+}
+
+fn stamp_of(path: &std::path::Path) -> Option<(std::time::SystemTime, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+/// Read `WIKIFIER_TOOLS`, `WIKIFIER_DISABLE`, and the `agent-tools` block of AGENTS.md in
+/// the server's project root (`WIKIFIER_PROJECT_ROOT`, else the working directory). `Err`
+/// is an environment mistake; the server prints it and exits 2.
+pub fn configure() -> Result<(), String> {
+    let env = |key: &str| std::env::var(key).ok().filter(|v| !v.trim().is_empty());
+    let root = env("WIKIFIER_PROJECT_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok());
+    let state = GroupState::load(
+        root.map(|root| root.join("AGENTS.md")),
+        env(TOOLS_VAR),
+        env(DISABLE_VAR),
+    )?;
+    if let Ok(mut guard) = STATE.lock() {
+        *guard = Some(state);
+    }
+    Ok(())
+}
+
+/// Stat AGENTS.md (mtime and size) and reload it when it changed. True when the exposed
+/// tool list changed, so the caller sends [`LIST_CHANGED`] before its response.
+pub fn refresh() -> bool {
+    let Ok(mut guard) = STATE.lock() else {
+        return false;
+    };
+    let Some(state) = guard.as_mut() else {
+        return false;
+    };
+    let Some(path) = state.agents.clone() else {
+        return false;
+    };
+    let stamp = stamp_of(&path);
+    if stamp == state.stamp {
+        return false;
+    }
+    match GroupState::load(
+        Some(path),
+        state.env_tools.clone(),
+        state.env_disable.clone(),
+    ) {
+        Ok(next) => {
+            let changed = next.selection.enabled() != state.selection.enabled();
+            *state = next;
+            changed
+        }
+        Err(_) => {
+            state.stamp = stamp;
+            false
+        }
+    }
+}
 
 fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
     let boolean = |description: &str| {
@@ -318,65 +450,19 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
     let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("");
     id.as_ref()?;
     let result = match method {
-        "initialize" => Json::obj(vec![
-            ("protocolVersion", Json::String("2024-11-05".into())),
-            (
-                "capabilities",
-                Json::obj(vec![
-                    ("tools", Json::obj(vec![])),
-                    ("resources", Json::obj(vec![])),
-                    ("prompts", Json::obj(vec![])),
-                ]),
-            ),
-            (
-                "serverInfo",
-                Json::obj(vec![
-                    ("name", Json::String("wikifier".into())),
-                    ("version", Json::String(api::VERSION.into())),
-                ]),
-            ),
-        ]),
+        "initialize" => initialize(),
         "tools/list" => Json::obj(vec![(
             "tools",
-            Json::Array(MCP_TOOLS.iter().map(|n| tool_schema(n)).collect()),
-        )]),
-        "resources/list" => Json::obj(vec![(
-            "resources",
             Json::Array(
-                [
-                    "wikifier://library",
-                    "wikifier://health",
-                    "wikifier://pending",
-                    "wikifier://journal",
-                ]
-                .into_iter()
-                .map(|u| {
-                    Json::obj(vec![
-                        ("uri", Json::String(u.into())),
-                        ("name", Json::String(u.into())),
-                    ])
-                })
-                .collect(),
+                MCP_TOOLS
+                    .iter()
+                    .filter(|n| active().allows(n))
+                    .map(|n| tool_schema(n))
+                    .collect(),
             ),
         )]),
-        "prompts/list" => Json::obj(vec![(
-            "prompts",
-            Json::Array(
-                [
-                    "review_pending_changes",
-                    "audit_project_health",
-                    "plan_refactoring",
-                    "find_architectural_smells",
-                    "understand_codebase_structure",
-                    "review_recent_changes",
-                    "generate_project_health_report",
-                    "onboard_to_module",
-                ]
-                .into_iter()
-                .map(|n| Json::obj(vec![("name", Json::String(n.into()))]))
-                .collect(),
-            ),
-        )]),
+        "resources/list" => resources_list(),
+        "prompts/list" => prompts_list(),
         "resources/read" => resource_read(msg),
         "prompts/get" => prompt_get(msg),
         "tools/call" => call_tool(msg),
@@ -393,6 +479,82 @@ pub fn handle_message(msg: &Json) -> Option<Json> {
     ]))
 }
 
+fn initialize() -> Json {
+    let state = groups_state();
+    // listChanged only when groups are in play, so a server with no switch and no block
+    // answers exactly as 5.1.0 did.
+    let tools = if state.shaped {
+        Json::obj(vec![("listChanged", Json::Bool(true))])
+    } else {
+        Json::obj(vec![])
+    };
+    let mut value = Json::obj(vec![
+        ("protocolVersion", Json::String("2024-11-05".into())),
+        (
+            "capabilities",
+            Json::obj(vec![
+                ("tools", tools),
+                ("resources", Json::obj(vec![])),
+                ("prompts", Json::obj(vec![])),
+            ]),
+        ),
+        (
+            "serverInfo",
+            Json::obj(vec![
+                ("name", Json::String("wikifier".into())),
+                ("version", Json::String(api::VERSION.into())),
+            ]),
+        ),
+    ]);
+    if state.shaped {
+        value.insert("instructions", Json::String(state.instructions()));
+    }
+    value
+}
+
+fn resources_list() -> Json {
+    Json::obj(vec![(
+        "resources",
+        Json::Array(
+            [
+                "wikifier://library",
+                "wikifier://health",
+                "wikifier://pending",
+                "wikifier://journal",
+            ]
+            .into_iter()
+            .map(|u| {
+                Json::obj(vec![
+                    ("uri", Json::String(u.into())),
+                    ("name", Json::String(u.into())),
+                ])
+            })
+            .collect(),
+        ),
+    )])
+}
+
+fn prompts_list() -> Json {
+    Json::obj(vec![(
+        "prompts",
+        Json::Array(
+            [
+                "review_pending_changes",
+                "audit_project_health",
+                "plan_refactoring",
+                "find_architectural_smells",
+                "understand_codebase_structure",
+                "review_recent_changes",
+                "generate_project_health_report",
+                "onboard_to_module",
+            ]
+            .into_iter()
+            .map(|n| Json::obj(vec![("name", Json::String(n.into()))]))
+            .collect(),
+        ),
+    )])
+}
+
 fn call_tool(msg: &Json) -> Json {
     let params = msg.get("params");
     let name = params
@@ -401,6 +563,14 @@ fn call_tool(msg: &Json) -> Json {
         .unwrap_or("")
         .to_string();
     let args = params.and_then(|p| p.get("arguments")).cloned();
+    if !active().allows(&name) {
+        let refusal = Json::obj(vec![
+            ("success", Json::Bool(false)),
+            ("error", Json::String(active().refusal(&name))),
+            ("error_type", Json::String("ToolDisabled".into())),
+        ]);
+        return tool_result(refusal, false, &name);
+    }
     if let Some(err) = missing_required(&name, args.as_ref()) {
         return tool_result(err, false, &name);
     }
@@ -600,7 +770,29 @@ fn call_tool(msg: &Json) -> Json {
             ("may_still_complete", Json::Bool(true)),
         ]),
     };
+    let value = if tool_name == "list_core_tools" && groups_state().shaped {
+        with_active_groups(value)
+    } else {
+        value
+    };
     tool_result(value, textual, &tool_name)
+}
+
+/// `list_core_tools` under `WIKIFIER_TOOLS` / `WIKIFIER_DISABLE`: only the tools this
+/// server exposes, plus the one-line group summary.
+fn with_active_groups(mut value: Json) -> Json {
+    for key in ["core", "tools"] {
+        if let Some(Json::Array(items)) = value.get(key) {
+            let kept: Vec<Json> = items
+                .iter()
+                .filter(|item| item.as_str().is_some_and(|name| active().allows(name)))
+                .cloned()
+                .collect();
+            value.insert(key, Json::Array(kept));
+        }
+    }
+    value.insert("groups", Json::String(groups_state().instructions()));
+    value
 }
 
 /// A required argument the client left out fails the call and names the accepted fields,
@@ -806,6 +998,13 @@ fn prompt_text(name: &str) -> &'static str {
 }
 
 pub fn serve_stdio() -> Result<(), String> {
+    // A typo in WIKIFIER_TOOLS / WIKIFIER_DISABLE stops the server, so the MCP client
+    // shows it as failed instead of serving a silently different tool set.
+    // A block mistake in AGENTS.md only warns: an agent wrote it and reads the warning.
+    if let Err(message) = configure() {
+        eprintln!("{message}");
+        std::process::exit(2);
+    }
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
     let mut stdout = std::io::stdout().lock();
@@ -823,6 +1022,9 @@ pub fn serve_stdio() -> Result<(), String> {
             Ok(v) => v,
             Err(_) => continue,
         };
+        if refresh() {
+            writeln!(stdout, "{LIST_CHANGED}").map_err(|e| e.to_string())?;
+        }
         if let Some(resp) = handle_message(&msg) {
             writeln!(stdout, "{resp}").map_err(|e| e.to_string())?;
             stdout.flush().map_err(|e| e.to_string())?;
