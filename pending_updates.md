@@ -1,6 +1,5 @@
 # Pending Updates
 
-- src/artifacts.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/jsonutil.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/legacy_cache.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/lib.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
