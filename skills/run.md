@@ -1,6 +1,6 @@
 # Wikifier Agent Protocol v0.7
 
-**Package 5.0.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
+**Package 5.1.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
 This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference. In the Wikifier repository, `AGENTS.md` is the entry point and points here.
 
@@ -42,7 +42,7 @@ This file is the contract for any agent operating Wikifier. Part 1 is all you ne
 ### Paste into new sessions
 
 ```
-You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.0.0).
+You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.1.0).
 It is an agent-to-agent wiki: look things up (health, file wikis, deps) instead of re-reading sources.
 
 SELECTIVE WORK: only update 🔴 Red and actionable 🟡 Yellow files; never re-wiki 🟢 Green files;
@@ -147,11 +147,11 @@ The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` la
 
 There is no Python library. Agents call the CLI or `wikifier mcp`. The same functions live in the Rust crate (`src/api.rs`) and both fronts call them.
 
-### Implementation (package 5.0.0, protocol stays v0.7)
+### Implementation (package 5.1.0, protocol stays v0.7)
 
 The program is a std-only Rust binary under `src/`. `Cargo.toml` has an empty `[dependencies]` list. Launchers exec that binary. MCP is `wikifier mcp`.
 
-- `update-maps` writes `library.md` (a file tree, a Mermaid block capped at 80 edges, and the dependency table) and `.wikifier_staging/maps/` (`_root.json` plus one `_index.json` per directory). `--directory`, `--max-files`, and `--stream` apply. A file budget returns `map_complete=false` and `files_remaining_dirty`. The next run stat-skips files already parsed, so the same command resumes. `--stream` prints JSON events on stderr and still persists the map. The result field `parser` is `regex+reexport`. A run that changes nothing in the cache keeps `library.md` and the folder cards as they are.
+- `update-maps` writes `library.md` (a file tree, a Mermaid block capped at 80 edges, and the dependency table) and `.wikifier_staging/maps/` (`_root.json` plus one `_index.json` per directory). `--directory`, `--max-files`, and `--stream` apply. A file budget returns `map_complete=false` and `files_remaining_dirty`. The next run stat-skips files already parsed, so the same command resumes. `--stream` prints JSON events on stderr and still persists the map. The result field `parser` is `regex+reexport`. A run that changes nothing in the cache keeps `library.md` and the folder cards as they are. Cache files are derived and are not synced; a missing, resized, or malformed cache file is a miss, and `update_maps` parses that source again (lookups answer from `index.tsv` meanwhile). Health, journal, and pending files are written through a synced temp file.
 - The cache is `.wikifier_staging/wk_cache`, a text index (payload, `by_src`, `by_dst`, notes, barrels). When that index is empty, an existing `import_cache.sqlite` is imported with the `sqlite3` CLI, and `import_cache.json` is the other fallback. Rows imported this way use hash `sha256:legacy` and mtime 0, so the next `update-maps` re-parses them. If the sqlite file is present and cannot be read, the result includes the warning `sqlite_present_unread`.
 - A resolved edge line is `dst`, `line`, `names`, then optional flag letters `c` (conditional), `d` (dynamic), and `b` (via barrel). Confidence is assigned when the edge is read: dynamic 0.4, conditional 0.55, via barrel 0.7, static 0.9. ACS reason codes are `dynamic_literal`, `conditional_guard`, `via_barrel`, and `resolved_static`. Unresolved notes use `unresolved_relative` (the specifier starts with `.`), `dynamic_literal`, or `unresolved`.
 - `dependencies --full` returns `imports[]` with `confidence_score`, `confidence_reasons`, `acs`, `is_dynamic`, `is_conditional`, and `in_cycle`. Compact rows always include `conditional`, `dynamic`, `via_barrel`, and `confidence`.

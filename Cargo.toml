@@ -1,6 +1,6 @@
 [package]
 name = "wikifier"
-version = "5.0.0"
+version = "5.1.0"
 edition = "2021"
 description = "Wikifier — zero-dependency agent-to-agent codebase wiki."
 license = "MIT"

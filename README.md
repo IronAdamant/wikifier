@@ -21,11 +21,11 @@ Download a binary from the [GitHub releases](https://github.com/IronAdamant/wiki
 Check `SHA256SUMS`, unpack, and put `wikifier` (`wikifier.exe` on Windows) on your `PATH`:
 
 ```bash
-# Linux x86_64, 5.0.0
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.0.0/SHA256SUMS
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.0.0/wikifier-5.0.0-x86_64-unknown-linux-gnu.tar.gz
+# Linux x86_64, 5.1.0
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.1.0/SHA256SUMS
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.1.0/wikifier-5.1.0-x86_64-unknown-linux-gnu.tar.gz
 sha256sum --check --ignore-missing SHA256SUMS
-tar -xzf wikifier-5.0.0-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf wikifier-5.1.0-x86_64-unknown-linux-gnu.tar.gz
 ./wikifier --version
 ```
 
@@ -58,7 +58,7 @@ Or add it to a project's `.mcp.json`:
 }
 ```
 
-Every tool takes `project_root` (an absolute path). Without it the server uses `WIKIFIER_PROJECT_ROOT`, then its working directory. A call with a missing argument or an unknown file fails with a message that names the fix, and a failed call sets `isError`. Then give the agent the short prompt in [`skills/run.md`](skills/run.md#paste-into-new-sessions). Any agent that can run shell commands can use the CLI instead: the daily tools have twins such as `wikifier session-bootstrap`, `prepare-edit`, and `record-change` that print the same JSON (the mapping is in `skills/run.md`).
+Every tool takes `project_root` (an absolute path). Without it the server uses `WIKIFIER_PROJECT_ROOT`, then its working directory. A call with a missing argument or an unknown file fails with a message that names the fix, and a failed call sets `isError`. To keep replies small, MCP `session_bootstrap` lists at most 100 files unless you pass `limit` (`files_total` gives the full count, `limit: 0` lists every file), and `update_maps` leaves out the edge list unless you pass `edges: true`. Then give the agent the short prompt in [`skills/run.md`](skills/run.md#paste-into-new-sessions). Any agent that can run shell commands can use the CLI instead: the daily tools have twins such as `wikifier session-bootstrap`, `prepare-edit`, and `record-change` that print the same JSON (the mapping is in `skills/run.md`).
 
 ## Quick start
 

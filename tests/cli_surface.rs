@@ -202,3 +202,21 @@ fn launcher_passes_exit_code_through() {
 fn parse_line(line: &str) -> wikifier::Json {
     wikifier::jsonutil::parse(line.trim()).unwrap_or_else(|err| panic!("stdio json {err}: {line}"))
 }
+
+/// The docs that name a package version name this one. Cargo.toml is the source.
+#[test]
+fn docs_name_the_cargo_version() {
+    let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let version = env!("CARGO_PKG_VERSION");
+    let read = |rel: &str| std::fs::read_to_string(here.join(rel)).unwrap();
+    for (rel, needle) in [
+        ("skills/run.md", format!("**Package {version}**")),
+        ("skills/run.md", format!("package {version})")),
+        ("AGENTS.md", format!("package {version})")),
+        ("CLAUDE.md", format!("currently **{version}**")),
+        ("README.md", format!("releases/download/v{version}/")),
+        ("CHANGELOG.md", format!("## [{version}]")),
+    ] {
+        assert!(read(rel).contains(&needle), "{rel} does not say {needle}");
+    }
+}
