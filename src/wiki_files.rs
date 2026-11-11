@@ -6,16 +6,26 @@ use std::path::{Path, PathBuf};
 const WIKI_DIRS: &[&str] = &["docs/wiki", "docs", "wiki", "documentation", ".wiki"];
 
 /// First existing wiki for `rel`, or None when the source has no companion summary.
+/// For a worktree each candidate is the tree's file, else main's (wikis are often
+/// gitignored, so a fresh worktree has none of its own).
 pub fn find_wiki(root: &Path, rel: &str) -> Option<PathBuf> {
     let rel_path = Path::new(rel);
     let source = root.join(rel);
-    let mut candidates = Vec::new();
-    candidates.push(root.join(format!("{rel}.wiki.md")));
-    candidates.push(root.join(format!("{rel}.md")));
+    let mut candidates: Vec<String> = Vec::new();
+    candidates.push(format!("{rel}.wiki.md"));
+    candidates.push(format!("{rel}.md"));
+    let joined = |dir: &Path, name: String| -> String {
+        let dir = dir.to_string_lossy().replace('\\', "/");
+        if dir.is_empty() {
+            name
+        } else {
+            format!("{dir}/{name}")
+        }
+    };
     if let (Some(parent), Some(stem)) = (rel_path.parent(), rel_path.file_stem()) {
         let stem = stem.to_string_lossy();
-        candidates.push(root.join(parent).join(format!("{stem}.wiki.md")));
-        candidates.push(root.join(parent).join(format!("{stem}.md")));
+        candidates.push(joined(parent, format!("{stem}.wiki.md")));
+        candidates.push(joined(parent, format!("{stem}.md")));
     }
     let name = rel_path
         .file_name()
@@ -26,13 +36,14 @@ pub fn find_wiki(root: &Path, rel: &str) -> Option<PathBuf> {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
     for dir in WIKI_DIRS {
-        candidates.push(root.join(dir).join(format!("{name}.wiki.md")));
-        candidates.push(root.join(dir).join(format!("{name}.md")));
-        candidates.push(root.join(dir).join(format!("{stem}.wiki.md")));
-        candidates.push(root.join(dir).join(format!("{stem}.md")));
+        candidates.push(format!("{dir}/{name}.wiki.md"));
+        candidates.push(format!("{dir}/{name}.md"));
+        candidates.push(format!("{dir}/{stem}.wiki.md"));
+        candidates.push(format!("{dir}/{stem}.md"));
     }
     candidates
         .into_iter()
+        .map(|candidate| crate::worktree::state(root, &candidate))
         .find(|path| path.is_file() && path != &source)
 }
 

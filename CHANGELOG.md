@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-11-11
+
+From the Specula M5 feedback: wikifier answered from the main checkout while every lane worked in its own git worktree, and agents did not know when it beats grep.
+
+### Added
+- `worktree_root` (CLI `--worktree <path>`) on every MCP tool that reads project state, including `get_dependents`, `get_dependencies`, `get_cycles`, `why_file`, `get_file_wiki`, `health`, `check_changes`, `prepare_edit`, `session_bootstrap`, `suggest_next_actions`, `get_files_needing_attention`, `get_barrel_reports` and `update_maps`. The answer describes that tree: main's map plus an overlay of the files the branch added, changed or deleted (content hashes, with a size and mtime pre-check on every call). The overlay is kept in main's `.wikifier_staging/overlays/<hash of the worktree path>/`, seeded once from main's cache, and pruned when its worktree is gone. Replies carry `worktree` and `overlay_files`; paths are relative to the worktree. Health and changed lines are measured against main's health rows and mark-green snapshots, so a file the branch changed is Yellow with `changed_lines`, a deleted file is Red and a new one is an Initial stub. `modularity.new_in_worktree` lists the modularity alerts the branch added. A missing path, a relative path, or a directory that is not a git worktree of the same repository fails with `WorktreeError` and one line naming the fix. git is not called: the `.git` file and `commondir` are read directly.
+- The first call for a fresh worktree is fast. A new `git worktree add` gives every file a new mtime, so the first overlay call read and hashed the whole tree (18.8 s and 42.9 s on Specula). Now:
+  - The git index of both checkouts is read (std-only, versions 2 and 3; no `git` call). A file whose size and mtime match its index entry, with the same blob id as main's entry while main's file still matches main's map row, is proven unchanged without being read.
+  - The overlay seeds its cache with hard links (cache files are only ever replaced by rename), and falls back to copies.
+  - The overlay builds `library.md` and the folder cards only when `session_bootstrap` asks for them, and refreshes them only when an edge changes.
+  - Health and modularity treat a file the branch did not change as main's: main's health row as it stands and main's line count, with no read of the tree's copy. `check_changes` with a worktree therefore lists only what the branch changed.
+  - On Specula, the first `get_dependents` for a fresh worktree takes 0.8 s and later calls 0.17 s; a first `health --summary` takes 1.3 s. A tree without a readable git index is hashed as before.
+- The CLI takes `--worktree <path>` (or `--worktree=<path>`) before or after the command, like `--target`.
+- Writers refuse a worktree with `WorktreeReadOnly`: `record_change`, `record_changes`, `record_deletion`, `mark_green`, `heal_stubs`, `seed_source_content_hashes`, `seed-health`, `prune-*`, `init`, `monitor`, `serve` and `daemon`. Main's cache, health, journal, pending list and snapshots are never written for a worktree, and nothing is written into the worktree. `update_maps` with a worktree refreshes only its overlay.
+- `initialize` always returns `instructions`: when Wikifier beats grep (`get_dependents` before a type or signature change, `get_cycles`, `why_file`, `health` / `check_changes` before a commit) and how to pass `worktree_root`. The tool-group line and block warnings still come first when a switch or block is set. Tool descriptions say when to use the tool.
+
+### Changed
+- Modularity alerts (5.4.0), after a run on Specula (662 files: 215 alerts, a 59 KB `health --summary`, a 165 KB bootstrap):
+  - No `fan_in` alert for a crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.{ts,tsx,js,jsx,mjs,cjs,mts,cts}`). Every `use my_crate::X` resolves to `lib.rs`, so its fan-in is the package's (`specula-core/src/lib.rs` had 242). Its `line_count` alert stays.
+  - Alerts are ranked by how far past the limit they are (`value / threshold`), not by path. In `actions[]`, alerts on files changed since their mark-green come first: those are the files the agent is editing.
+  - `actions[]` and `modularity.alerts` list the first 10 alerts; `modularity.alert_count`, `by_kind` and `alerts_listed` give the totals, and `full` (CLI `--full`) lists every alert. Alerts in `modularity.alerts` are `file`, `kind`, `value`, `threshold`; the reason sentence stays on the action. The thresholds are unchanged.
+- `check-changes` writes its journal entries and pending items once per run, not once per drifted file. The first run on Specula after 151 files had drifted took 8.9 s, almost all of it rewriting and syncing the journal and `pending_updates.md`.
+- A root that is a linked git worktree with no Wikifier state of its own, whose main checkout has that state, is answered as that worktree. Before, `--target <worktree>` returned `success: true` with an empty dependents list, and a writer created health files inside the worktree; writers now refuse it. A server started inside such a worktree uses it the same way. Every other root behaves as before.
+- MCP `timeout_s` and `WIKIFIER_MCP_DEADLINE_S` are capped at 600 seconds, under Claude Code's 30-minute idle limit for an MCP call.
+
+### Fixed
+- Rust: a module path brought into scope by a glob import is an edge. `sight::SCHEMA` in a file with `use super::*;` now points at `sight.rs` when the parent (or the crate root, through up to four globs) declares or imports `sight`. A head the file imports by name (`use std::fs;`) is not followed. On Specula, `get_dependents crates/specula/src/sight.rs` gained four real importers grep had found and the map had missed (`anim_tools/anim_steps.rs`, `capture/flight.rs`, `studio.rs`, `ui_engine.rs`). These edges carry `via_barrel` (confidence 0.7). Frozen fixture `rust_glob_imports`.
+- A cache written by an older parser has its Rust files parsed once more on the next `update-maps` (stamp `wk_cache/parser`), so an upgrade picks up parser fixes without `--full`, which re-hashes but did not re-parse unchanged files. A run capped by `--max-files` writes the stamp only once every such file is parsed.
+- `.wikifier/config`: a line without `=` ended the scan, so every key after it fell back to its default. It is now skipped.
+
 ## [5.4.0] - 2026-11-11
 
 ### Added

@@ -19,7 +19,16 @@ pub(crate) struct Alert {
     pub threshold: u64,
 }
 
+/// Alerts listed in a reply unless `full` asks for all of them. `alert_count` and
+/// `by_kind` always give the totals. On Specula the whole list was 215 alerts and 59 KB.
+pub(crate) const LISTED: usize = 10;
+
 impl Alert {
+    /// How far past its limit the file is: 2.0 is twice the threshold. Lists rank by it.
+    pub(crate) fn severity(&self) -> f64 {
+        self.value as f64 / self.threshold.max(1) as f64
+    }
+
     pub(crate) fn key(&self) -> String {
         format!("{}\t{}", self.file, self.kind)
     }
@@ -69,6 +78,10 @@ pub(crate) fn refresh(root: &Path) -> Vec<Alert> {
 }
 
 pub(crate) fn save_baseline(root: &Path, rel: &str) {
+    // A worktree reads main's snapshots and never replaces them.
+    if crate::worktree::is_overlay(root) {
+        return;
+    }
     let Ok(bytes) = fs::read(root.join(rel)) else {
         return;
     };
@@ -169,12 +182,26 @@ fn compute(
     }
     let mut next_cache = HashMap::new();
     let mut found = Vec::new();
+    // A worktree counts the lines of a file it did not change in main's copy, with main's
+    // line cache, instead of reading its own copy.
+    let base_view = crate::worktree::base_view(root);
+    let main_cache = base_view
+        .as_ref()
+        .map(|view| read_state(view.main()).line_cache)
+        .unwrap_or_default();
     for rel in crate::cache::all_paths(root) {
-        let path = root.join(&rel);
+        let from_main = base_view
+            .as_ref()
+            .filter(|view| view.unchanged(root, &rel))
+            .map(|view| view.main_path(&rel));
+        let (path, prior) = match from_main {
+            Some(main_path) => (main_path, main_cache.get(&rel)),
+            None => (root.join(&rel), cache.get(&rel)),
+        };
         if !path.is_file() {
             continue;
         }
-        let Some((lines, rec)) = cached_lines(&path, cache.get(&rel)) else {
+        let Some((lines, rec)) = cached_lines(&path, prior) else {
             continue;
         };
         next_cache.insert(rel.clone(), rec);
@@ -187,7 +214,7 @@ fn compute(
             });
         }
         let inbound = fan_in.get(&rel).copied().unwrap_or(0);
-        if thresholds.max_fan_in > 0 && inbound > thresholds.max_fan_in {
+        if thresholds.max_fan_in > 0 && inbound > thresholds.max_fan_in && !entry_point(&rel) {
             found.push(Alert {
                 file: rel,
                 kind: "fan_in",
@@ -196,8 +223,35 @@ fn compute(
             });
         }
     }
-    found.sort_by(|a, b| a.file.cmp(&b.file).then(a.kind.cmp(b.kind)));
+    found.sort_by(|a, b| {
+        b.severity()
+            .total_cmp(&a.severity())
+            .then(a.file.cmp(&b.file))
+            .then(a.kind.cmp(b.kind))
+    });
     (found, next_cache)
+}
+
+/// Files every importer of a package resolves to: a crate root (`use my_crate::X` points
+/// at `lib.rs`), a Python package `__init__.py`, a JS/TS `index` barrel. Their fan-in is
+/// the package's, so a fan-in alert on them is noise (Specula: `specula-core/src/lib.rs`
+/// with 242 dependents). Their line count still alerts.
+fn entry_point(rel: &str) -> bool {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    matches!(
+        name,
+        "lib.rs"
+            | "main.rs"
+            | "__init__.py"
+            | "index.ts"
+            | "index.tsx"
+            | "index.js"
+            | "index.jsx"
+            | "index.mjs"
+            | "index.cjs"
+            | "index.mts"
+            | "index.cts"
+    )
 }
 
 struct LineRec {
@@ -350,13 +404,11 @@ fn alert_json(alert: &Alert) -> Json {
 }
 
 pub(crate) fn snapshot_path(root: &Path) -> PathBuf {
-    root.join(".wikifier_staging").join("modularity.json")
+    crate::worktree::staging(root).join("modularity.json")
 }
 
 fn baseline_path(root: &Path, rel: &str) -> PathBuf {
-    root.join(".wikifier_staging")
-        .join("baselines")
-        .join(format!("{}.txt", crate::cache::enc(rel)))
+    crate::worktree::baselines(root).join(format!("{}.txt", crate::cache::enc(rel)))
 }
 
 fn json_u64(value: &Json) -> Option<u64> {

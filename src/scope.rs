@@ -196,7 +196,7 @@ fn rel_prefix(root: &Path, path: &Path) -> String {
 }
 
 pub fn read_path_list(root: &Path, name: &str) -> Vec<String> {
-    let text = match fs::read_to_string(root.join(name)) {
+    let text = match fs::read_to_string(crate::worktree::state(root, name)) {
         Ok(t) => t,
         Err(_) => return Vec::new(),
     };
@@ -222,7 +222,8 @@ pub fn read_path_list(root: &Path, name: &str) -> Vec<String> {
 pub fn excludes(root: &Path) -> (Vec<String>, Vec<String>) {
     let mut names: Vec<String> = DEFAULT_EXCLUDES.iter().map(|s| (*s).to_string()).collect();
     let mut globs = Vec::new();
-    let text = fs::read_to_string(root.join("exclude_patterns.txt")).unwrap_or_default();
+    let text = fs::read_to_string(crate::worktree::state(root, "exclude_patterns.txt"))
+        .unwrap_or_default();
     for line in text.lines() {
         let p = line.trim();
         if p.is_empty() || p.starts_with('#') {

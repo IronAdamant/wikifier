@@ -14,8 +14,8 @@ pub fn import_if_empty(root: &Path) -> Result<Option<String>, String> {
     if !cache::all_paths(root).is_empty() {
         return Ok(None);
     }
-    let sqlite = root.join(".wikifier_staging").join("import_cache.sqlite");
-    let json_path = root.join(".wikifier_staging").join("import_cache.json");
+    let sqlite = crate::worktree::staging(root).join("import_cache.sqlite");
+    let json_path = crate::worktree::staging(root).join("import_cache.json");
     if sqlite.is_file() {
         match import_sqlite(root, &sqlite) {
             Ok(0) => {}

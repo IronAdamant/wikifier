@@ -32,6 +32,8 @@ pub enum Kind {
 pub struct Scan {
     pub imports: Vec<RawImport>,
     pub local_exports: Vec<String>,
+    /// Rust glob imports (`use super::*;` is `super`) with their inline `mod` depth.
+    pub rust_globs: Vec<(String, usize)>,
 }
 
 pub fn language(path: &Path) -> Option<&'static str> {
@@ -806,6 +808,7 @@ fn scan_python(src: &str) -> Scan {
     Scan {
         imports,
         local_exports: Vec::new(),
+        ..Scan::default()
     }
 }
 
@@ -1162,6 +1165,7 @@ fn scan_js(src: &str) -> Scan {
     Scan {
         imports,
         local_exports,
+        ..Scan::default()
     }
 }
 
@@ -1440,6 +1444,7 @@ fn scan_rust(src: &str) -> Scan {
     let mut i = 0;
     let mut brace: i32 = 0;
     let mut inline: Vec<(String, i32)> = Vec::new();
+    let mut globs: Vec<(String, usize)> = Vec::new();
     while i < b.len() {
         if b[i].is_ascii_whitespace() {
             i += 1;
@@ -1491,6 +1496,16 @@ fn scan_rust(src: &str) -> Scan {
             if let Some((end, paths)) = read_rust_use(b, i + 3) {
                 let depth = inline.len();
                 for path in paths {
+                    // The spec stays `super` for `use super::*`, as before; the glob is kept apart.
+                    let path = match path.strip_suffix(GLOB_MARK) {
+                        Some(prefix) => {
+                            if !prefix.is_empty() {
+                                globs.push((prefix.to_string(), depth));
+                            }
+                            prefix.to_string()
+                        }
+                        None => path,
+                    };
                     if !path.is_empty() {
                         imports.push(rust_import(path, Kind::Import, depth));
                     }
@@ -1524,8 +1539,12 @@ fn scan_rust(src: &str) -> Scan {
     Scan {
         imports,
         local_exports: Vec::new(),
+        rust_globs: globs,
     }
 }
+
+/// `parse_use_tree` ends a glob path with this so `scan_rust` can tell `use a::*` from `use a`.
+const GLOB_MARK: &str = "::*";
 
 fn rust_import(spec: String, kind: Kind, inline_depth: usize) -> RawImport {
     RawImport {
@@ -1585,7 +1604,7 @@ fn parse_use_tree(b: &[u8], start: usize, prefix: &[String]) -> Option<(usize, V
         return parse_use_group(b, i + 1, prefix);
     }
     if b[i] == b'*' {
-        return Some((i + 1, vec![prefix.join("::")]));
+        return Some((i + 1, vec![format!("{}{GLOB_MARK}", prefix.join("::"))]));
     }
     let (ident, mut j) = read_ident(b, i)?;
     j = skip_noise(b, j);
@@ -2541,6 +2560,7 @@ fn scan_go(src: &str) -> Scan {
     Scan {
         imports,
         local_exports: Vec::new(),
+        ..Scan::default()
     }
 }
 
@@ -2572,6 +2592,7 @@ fn scan_c(src: &str) -> Scan {
     Scan {
         imports,
         local_exports: Vec::new(),
+        ..Scan::default()
     }
 }
 
@@ -2595,6 +2616,7 @@ fn scan_java(src: &str) -> Scan {
     Scan {
         imports,
         local_exports: Vec::new(),
+        ..Scan::default()
     }
 }
 
@@ -2621,6 +2643,7 @@ fn scan_csharp(src: &str) -> Scan {
     Scan {
         imports,
         local_exports: Vec::new(),
+        ..Scan::default()
     }
 }
 
@@ -3065,6 +3088,174 @@ fn py_parts(spec: &str) -> (String, Vec<String>) {
     (spec.to_string(), Vec::new())
 }
 
+/// Glob hops followed from a file (`use super::*` in `a/b/c.rs` reaching `a/b.rs`, whose
+/// own `use super::*` reaches `a.rs`, is two).
+const RUST_GLOB_DEPTH: usize = 4;
+
+/// Heads that never name a project module through a glob.
+const RUST_NON_MODULE_HEADS: &[&str] = &["crate", "self", "super", "std", "core", "alloc"];
+
+/// Per-run memory for [`rust_glob_target`]: what each module globs reach offers, and where a
+/// head was found from a given set of glob targets. Files of one module share their
+/// globs, so `sight::A`, `sight::B`, ... search once.
+/// Where a glob search found a head: the module, the path that names it there, and that
+/// path's inline `mod` depth.
+type GlobHit = (String, String, usize);
+
+#[derive(Default)]
+struct GlobMemo {
+    modules: HashMap<String, GlobModule>,
+    /// (glob targets, head) -> (module, path that names the head there, inline depth).
+    heads: HashMap<(String, String), Option<GlobHit>>,
+}
+
+/// A Rust path such as `sight::SCHEMA` whose head is neither a child module nor a crate
+/// name can name a module a glob import brought into scope (`use super::*;` in a file of a
+/// crate whose root declares `mod sight`). Follow `from`'s globs, and the globs of the
+/// modules they reach, and resolve the path in the first module that declares the head as
+/// a child module or imports it by name. A head `from` imports by name itself is skipped:
+/// that import already has its own edge or is external.
+fn rust_glob_target(
+    root: &Path,
+    resolver: &Resolver,
+    file: &GlobFile,
+    spec: &str,
+    known: &HashMap<String, Scan>,
+    memo: &mut GlobMemo,
+) -> Option<String> {
+    let (head, rest) = match spec.split_once("::") {
+        Some((head, rest)) => (head.trim(), rest),
+        None => return None,
+    };
+    if file.starts.is_empty() || RUST_NON_MODULE_HEADS.contains(&head) || file.named.contains(head)
+    {
+        return None;
+    }
+    // The search depends only on the glob targets and the head, so files that share their
+    // globs share the answer, whatever order they are parsed in.
+    let key = (file.key.clone(), head.to_string());
+    let found = match memo.heads.get(&key) {
+        Some(found) => found.clone(),
+        None => {
+            let found = find_glob_head(root, resolver, &file.starts, head, known, memo);
+            memo.heads.insert(key, found.clone());
+            found
+        }
+    };
+    let (module, prefix, depth) = found?;
+    resolver.resolve(&module, &format!("{prefix}::{rest}"), "rust", depth)
+}
+
+/// Breadth-first over glob targets: the first module where `head` is a child module, or a
+/// name a `use` brings in, with the path that names it there.
+fn find_glob_head(
+    root: &Path,
+    resolver: &Resolver,
+    starts: &[String],
+    head: &str,
+    known: &HashMap<String, Scan>,
+    memo: &mut GlobMemo,
+) -> Option<GlobHit> {
+    let mut queue: std::collections::VecDeque<(String, usize)> =
+        starts.iter().map(|module| (module.clone(), 1)).collect();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    while let Some((module, hops)) = queue.pop_front() {
+        if !seen.insert(module.clone()) {
+            continue;
+        }
+        if resolver.resolve(&module, head, "rust", 0).is_some() {
+            return Some((module, head.to_string(), 0));
+        }
+        if !memo.modules.contains_key(&module) {
+            let fresh;
+            let scan = match known.get(&module) {
+                Some(scan) => scan,
+                None => {
+                    fresh = scan_file(&root.join(&module));
+                    &fresh
+                }
+            };
+            let info = GlobModule::new(resolver, &module, scan);
+            memo.modules.insert(module.clone(), info);
+        }
+        let info = &memo.modules[&module];
+        if let Some((path, depth)) = info.named.get(head) {
+            return Some((module, path.clone(), *depth));
+        }
+        if hops < RUST_GLOB_DEPTH {
+            for next in &info.globs {
+                queue.push_back((next.clone(), hops + 1));
+            }
+        }
+    }
+    None
+}
+
+/// What a module reached through a glob offers: names its `use` items bring in (that
+/// resolve to a project file), and the modules its own globs reach.
+struct GlobModule {
+    named: HashMap<String, (String, usize)>,
+    globs: Vec<String>,
+}
+
+impl GlobModule {
+    fn new(resolver: &Resolver, module: &str, scan: &Scan) -> Self {
+        let mut named = HashMap::new();
+        for imp in &scan.imports {
+            if imp.kind != Kind::Import || imp.spec.starts_with("mod:") {
+                continue;
+            }
+            let path = imp.spec.trim();
+            let last = path.rsplit("::").next().unwrap_or(path).trim();
+            if named.contains_key(last) {
+                continue;
+            }
+            if resolver
+                .resolve(module, path, "rust", imp.inline_depth)
+                .is_some()
+            {
+                named.insert(last.to_string(), (path.to_string(), imp.inline_depth));
+            }
+        }
+        let globs = scan
+            .rust_globs
+            .iter()
+            .filter_map(|(glob, depth)| resolver.resolve(module, glob, "rust", *depth))
+            .collect();
+        GlobModule { named, globs }
+    }
+}
+
+/// One file's side of [`rust_glob_target`], built once per file: the modules its globs
+/// reach, their memo key, and the names its `use` items bring in by name (`use a::name;`),
+/// which a glob does not override.
+struct GlobFile {
+    starts: Vec<String>,
+    key: String,
+    named: BTreeSet<String>,
+}
+
+impl GlobFile {
+    fn new(resolver: &Resolver, from: &str, scan: &Scan) -> Self {
+        let starts: Vec<String> = scan
+            .rust_globs
+            .iter()
+            .filter_map(|(glob, depth)| resolver.resolve(from, glob, "rust", *depth))
+            .collect();
+        let named = scan
+            .imports
+            .iter()
+            .filter(|imp| imp.kind == Kind::Import && !imp.spec.starts_with("mod:"))
+            .filter_map(|imp| imp.spec.rsplit("::").next().map(|s| s.trim().to_string()))
+            .collect();
+        GlobFile {
+            key: starts.join("|"),
+            starts,
+            named,
+        }
+    }
+}
+
 pub fn analyze_files(root: &Path, files: &[PathBuf]) -> Analysis {
     analyze_files_filtered(root, files, None)
 }
@@ -3120,6 +3311,8 @@ fn analyze_files_filtered(
     let resolver = Resolver::build(root, &rels);
     // Barrel follow-through wants the scans sorted. Build that copy once, not per name.
     let mut sorted_scans: Option<BTreeMap<String, Scan>> = None;
+    // Modules reached through Rust globs, scanned once per run, and where heads were found.
+    let mut glob_memo = GlobMemo::default();
     let mut out = BTreeMap::new();
     for rel in &rels {
         if only.as_ref().is_some_and(|set| !set.contains(rel)) {
@@ -3171,6 +3364,8 @@ fn analyze_files_filtered(
         } else if !lang.is_empty() {
             // A spec repeats across imports (every `a::b` path in a Rust file); find its line once.
             let mut lines_seen: HashMap<&str, i64> = HashMap::new();
+            // Built on the first path that needs it: this file's glob targets and names.
+            let mut glob_file: Option<GlobFile> = None;
             for imp in &scan.imports {
                 let target = resolver.resolve(rel, &imp.spec, lang, imp.inline_depth);
                 let line = *lines_seen
@@ -3208,6 +3403,34 @@ fn analyze_files_filtered(
                                         );
                                     }
                                 }
+                            }
+                        }
+                    }
+                    _ if lang == "rust"
+                        && target.is_none()
+                        && imp.kind == Kind::PathExpr
+                        && !scan.rust_globs.is_empty() =>
+                    {
+                        let file =
+                            glob_file.get_or_insert_with(|| GlobFile::new(&resolver, rel, &scan));
+                        if let Some(dst) = rust_glob_target(
+                            root,
+                            &resolver,
+                            file,
+                            &imp.spec,
+                            &scans,
+                            &mut glob_memo,
+                        ) {
+                            if dst != *rel && !facts.dsts.contains(&dst) {
+                                add_edge(
+                                    &mut facts,
+                                    dst,
+                                    line,
+                                    imp.names.clone(),
+                                    imp.conditional,
+                                    dynamic,
+                                    true,
+                                );
                             }
                         }
                     }

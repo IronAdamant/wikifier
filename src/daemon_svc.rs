@@ -8,19 +8,19 @@ use std::path::{Path, PathBuf};
 use crate::jsonutil::Json;
 
 pub fn pid_path(root: &Path) -> PathBuf {
-    root.join(".wikifier_staging").join("wikifier.pid")
+    crate::worktree::staging(root).join("wikifier.pid")
 }
 
 pub fn legacy_pid_path(root: &Path) -> PathBuf {
-    root.join(".wikifier_staging").join("daemon.pid")
+    crate::worktree::staging(root).join("daemon.pid")
 }
 
 pub fn log_path(root: &Path) -> PathBuf {
-    root.join(".wikifier_staging").join("daemon.log")
+    crate::worktree::staging(root).join("daemon.log")
 }
 
 pub fn heartbeat_path(root: &Path) -> PathBuf {
-    root.join(".wikifier_staging").join("daemon_heartbeat.json")
+    crate::worktree::staging(root).join("daemon_heartbeat.json")
 }
 
 pub fn poll_seconds() -> u64 {
@@ -46,7 +46,7 @@ pub fn maps_enabled() -> bool {
 }
 
 pub fn append_log(root: &Path, message: &str) {
-    let _ = fs::create_dir_all(root.join(".wikifier_staging"));
+    let _ = fs::create_dir_all(crate::worktree::staging(root));
     let line = format!("[{}] {message}\n", stamp());
     if let Ok(mut file) = fs::OpenOptions::new()
         .create(true)
@@ -79,7 +79,7 @@ pub fn write_heartbeat(root: &Path, event: &str, ok: bool, detail: &str) {
         ("consecutive_failures", Json::Int(streak)),
         ("project_root", Json::String(root.display().to_string())),
     ]);
-    let _ = fs::create_dir_all(root.join(".wikifier_staging"));
+    let _ = fs::create_dir_all(crate::worktree::staging(root));
     let _ = fs::write(path, format!("{body}\n"));
     if streak >= 5 {
         append_log(

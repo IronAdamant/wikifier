@@ -76,7 +76,7 @@ impl GroupState {
         })
     }
 
-    /// Block warnings first, then the groups line.
+    /// Block warnings first, then the groups line. `initialize` adds [`GUIDE`] after them.
     pub fn instructions(&self) -> String {
         let mut lines = self.warnings.clone();
         lines.push(self.selection.summary());
@@ -158,7 +158,7 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
         (
             "timeout_s",
             integer(
-                "Stop this call after this many seconds. Falls back to WIKIFIER_MCP_DEADLINE_S.",
+                "Stop this call after this many seconds (at most 600). Falls back to WIKIFIER_MCP_DEADLINE_S, then 60.",
             ),
         ),
         (
@@ -172,6 +172,12 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
             string_prop("Limit the result to this project-relative prefix."),
         ),
     ];
+    if takes_worktree(name) {
+        props.push((
+            "worktree_root",
+            string_prop("Absolute path of your git worktree. The answer describes that tree: main's map plus the files your branch added, changed or deleted. Omit on main."),
+        ));
+    }
     match name {
         "get_dependencies" => props.extend([
             ("detail", string_prop("compact or full. full adds confidence reasons.")),
@@ -233,6 +239,34 @@ fn extra_props(name: &str) -> Vec<(&'static str, Json)> {
     props
 }
 
+/// Tools that write main's state (or only list the catalogue) do not offer
+/// `worktree_root`; passing it anyway is refused with a reason.
+fn takes_worktree(name: &str) -> bool {
+    !matches!(
+        name,
+        "record_change"
+            | "record_deletion"
+            | "mark_green"
+            | "record_changes"
+            | "heal_stubs"
+            | "seed_source_content_hashes"
+            | "list_core_tools"
+    )
+}
+
+/// Longest `timeout_s` a call may ask for. Claude Code drops an MCP call that is idle for
+/// 30 minutes, and then the answer never arrives; 10 minutes leaves room.
+pub const MAX_TIMEOUT_S: u64 = 600;
+
+/// Seconds an MCP call may run: `timeout_s`, else `WIKIFIER_MCP_DEADLINE_S`, else 60,
+/// always between 1 and [`MAX_TIMEOUT_S`]. A call past it answers `DeadlineExceeded`.
+pub fn deadline_s(timeout_arg: Option<u64>, env: Option<&str>) -> u64 {
+    timeout_arg
+        .or_else(|| env.and_then(|s| s.trim().parse().ok()))
+        .unwrap_or(60)
+        .clamp(1, MAX_TIMEOUT_S)
+}
+
 /// Files listed by an MCP `session_bootstrap` that passes no `limit`.
 const MCP_BOOTSTRAP_FILES: usize = 100;
 
@@ -252,27 +286,27 @@ fn tool_spec(
 ) {
     match name {
         "check_changes" => (
-            "Compare mapped files and Green baselines and report content drift.",
+            "Which mapped files changed since their last mark-green, plus the modularity alert count. Run before you commit; with worktree_root it compares your branch with main.",
             &["project_root"],
             &[],
         ),
         "record_change" => (
-            "Record a semantic edit against one file and mark that file actionable.",
+            "Record why one file changed (journal and health). Call after each edit. Main checkout only.",
             &["project_root", "file", "reason"],
             &[],
         ),
         "record_deletion" => (
-            "Record that a mapped file was removed and should leave the health matrix.",
+            "Record that a mapped file was deleted so it leaves the health matrix. Main checkout only.",
             &["project_root", "file", "reason"],
             &[],
         ),
         "mark_green" => (
-            "Mark a file Green after its wiki names the file's public symbols.",
+            "Mark a file Green once its wiki names the file's public symbols. Main checkout only.",
             &["project_root", "file"],
             &["reason"],
         ),
         "record_changes" => (
-            "Record git changes in one batch. Pass per-file reasons when you have them.",
+            "Record every file git reports changed in one call, with per-file reasons. Main checkout only.",
             &["project_root"],
             &[],
         ),
@@ -282,12 +316,12 @@ fn tool_spec(
             &[],
         ),
         "prepare_edit" => (
-            "Look up health, wiki text, dependencies, and dependents (first 25) before editing a file.",
+            "One call before editing a file: health, changed lines, wiki, what it imports and what imports it (first 25). Cheaper than reading the file and grepping for its importers.",
             &["project_root", "file"],
             &[],
         ),
         "session_bootstrap" => (
-            "Return readiness, health, suggested actions, and the mapped file list for this root.",
+            "Start here: readiness, health counts, prioritized actions (including modularity alerts) and the folder map. Pass worktree_root when you work in a git worktree.",
             &["project_root"],
             &[],
         ),
@@ -302,32 +336,32 @@ fn tool_spec(
             &[],
         ),
         "list_paths" => (
-            "List mapped files under a project-relative prefix.",
+            "List mapped files under a prefix, or per-folder counts. Faster than walking a large tree.",
             &["project_root"],
             &["prefix"],
         ),
         "search_journal" => (
-            "Search journal entries by file path or reason text.",
+            "Search the reasons agents recorded for changes, by file or text: the intent git log does not keep.",
             &["project_root", "query"],
             &["text"],
         ),
         "why_file" => (
-            "Return the journal reasons recorded for one file.",
+            "Why a file is the way it is: every reason agents recorded for it. Read it before you change a file you did not write; git log has commits, this has intent.",
             &["project_root", "file"],
             &[],
         ),
         "get_dependencies" => (
-            "Return internal edges, external imports, and unresolved imports for one file.",
+            "What a file imports: the project files it resolves to (line, confidence), external crates or packages, and imports that did not resolve.",
             &["project_root", "file"],
             &[],
         ),
         "get_dependents" => (
-            "Return the mapped files that import a given file (first 50 by default, with a per-directory count of the rest).",
+            "Every mapped file that imports this one, resolved like the compiler: Rust mod, crate::, super:: and glob imports; JS/TS barrels and re-exports. Grep misses those and matches comments. Call it before you change a struct, trait, enum, signature or export. First 50, then per-directory counts.",
             &["project_root", "file"],
             &[],
         ),
         "get_cycles" => (
-            "Return import cycles in the mapped graph (5 by default, 10 files each; full for all).",
+            "Import cycles in the mapped graph, ranked by severity, with the edge to break. Grep cannot see cycles; call it before you add an import between modules. 5 cycles by default, full for all.",
             &["project_root"],
             &[],
         ),
@@ -337,12 +371,12 @@ fn tool_spec(
             &[],
         ),
         "get_file_wiki" => (
-            "Return the wiki markdown stored beside a source file.",
+            "The wiki summary kept beside a source file: its role and public surface, shorter than the source.",
             &["project_root", "file"],
             &[],
         ),
         "get_files_needing_attention" => (
-            "Return files whose health is Red or an actionable Yellow.",
+            "Files whose health is Red or an actionable Yellow, and modularity alerts, highest priority first.",
             &["project_root"],
             &[],
         ),
@@ -372,7 +406,7 @@ fn tool_spec(
             &[],
         ),
         "health" => (
-            "Return the green, yellow, and red counts and the 10 most actionable health entries (full for all).",
+            "Health counts, the 10 most actionable entries (full for all) and modularity alerts: files over the line or fan-in limit. Before you commit from a worktree, pass worktree_root; modularity.new_in_worktree lists files your branch made non-modular.",
             &["project_root"],
             &[],
         ),
@@ -521,11 +555,18 @@ fn initialize() -> Json {
             ]),
         ),
     ]);
-    if state.shaped {
-        value.insert("instructions", Json::String(state.instructions()));
-    }
+    let instructions = if state.shaped {
+        format!("{}\n{GUIDE}", state.instructions())
+    } else {
+        GUIDE.to_string()
+    };
+    value.insert("instructions", Json::String(instructions));
     value
 }
+
+/// When Wikifier beats grep, in the `initialize` instructions. Agents in M5 used grep
+/// for everything because nothing said this.
+pub const GUIDE: &str = "Wikifier answers from a resolved import map, not text matches. Prefer it to grep for: get_dependents before you change a struct, trait, enum, signature or export (every importer, including Rust glob imports and JS/TS barrels and re-exports grep misses); get_cycles before you add an import between modules; why_file before you change a file you did not write; health or check_changes before you commit (modularity alerts: a file over the line or fan-in limit). In a git worktree, pass worktree_root (absolute path) to read tools so answers describe your tree, not main. Writers (record_change, mark_green) run on main only.";
 
 fn resources_list() -> Json {
     Json::obj(vec![(
@@ -625,6 +666,7 @@ fn call_tool(msg: &Json) -> Json {
         flags.insert("query".into(), q.into());
     }
     copy_str(&args, &mut flags, "directory");
+    copy_str(&args, &mut flags, "worktree_root");
     copy_str(&args, &mut flags, "since");
     copy_str(&args, &mut flags, "default");
     copy_str(&args, &mut flags, "detail");
@@ -777,14 +819,10 @@ fn call_tool(msg: &Json) -> Json {
             Json::String(text) => text.parse::<u64>().ok().filter(|n| *n > 0),
             _ => None,
         });
-    let deadline = from_arg
-        .or_else(|| {
-            std::env::var("WIKIFIER_MCP_DEADLINE_S")
-                .ok()
-                .and_then(|s| s.parse().ok())
-        })
-        .unwrap_or(60)
-        .max(1);
+    let deadline = deadline_s(
+        from_arg,
+        std::env::var("WIKIFIER_MCP_DEADLINE_S").ok().as_deref(),
+    );
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let value = if !root.is_dir() {

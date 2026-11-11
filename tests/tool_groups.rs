@@ -139,7 +139,9 @@ fn the_default_listing_is_unchanged() {
         ),
     ]);
     assert_eq!(lines[1], expected.to_string());
-    assert!(!lines[0].contains("instructions"), "{}", lines[0]);
+    // With no switch and no block, the instructions are the when-to-use guide alone.
+    let init = jsonutil::parse(&lines[0]).unwrap();
+    assert_eq!(instructions_of(&init), wikifier::mcp::GUIDE, "{}", lines[0]);
     // An empty variable is the same as an unset one.
     assert_eq!(
         listed(&[("WIKIFIER_TOOLS", " "), ("WIKIFIER_DISABLE", "")]).len(),
@@ -270,7 +272,7 @@ fn initialize_and_list_core_tools_name_the_active_groups() {
             .get("result")
             .and_then(|r| r.get("instructions"))
             .and_then(|v| v.as_str()),
-        Some(line)
+        Some(format!("{line}\n{}", wikifier::mcp::GUIDE).as_str())
     );
     let listed = got[1]
         .get("result")
@@ -401,7 +403,8 @@ fn block_mistakes_are_warnings_not_failures() {
     let got = replies(&out);
     let text = instructions_of(&got[0]);
     let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines.len(), 3, "{text}");
+    assert_eq!(lines.len(), 4, "{text}");
+    assert_eq!(lines[3], wikifier::mcp::GUIDE);
     assert_eq!(
         lines[0],
         r#"AGENTS.md agent-tools: unknown key "color" for wikifier; write "wikifier: tools <groups>" or "wikifier: disable <groups>""#
@@ -529,7 +532,7 @@ fn this_repos_agents_md_examples_switch_nothing() {
     assert_eq!(parsed.tools, None);
     assert_eq!(parsed.disable, None);
     let got = replies(&mcp_in(&here, &[], &[INIT, LIST]));
-    assert_eq!(instructions_of(&got[0]), "");
+    assert_eq!(instructions_of(&got[0]), wikifier::mcp::GUIDE);
     assert_eq!(names_of(&got[1]).len(), MCP_TOOLS.len());
     // The convention's own example shape, a block inside a markdown fence, is text too.
     let nested =

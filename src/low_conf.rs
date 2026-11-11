@@ -10,7 +10,7 @@ use crate::cache;
 const NAME: &str = "low_conf.tsv";
 
 fn path(root: &Path) -> std::path::PathBuf {
-    root.join(".wikifier_staging").join(NAME)
+    crate::worktree::staging(root).join(NAME)
 }
 
 fn confidence(conditional: bool, dynamic: bool, via_barrel: bool) -> f64 {
@@ -43,7 +43,7 @@ pub fn store_updates(root: &Path, updates: &[(String, i64)], removed: &[String])
             map.insert(rel.clone(), *count);
         }
     }
-    let _ = fs::create_dir_all(root.join(".wikifier_staging"));
+    let _ = fs::create_dir_all(crate::worktree::staging(root));
     let mut body = String::new();
     for (rel, count) in &map {
         body.push_str(rel);

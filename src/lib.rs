@@ -8,6 +8,7 @@ mod cache_commit;
 mod cycle_report;
 mod daemon_svc;
 mod drift;
+mod git_index;
 pub mod jsonutil;
 mod legacy_cache;
 mod low_conf;
@@ -26,6 +27,7 @@ pub mod symbols;
 pub mod text_out;
 pub mod timeutil;
 mod wiki_files;
+mod worktree;
 
 pub use api::{
     cache_status, check_changes, health, list_paths, load_dependencies, load_dependents,

@@ -283,17 +283,20 @@ fn prepare_edit_on_this_repo_lists_api_dependents() {
         "src/main.rs",
         "src/mcp.rs",
         "src/mcp_groups.rs",
+        "src/worktree.rs",
         "tests/agent_args.rs",
         "tests/cli_surface.rs",
         "tests/contract_gaps.rs",
         "tests/drift_alerts.rs",
         "tests/limit_rule.rs",
+        "tests/m5_fixes.rs",
         "tests/parity_fixes.rs",
         "tests/protocol_v07.rs",
         "tests/robustness.rs",
         "tests/skip_maps.rs",
         "tests/speed_paths.rs",
         "tests/tool_groups.rs",
+        "tests/worktree_overlay.rs",
     ];
     assert_eq!(dependents, expected, "prepare-edit src/api.rs dependents");
 

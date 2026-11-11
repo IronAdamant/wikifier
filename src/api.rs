@@ -225,7 +225,8 @@ fn is_green(status: &str) -> bool {
 }
 
 fn health_file_present(root: &Path) -> bool {
-    root.join("file_health.json").is_file() || root.join("file_health.md").is_file()
+    crate::worktree::state(root, "file_health.json").is_file()
+        || crate::worktree::state(root, "file_health.md").is_file()
 }
 
 fn readiness_of(
@@ -516,7 +517,15 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
-    if cache_changed || !crate::maps_out::current(root) {
+    // A worktree overlay builds library.md and the folder cards only when something asks
+    // for them (session_bootstrap), then keeps them current when an edge changes. Writing
+    // them on every overlay refresh cost 1.5 s on Specula.
+    let write_maps = if crate::worktree::is_overlay(root) {
+        (parsed > 0 || !stale.is_empty()) && artifacts::folder_card(root, "").is_some()
+    } else {
+        cache_changed || !crate::maps_out::current(root)
+    };
+    if write_maps {
         if let Err(err) = crate::maps_out::write(root) {
             warnings.push(format!("map artifacts: {err}"));
         }
@@ -626,7 +635,7 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
         ));
         changed = true;
     }
-    if changed || !root.join("file_health.json").is_file() && !rows.is_empty() {
+    if changed || !crate::worktree::state(root, "file_health.json").is_file() && !rows.is_empty() {
         artifacts::write_health(root, &rows)?;
     }
     Ok(())
@@ -635,7 +644,7 @@ fn seed_health_from_map(root: &Path) -> Result<(), String> {
 /// `None` seeds every mapped file: `monitored_paths.txt` is absent, empty, or only a bare `.`.
 /// A list of real paths seeds only those files and directories.
 fn monitored_seed_prefixes(root: &Path) -> Option<Vec<String>> {
-    if !root.join("monitored_paths.txt").is_file() {
+    if !crate::worktree::state(root, "monitored_paths.txt").is_file() {
         return None;
     }
     let entries = scope::read_path_list(root, "monitored_paths.txt");
@@ -907,6 +916,11 @@ pub fn session_bootstrap(root: &Path) -> Json {
 }
 
 pub fn session_bootstrap_scoped(root: &Path, directory: Option<&str>) -> Json {
+    session_bootstrap_with(root, directory, false)
+}
+
+/// `all_alerts` lists every modularity alert, as in [`suggest_next_with`].
+pub fn session_bootstrap_with(root: &Path, directory: Option<&str>, all_alerts: bool) -> Json {
     let scope = scope::detect(root);
     if scope.container || !scope.missing_dirs.is_empty() {
         let actions = Json::Array(vec![Json::obj(vec![
@@ -956,7 +970,7 @@ pub fn session_bootstrap_scoped(root: &Path, directory: Option<&str>) -> Json {
         rows.retain(|row| under_prefix(dir, &row.file));
     }
     let files: Vec<Json> = file_names.iter().cloned().map(Json::String).collect();
-    let actions = suggest_next_scoped(root, directory);
+    let actions = suggest_next_with(root, directory, all_alerts);
     let action_list = actions
         .get("actions")
         .cloned()
@@ -1060,6 +1074,13 @@ pub fn suggest_next_actions(root: &Path) -> Json {
 }
 
 pub fn suggest_next_scoped(root: &Path, directory: Option<&str>) -> Json {
+    suggest_next_with(root, directory, false)
+}
+
+/// `all_alerts` lists every modularity alert; otherwise the first
+/// [`crate::drift::LISTED`], alerts on files changed since mark-green first, then by how
+/// far past the limit they are.
+pub fn suggest_next_with(root: &Path, directory: Option<&str>, all_alerts: bool) -> Json {
     let scope = scope::detect(root);
     let mut actions = Vec::new();
     if scope.container || !scope.missing_dirs.is_empty() {
@@ -1103,8 +1124,15 @@ pub fn suggest_next_scoped(root: &Path, directory: Option<&str>) -> Json {
             actions.push(action);
         }
     }
-    let modularity_alerts = crate::drift::alerts(root, directory);
-    for alert in &modularity_alerts {
+    let changed: BTreeSet<String> = artifacts::read_health(root)
+        .into_iter()
+        .filter(|row| is_yellow(&row.status) && row.reason.contains("content changed"))
+        .map(|row| row.file)
+        .collect();
+    let mut modularity_alerts = crate::drift::alerts(root, directory);
+    // A stable sort keeps the severity order inside each half.
+    modularity_alerts.sort_by_key(|alert| !changed.contains(&alert.file));
+    for alert in listed(&modularity_alerts, all_alerts) {
         actions.push(modularity_action(alert));
     }
     let low_conf = crate::low_conf::actionable_total(root, directory);
@@ -1144,7 +1172,10 @@ pub fn suggest_next_scoped(root: &Path, directory: Option<&str>) -> Json {
     let rows = artifacts::read_health(root);
     ok(vec![
         ("actions", Json::Array(actions)),
-        ("modularity", modularity_summary(root, &modularity_alerts)),
+        (
+            "modularity",
+            modularity_summary(root, &modularity_alerts, all_alerts),
+        ),
         (
             "readiness",
             Json::String(
@@ -1172,15 +1203,47 @@ fn modularity_action(alert: &crate::drift::Alert) -> Json {
     ])
 }
 
-fn modularity_summary(root: &Path, alerts: &[crate::drift::Alert]) -> Json {
+fn listed(alerts: &[crate::drift::Alert], all: bool) -> &[crate::drift::Alert] {
+    if all {
+        alerts
+    } else {
+        &alerts[..alerts.len().min(crate::drift::LISTED)]
+    }
+}
+
+/// Totals plus the listed alerts. The full reason sentence stays on the actions; here an
+/// alert is `file`, `kind`, `value`, `threshold`.
+fn modularity_summary(root: &Path, alerts: &[crate::drift::Alert], all: bool) -> Json {
     let thresholds = crate::project_config::thresholds(root);
+    let count = |kind: &str| alerts.iter().filter(|a| a.kind == kind).count() as i64;
+    let shown = listed(alerts, all);
     Json::obj(vec![
         ("max_lines", Json::Int(thresholds.max_lines as i64)),
         ("max_fan_in", Json::Int(thresholds.max_fan_in as i64)),
         ("alert_count", Json::Int(alerts.len() as i64)),
         (
+            "by_kind",
+            Json::obj(vec![
+                ("line_count", Json::Int(count("line_count"))),
+                ("fan_in", Json::Int(count("fan_in"))),
+            ]),
+        ),
+        ("alerts_listed", Json::Int(shown.len() as i64)),
+        (
             "alerts",
-            Json::Array(alerts.iter().map(modularity_action).collect()),
+            Json::Array(
+                shown
+                    .iter()
+                    .map(|alert| {
+                        Json::obj(vec![
+                            ("file", Json::String(alert.file.clone())),
+                            ("kind", Json::String(alert.kind.into())),
+                            ("value", Json::Int(alert.value as i64)),
+                            ("threshold", Json::Int(alert.threshold as i64)),
+                        ])
+                    })
+                    .collect(),
+            ),
         ),
     ])
 }
@@ -1224,13 +1287,24 @@ pub fn check_changes(root: &Path) -> Json {
     let reason = "content changed since last mark-green (check-changes)";
     let mut dirty = Vec::new();
     let mut changed_rows = false;
+    // Journal entries and pending items are written once at the end, not once per file.
+    let mut notes: Vec<(String, String)> = Vec::new();
+    let mut pending_rels: Vec<String> = Vec::new();
     let indexed = cache::index_by_path(root);
+    // For a worktree, a file the branch did not change keeps main's health row as it is.
+    let base_view = crate::worktree::base_view(root);
     let mut row_at: HashMap<String, usize> = rows
         .iter()
         .enumerate()
         .map(|(i, row)| (row.file.clone(), i))
         .collect();
     for rel in watched {
+        if base_view
+            .as_ref()
+            .is_some_and(|view| view.unchanged(root, &rel))
+        {
+            continue;
+        }
         let path = root.join(&rel);
         let idx = row_at.get(&rel).copied();
         if !path.is_file() {
@@ -1255,7 +1329,7 @@ pub fn check_changes(root: &Path) -> Json {
                     row_at.insert(rel.clone(), rows.len());
                     rows.push(row);
                 }
-                let _ = artifacts::append_journal(root, "check-changes", &rel, "missing on disk");
+                notes.push((rel.clone(), "missing on disk".to_string()));
                 changed_rows = true;
             }
             continue;
@@ -1324,12 +1398,8 @@ pub fn check_changes(root: &Path) -> Json {
             } else {
                 format!("{reason}; lines {}", crate::drift::format_ranges(&ranges))
             };
-            let _ = artifacts::append_journal(root, "check-changes", &rel, &journal_reason);
-            let pending = root.join("pending_updates.md");
-            let text = fs::read_to_string(&pending).unwrap_or_default();
-            let text =
-                crate::pending_line::append_item(&text, &rel, crate::pending_line::CHECK_MESSAGE);
-            let _ = artifacts::write_durable(&pending, text.as_bytes());
+            notes.push((rel.clone(), journal_reason));
+            pending_rels.push(rel.clone());
             changed_rows = true;
         } else if let Some(i) = idx {
             if rows[i].changed_lines != ranges {
@@ -1337,6 +1407,18 @@ pub fn check_changes(root: &Path) -> Json {
                 changed_rows = true;
             }
         }
+    }
+    let _ = artifacts::append_journal_many(root, "check-changes", &notes);
+    if !pending_rels.is_empty() {
+        let mut text = fs::read_to_string(crate::worktree::state(root, "pending_updates.md"))
+            .unwrap_or_default();
+        for rel in &pending_rels {
+            text = crate::pending_line::append_item(&text, rel, crate::pending_line::CHECK_MESSAGE);
+        }
+        let _ = artifacts::write_durable(
+            &crate::worktree::state_write(root, "pending_updates.md"),
+            text.as_bytes(),
+        );
     }
     if changed_rows {
         let _ = artifacts::write_health(root, &rows);
@@ -1686,6 +1768,16 @@ pub fn health(root: &Path) -> Json {
 }
 
 pub fn health_view(root: &Path, directory: Option<&str>, format: &str) -> Json {
+    health_view_with(root, directory, format, false)
+}
+
+/// `all_alerts` lists every modularity alert (`full`), as in [`suggest_next_with`].
+pub fn health_view_with(
+    root: &Path,
+    directory: Option<&str>,
+    format: &str,
+    all_alerts: bool,
+) -> Json {
     if format == "healing-stats" {
         return healing_stats(root);
     }
@@ -1701,7 +1793,7 @@ pub fn health_view(root: &Path, directory: Option<&str>, format: &str) -> Json {
     if format == "summary" {
         let mut value = ok(vec![
             ("health_summary", summary),
-            ("modularity", modularity_summary(root, &alerts)),
+            ("modularity", modularity_summary(root, &alerts, all_alerts)),
         ]);
         if let Some(dir) = directory {
             value.insert("directory", Json::String(dir.into()));
@@ -1710,7 +1802,7 @@ pub fn health_view(root: &Path, directory: Option<&str>, format: &str) -> Json {
     }
     ok(vec![
         ("health_summary", summary),
-        ("modularity", modularity_summary(root, &alerts)),
+        ("modularity", modularity_summary(root, &alerts, all_alerts)),
         (
             "entries",
             Json::Array(rows.into_iter().map(health_entry).collect()),
@@ -2732,7 +2824,7 @@ pub fn metrics_snapshot(root: &Path) -> Json {
             Json::Int(cache::all_paths(root).len() as i64),
         ),
     ]);
-    let staging = root.join(".wikifier_staging");
+    let staging = crate::worktree::staging(root);
     if fs::create_dir_all(&staging).is_err() {
         return fail("MetricsError", "could not create staging dir");
     }
@@ -2830,8 +2922,7 @@ pub fn resolution_diagnostics(root: &Path) -> Json {
 }
 
 pub fn barrel_reports(root: &Path) -> Json {
-    let dir = root
-        .join(".wikifier_staging")
+    let dir = crate::worktree::staging(root)
         .join("wk_cache")
         .join("barrels");
     let mut barrels = Vec::new();
@@ -2923,7 +3014,7 @@ pub fn serve_loop(root: &Path, port: u16) -> Json {
     };
     let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
     eprintln!("wikifier serve http://127.0.0.1:{bound}/index.html");
-    let _ = fs::create_dir_all(root.join(".wikifier_staging"));
+    let _ = fs::create_dir_all(crate::worktree::staging(root));
     let _ = fs::write(root.join(".wikifier_staging/serve.port"), bound.to_string());
     let once = std::env::var("WIKIFIER_SERVE_ONCE").ok().as_deref() == Some("1");
     for conn in listener.incoming() {
@@ -3630,7 +3721,25 @@ fn pid_alive(pidfile: &Path) -> bool {
     crate::proc::pid_alive(pid)
 }
 
+/// Run one command. `worktree` / `worktree_root` in `flags` (or a root that is a bare git
+/// worktree of a mapped main checkout) answers for that tree from an overlay; see
+/// `src/worktree.rs`. Without either, this is [`dispatch_main`] unchanged.
 pub fn dispatch(
+    name: &str,
+    root: &Path,
+    positional: &[String],
+    flags: &BTreeMap<String, String>,
+) -> Json {
+    match crate::worktree::target(root, name, flags) {
+        crate::worktree::Target::Main => dispatch_main(name, root, positional, flags),
+        crate::worktree::Target::Tree { main, tree } => {
+            crate::worktree::run(name, &main, &tree, positional, flags)
+        }
+        crate::worktree::Target::Fail(err) => err,
+    }
+}
+
+pub(crate) fn dispatch_main(
     name: &str,
     root: &Path,
     positional: &[String],
@@ -3657,11 +3766,12 @@ pub fn dispatch(
         ),
         "record-deletion" | "record_deletion" => record_deletion(root, file, &reason),
         "session-bootstrap" | "bootstrap" | "session-start" | "session_bootstrap" => cap_files(
-            session_bootstrap_scoped(root, flag_text(flags, "directory")),
+            session_bootstrap_with(root, flag_text(flags, "directory"), flag_on(flags, "full")),
             flags,
         ),
         "suggest-next" | "suggest" | "suggest-next-actions" | "suggest_next_actions" => {
-            let mut value = suggest_next_scoped(root, flag_text(flags, "directory"));
+            let mut value =
+                suggest_next_with(root, flag_text(flags, "directory"), flag_on(flags, "full"));
             if let (Some(limit), Some(Json::Array(actions))) = (
                 Cap::from_flags(flags, &["limit"]).max(),
                 value.get("actions"),
@@ -3727,7 +3837,12 @@ pub fn dispatch(
             } else {
                 flags.get("format").map(|s| s.as_str()).unwrap_or("json")
             };
-            let mut value = health_view(root, flag_text(flags, "directory"), format);
+            let mut value = health_view_with(
+                root,
+                flag_text(flags, "directory"),
+                format,
+                flag_on(flags, "full"),
+            );
             let limit = Cap::from_flags(flags, &["limit"]).max();
             if let (Some(limit), Some(Json::Array(rows))) = (limit, value.get("entries")) {
                 if rows.len() > limit {
@@ -3861,7 +3976,7 @@ pub fn dispatch(
             Ok(()) => ok(vec![("rebuilt", Json::Bool(true))]),
             Err(err) => fail("CacheError", err),
         },
-        "issues" => suggest_next_scoped(root, flag_text(flags, "directory")),
+        "issues" => suggest_next_with(root, flag_text(flags, "directory"), flag_on(flags, "full")),
         "cycles" | "get_cycles" => {
             let max_items = Cap::from_flags(flags, &["max-items", "max_items"]).max();
             cycles_view(root, !flag_on(flags, "no-analysis"), max_items)
@@ -3893,7 +4008,7 @@ pub fn dispatch(
         }
         "init" => init_project(root, flag_on(flags, "no-copy")),
         "get_project_status" => cap_files(
-            session_bootstrap_scoped(root, flag_text(flags, "directory")),
+            session_bootstrap_with(root, flag_text(flags, "directory"), flag_on(flags, "full")),
             flags,
         ),
         "get_current_project_root" => ok(vec![(
@@ -3914,7 +4029,7 @@ pub fn dispatch(
                 ),
             ])
         }
-        "get_files_needing_attention" => suggest_next_actions(root),
+        "get_files_needing_attention" => suggest_next_with(root, None, flag_on(flags, "full")),
         "get_resolution_diagnostics" => resolution_diagnostics(root),
         "get_barrel_reports" => barrel_reports(root),
         "get_incremental_status" => incremental_status(root),

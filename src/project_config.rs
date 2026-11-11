@@ -70,13 +70,16 @@ fn env_present(name: &str) -> bool {
 }
 
 fn read_u64(root: &Path, key: &str) -> Option<u64> {
-    let text = fs::read_to_string(root.join(".wikifier/config")).ok()?;
+    let text = fs::read_to_string(crate::worktree::state(root, ".wikifier/config")).ok()?;
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (name, value) = line.split_once('=')?;
+        // A line without `=` is skipped, not the end of the file.
+        let Some((name, value)) = line.split_once('=') else {
+            continue;
+        };
         if name.trim() == key {
             return value.trim().parse().ok();
         }
