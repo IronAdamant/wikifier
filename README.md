@@ -134,7 +134,13 @@ A second agent that starts cold runs `session-bootstrap`: files left Yellow come
 | `journal/` + `pending_updates.md` | Why each file changed, and the work queue |
 | `library.md` + `.wikifier_staging/maps/` | File tree and dependency tables; folder cards that `list-paths` returns |
 
-`check-changes` compares files with their Green baselines. `mark-green` checks that the wiki names the file's public Python, JS/TS, or Rust symbols. Other languages are mapped and recorded as `unchecked`. `map_paths.txt` lists the import-map roots; `monitored_paths.txt` adds extra files to watch, such as docs.
+`check-changes` compares files with their Green baselines. A file that goes Yellow because its bytes changed carries `changed_lines` on that action and on its health entry: 1-based inclusive ranges in the current file, diffed against the snapshot `mark-green` saved. A pure deletion is reported as the surviving line beside the gap. With no snapshot yet, the range is the whole file. This is a review aid for agents, not a linter.
+
+`session-bootstrap`, `suggest-next`, and `health` also report modularity alerts (`review_modularity`, priority 3). A mapped file alerts when it has more physical lines than `modularity_max_lines` (default 800, blanks and comments included) or more dependents than `modularity_max_fan_in` (default 12, from the last map). `0` disables that alert. The keys live in `.wikifier/config`; `WIKIFIER_MODULARITY_MAX_LINES` and `WIKIFIER_MODULARITY_MAX_FAN_IN` override them. Alerts do not split or rewrite the file, and they do not change its health color. The same numbers are in `.wikifier_staging/modularity.json`, which `check-changes` refreshes, so a parent agent and its sub-agents read one picture.
+
+`monitor` repeats that cheap pass. The interval is `health_interval_s` (default 30, minimum 1 second) or `--interval`, and `WIKIFIER_POLL_INTERVAL` overrides the config. `daemon` uses the same interval for the pass and still runs `update-maps` on `maps_interval_s` (default 600; `WIKIFIER_DAEMON_MAPS_INTERVAL` overrides; `0` skips the repeat; `WIKIFIER_DAEMON_MAPS=0` skips the map). A short health interval does not run `update-maps` on every tick.
+
+`mark-green` checks that the wiki names the file's public Python, JS/TS, or Rust symbols. Other languages are mapped and recorded as `unchecked`. `map_paths.txt` lists the import-map roots; `monitored_paths.txt` adds extra files to watch, such as docs.
 
 | Language | Extensions | Import scan |
 |---|---|---|

@@ -15,7 +15,7 @@ The program is the std-only Rust binary under `src/`. Version is `Cargo.toml` (`
 On this repo, or on any Wikifier-managed tree:
 
 1. `wikifier session-bootstrap` (MCP: `session_bootstrap`). For another project, pass `--target DIR` or `WIKIFIER_PROJECT_ROOT`. A missing root is an error.
-2. Act on `actions[]`. Touch 🔴 Red, then actionable 🟡 Yellow. Leave 🟢 Green alone. Leave 🟡 Initial stubs alone until you edit that file.
+2. Act on `actions[]`. Touch 🔴 Red, then actionable 🟡 Yellow. Leave 🟢 Green alone. Leave 🟡 Initial stubs alone until you edit that file. `review_modularity` (line count, fan-in) and `changed_lines` on a content-changed Yellow file are alerts in that same list. Do not split a file because of an alert.
 3. `wikifier prepare-edit <file>` before a substantial edit.
 4. After the edit: `wikifier record-change "<file>" "<why>"`. Include a short subid in the reason.
 5. Refresh that file's `<file>.wiki.md` only.

@@ -17,6 +17,8 @@ pub struct HealthRow {
     pub public_symbols: String,
     pub wiki_hash: String,
     pub source_mtime_ns: String,
+    /// Inclusive 1-based ranges in the current file since the last green snapshot.
+    pub changed_lines: Vec<(u32, u32)>,
 }
 
 impl HealthRow {
@@ -38,6 +40,7 @@ impl HealthRow {
             public_symbols: String::new(),
             wiki_hash: String::new(),
             source_mtime_ns: String::new(),
+            changed_lines: Vec::new(),
         }
     }
 
@@ -51,6 +54,52 @@ impl HealthRow {
         if self.source_mtime_ns.is_empty() {
             self.source_mtime_ns = old.source_mtime_ns.clone();
         }
+    }
+}
+
+fn changed_lines_json(ranges: &[(u32, u32)]) -> Json {
+    Json::Array(
+        ranges
+            .iter()
+            .map(|(start, end)| {
+                Json::obj(vec![
+                    ("start", Json::Int(*start as i64)),
+                    ("end", Json::Int(*end as i64)),
+                ])
+            })
+            .collect(),
+    )
+}
+
+fn parse_changed_lines(value: Option<&Json>) -> Vec<(u32, u32)> {
+    let Some(Json::Array(items)) = value else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in items {
+        let (start, end) = match item {
+            Json::Array(pair) => (
+                pair.first().and_then(json_line),
+                pair.get(1).and_then(json_line),
+            ),
+            _ => (
+                item.get("start").and_then(json_line),
+                item.get("end").and_then(json_line),
+            ),
+        };
+        if let (Some(start), Some(end)) = (start, end) {
+            if start > 0 && end >= start {
+                out.push((start, end));
+            }
+        }
+    }
+    out
+}
+
+fn json_line(value: &Json) -> Option<u32> {
+    match value {
+        Json::Int(n) if *n > 0 && *n <= i64::from(u32::MAX) => Some(*n as u32),
+        _ => None,
     }
 }
 
@@ -104,6 +153,7 @@ fn read_health_json(path: &Path) -> Option<Vec<HealthRow>> {
             .and_then(|s| s.as_str())
             .unwrap_or("")
             .to_string();
+        row.changed_lines = parse_changed_lines(ent.get("changed_lines"));
         rows.push(row);
     }
     rows.sort_by(|a, b| a.file.cmp(&b.file));
@@ -204,6 +254,12 @@ pub fn write_health(root: &Path, rows: &[HealthRow]) -> Result<(), String> {
                             obj.push((
                                 "source_mtime_ns".into(),
                                 Json::String(row.source_mtime_ns.clone()),
+                            ));
+                        }
+                        if !row.changed_lines.is_empty() {
+                            obj.push((
+                                "changed_lines".into(),
+                                changed_lines_json(&row.changed_lines),
                             ));
                         }
                         (row.file.clone(), Json::from_pairs(obj))
