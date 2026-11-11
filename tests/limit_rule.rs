@@ -11,7 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use wikifier::jsonutil::{self, Json};
 
 /// 70 modules import core.py, 8 import cycles, 3 Green files whose wiki misses a new name,
-/// 3 recorded changes,
+/// 3 recorded changes. suggest-next also alerts on core.py (fan-in 70, limit 12),
+/// so that list is 4.
 /// `os` imports for diagnostics notes, and 121 mapped files in all.
 fn project() -> PathBuf {
     let n = SystemTime::now()
@@ -141,7 +142,7 @@ fn cases() -> Vec<Case> {
         ("prepare_edit", core(), "dependents", 25, 70),
         ("get_resolution_diagnostics", vec![], "notes", 20, 71),
         ("verify_wikis", vec![], "failed", 3, 3),
-        ("suggest_next_actions", vec![], "actions", 3, 3),
+        ("suggest_next_actions", vec![], "actions", 4, 4),
         ("journal", vec![], "entries", 3, 3),
         (
             "search_journal",
@@ -214,7 +215,7 @@ fn every_cli_cap_reads_absent_zero_and_one_the_same_way() {
         (&["journal"], "--limit", "entries", 3),
         (&["search-journal", "limit-1"], "--limit", "entries", 3),
         (&["verify-wikis"], "--limit", "failed", 3),
-        (&["suggest-next"], "--limit", "actions", 3),
+        (&["suggest-next"], "--limit", "actions", 4),
         (&["cycles"], "--max-items", "cycles", 8),
         (
             &["list-paths", "src/pkg", "--depth", "0"],

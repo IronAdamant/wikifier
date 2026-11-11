@@ -26,4 +26,3 @@
 - tests/speed_paths.rs: new: fast paths give the slow paths' answers (claude/windows-verify speed) — refresh the wiki, then mark-green
 - tests/tool_groups.rs: MCP tool groups with WIKIFIER_TOOLS/WIKIFIER_DISABLE per the suite convention (claude/tool-groups) — refresh the wiki, then mark-green
 - tests/compact_replies.rs: B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/specula-fixes) — refresh the wiki, then mark-green
-- tests/limit_rule.rs: one cap rule via api::Cap: absent=default, 0=no cap, N=N (claude/limit-rule) — refresh the wiki, then mark-green

@@ -286,6 +286,7 @@ fn prepare_edit_on_this_repo_lists_api_dependents() {
         "tests/agent_args.rs",
         "tests/cli_surface.rs",
         "tests/contract_gaps.rs",
+        "tests/drift_alerts.rs",
         "tests/limit_rule.rs",
         "tests/parity_fixes.rs",
         "tests/protocol_v07.rs",

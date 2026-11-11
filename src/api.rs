@@ -961,6 +961,10 @@ pub fn session_bootstrap_scoped(root: &Path, directory: Option<&str>) -> Json {
         .get("actions")
         .cloned()
         .unwrap_or(Json::Array(vec![]));
+    let modularity = actions
+        .get("modularity")
+        .cloned()
+        .unwrap_or(Json::obj(vec![]));
     let map_index = artifacts::folder_card(root, "")
         .and_then(|text| crate::jsonutil::parse(&text).ok())
         .unwrap_or_else(|| Json::obj(vec![]));
@@ -974,6 +978,7 @@ pub fn session_bootstrap_scoped(root: &Path, directory: Option<&str>) -> Json {
         ),
         ("health_summary", health_summary_of(&rows)),
         ("actions", action_list),
+        ("modularity", modularity),
         ("files", Json::Array(files)),
         ("map_index", map_index),
         (
@@ -1083,13 +1088,24 @@ pub fn suggest_next_scoped(root: &Path, directory: Option<&str>) -> Json {
         } else if row.reason != "Initial stub"
             && (row.status.contains("Yellow") || row.status.contains('🟡'))
         {
-            actions.push(Json::obj(vec![
+            let mut action = Json::obj(vec![
                 ("action", Json::String("prepare_edit".into())),
-                ("file", Json::String(row.file)),
+                ("file", Json::String(row.file.clone())),
                 ("priority", Json::Int(2)),
-                ("reason", Json::String(row.reason)),
-            ]));
+                ("reason", Json::String(row.reason.clone())),
+            ]);
+            if !row.changed_lines.is_empty() {
+                action.insert(
+                    "changed_lines",
+                    crate::drift::lines_json(&row.changed_lines),
+                );
+            }
+            actions.push(action);
         }
+    }
+    let modularity_alerts = crate::drift::alerts(root, directory);
+    for alert in &modularity_alerts {
+        actions.push(modularity_action(alert));
     }
     let low_conf = crate::low_conf::actionable_total(root, directory);
     if low_conf > 0 {
@@ -1128,6 +1144,7 @@ pub fn suggest_next_scoped(root: &Path, directory: Option<&str>) -> Json {
     let rows = artifacts::read_health(root);
     ok(vec![
         ("actions", Json::Array(actions)),
+        ("modularity", modularity_summary(root, &modularity_alerts)),
         (
             "readiness",
             Json::String(
@@ -1139,6 +1156,31 @@ pub fn suggest_next_scoped(root: &Path, directory: Option<&str>) -> Json {
                 )
                 .into(),
             ),
+        ),
+    ])
+}
+
+fn modularity_action(alert: &crate::drift::Alert) -> Json {
+    Json::obj(vec![
+        ("action", Json::String("review_modularity".into())),
+        ("file", Json::String(alert.file.clone())),
+        ("priority", Json::Int(3)),
+        ("kind", Json::String(alert.kind.into())),
+        ("value", Json::Int(alert.value as i64)),
+        ("threshold", Json::Int(alert.threshold as i64)),
+        ("reason", Json::String(alert.reason())),
+    ])
+}
+
+fn modularity_summary(root: &Path, alerts: &[crate::drift::Alert]) -> Json {
+    let thresholds = crate::project_config::thresholds(root);
+    Json::obj(vec![
+        ("max_lines", Json::Int(thresholds.max_lines as i64)),
+        ("max_fan_in", Json::Int(thresholds.max_fan_in as i64)),
+        ("alert_count", Json::Int(alerts.len() as i64)),
+        (
+            "alerts",
+            Json::Array(alerts.iter().map(modularity_action).collect()),
         ),
     ])
 }
@@ -1238,9 +1280,14 @@ pub fn check_changes(root: &Path) -> Json {
             None => index_row.map(|r| r.2 != live).unwrap_or(false),
         };
         if !drifted {
+            if baseline.is_some() {
+                crate::drift::ensure_baseline(root, &rel);
+            }
             continue;
         }
         dirty.push(rel.clone());
+        let ranges = crate::drift::ranges_since_baseline(root, &rel)
+            .unwrap_or_else(|| crate::drift::whole_file_range(root, &rel));
         let already = idx
             .map(|i| {
                 is_yellow(&rows[i].status)
@@ -1262,6 +1309,7 @@ pub fn check_changes(root: &Path) -> Json {
                 keep_hash,
                 verification,
             );
+            row.changed_lines = ranges.clone();
             if let Some(i) = idx {
                 row.keep_baseline_from(&rows[i]);
             }
@@ -1271,18 +1319,29 @@ pub fn check_changes(root: &Path) -> Json {
                 row_at.insert(rel.clone(), rows.len());
                 rows.push(row);
             }
-            let _ = artifacts::append_journal(root, "check-changes", &rel, reason);
+            let journal_reason = if ranges.is_empty() {
+                reason.to_string()
+            } else {
+                format!("{reason}; lines {}", crate::drift::format_ranges(&ranges))
+            };
+            let _ = artifacts::append_journal(root, "check-changes", &rel, &journal_reason);
             let pending = root.join("pending_updates.md");
             let text = fs::read_to_string(&pending).unwrap_or_default();
             let text =
                 crate::pending_line::append_item(&text, &rel, crate::pending_line::CHECK_MESSAGE);
             let _ = artifacts::write_durable(&pending, text.as_bytes());
             changed_rows = true;
+        } else if let Some(i) = idx {
+            if rows[i].changed_lines != ranges {
+                rows[i].changed_lines = ranges;
+                changed_rows = true;
+            }
         }
     }
     if changed_rows {
         let _ = artifacts::write_health(root, &rows);
     }
+    let modularity_alerts = crate::drift::refresh(root);
     let mut value = ok(vec![
         ("dirty_total", Json::Int(dirty.len() as i64)),
         ("changes_detected", Json::Int(dirty.len() as i64)),
@@ -1291,6 +1350,10 @@ pub fn check_changes(root: &Path) -> Json {
             Json::Array(dirty.into_iter().map(Json::String).collect()),
         ),
         ("scope", scope_json(&scope)),
+        (
+            "modularity_alerts",
+            Json::Int(modularity_alerts.len() as i64),
+        ),
     ]);
     if truncated {
         value.insert("truncated", Json::Bool(true));
@@ -1317,12 +1380,17 @@ pub fn prepare_edit(root: &Path, file: &str) -> Json {
     let row = artifacts::read_health(root)
         .into_iter()
         .find(|r| r.file == rel);
-    ok(vec![
+    let mut value = ok(vec![
         ("file", Json::String(rel.into())),
         (
             "status",
             Json::String(row.as_ref().map(|r| r.status.clone()).unwrap_or_default()),
         ),
+        (
+            "line_count",
+            Json::Int(crate::drift::line_count(root, rel) as i64),
+        ),
+        ("fan_in", Json::Int(importers.len() as i64)),
         (
             "dependencies",
             Json::Array(
@@ -1344,7 +1412,14 @@ pub fn prepare_edit(root: &Path, file: &str) -> Json {
             "wiki",
             Json::String(crate::wiki_files::read_wiki(root, rel).1),
         ),
-    ])
+    ]);
+    if let Some(row) = row.as_ref().filter(|row| !row.changed_lines.is_empty()) {
+        value.insert(
+            "changed_lines",
+            crate::drift::lines_json(&row.changed_lines),
+        );
+    }
+    value
 }
 
 pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
@@ -1364,6 +1439,9 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
     };
     let hash = file_sha256_prefixed(&path).unwrap_or_default();
     let mut row = HealthRow::new(rel, "🟡 Yellow", written.stamp, reason, hash, "");
+    if let Some(ranges) = crate::drift::ranges_since_baseline(root, rel) {
+        row.changed_lines = ranges;
+    }
     if let Some(old) = artifacts::read_health(root)
         .into_iter()
         .find(|r| r.file == rel)
@@ -1560,6 +1638,7 @@ fn write_green_row(
         .map(|(mtime, _)| mtime.to_string())
         .unwrap_or_default();
     artifacts::upsert_health_row(root, row)?;
+    crate::drift::save_baseline(root, rel);
     drop_pending_line(root, rel);
     Ok(())
 }
@@ -1618,8 +1697,12 @@ pub fn health_view(root: &Path, directory: Option<&str>, format: &str) -> Json {
         rows.retain(|row| under_prefix(dir, &row.file));
     }
     let summary = health_summary_of(&rows);
+    let alerts = crate::drift::alerts(root, directory);
     if format == "summary" {
-        let mut value = ok(vec![("health_summary", summary)]);
+        let mut value = ok(vec![
+            ("health_summary", summary),
+            ("modularity", modularity_summary(root, &alerts)),
+        ]);
         if let Some(dir) = directory {
             value.insert("directory", Json::String(dir.into()));
         }
@@ -1627,6 +1710,7 @@ pub fn health_view(root: &Path, directory: Option<&str>, format: &str) -> Json {
     }
     ok(vec![
         ("health_summary", summary),
+        ("modularity", modularity_summary(root, &alerts)),
         (
             "entries",
             Json::Array(rows.into_iter().map(health_entry).collect()),
@@ -1635,14 +1719,21 @@ pub fn health_view(root: &Path, directory: Option<&str>, format: &str) -> Json {
 }
 
 fn health_entry(row: HealthRow) -> Json {
-    Json::obj(vec![
+    let mut entry = Json::obj(vec![
         ("file", Json::String(row.file)),
         ("status", Json::String(row.status)),
         ("last_updated", Json::String(row.last_updated)),
         ("reason", Json::String(row.reason)),
         ("source_content_hash", Json::String(row.source_hash)),
         ("verification", Json::String(row.verification)),
-    ])
+    ]);
+    if !row.changed_lines.is_empty() {
+        entry.insert(
+            "changed_lines",
+            crate::drift::lines_json(&row.changed_lines),
+        );
+    }
+    entry
 }
 
 fn under_prefix(prefix: &str, rel: &str) -> bool {
@@ -3145,21 +3236,192 @@ const INDEX_HTML: &str = include_str!("../index.html");
 pub fn monitor_loop(root: &Path, interval_s: u64) -> Json {
     let once = std::env::var("WIKIFIER_MONITOR_ONCE").ok().as_deref() == Some("1");
     loop {
-        let report = check_changes(root);
-        let dirty = report
-            .get("dirty_total")
-            .and_then(|v| match v {
-                Json::Int(n) => Some(*n),
-                _ => None,
-            })
-            .unwrap_or(0);
-        eprintln!("monitor dirty={dirty}");
+        let report = monitor_pass(root);
         if once {
             return report;
         }
         let step = interval_s.max(1);
         std::thread::sleep(std::time::Duration::from_secs(step));
     }
+}
+
+/// Finite monitor loop for tests and for a caller that wants N cheap passes.
+/// Never runs `update-maps`.
+pub fn monitor_passes(root: &Path, passes: u64) -> Json {
+    let mut health_passes = 0i64;
+    for _ in 0..passes {
+        let _ = monitor_pass(root);
+        health_passes += 1;
+    }
+    ok(vec![
+        ("passes", Json::Int(health_passes)),
+        ("health_passes", Json::Int(health_passes)),
+        ("map_passes", Json::Int(0)),
+    ])
+}
+
+fn monitor_pass(root: &Path) -> Json {
+    let report = check_changes(root);
+    let dirty = report
+        .get("dirty_total")
+        .and_then(|v| match v {
+            Json::Int(n) => Some(*n),
+            _ => None,
+        })
+        .unwrap_or(0);
+    let alerts = report
+        .get("modularity_alerts")
+        .and_then(|v| match v {
+            Json::Int(n) => Some(*n),
+            _ => None,
+        })
+        .unwrap_or(0);
+    eprintln!("monitor dirty={dirty} modularity_alerts={alerts}");
+    let ok_check = report
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    crate::daemon_svc::write_heartbeat(
+        root,
+        "modularity",
+        ok_check,
+        &format!("{alerts} modularity alerts"),
+    );
+    report
+}
+
+/// One daemon heartbeat schedule. `poll_s` is the cheap health pass.
+/// `maps_every_s` is the full map, and it is not the same clock.
+pub struct HeartbeatOptions {
+    pub poll_s: u64,
+    pub maps_every_s: u64,
+    pub maps: bool,
+    pub virtual_clock: bool,
+    pub periodic_ticks: u64,
+    pub follow_pid: bool,
+}
+
+impl HeartbeatOptions {
+    pub fn from_root(root: &Path) -> Self {
+        Self {
+            poll_s: crate::project_config::health_interval_s(root),
+            maps_every_s: crate::project_config::maps_interval_s(root),
+            maps: crate::daemon_svc::maps_enabled(),
+            virtual_clock: false,
+            periodic_ticks: 0,
+            follow_pid: true,
+        }
+    }
+}
+
+/// Run the daemon heartbeat. A virtual run sleeps nothing and advances the
+/// map clock by `poll_s` per periodic tick, so a short health interval can be
+/// tested without waiting out the map interval.
+pub fn heartbeat_ticks(root: &Path, opts: HeartbeatOptions) -> Json {
+    let pidfile = crate::daemon_svc::pid_path(root);
+    let poll = opts.poll_s.max(1);
+    let maps_every = opts.maps_every_s;
+    crate::daemon_svc::append_log(
+        root,
+        &format!("daemon started (check every {poll}s; maps every {maps_every}s)"),
+    );
+    let mut health_passes = 0i64;
+    let mut map_passes = 0i64;
+    let mut virtual_since = 0u64;
+    let mut last_maps = std::time::Instant::now();
+    health_passes += run_health_pass(root, "check-changes:start");
+    if opts.maps {
+        map_passes += run_maps_pass(root, "update-maps:start", "update-maps (start)");
+        last_maps = std::time::Instant::now();
+        virtual_since = 0;
+    }
+    let mut ticks = 0u64;
+    loop {
+        if !opts.follow_pid && ticks >= opts.periodic_ticks {
+            break;
+        }
+        if opts.follow_pid && !pidfile.is_file() {
+            break;
+        }
+        if opts.virtual_clock {
+            virtual_since = virtual_since.saturating_add(poll);
+        } else if !sleep_poll(poll, opts.follow_pid, &pidfile) {
+            break;
+        }
+        if opts.follow_pid && !pidfile.is_file() {
+            break;
+        }
+        ticks += 1;
+        health_passes += run_health_pass(root, "check-changes:periodic");
+        let elapsed = if opts.virtual_clock {
+            virtual_since
+        } else {
+            last_maps.elapsed().as_secs()
+        };
+        if opts.maps && maps_every > 0 && elapsed >= maps_every {
+            map_passes += run_maps_pass(root, "update-maps:interval", "update-maps (interval)");
+            last_maps = std::time::Instant::now();
+            virtual_since = 0;
+        }
+        if !opts.follow_pid && ticks >= opts.periodic_ticks {
+            break;
+        }
+    }
+    crate::daemon_svc::append_log(root, "daemon stopped");
+    ok(vec![
+        ("running", Json::Bool(false)),
+        ("action", Json::String("run".into())),
+        ("health_passes", Json::Int(health_passes)),
+        ("map_passes", Json::Int(map_passes)),
+        ("periodic_ticks", Json::Int(ticks as i64)),
+        ("poll_s", Json::Int(poll as i64)),
+        ("maps_every_s", Json::Int(maps_every as i64)),
+    ])
+}
+
+fn run_health_pass(root: &Path, event: &str) -> i64 {
+    let checked = check_changes(root);
+    let ok_check = checked
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let alerts = checked
+        .get("modularity_alerts")
+        .and_then(|v| match v {
+            Json::Int(n) => Some(*n),
+            _ => None,
+        })
+        .unwrap_or(0);
+    crate::daemon_svc::write_heartbeat(root, event, ok_check, "");
+    crate::daemon_svc::write_heartbeat(
+        root,
+        "modularity",
+        ok_check,
+        &format!("{alerts} modularity alerts"),
+    );
+    1
+}
+
+fn run_maps_pass(root: &Path, event: &str, log_line: &str) -> i64 {
+    let mapped = update_maps(root);
+    let ok_maps = mapped
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    crate::daemon_svc::write_heartbeat(root, event, ok_maps, "");
+    crate::daemon_svc::append_log(root, log_line);
+    1
+}
+
+fn sleep_poll(poll: u64, follow_pid: bool, pidfile: &Path) -> bool {
+    let slices = (poll.max(1) * 5).max(1);
+    for _ in 0..slices {
+        if follow_pid && !pidfile.is_file() {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    !(follow_pid && !pidfile.is_file())
 }
 
 pub fn daemon_ctl(root: &Path, action: &str, force: bool) -> Json {
@@ -3203,63 +3465,7 @@ fn daemon_run(root: &Path, pidfile: &Path) -> Json {
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    let poll = crate::daemon_svc::poll_seconds();
-    let maps_every = crate::daemon_svc::maps_interval_seconds();
-    let maps = crate::daemon_svc::maps_enabled();
-    crate::daemon_svc::append_log(
-        root,
-        &format!("daemon started (check every {poll}s; maps every {maps_every}s)"),
-    );
-    let checked = check_changes(root);
-    let ok_check = checked
-        .get("success")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    crate::daemon_svc::write_heartbeat(root, "check-changes:start", ok_check, "");
-    let mut last_maps = std::time::Instant::now();
-    if maps {
-        let mapped = update_maps(root);
-        let ok_maps = mapped
-            .get("success")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        crate::daemon_svc::write_heartbeat(root, "update-maps:start", ok_maps, "");
-        crate::daemon_svc::append_log(root, "update-maps (start)");
-        last_maps = std::time::Instant::now();
-    }
-    while pidfile.is_file() {
-        let slices = (poll * 5).max(1);
-        for _ in 0..slices {
-            if !pidfile.is_file() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(200));
-        }
-        if !pidfile.is_file() {
-            break;
-        }
-        let checked = check_changes(root);
-        let ok_check = checked
-            .get("success")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        crate::daemon_svc::write_heartbeat(root, "check-changes:periodic", ok_check, "");
-        if maps && maps_every > 0 && last_maps.elapsed().as_secs() >= maps_every {
-            let mapped = update_maps(root);
-            let ok_maps = mapped
-                .get("success")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            crate::daemon_svc::write_heartbeat(root, "update-maps:interval", ok_maps, "");
-            crate::daemon_svc::append_log(root, "update-maps (interval)");
-            last_maps = std::time::Instant::now();
-        }
-    }
-    crate::daemon_svc::append_log(root, "daemon stopped");
-    ok(vec![
-        ("running", Json::Bool(false)),
-        ("action", Json::String("run".into())),
-    ])
+    heartbeat_ticks(root, HeartbeatOptions::from_root(root))
 }
 
 fn daemon_start(root: &Path, pidfile: &Path, force: bool) -> Json {
@@ -3800,7 +4006,7 @@ pub fn dispatch(
             let interval = flags
                 .get("interval")
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(30);
+                .unwrap_or_else(|| crate::project_config::health_interval_s(root));
             monitor_loop(root, interval)
         }
         "serve" => {
@@ -4003,7 +4209,28 @@ target
     if !write_new("library.md", library_body, &mut created) {
         return fail("InitError", "could not write library.md");
     }
-    let config = format!("project_root={}\n", root.display());
+    let config = format!(
+        "\
+project_root={}
+# Cheap health and modularity pass, in seconds. A few seconds is allowed (minimum 1).
+# WIKIFIER_POLL_INTERVAL overrides this. This is not the update-maps interval.
+health_interval_s={}
+# Full update-maps repeat, in seconds. 0 skips the periodic map. The start map still runs.
+# WIKIFIER_DAEMON_MAPS_INTERVAL overrides this. WIKIFIER_DAEMON_MAPS=0 skips the map entirely.
+maps_interval_s={}
+# Alert when a mapped file has more physical lines than this. 0 disables.
+# WIKIFIER_MODULARITY_MAX_LINES overrides this. Alerts do not split the file.
+modularity_max_lines={}
+# Alert when more mapped files import a file than this. 0 disables.
+# WIKIFIER_MODULARITY_MAX_FAN_IN overrides this.
+modularity_max_fan_in={}
+",
+        root.display(),
+        crate::project_config::DEFAULT_HEALTH_INTERVAL_S,
+        crate::project_config::DEFAULT_MAPS_INTERVAL_S,
+        crate::project_config::DEFAULT_MAX_LINES,
+        crate::project_config::DEFAULT_MAX_FAN_IN,
+    );
     if !write_new(".wikifier/config", &config, &mut created) {
         return fail("InitError", "could not write .wikifier/config");
     }
