@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wikifier is a **zero-dependency, agent-to-agent codebase wiki**: it gives AI agents a token-efficient, queryable map of a codebase (health matrix, dependency graph, per-file wiki summaries) so they can look things up instead of re-reading full sources. The human layer (`index.html` dashboard) is strictly secondary — a read-only viewer of the same artifacts. It is deliberately NOT a general human documentation tool.
 
-**This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). `AGENTS.md` is the entry point for any coding agent. The authoritative contract is `skills/run.md` (Agent Protocol v0.7, package 5.3.1). Read it before substantive work.
+**This repo dogfoods itself.** Wikifier runs on its own source, and you are expected to follow its agent protocol when working here (see below). `AGENTS.md` is the entry point for any coding agent. The authoritative contract is `skills/run.md` (Agent Protocol v0.7, package 5.4.0). Read it before substantive work.
 
 **USE WIKIFIER FIRST (non-negotiable in this repo, preferred on any managed target):** At session start call `session_bootstrap` (MCP or `wikifier session-bootstrap`). Prefer Core daily tools (`list_core_tools`): bootstrap, `check_changes`, `prepare_edit`, `suggest_next_actions` (json `actions[]`), `record_change`, `mark_green`. Look up via map/wiki/deps before re-reading full sources. Selective work only (🔴 / actionable 🟡). Never skip `record_change` after edits.
 
@@ -56,7 +56,7 @@ wikifier mcp                           # MCP server on stdio
 
 ## Architecture
 
-Pipeline: **scan → parse → resolve → cache → health → artifacts**, implemented in Rust under `src/` (version in `Cargo.toml`, currently **5.3.1**). The Python package is no longer in this repository. `pip install wikifier` still installs Python 4.7. CLI (`src/main.rs`) and MCP (`src/mcp.rs`) both call `src/api.rs`. Every function returns a JSON object with `success`. Operational failures return `{"success": false, "error", "error_type"}`.
+Pipeline: **scan → parse → resolve → cache → health → artifacts**, implemented in Rust under `src/` (version in `Cargo.toml`, currently **5.4.0**). The Python package is no longer in this repository. `pip install wikifier` still installs Python 4.7. CLI (`src/main.rs`) and MCP (`src/mcp.rs`) both call `src/api.rs`. Every function returns a JSON object with `success`. Operational failures return `{"success": false, "error", "error_type"}`.
 
 - `src/api.rs` — the library surface: `session_bootstrap`, `check_changes`, `prepare_edit`, `suggest_next_actions`, `record_change`, `record_changes`, `record_deletion`, `mark_green`, `verify_wikis`, `update_maps` / `update_maps_run`, `dependency_report`, `load_dependents`, `cycles`, `init_project`, `serve_loop`, `monitor_loop`, `daemon_ctl`. `check_changes` watches mapped files, Green files, and `monitored_paths.txt`. `record_changes` reads `git status` (git is optional).
 - `src/drift.rs` — modularity alerts (physical line count and fan-in) and changed-line ranges against the snapshot `mark-green` saves. `src/project_config.rs` reads those thresholds and the health / map intervals from `.wikifier/config`; the existing `WIKIFIER_*` variables override the file.

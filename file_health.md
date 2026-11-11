@@ -3,22 +3,22 @@
 | File | Status | Last Updated | Reason / Intent |
 |------|--------|--------------|-----------------|
 | .github/workflows/publish.yml | 🟢 Green | 2026-11-03 09:27:04 | Multi-target release archives and SHA256SUMS (subid=release-5.0.0) |
-| AGENTS.md | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
-| CHANGELOG.md | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
-| CLAUDE.md | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
+| AGENTS.md | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
+| CHANGELOG.md | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
+| CLAUDE.md | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
 | CONTRIBUTING.md | 🟢 Green | 2026-11-03 05:34:35 | Address the 3 Nov review findings (subid=review-2026-11-03) |
-| Cargo.lock | 🟢 Green | 2026-11-05 10:00:59 | wiki updated (claude/limit-rule) |
-| Cargo.toml | 🟢 Green | 2026-11-05 10:00:59 | wiki updated (claude/limit-rule) |
+| Cargo.lock | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
+| Cargo.toml | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
 | Findings/M5-Dogfood-Assessment-Report.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-11-03 08:06:46 | Wiki marks this file as the historical M5 log (subid=protocol-v07) |
 | Findings/M5.1-cross-hardening-analysis.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
 | Findings/Milestones-Overview.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
 | Findings/p6_real_world_validation_report.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
-| README.md | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
+| README.md | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
 | docs/spec.md | 🟢 Green | 2026-11-03 08:00:11 | Name the Rust binary and protocol v0.7 in the living principles (subid=protocol-v07) |
 | scripts/benchmark_parity.sh | 🟡 Yellow | 2026-11-03 08:56:15 | Benchmark script and measured results. |
 | scripts/benchmark_results.md | 🟡 Yellow | 2026-11-03 08:56:15 | Benchmark script and measured results. |
-| skills/run.md | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
+| skills/run.md | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
 | src/api.rs | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
 | src/artifacts.rs | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
 | src/cache.rs | 🟢 Green | 2026-11-05 05:37:12 | wiki updated (claude/windows-verify release-5.1.0) |
@@ -54,6 +54,7 @@
 | tests/contract_gaps.rs | 🟡 Yellow | 2026-11-03 08:56:14 | Tests for those parity fixes. |
 | tests/dogfood.rs | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
 | tests/drift_alerts.rs | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
+| tests/fixtures/mcp_default.jsonl | 🟢 Green | 2026-11-11 08:17:56 | release 5.4.0 version bump (release-5.4.0) |
 | tests/limit_rule.rs | 🟢 Green | 2026-11-11 07:24:35 | Wiki matches the modularity slice (subid=modularity-alerts) |
 | tests/parity.rs | 🟡 Yellow | 2026-11-03 08:56:15 | Tests for those parity fixes. |
 | tests/parity_fixes.rs | 🟡 Yellow | 2026-11-05 05:15:33 | pending item wording and empty-queue note (claude/windows-verify speed) |
