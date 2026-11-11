@@ -27,7 +27,7 @@ pub(crate) const STORE_KINDS: &[(&str, &str)] = &[
 ];
 
 pub(crate) fn cache_root(root: &Path) -> PathBuf {
-    root.join(".wikifier_staging").join("wk_cache")
+    crate::worktree::staging(root).join("wk_cache")
 }
 
 /// Stable FNV-1a 64. `std::hash` is keyed per process, so it cannot name cache files.
@@ -98,6 +98,18 @@ pub(crate) fn generation_path(root: &Path) -> PathBuf {
 
 pub(crate) fn names_marker(root: &Path) -> PathBuf {
     cache_root(root).join("names-v2")
+}
+
+/// Names the parser that wrote the cache. A cache without this stamp (or with another)
+/// parses its `PARSER_RESCAN` files once more on the next `update-maps`. Bump it when a
+/// parser change alters the edges of files that did not change.
+pub(crate) const PARSER_STAMP: &[u8] = b"rust-globs-1\n";
+
+/// Files the last parser change affects.
+pub(crate) const PARSER_RESCAN: &[&str] = &[".rs"];
+
+pub(crate) fn parser_marker(root: &Path) -> PathBuf {
+    cache_root(root).join("parser")
 }
 
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {

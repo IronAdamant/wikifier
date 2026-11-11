@@ -111,7 +111,7 @@ pub fn write_durable(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 pub fn read_health(root: &Path) -> Vec<HealthRow> {
-    let json_path = root.join("file_health.json");
+    let json_path = crate::worktree::state(root, "file_health.json");
     if json_path.is_file() {
         if let Some(rows) = read_health_json(&json_path) {
             if !rows.is_empty() {
@@ -119,7 +119,7 @@ pub fn read_health(root: &Path) -> Vec<HealthRow> {
             }
         }
     }
-    read_health_md(&root.join("file_health.md"))
+    read_health_md(&crate::worktree::state(root, "file_health.md"))
 }
 
 fn read_health_json(path: &Path) -> Option<Vec<HealthRow>> {
@@ -269,7 +269,7 @@ pub fn write_health(root: &Path, rows: &[HealthRow]) -> Result<(), String> {
         ),
     ]);
     write_durable(
-        &root.join("file_health.json"),
+        &crate::worktree::state_write(root, "file_health.json"),
         stable.to_string().as_bytes(),
     )?;
     let mut md = String::from("# Documentation Health Matrix\n\n| File | Status | Last Updated | Reason / Intent |\n|------|--------|--------------|-----------------|\n");
@@ -284,7 +284,10 @@ pub fn write_health(root: &Path, rows: &[HealthRow]) -> Result<(), String> {
             row.reason.replace('|', "/")
         ));
     }
-    write_durable(&root.join("file_health.md"), md.as_bytes())?;
+    write_durable(
+        &crate::worktree::state_write(root, "file_health.md"),
+        md.as_bytes(),
+    )?;
     Ok(())
 }
 
@@ -315,9 +318,14 @@ pub fn read_journal(root: &Path, date: Option<&str>) -> Vec<JournalEntry> {
     let mut files = Vec::new();
     if let Some(date) = date {
         if let Some((y, m, d)) = date_parts(&format!("{date} 00:00:00")) {
-            files.push(root.join("journal").join(y).join(m).join(format!("{d}.md")));
+            files.push(
+                crate::worktree::state(root, "journal")
+                    .join(y)
+                    .join(m)
+                    .join(format!("{d}.md")),
+            );
         }
-    } else if let Ok(years) = fs::read_dir(root.join("journal")) {
+    } else if let Ok(years) = fs::read_dir(crate::worktree::state(root, "journal")) {
         for y in years.flatten() {
             if let Ok(months) = fs::read_dir(y.path()) {
                 for m in months.flatten() {
@@ -384,6 +392,13 @@ pub fn append_journal(
     reason: &str,
 ) -> Result<JournalWrite, String> {
     let stamp = local_stamp();
+    // The journal records main's history. A worktree answer does not add to it.
+    if crate::worktree::is_overlay(root) {
+        return Ok(JournalWrite {
+            stamp,
+            journaled: false,
+        });
+    }
     let path = journal_path(root, &stamp);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -403,6 +418,40 @@ pub fn append_journal(
         stamp,
         journaled: true,
     })
+}
+
+/// Append several `(file, reason)` entries under one action with one durable write.
+/// `check-changes` on a tree with many drifted files used to rewrite and sync the day's
+/// journal once per file (151 times, about 8 seconds, on Specula). Same duplicate rule as
+/// [`append_journal`]. Returns how many entries were written.
+pub fn append_journal_many(
+    root: &Path,
+    action: &str,
+    entries: &[(String, String)],
+) -> Result<usize, String> {
+    if entries.is_empty() || crate::worktree::is_overlay(root) {
+        return Ok(0);
+    }
+    let stamp = local_stamp();
+    let path = journal_path(root, &stamp);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut body = fs::read_to_string(&path).unwrap_or_default();
+    let mut written = 0;
+    for (file, reason) in entries {
+        if journal_duplicate(&body, action, file, reason, &stamp) {
+            continue;
+        }
+        body.push_str(&format!(
+            "## [{stamp}] {action}\n**File:** {file}\n**Reason:** {reason}\n\n"
+        ));
+        written += 1;
+    }
+    if written > 0 {
+        write_durable(&path, body.as_bytes())?;
+    }
+    Ok(written)
 }
 
 fn journal_duplicate(existing: &str, action: &str, file: &str, reason: &str, stamp: &str) -> bool {
@@ -445,23 +494,22 @@ fn symbols_field(value: Option<&Json>) -> String {
 }
 
 pub fn read_pending(root: &Path) -> String {
-    fs::read_to_string(root.join("pending_updates.md")).unwrap_or_default()
+    fs::read_to_string(crate::worktree::state(root, "pending_updates.md")).unwrap_or_default()
 }
 
 pub fn folder_card(root: &Path, prefix: &str) -> Option<String> {
     let rel = if prefix.is_empty() || prefix == "." {
-        root.join(".wikifier_staging")
+        crate::worktree::staging(root)
             .join("maps")
             .join("_root.json")
     } else {
-        root.join(".wikifier_staging")
+        crate::worktree::staging(root)
             .join("maps")
             .join(prefix)
             .join("_index.json")
     };
     fs::read_to_string(rel).ok().or_else(|| {
-        let alt = root
-            .join(".wikifier_staging")
+        let alt = crate::worktree::staging(root)
             .join("maps")
             .join("_root.json");
         if prefix.is_empty() {

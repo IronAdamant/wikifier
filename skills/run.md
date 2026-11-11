@@ -1,6 +1,6 @@
 # Wikifier Agent Protocol v0.7
 
-**Package 5.4.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
+**Package 5.5.0** (live version: `wikifier --version`, from `Cargo.toml`) · **Status:** active, supersedes v0.6 · **Scope:** agent-to-agent codebase wiki for token-efficient lookup. Not a human docs product, not an issue tracker.
 
 This file is the contract for any agent operating Wikifier. Part 1 is all you need day to day; Part 2 is reference. In the Wikifier repository, `AGENTS.md` is the entry point and points here.
 
@@ -67,7 +67,7 @@ wikifier: tools core
 ### Paste into new sessions
 
 ```
-You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.4.0).
+You are operating inside a Wikifier-managed codebase (Agent Protocol v0.7, package 5.5.0).
 It is an agent-to-agent wiki: look things up (health, file wikis, deps) instead of re-reading sources.
 
 SELECTIVE WORK: only update 🔴 Red and actionable 🟡 Yellow files; never re-wiki 🟢 Green files;
@@ -109,7 +109,7 @@ A content change stores `changed_lines` on the health entry and on the Yellow `p
 | `line_count` | physical lines (blanks and comments included) are greater than `modularity_max_lines` | 800 |
 | `fan_in` | other mapped files that import it are greater than `modularity_max_fan_in` | 12 |
 
-Each action has `file`, `kind`, `value`, `threshold`, and `reason`. `0` disables that kind. The keys are in `.wikifier/config` (full-line `#` comments; `key=value`). `WIKIFIER_MODULARITY_MAX_LINES` and `WIKIFIER_MODULARITY_MAX_FAN_IN` override the file. A missing key uses the default, so an older config keeps working. `init` writes the four keys when it creates the config. The same alerts are in the result's `modularity` object (`max_lines`, `max_fan_in`, `alert_count`, `alerts`) and in `.wikifier_staging/modularity.json`, refreshed by `check-changes`. A new crossing is journaled once (`action: modularity`). Fan-in uses the last dependency map, not a fresh parse.
+Each action has `file`, `kind`, `value`, `threshold`, and `reason`. A crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.*`) gets no `fan_in` alert, since every import of the package resolves to it. Alerts rank by `value / threshold`; in `actions[]`, alerts on files changed since their mark-green come first. Replies list the first 10 alerts (`full` lists all); `modularity` gives `alert_count`, `by_kind`, and `alerts_listed`, and its `alerts` entries are `file`, `kind`, `value`, `threshold`. `0` disables that kind. The keys are in `.wikifier/config` (full-line `#` comments; `key=value`). `WIKIFIER_MODULARITY_MAX_LINES` and `WIKIFIER_MODULARITY_MAX_FAN_IN` override the file. A missing key uses the default, so an older config keeps working. `init` writes the four keys when it creates the config. The same alerts are in the result's `modularity` object (`max_lines`, `max_fan_in`, `alert_count`, `by_kind`, `alerts_listed`, `alerts`) and in `.wikifier_staging/modularity.json`, refreshed by `check-changes`. A new crossing is journaled once (`action: modularity`). Fan-in uses the last dependency map, not a fresh parse.
 
 ### Wiki verification (mark_green)
 
@@ -143,7 +143,11 @@ A change that leaves the public surface alone (a bug fix inside a function) pass
 - `get_dependents(file)`: who imports it (indexed lookup).
 - ACS triage: work from `actionable_low_conf_edges` + `reason_code_counts`. `external_or_bare` and `dynamic_literal` edges are noise, not work items.
 - `get_cycles`: strongly connected components of size greater than 1. Each component includes `external_edges` and `break_hint` (the lowest-confidence edge inside the component, with `src`, `dst`, `confidence`, and `reason`).
-- Parsers: comment-masked regex for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8 and stored as `via_barrel`. A Python import indented under a block is `conditional`. `import()` is `dynamic`. See *Implementation* for what this scan does and does not resolve.
+- Parsers: comment-masked regex for Python, JS/TS, Rust, Go, C/C++, C#, and Java. Named JS/TS re-exports are followed to depth 8 and stored as `via_barrel`. A Rust module path a glob brought into scope (`sight::X` under `use super::*;`, through up to four globs) is also `via_barrel`. A Python import indented under a block is `conditional`. `import()` is `dynamic`. See *Implementation* for what this scan does and does not resolve.
+
+### Worktrees (`worktree_root`)
+
+Every read tool takes `worktree_root` (absolute path; CLI `--worktree <path>`). The answer describes that git worktree: main's map plus an overlay of the files the branch added, changed, or deleted, kept in main's `.wikifier_staging/overlays/<hash>/` and refreshed by size and mtime on each call. Replies add `worktree` and `overlay_files`; paths are relative to the worktree. Health rows and `changed_lines` compare the tree with main's health and mark-green snapshots (changed is Yellow, deleted is Red, new is an Initial stub), and `modularity.new_in_worktree` lists the alerts the branch added. Writers (`record_change`, `record_changes`, `record_deletion`, `mark_green`, `heal_stubs`, `seed_source_content_hashes`, and the CLI's `seed-health`, `prune-*`, `init`, `monitor`, `serve`, `daemon`) return `WorktreeReadOnly`: Wikifier keeps one state, on main, so record changes there after the merge. A bad path returns `WorktreeError` with the fix. A root that is itself a linked worktree without Wikifier state, whose main checkout has it, is treated as `worktree_root` automatically.
 
 ### Update maps
 
@@ -152,7 +156,7 @@ A change that leaves the public surface alone (a bug fix inside a function) pass
 ### Results and errors
 
 - Every library/MCP call returns a dict with `success`. Operational failures (missing root, missing file, path outside the project, lock timeout, I/O) return `{"success": false, "error", "error_type"}`; lock timeouts add `timed_out: true`.
-- MCP mutators run under a deadline (`WIKIFIER_MCP_DEADLINE_S`, default 60s). On `timed_out` the call may still complete in the background (`may_still_complete: true`) — check `why_file` before retrying. Identical `record_change` retries within 120s are de-duplicated in the journal (`duplicate_skipped: true`).
+- MCP calls run under a deadline (`timeout_s`, else `WIKIFIER_MCP_DEADLINE_S`, else 60s; at most 600s, under the client's 30-minute idle limit). On `timed_out` the call may still complete in the background (`may_still_complete: true`) — check `why_file` before retrying. Identical `record_change` retries within 120s are de-duplicated in the journal (`duplicate_skipped: true`).
 - Request `format="json"` for decisions; text output is for humans.
 - Over MCP, replies that grow with the repository are compact unless `full: true`: `health` gives the counts and the 10 most actionable entries, `get_cycles` 5 cycles with at most 10 files each, `get_dependents` 50 dependents (`prepare_edit` 25) plus `dependents_total` and `dependent_dirs`, `get_resolution_diagnostics` the reason counts plus 20 notes. `limit` sets the count. The CLI returns everything.
 - One rule for every cap (`limit`, `max_items`, `max_files`, `WIKIFIER_CHECK_CHANGES_MAX`), CLI and MCP: absent is the tool's default, `0` is no cap (the same as `full: true`), `N` is at most N.
@@ -190,7 +194,7 @@ The implementation is a std-only Rust binary. `wikifier.sh` / `.ps1` / `.bat` la
 
 There is no Python library. Agents call the CLI or `wikifier mcp`. The same functions live in the Rust crate (`src/api.rs`) and both fronts call them.
 
-### Implementation (package 5.4.0, protocol stays v0.7)
+### Implementation (package 5.5.0, protocol stays v0.7)
 
 The program is a std-only Rust binary under `src/`. `Cargo.toml` has an empty `[dependencies]` list. Launchers exec that binary. MCP is `wikifier mcp`.
 

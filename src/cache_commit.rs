@@ -116,6 +116,8 @@ pub struct Session {
     rewrite_index: bool,
     sizes: Sizes,
     reparse: BTreeSet<String>,
+    /// Rows parsed by an older parser. The parser stamp is written once all are parsed again.
+    parser_due: BTreeSet<String>,
     _lock: LockGuard,
 }
 
@@ -133,7 +135,16 @@ impl Session {
                 rev.entry(dst.clone()).or_default().insert(rel.clone());
             }
         }
-        let check = check_entries(root, &rows, &rev);
+        let mut check = check_entries(root, &rows, &rev);
+        let parser_due: BTreeSet<String> = if parser_current(root) {
+            BTreeSet::new()
+        } else {
+            rows.keys()
+                .filter(|rel| cache::PARSER_RESCAN.iter().any(|ext| rel.ends_with(ext)))
+                .cloned()
+                .collect()
+        };
+        check.reparse.extend(parser_due.iter().cloned());
         let rewrite_index = rewrite_index
             || check.rewrite
             || !check.reparse.is_empty()
@@ -151,6 +162,7 @@ impl Session {
             rewrite_index,
             sizes: check.sizes,
             reparse: check.reparse,
+            parser_due,
             _lock: lock,
         })
     }
@@ -186,6 +198,7 @@ impl Session {
     }
 
     pub fn upsert(&mut self, upd: &FileUpdate) {
+        self.parser_due.remove(&upd.rel);
         self.removed.remove(&upd.rel);
         let old = self
             .rows
@@ -258,6 +271,7 @@ impl Session {
     }
 
     pub fn remove(&mut self, rel: &str) {
+        self.parser_due.remove(rel);
         let importers: Vec<String> = self
             .rev
             .get(rel)
@@ -427,8 +441,17 @@ impl Session {
         )?;
         let _ = fs::remove_file(cache::commit_pending_path(&self.root));
         cache::atomic_write(&cache::names_marker(&self.root), b"fnv1a64\n")?;
+        if self.parser_due.is_empty() && !parser_current(&self.root) {
+            cache::atomic_write(&cache::parser_marker(&self.root), cache::PARSER_STAMP)?;
+        }
         Ok(())
     }
+}
+
+/// True when the cache was written by this parser, so rows whose size and mtime match
+/// can be trusted without parsing them again.
+fn parser_current(root: &Path) -> bool {
+    fs::read(cache::parser_marker(root)).is_ok_and(|bytes| bytes == cache::PARSER_STAMP)
 }
 
 /// Kinds of cache file `Session::open` checks before trusting a row: sub-directory and

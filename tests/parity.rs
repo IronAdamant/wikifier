@@ -160,6 +160,36 @@ const FIXTURES: &[Fixture] = &[
             ("tests/use_lib.rs", "src/lib.rs"),
         ],
     },
+    // 5.5.0: a `sight::X` path that a glob (`use super::*;`) brought into scope is an
+    // edge to sight.rs, through one or two globs. A head the file imports by name
+    // (`use std::fs;`) is not followed to the crate's own `fs` module.
+    Fixture {
+        name: "rust_glob_imports",
+        files: &[
+            ("Cargo.toml", "[package]\nname = \"globdemo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+            ("src/lib.rs", "pub mod sight;\npub mod studio;\npub mod anim;\npub mod fs;\npub mod other;\n"),
+            ("src/sight.rs", "pub const SCHEMA: &str = \"s\";\npub fn go() {}\n"),
+            ("src/fs.rs", "pub fn read(_: &str) {}\n"),
+            ("src/studio.rs", "use super::*;\n\npub fn f() -> &'static str {\n    // sight::go is only a comment here\n    sight::SCHEMA\n}\n"),
+            ("src/anim.rs", "use super::*;\nmod steps;\n"),
+            ("src/anim/steps.rs", "use super::*;\n\nfn g() {\n    sight::go();\n}\n"),
+            ("src/other.rs", "use super::*;\nuse std::fs;\n\nfn h() {\n    let _ = fs::read(\"x\");\n}\n"),
+        ],
+        edges: &[
+            ("src/lib.rs", "src/sight.rs"),
+            ("src/lib.rs", "src/studio.rs"),
+            ("src/lib.rs", "src/anim.rs"),
+            ("src/lib.rs", "src/fs.rs"),
+            ("src/lib.rs", "src/other.rs"),
+            ("src/studio.rs", "src/lib.rs"),
+            ("src/studio.rs", "src/sight.rs"),
+            ("src/anim.rs", "src/lib.rs"),
+            ("src/anim.rs", "src/anim/steps.rs"),
+            ("src/anim/steps.rs", "src/anim.rs"),
+            ("src/anim/steps.rs", "src/sight.rs"),
+            ("src/other.rs", "src/lib.rs"),
+        ],
+    },
 ];
 
 #[test]

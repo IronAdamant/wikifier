@@ -1,28 +1,21 @@
 # Pending Updates
 
 - src/jsonutil.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
-- src/legacy_cache.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/proc.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
-- src/project_lock.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/timeutil.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - tests/behaviour_gaps.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/cache_and_artifacts.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/cli_surface.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/contract_gaps.rs: LLM/agent edit — Tests for those parity fixes.
-- tests/parity.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/protocol_v07.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/robustness.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/skip_maps.rs: LLM/agent edit — Tests for those parity fixes.
 - scripts/benchmark_parity.sh: LLM/agent edit — Benchmark script and measured results.
 - scripts/benchmark_results.md: LLM/agent edit — Benchmark script and measured results.
 - src/cycle_report.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
-- src/daemon_svc.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
-- src/low_conf.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/symbols.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - src/text_out.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
-- src/wiki_files.rs: LLM/agent edit — Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions.
 - tests/parity_fixes.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/agent_args.rs: LLM/agent edit — new: agent-style file args, missing args, lean MCP outputs, init roots, CRLF (claude/windows-verify)
 - tests/speed_paths.rs: new: fast paths give the slow paths' answers (claude/windows-verify speed) — refresh the wiki, then mark-green
-- tests/tool_groups.rs: MCP tool groups with WIKIFIER_TOOLS/WIKIFIER_DISABLE per the suite convention (claude/tool-groups) — refresh the wiki, then mark-green
 - tests/compact_replies.rs: B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/specula-fixes) — refresh the wiki, then mark-green

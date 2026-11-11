@@ -26,6 +26,7 @@ pub mod symbols;
 pub mod text_out;
 pub mod timeutil;
 mod wiki_files;
+mod worktree;
 
 pub use api::{
     cache_status, check_changes, health, list_paths, load_dependencies, load_dependents,

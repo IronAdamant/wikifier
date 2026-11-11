@@ -43,7 +43,7 @@ impl ProjectLock {
         if nested {
             return Ok(ProjectLock { path: None });
         }
-        let dir = root.join(".wikifier_staging");
+        let dir = crate::worktree::staging(root);
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let path = dir.join(".lock");
         let deadline = Instant::now() + Duration::from_secs(30);

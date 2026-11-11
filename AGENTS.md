@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.4.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
+Entry point for any coding agent working in this repository, or using Wikifier on another tree. The day-to-day contract is `skills/run.md` (Agent Protocol v0.7, package 5.5.0). Read that file before substantive work. This file says what is live, what is history, and which rules are easy to miss.
 
 ## What this program is
 
@@ -23,6 +23,8 @@ On this repo, or on any Wikifier-managed tree:
 7. `wikifier update-maps` only when imports or structure changed.
 
 Many files: `wikifier record-changes -r "path/or/glob=why" --only <your files> --green`.
+
+Working in a git worktree: pass `worktree_root` (CLI `--worktree`) to read tools, and the answer describes your tree, not main. Writers refuse a worktree; record changes on main after the merge.
 
 Prefer the CLI when the connected MCP server is still `python3 -m wikifier.mcp.server` or `wikifier-mcp`. Those entry points belong to the archived package and the handshake fails. Pass `project_root=` on every MCP call for a tree that is not the server's cwd.
 
