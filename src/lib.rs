@@ -8,6 +8,7 @@ mod cache_commit;
 mod cycle_report;
 mod daemon_svc;
 mod drift;
+mod git_index;
 pub mod jsonutil;
 mod legacy_cache;
 mod low_conf;

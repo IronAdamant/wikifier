@@ -183,9 +183,25 @@ fn extract_target(args: &[String]) -> (Option<PathBuf>, bool, Vec<String>) {
     let mut root = env::var("WIKIFIER_PROJECT_ROOT").ok().map(PathBuf::from);
     let mut explicit = false;
     let mut rest = Vec::new();
+    let mut moved = Vec::new();
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
+        // `--worktree` may come before the command, like `--target`; it is moved after it,
+        // where the command's own flags are read.
+        if (a == "--worktree" || a == "--worktree-root") && i + 1 < args.len() {
+            moved.push(a.clone());
+            moved.push(args[i + 1].clone());
+            i += 2;
+            continue;
+        }
+        if a.starts_with("--worktree=") || a.starts_with("--worktree-root=") {
+            let (key, value) = a.split_once('=').unwrap_or((a, ""));
+            moved.push(key.to_string());
+            moved.push(value.to_string());
+            i += 1;
+            continue;
+        }
         if (a == "--target" || a == "--project-root") && i + 1 < args.len() {
             root = Some(PathBuf::from(&args[i + 1]));
             explicit = true;
@@ -204,6 +220,7 @@ fn extract_target(args: &[String]) -> (Option<PathBuf>, bool, Vec<String>) {
         rest.push(a.clone());
         i += 1;
     }
+    rest.extend(moved);
     (root, explicit, rest)
 }
 

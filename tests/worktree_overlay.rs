@@ -707,3 +707,161 @@ fn mcp_read_tools_take_worktree_root_and_writers_do_not_list_it() {
     );
     assert_eq!(reply.get("overlay_files"), Some(&Json::Int(5)), "{reply}");
 }
+
+/// A git index (version 2) whose entries carry each file's real size and mtime and the
+/// given blob byte, written with an mtime in the future so no entry is racily clean.
+fn write_git_index(index: &Path, checkout: &Path, files: &[(&str, u8)]) {
+    let mut entries: Vec<(&str, u8)> = files.to_vec();
+    entries.sort();
+    let mut out = b"DIRC".to_vec();
+    out.extend_from_slice(&2u32.to_be_bytes());
+    out.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+    for (rel, blob) in entries {
+        let meta = fs::metadata(checkout.join(rel)).unwrap();
+        let since = meta.modified().unwrap().duration_since(UNIX_EPOCH).unwrap();
+        let start = out.len();
+        for value in [
+            0,
+            0,
+            since.as_secs() as u32,
+            since.subsec_nanos(),
+            0,
+            0,
+            0o100644,
+            0,
+            0,
+            meta.len() as u32,
+        ] {
+            out.extend_from_slice(&value.to_be_bytes());
+        }
+        out.extend_from_slice(&[blob; 20]);
+        out.extend_from_slice(&(rel.len() as u16).to_be_bytes());
+        out.extend_from_slice(rel.as_bytes());
+        let len = (62 + rel.len() + 8) & !7;
+        out.resize(start + len, 0);
+    }
+    out.extend_from_slice(&[0; 20]);
+    fs::write(index, out).unwrap();
+    let later = SystemTime::now() + std::time::Duration::from_secs(60);
+    fs::File::options()
+        .write(true)
+        .open(index)
+        .unwrap()
+        .set_modified(later)
+        .unwrap();
+}
+
+#[test]
+fn a_fresh_worktree_trusts_the_git_index_instead_of_reading_every_file() {
+    let main = main_tree("gitindex");
+    let tree = linked_tree(&main);
+    // b.rs gets new bytes, but both git indexes say it is the same blob as main's: the
+    // overlay must take git's word and not read it, so main's edge b.rs -> core.rs stays.
+    write(&tree, "src/b.rs", "pub fn b() {}\n");
+    // c.rs changes and git knows it (another blob): it is read and re-parsed.
+    write(
+        &tree,
+        "src/c.rs",
+        "use crate::core::Camera;\npub fn c() {}\n",
+    );
+    let files = [
+        "Cargo.toml",
+        "src/lib.rs",
+        "src/core.rs",
+        "src/a.rs",
+        "src/b.rs",
+        "src/c.rs",
+    ];
+    let main_blobs: Vec<(&str, u8)> = files.iter().map(|f| (*f, 1)).collect();
+    let tree_blobs: Vec<(&str, u8)> = files
+        .iter()
+        .map(|f| (*f, if *f == "src/c.rs" { 2 } else { 1 }))
+        .collect();
+    write_git_index(&main.join(".git/index"), &main, &main_blobs);
+    write_git_index(&main.join(".git/worktrees/lane/index"), &tree, &tree_blobs);
+    let value = dispatch(
+        "get_dependents",
+        &main,
+        &["src/core.rs".into()],
+        &flags(&[("worktree_root", &tree.display().to_string())]),
+    );
+    assert_eq!(
+        strings(&value, "dependents"),
+        ["src/a.rs", "src/b.rs", "src/c.rs", "src/lib.rs"],
+        "{value}"
+    );
+    assert_eq!(value.get("overlay_files"), Some(&Json::Int(1)), "{value}");
+    // Without a readable index on the tree side, every file is hashed and b.rs is seen.
+    fs::remove_file(main.join(".git/worktrees/lane/index")).unwrap();
+    fs::remove_dir_all(main.join(".wikifier_staging/overlays")).unwrap();
+    let hashed = dispatch(
+        "get_dependents",
+        &main,
+        &["src/core.rs".into()],
+        &flags(&[("worktree_root", &tree.display().to_string())]),
+    );
+    assert_eq!(
+        strings(&hashed, "dependents"),
+        ["src/a.rs", "src/c.rs", "src/lib.rs"],
+        "{hashed}"
+    );
+}
+
+#[test]
+fn the_cli_takes_worktree_before_the_command_too() {
+    let main = main_tree("cli-first");
+    let tree = linked_tree(&main);
+    edit_branch(&tree);
+    let wt = tree.display().to_string();
+    let target = main.display().to_string();
+    for args in [
+        vec![
+            "--worktree",
+            wt.as_str(),
+            "--target",
+            target.as_str(),
+            "dependents",
+            "src/core.rs",
+        ],
+        vec![
+            "--target",
+            target.as_str(),
+            "--worktree",
+            wt.as_str(),
+            "dependents",
+            "src/core.rs",
+        ],
+        vec![
+            "--target",
+            target.as_str(),
+            "dependents",
+            "src/core.rs",
+            "--worktree",
+            wt.as_str(),
+        ],
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_wikifier"))
+            .args(&args)
+            .output()
+            .unwrap();
+        let value = jsonutil::parse(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
+        assert_eq!(
+            strings(&value, "dependents"),
+            ["src/c.rs", "src/d.rs", "src/lib.rs"],
+            "{args:?}: {value}"
+        );
+    }
+    let joined = format!("--worktree={wt}");
+    let out = Command::new(env!("CARGO_BIN_EXE_wikifier"))
+        .args([
+            joined.as_str(),
+            "--target",
+            target.as_str(),
+            "dependents",
+            "src/core.rs",
+        ])
+        .output()
+        .unwrap();
+    let value = jsonutil::parse(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
+    assert!(value.get("worktree").is_some(), "{value}");
+}

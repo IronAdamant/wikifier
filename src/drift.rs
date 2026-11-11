@@ -182,12 +182,26 @@ fn compute(
     }
     let mut next_cache = HashMap::new();
     let mut found = Vec::new();
+    // A worktree counts the lines of a file it did not change in main's copy, with main's
+    // line cache, instead of reading its own copy.
+    let base_view = crate::worktree::base_view(root);
+    let main_cache = base_view
+        .as_ref()
+        .map(|view| read_state(view.main()).line_cache)
+        .unwrap_or_default();
     for rel in crate::cache::all_paths(root) {
-        let path = root.join(&rel);
+        let from_main = base_view
+            .as_ref()
+            .filter(|view| view.unchanged(root, &rel))
+            .map(|view| view.main_path(&rel));
+        let (path, prior) = match from_main {
+            Some(main_path) => (main_path, main_cache.get(&rel)),
+            None => (root.join(&rel), cache.get(&rel)),
+        };
         if !path.is_file() {
             continue;
         }
-        let Some((lines, rec)) = cached_lines(&path, cache.get(&rel)) else {
+        let Some((lines, rec)) = cached_lines(&path, prior) else {
             continue;
         };
         next_cache.insert(rel.clone(), rec);

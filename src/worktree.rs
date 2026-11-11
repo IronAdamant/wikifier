@@ -101,6 +101,49 @@ pub(crate) fn baselines(root: &Path) -> PathBuf {
     }
 }
 
+type Rows = std::collections::HashMap<String, (u128, u64, String)>;
+
+/// Main's map next to the overlay's, for the files the branch did not change. Health and
+/// modularity treat such a file as main's: main's health row as it stands, main's line
+/// count, and no read of the tree's copy (which on a fresh checkout is slow to read).
+pub(crate) struct BaseView {
+    main: PathBuf,
+    base: Rows,
+    over: Rows,
+}
+
+impl BaseView {
+    /// True when `rel` in the tree holds the bytes main's map hashed: the overlay row
+    /// still matches the file's size and mtime, and its hash is main's row hash.
+    pub(crate) fn unchanged(&self, root: &Path, rel: &str) -> bool {
+        let (Some(over), Some(base)) = (self.over.get(rel), self.base.get(rel)) else {
+            return false;
+        };
+        over.2 == base.2
+            && over.2.starts_with("sha256:")
+            && crate::cache::stat_ns(&root.join(rel)) == Some((over.0, over.1))
+    }
+
+    /// Main's copy of `rel`.
+    pub(crate) fn main_path(&self, rel: &str) -> PathBuf {
+        self.main.join(rel)
+    }
+
+    pub(crate) fn main(&self) -> &Path {
+        &self.main
+    }
+}
+
+/// `Some` while `root` is a worktree being answered from an overlay.
+pub(crate) fn base_view(root: &Path) -> Option<BaseView> {
+    let overlay = find(root)?;
+    Some(BaseView {
+        base: crate::cache::index_by_path(&overlay.main),
+        over: crate::cache::index_by_path(root),
+        main: overlay.main,
+    })
+}
+
 struct Registration {
     tree: PathBuf,
 }
@@ -420,6 +463,7 @@ fn prepare(main: &Path, tree: &Path, health: bool) -> Result<Active, String> {
     for name in STATE_RESET {
         let _ = fs::remove_file(dir.join("state").join(name));
     }
+    adopt_unchanged(main, tree);
     let maps = crate::api::update_maps_run(
         tree,
         &crate::api::MapRun {
@@ -477,7 +521,43 @@ fn seed(main: &Path, tree: &Path, dir: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+/// Copy a cache directory: hard links where the file system allows, else copies. Its
+/// files are small and many (about 2,200 on Specula), so the work runs on several threads.
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    let mut pairs = Vec::new();
+    list_tree(from, to, &mut pairs)?;
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, 8);
+    let chunk = pairs.len().div_ceil(threads).max(1);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = pairs
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter().try_for_each(|(src, dst)| {
+                        // Every cache write replaces a file by rename and never edits one
+                        // in place, so a hard link is a safe copy: a later write by either
+                        // side swaps in a new file and leaves the other side's alone.
+                        fs::hard_link(src, dst)
+                            .or_else(|_| fs::copy(src, dst).map(|_| ()))
+                            .map_err(|e| format!("{}: {e}", src.display()))
+                    })
+                })
+            })
+            .collect();
+        workers.into_iter().try_for_each(|worker| {
+            worker
+                .join()
+                .unwrap_or_else(|_| Err("overlay copy thread panicked".to_string()))
+        })
+    })
+}
+
+/// Create the directories under `to` and list the files to copy, skipping locks and
+/// half-written temp files.
+fn list_tree(from: &Path, to: &Path, out: &mut Vec<(PathBuf, PathBuf)>) -> Result<(), String> {
     fs::create_dir_all(to).map_err(|e| e.to_string())?;
     for entry in fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
         let name = entry.file_name();
@@ -488,12 +568,76 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
         let path = entry.path();
         let dest = to.join(&name);
         if path.is_dir() {
-            copy_tree(&path, &dest)?;
+            list_tree(&path, &dest, out)?;
         } else {
-            fs::copy(&path, &dest).map_err(|e| format!("{}: {e}", path.display()))?;
+            out.push((path, dest));
         }
     }
     Ok(())
+}
+
+/// Give overlay rows the tree's size and mtime when git proves the tree's file holds the
+/// bytes main's map hashed, so the map run skips them by stat instead of reading them.
+/// The proof: main's file still has the size and mtime of main's map row (so its bytes
+/// are what the map hashed) and of main's git index entry, the tree's file has the size
+/// and mtime of the tree's git index entry, and both entries name the same blob. A fresh
+/// `git worktree add` gives every file a new mtime; without this the first call read the
+/// whole tree. Returns how many rows were adopted. Without a readable git index on both
+/// sides this does nothing and the map run hashes, as before.
+fn adopt_unchanged(main: &Path, tree: &Path) -> usize {
+    let rows = crate::cache::index_by_path(tree);
+    let candidates: Vec<(String, u128, u64)> = rows
+        .into_iter()
+        .filter_map(|(rel, (mtime, size, hash))| {
+            if !hash.starts_with("sha256:") {
+                return None;
+            }
+            let stat = crate::cache::stat_ns(&tree.join(&rel))?;
+            (stat != (mtime, size)).then_some((rel, mtime, size))
+        })
+        .collect();
+    if candidates.is_empty() {
+        return 0;
+    }
+    let (Some(main_index), Some(tree_index)) = (
+        crate::git_index::GitIndex::read(main),
+        crate::git_index::GitIndex::read(tree),
+    ) else {
+        return 0;
+    };
+    let mut adopted = Vec::new();
+    for (rel, mtime, size) in candidates {
+        let main_path = main.join(&rel);
+        if crate::cache::stat_ns(&main_path) != Some((mtime, size)) {
+            continue;
+        }
+        let tree_path = tree.join(&rel);
+        let (Some(base), Some(ours)) = (
+            main_index.blob_if_fresh(&rel, &main_path),
+            tree_index.blob_if_fresh(&rel, &tree_path),
+        ) else {
+            continue;
+        };
+        if base != ours {
+            continue;
+        }
+        if let Some((tree_mtime, tree_size)) = crate::cache::stat_ns(&tree_path) {
+            adopted.push((rel, tree_mtime, tree_size));
+        }
+    }
+    if adopted.is_empty() {
+        return 0;
+    }
+    let Ok(mut session) = crate::cache::Session::open(tree) else {
+        return 0;
+    };
+    for (rel, mtime, size) in &adopted {
+        session.note_stat(rel, *mtime, *size);
+    }
+    if session.commit().is_err() {
+        return 0;
+    }
+    adopted.len()
 }
 
 /// Drop overlays whose worktree is gone, and seeds that never finished.

@@ -517,7 +517,15 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         return fail_warnings(kind, err, &warnings);
     }
     let _ = seed_health_from_map(root);
-    if cache_changed || !crate::maps_out::current(root) {
+    // A worktree overlay builds library.md and the folder cards only when something asks
+    // for them (session_bootstrap), then keeps them current when an edge changes. Writing
+    // them on every overlay refresh cost 1.5 s on Specula.
+    let write_maps = if crate::worktree::is_overlay(root) {
+        (parsed > 0 || !stale.is_empty()) && artifacts::folder_card(root, "").is_some()
+    } else {
+        cache_changed || !crate::maps_out::current(root)
+    };
+    if write_maps {
         if let Err(err) = crate::maps_out::write(root) {
             warnings.push(format!("map artifacts: {err}"));
         }
@@ -1283,12 +1291,20 @@ pub fn check_changes(root: &Path) -> Json {
     let mut notes: Vec<(String, String)> = Vec::new();
     let mut pending_rels: Vec<String> = Vec::new();
     let indexed = cache::index_by_path(root);
+    // For a worktree, a file the branch did not change keeps main's health row as it is.
+    let base_view = crate::worktree::base_view(root);
     let mut row_at: HashMap<String, usize> = rows
         .iter()
         .enumerate()
         .map(|(i, row)| (row.file.clone(), i))
         .collect();
     for rel in watched {
+        if base_view
+            .as_ref()
+            .is_some_and(|view| view.unchanged(root, &rel))
+        {
+            continue;
+        }
         let path = root.join(&rel);
         let idx = row_at.get(&rel).copied();
         if !path.is_file() {

@@ -9,3 +9,5 @@
 The line diff anchors on a line that is unique in both sides of a window, then splits. It is a review aid, not a linter.
 
 5.5.0: alerts sort by `severity` (`value / threshold`), worst first. A crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.*`) gets no `fan_in` alert. `LISTED` (10) is how many alerts a reply lists without `full`. Baselines are read from `crate::worktree::baselines`, which is main's for a worktree, and `save_baseline` does nothing for a worktree.
+
+For a worktree, a file the branch did not change is counted in main's copy with main's line cache.
