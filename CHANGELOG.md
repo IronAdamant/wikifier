@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-11-11
+
 ### Added
 - Modularity alerts in `session-bootstrap`, `suggest-next` / `issues`, and `health`. A mapped file with more physical lines than `modularity_max_lines` (default 800) or more dependents than `modularity_max_fan_in` (default 12) becomes a `review_modularity` action (priority 3, `kind` `line_count` or `fan_in`, plus `value` and `threshold`). `0` disables that check. Keys live in `.wikifier/config`; `WIKIFIER_MODULARITY_MAX_LINES` and `WIKIFIER_MODULARITY_MAX_FAN_IN` override them. Missing keys use the defaults, including on a config file written before this change. The alert does not split the file and does not change its health color. `check-changes` writes `.wikifier_staging/modularity.json` and journals a crossing once, so every agent on the project root sees the same list.
 - `changed_lines` on a content-changed Yellow file: 1-based inclusive `{start, end}` ranges in the current file, from the snapshot `mark-green` stores under `.wikifier_staging/baselines/`. A pure deletion points at the surviving neighbour. With no snapshot, the range is the whole file. The ranges are on the health entry, on the `prepare_edit` action, and on `prepare-edit`. Not a linter.

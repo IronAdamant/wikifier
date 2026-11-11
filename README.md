@@ -21,11 +21,11 @@ Download a binary from the [GitHub releases](https://github.com/IronAdamant/wiki
 Check `SHA256SUMS`, unpack, and put `wikifier` (`wikifier.exe` on Windows) on your `PATH`:
 
 ```bash
-# Linux x86_64, 5.3.1
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.3.1/SHA256SUMS
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.3.1/wikifier-5.3.1-x86_64-unknown-linux-gnu.tar.gz
+# Linux x86_64, 5.4.0
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.4.0/SHA256SUMS
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.4.0/wikifier-5.4.0-x86_64-unknown-linux-gnu.tar.gz
 sha256sum --check --ignore-missing SHA256SUMS
-tar -xzf wikifier-5.3.1-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf wikifier-5.4.0-x86_64-unknown-linux-gnu.tar.gz
 ./wikifier --version
 ```
 
