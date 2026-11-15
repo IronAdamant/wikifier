@@ -4,11 +4,11 @@
 |------|--------|--------------|-----------------|
 | .github/workflows/publish.yml | 🟢 Green | 2026-11-03 09:27:04 | Multi-target release archives and SHA256SUMS (subid=release-5.0.0) |
 | AGENTS.md | 🟢 Green | 2026-11-15 09:51:59 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
-| CHANGELOG.md | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
+| CHANGELOG.md | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
 | CLAUDE.md | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
 | CONTRIBUTING.md | 🟢 Green | 2026-11-03 05:34:35 | Address the 3 Nov review findings (subid=review-2026-11-03) |
 | Cargo.lock | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
-| Cargo.toml | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
+| Cargo.toml | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
 | Findings/M5-Dogfood-Assessment-Report.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
 | Findings/M5-Dogfood-Progress.md | 🟢 Green | 2026-11-03 08:06:46 | Wiki marks this file as the historical M5 log (subid=protocol-v07) |
 | Findings/M5.1-cross-hardening-analysis.md | 🟢 Green | 2026-07-09 05:02:27 | kept; stale yellow cleared |
@@ -19,15 +19,15 @@
 | scripts/benchmark_parity.sh | 🟡 Yellow | 2026-11-03 08:56:15 | Benchmark script and measured results. |
 | scripts/benchmark_results.md | 🟡 Yellow | 2026-11-03 08:56:15 | Benchmark script and measured results. |
 | skills/run.md | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
-| src/api.rs | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
-| src/artifacts.rs | 🟢 Green | 2026-11-11 12:01:53 | m5-fixes: state paths via worktree; append_journal_many for one durable journal write per check-changes run |
+| src/api.rs | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
+| src/artifacts.rs | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
 | src/cache.rs | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
 | src/cache_commit.rs | 🟢 Green | 2026-11-15 09:52:00 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
 | src/cycle_report.rs | 🟡 Yellow | 2026-11-03 08:56:15 | Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions. |
 | src/daemon_svc.rs | 🟢 Green | 2026-11-11 12:01:53 | m5-fixes: daemon state paths under worktree staging (unchanged for main) |
-| src/drift.rs | 🟢 Green | 2026-11-11 12:53:37 | m5-fixes review: worktree line counts of unchanged files come from main's copy and line cache |
+| src/drift.rs | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
 | src/export_sigs.rs | 🟢 Green | 2026-11-15 09:52:01 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
-| src/git_index.rs | 🟢 Green | 2026-11-11 12:53:38 | m5-fixes review: new std-only git index reader (v2/v3) so a fresh worktree's unchanged files are proven without reading them |
+| src/git_index.rs | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
 | src/jsonutil.rs | 🟡 Yellow | 2026-11-03 08:56:14 | Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions. |
 | src/legacy_cache.rs | 🟢 Green | 2026-11-11 12:01:54 | m5-fixes: legacy cache lookup under worktree staging |
 | src/lib.rs | 🟢 Green | 2026-11-15 09:52:01 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
@@ -49,12 +49,12 @@
 | src/text_out.rs | 🟡 Yellow | 2026-11-03 08:56:15 | Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions. |
 | src/timeutil.rs | 🟡 Yellow | 2026-11-03 08:56:14 | Parity with the Python package: wiki lookup, symbols, daemon, init, flags, MCP, cycles, and low-confidence actions. |
 | src/wiki_files.rs | 🟢 Green | 2026-11-11 12:01:54 | m5-fixes: wiki candidates read through worktree state (tree, else main) |
-| src/worktree.rs | 🟢 Green | 2026-11-11 12:53:38 | m5-fixes review: cold first call under 2 s on Specula (git index adoption, hard-linked seed, BaseView for health and line counts) |
+| src/worktree.rs | 🟢 Green | 2026-11-15 12:40:30 | neutral wording for the measured workspace in comments and notes (subid=scrub-name) |
 | tests/agent_args.rs | 🟡 Yellow | 2026-11-05 04:14:08 | new: agent-style file args, missing args, lean MCP outputs, init roots, CRLF (claude/windows-verify) |
 | tests/behaviour_gaps.rs | 🟡 Yellow | 2026-11-03 08:56:14 | Tests for those parity fixes. |
 | tests/cache_and_artifacts.rs | 🟡 Yellow | 2026-11-03 08:56:14 | Tests for those parity fixes. |
-| tests/cli_surface.rs | 🟡 Yellow | 2026-11-05 08:49:40 | B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/specula-fixes) |
-| tests/compact_replies.rs | 🟡 Yellow | 2026-11-05 08:49:40 | B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/specula-fixes) |
+| tests/cli_surface.rs | 🟡 Yellow | 2026-11-05 08:49:40 | B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/live-test-fixes) |
+| tests/compact_replies.rs | 🟡 Yellow | 2026-11-05 08:49:40 | B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/live-test-fixes) |
 | tests/contract_gaps.rs | 🟡 Yellow | 2026-11-03 08:56:14 | Tests for those parity fixes. |
 | tests/dogfood.rs | 🟢 Green | 2026-11-15 09:52:01 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |
 | tests/drift_alerts.rs | 🟢 Green | 2026-11-15 09:52:01 | m5-round2 (5.6.0): follow Rust re-exports to the defining file; modularity hint; docs say what is followed |

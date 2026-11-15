@@ -7,22 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
-
 ## [5.6.0] - 2026-11-15
 
-From the Specula M5 feedback: `get_dependents crates/specula-input/src/input.rs` returned two files in the same crate. The real users are in other crates and import through the crate root (`use specula_input::Input;`), which resolved to `lib.rs` and stopped there.
+From M5 feedback on a large Rust workspace: `get_dependents crates/input/src/input.rs` returned two files in the same crate. The real users are in other crates and import through the crate root (`use workspace_input::Input;`), which resolved to `lib.rs` and stopped there.
 
 ### Fixed
 - Rust re-exports are followed to the file that defines the name. When a path ends at a name in a module (`use sp_input::Input;`, `crate::Input`, `super::Thing`), that module's top-level `use` items are read and the importer gets an edge to the defining file, marked `via_barrel` (confidence 0.7). The edge to the module file stays. Followed: `pub use m::Name;`, `pub use m::{A, B as C};`, `pub use m::*;`, chains through nested modules up to four hops (a longer chain adds no edge), and inside one crate `pub(crate) use` and plain `use` items. Across crates only items with `pub` count. A re-export of a crate outside the project (`pub use std::fmt::Debug;`) is external.
 - A glob import of a module (`use sp_input::*;`) links each name it brings in that the file uses on its own (not after `.` or `::`) to that name's defining file.
 - A path that goes on past a type right below a crate root (`sp_input::Input::new()` with no `use`, `crate::Bundled::ALL`) gets one edge, to the type's definition. Before, it had no edge. It gets no edge to the crate root, so it adds no cycle.
-- On Specula, `dependents crates/specula-input/src/input.rs` went from 2 files to 22 (the `specula-ui`, `specula` and `sepulcra-app` users, examples and tests). The map went from 4523 to 5711 edges; the 37 cycles are the same files as before.
+- On a large Rust workspace, `dependents crates/input/src/input.rs` went from 2 files to 22 (users, examples and tests in other crates). The map went from 4523 to 5711 edges; the 37 cycles are the same files as before.
 
 ### Changed
-- `update-maps` keeps each Rust file's export entries (its `use` items and item names) in `wk_cache/rust_exports.tsv`. When a parsed file's entries change, the files that name a changed entry are parsed in the same run, and so on through modules that pass the name on, up to four hops. They count in `files_parsed`. An edit that leaves the entries alone parses that file only. On Specula, adding a function to `specula-core/src/lib.rs` parsed 1 file; rewriting the `pub use` lines of `specula-input/src/lib.rs` parsed 36.
+- `update-maps` keeps each Rust file's export entries (its `use` items and item names) in `wk_cache/rust_exports.tsv`. When a parsed file's entries change, the files that name a changed entry are parsed in the same run, and so on through modules that pass the name on, up to four hops. They count in `files_parsed`. An edit that leaves the entries alone parses that file only. On a large Rust workspace, adding a function to `crates/core/src/lib.rs` parsed 1 file; rewriting the `pub use` lines of `crates/input/src/lib.rs` parsed 36.
 - The parser stamp is `rust-reexports-1`, so the first `update-maps` after the upgrade parses every Rust file once.
-- Fan-in counts the new edges. On Specula, `fan_in` alerts went from 58 to 92: the files that define widely re-exported types now count their users in other crates.
+- Fan-in counts the new edges. On a large Rust workspace, `fan_in` alerts went from 58 to 92: the files that define widely re-exported types now count their users in other crates.
 - `get_dependents`, the `initialize` instructions and the README say which Rust re-exports are followed and which are not. "Resolved like the compiler" is gone.
 
 ### Added
@@ -33,31 +31,31 @@ From the Specula M5 feedback: `get_dependents crates/specula-input/src/input.rs`
 
 ## [5.5.0] - 2026-11-11
 
-From the Specula M5 feedback: wikifier answered from the main checkout while every lane worked in its own git worktree, and agents did not know when it beats grep.
+From M5 feedback on a large Rust workspace: wikifier answered from the main checkout while every lane worked in its own git worktree, and agents did not know when it beats grep.
 
 ### Added
 - `worktree_root` (CLI `--worktree <path>`) on every MCP tool that reads project state, including `get_dependents`, `get_dependencies`, `get_cycles`, `why_file`, `get_file_wiki`, `health`, `check_changes`, `prepare_edit`, `session_bootstrap`, `suggest_next_actions`, `get_files_needing_attention`, `get_barrel_reports` and `update_maps`. The answer describes that tree: main's map plus an overlay of the files the branch added, changed or deleted (content hashes, with a size and mtime pre-check on every call). The overlay is kept in main's `.wikifier_staging/overlays/<hash of the worktree path>/`, seeded once from main's cache, and pruned when its worktree is gone. Replies carry `worktree` and `overlay_files`; paths are relative to the worktree. Health and changed lines are measured against main's health rows and mark-green snapshots, so a file the branch changed is Yellow with `changed_lines`, a deleted file is Red and a new one is an Initial stub. `modularity.new_in_worktree` lists the modularity alerts the branch added. A missing path, a relative path, or a directory that is not a git worktree of the same repository fails with `WorktreeError` and one line naming the fix. git is not called: the `.git` file and `commondir` are read directly.
-- The first call for a fresh worktree is fast. A new `git worktree add` gives every file a new mtime, so the first overlay call read and hashed the whole tree (18.8 s and 42.9 s on Specula). Now:
+- The first call for a fresh worktree is fast. A new `git worktree add` gives every file a new mtime, so the first overlay call read and hashed the whole tree (18.8 s and 42.9 s on a large Rust workspace). Now:
   - The git index of both checkouts is read (std-only, versions 2 and 3; no `git` call). A file whose size and mtime match its index entry, with the same blob id as main's entry while main's file still matches main's map row, is proven unchanged without being read.
   - The overlay seeds its cache with hard links (cache files are only ever replaced by rename), and falls back to copies.
   - The overlay builds `library.md` and the folder cards only when `session_bootstrap` asks for them, and refreshes them only when an edge changes.
   - Health and modularity treat a file the branch did not change as main's: main's health row as it stands and main's line count, with no read of the tree's copy. `check_changes` with a worktree therefore lists only what the branch changed.
-  - On Specula, the first `get_dependents` for a fresh worktree takes 0.8 s and later calls 0.17 s; a first `health --summary` takes 1.3 s. A tree without a readable git index is hashed as before.
+  - On a large Rust workspace, the first `get_dependents` for a fresh worktree takes 0.8 s and later calls 0.17 s; a first `health --summary` takes 1.3 s. A tree without a readable git index is hashed as before.
 - The CLI takes `--worktree <path>` (or `--worktree=<path>`) before or after the command, like `--target`.
 - Writers refuse a worktree with `WorktreeReadOnly`: `record_change`, `record_changes`, `record_deletion`, `mark_green`, `heal_stubs`, `seed_source_content_hashes`, `seed-health`, `prune-*`, `init`, `monitor`, `serve` and `daemon`. Main's cache, health, journal, pending list and snapshots are never written for a worktree, and nothing is written into the worktree. `update_maps` with a worktree refreshes only its overlay.
 - `initialize` always returns `instructions`: when Wikifier beats grep (`get_dependents` before a type or signature change, `get_cycles`, `why_file`, `health` / `check_changes` before a commit) and how to pass `worktree_root`. The tool-group line and block warnings still come first when a switch or block is set. Tool descriptions say when to use the tool.
 
 ### Changed
-- Modularity alerts (5.4.0), after a run on Specula (662 files: 215 alerts, a 59 KB `health --summary`, a 165 KB bootstrap):
-  - No `fan_in` alert for a crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.{ts,tsx,js,jsx,mjs,cjs,mts,cts}`). Every `use my_crate::X` resolves to `lib.rs`, so its fan-in is the package's (`specula-core/src/lib.rs` had 242). Its `line_count` alert stays.
+- Modularity alerts (5.4.0), after a run on a large Rust workspace (662 files: 215 alerts, a 59 KB `health --summary`, a 165 KB bootstrap):
+  - No `fan_in` alert for a crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.{ts,tsx,js,jsx,mjs,cjs,mts,cts}`). Every `use my_crate::X` resolves to `lib.rs`, so its fan-in is the package's (`crates/core/src/lib.rs` had 242). Its `line_count` alert stays.
   - Alerts are ranked by how far past the limit they are (`value / threshold`), not by path. In `actions[]`, alerts on files changed since their mark-green come first: those are the files the agent is editing.
   - `actions[]` and `modularity.alerts` list the first 10 alerts; `modularity.alert_count`, `by_kind` and `alerts_listed` give the totals, and `full` (CLI `--full`) lists every alert. Alerts in `modularity.alerts` are `file`, `kind`, `value`, `threshold`; the reason sentence stays on the action. The thresholds are unchanged.
-- `check-changes` writes its journal entries and pending items once per run, not once per drifted file. The first run on Specula after 151 files had drifted took 8.9 s, almost all of it rewriting and syncing the journal and `pending_updates.md`.
+- `check-changes` writes its journal entries and pending items once per run, not once per drifted file. The first run on a large Rust workspace after 151 files had drifted took 8.9 s, almost all of it rewriting and syncing the journal and `pending_updates.md`.
 - A root that is a linked git worktree with no Wikifier state of its own, whose main checkout has that state, is answered as that worktree. Before, `--target <worktree>` returned `success: true` with an empty dependents list, and a writer created health files inside the worktree; writers now refuse it. A server started inside such a worktree uses it the same way. Every other root behaves as before.
 - MCP `timeout_s` and `WIKIFIER_MCP_DEADLINE_S` are capped at 600 seconds, under Claude Code's 30-minute idle limit for an MCP call.
 
 ### Fixed
-- Rust: a module path brought into scope by a glob import is an edge. `sight::SCHEMA` in a file with `use super::*;` now points at `sight.rs` when the parent (or the crate root, through up to four globs) declares or imports `sight`. A head the file imports by name (`use std::fs;`) is not followed. On Specula, `get_dependents crates/specula/src/sight.rs` gained four real importers grep had found and the map had missed (`anim_tools/anim_steps.rs`, `capture/flight.rs`, `studio.rs`, `ui_engine.rs`). These edges carry `via_barrel` (confidence 0.7). Frozen fixture `rust_glob_imports`.
+- Rust: a module path brought into scope by a glob import is an edge. `sight::SCHEMA` in a file with `use super::*;` now points at `sight.rs` when the parent (or the crate root, through up to four globs) declares or imports `sight`. A head the file imports by name (`use std::fs;`) is not followed. On a large Rust workspace, `get_dependents crates/app/src/widget.rs` gained four real importers grep had found and the map had missed (`tools/steps.rs`, `jobs/run.rs`, `app.rs`, `ui/view.rs`). These edges carry `via_barrel` (confidence 0.7). Frozen fixture `rust_glob_imports`.
 - A cache written by an older parser has its Rust files parsed once more on the next `update-maps` (stamp `wk_cache/parser`), so an upgrade picks up parser fixes without `--full`, which re-hashes but did not re-parse unchanged files. A run capped by `--max-files` writes the stamp only once every such file is parsed.
 - `.wikifier/config`: a line without `=` ended the scan, so every key after it fell back to its default. It is now skipped.
 
@@ -73,11 +71,11 @@ From the Specula M5 feedback: wikifier answered from the main checkout while eve
 ### Fixed
 - `limit: 0` meant three different things. `session_bootstrap` read it as "every file", the 5.3.0 compact tools (`health`, `get_cycles`, `get_dependents`, `prepare_edit`, `get_resolution_diagnostics`) as "use the default" (so `get_dependents` still listed 50), and the CLI and the other capped tools (`health --limit`, `journal`, `search_journal`, `verify_wikis`, `stale-wikis`, `cycles --max-items`, `list-paths --max-files`, `update-maps --max-files`) as "zero items". Each tool parsed its own cap. Now one parser, `api::Cap`, reads every cap (`limit`, `max_items`, `max_files`, and `WIKIFIER_CHECK_CHANGES_MAX`) on the CLI and over MCP with one rule: absent means the tool's default, `0` means no cap (the same as MCP `full: true`), and `N` means at most N. A value that is not a whole number is ignored.
 - `suggest_next_actions` advertised `limit` and ignored it; it now caps `actions` and adds `actions_total`. `journal` and `search_journal` list `limit` in their MCP schemas.
-- On Specula (a copy), before → after with `limit: 0`: `get_dependents` of `specula-core/src/lib.rs` 50 → 216, `health` 10 → 587, `get_cycles` 5 → 30, `get_resolution_diagnostics` 20 → 1,710 notes; CLI `health --limit 0` and `cycles --max-items 0` 0 → all.
+- On a copy of a large Rust workspace, before → after with `limit: 0`: `get_dependents` of `crates/core/src/lib.rs` 50 → 216, `health` 10 → 587, `get_cycles` 5 → 30, `get_resolution_diagnostics` 20 → 1,710 notes; CLI `health --limit 0` and `cycles --max-items 0` 0 → all.
 
 ## [5.3.0] - 2026-11-05
 
-Fixes from the live test on Specula (a 587-file Cargo workspace).
+Fixes from the live test on a large Rust workspace (587 files).
 
 ### Fixed
 - `wikifier <command> --help` (and `-h`) printed nothing useful and ran the command: `init --help` wrote ten files. Every subcommand now prints its usage line and a one-sentence description and touches nothing; `wikifier help <command>` does the same.
@@ -88,7 +86,7 @@ Fixes from the live test on Specula (a 587-file Cargo workspace).
   - `get_cycles`: 5 cycles (as `max_items: 5`), at most 10 files each (`size` keeps the count, `files_truncated` marks a cut), and the top 5 of the reverse-dependency ranking.
   - `get_dependents`: the first 50 dependents, plus `dependents_total` and `dependent_dirs` (importers per directory, top 20) when there are more. `prepare_edit` lists the first 25 the same way.
   - `get_resolution_diagnostics`: the reason counts plus the first 20 notes and actionable low-confidence edges (`notes_total`, `actionable_low_conf_edges_total`).
-  - Reply sizes on Specula, whole JSON-RPC line, before → after: `health` 307,768 → 4,020 B; `get_resolution_diagnostics` 346,713 → 7,979 B; `get_cycles` 47,206 → 6,354 B; `get_dependents` of `specula-core/src/lib.rs` (216 importers) 16,146 → 5,976 B; `prepare_edit` of that file 19,222 → 7,158 B.
+  - Reply sizes on a large Rust workspace, whole JSON-RPC line, before → after: `health` 307,768 → 4,020 B; `get_resolution_diagnostics` 346,713 → 7,979 B; `get_cycles` 47,206 → 6,354 B; `get_dependents` of `crates/core/src/lib.rs` (216 importers) 16,146 → 5,976 B; `prepare_edit` of that file 19,222 → 7,158 B.
 - The tool schemas of those five tools list `full` and `limit`, so the default `tools/list` is 23.8 KB (it was 22.7 KB); with the recommended `WIKIFIER_DISABLE=map,cycles,status` it is 17.5 KB, and with `WIKIFIER_TOOLS=core` 7.2 KB. `tests/fixtures/mcp_default.jsonl` was re-recorded for that.
 
 
