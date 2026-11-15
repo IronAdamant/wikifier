@@ -356,7 +356,7 @@ fn tool_spec(
             &[],
         ),
         "get_dependents" => (
-            "Every mapped file that imports this one, resolved like the compiler: Rust mod, crate::, super:: and glob imports; JS/TS barrels and re-exports. Grep misses those and matches comments. Call it before you change a struct, trait, enum, signature or export. First 50, then per-directory counts.",
+            "Every mapped file that imports this one, from resolved imports: Rust mod, crate::, super::, glob imports, and pub use re-exports followed to the defining file (4 hops; not macro-generated items, #[path] modules or cfg); JS/TS barrels and re-exports. Grep misses those and matches comments. Call it before you change a struct, trait, enum, signature or export. First 50, then per-directory counts.",
             &["project_root", "file"],
             &[],
         ),
@@ -566,7 +566,7 @@ fn initialize() -> Json {
 
 /// When Wikifier beats grep, in the `initialize` instructions. Agents in M5 used grep
 /// for everything because nothing said this.
-pub const GUIDE: &str = "Wikifier answers from a resolved import map, not text matches. Prefer it to grep for: get_dependents before you change a struct, trait, enum, signature or export (every importer, including Rust glob imports and JS/TS barrels and re-exports grep misses); get_cycles before you add an import between modules; why_file before you change a file you did not write; health or check_changes before you commit (modularity alerts: a file over the line or fan-in limit). In a git worktree, pass worktree_root (absolute path) to read tools so answers describe your tree, not main. Writers (record_change, mark_green) run on main only.";
+pub const GUIDE: &str = "Wikifier answers from a resolved import map, not text matches. Prefer it to grep for: get_dependents before you change a struct, trait, enum, signature or export (every importer, including those that reach it through Rust globs or pub use re-exports and JS/TS barrels, which grep misses); get_cycles before you add an import between modules; why_file before you change a file you did not write; health or check_changes before you commit (modularity alerts: a file over the line or fan-in limit). In a git worktree, pass worktree_root (absolute path) to read tools so answers describe your tree, not main. Writers (record_change, mark_green) run on main only.";
 
 fn resources_list() -> Json {
     Json::obj(vec![(

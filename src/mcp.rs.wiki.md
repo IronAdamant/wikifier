@@ -7,3 +7,5 @@
 A `tools/call` that leaves out a required argument other than `project_root` (or sends it empty) gets `InvalidArguments` naming the missing field, the accepted fields, and the fields received. `project_root` falls back to `WIKIFIER_PROJECT_ROOT`, then the cwd. `update_maps` omits the edge list unless `edges: true`; `edges_persisted` still gives the count. `health` takes `limit` (adds `entries_total` when it cuts) and `summary`. `session_bootstrap` and `get_project_status` cap `files` at `MCP_BOOTSTRAP_FILES` (100) unless the call passes `limit` (`0` lists all).
 
 5.5.0: `initialize` always sends `instructions`: the groups line and block warnings when shaped, then `GUIDE` (when Wikifier beats grep, and `worktree_root`). Every tool that reads project state lists `worktree_root`; writers do not. Tool descriptions say when to use each tool. `deadline_s` caps `timeout_s` / `WIKIFIER_MCP_DEADLINE_S` at `MAX_TIMEOUT_S` (600).
+
+5.6.0: the `get_dependents` description and `GUIDE` say which Rust re-exports are followed (`pub use` to the defining file, four hops) and which are not (macro-generated items, `#[path]` modules, `cfg`).

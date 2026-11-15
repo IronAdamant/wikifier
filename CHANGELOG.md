@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-11-15
+
+From the Specula M5 feedback: `get_dependents crates/specula-input/src/input.rs` returned two files in the same crate. The real users are in other crates and import through the crate root (`use specula_input::Input;`), which resolved to `lib.rs` and stopped there.
+
+### Fixed
+- Rust re-exports are followed to the file that defines the name. When a path ends at a name in a module (`use sp_input::Input;`, `crate::Input`, `super::Thing`), that module's top-level `use` items are read and the importer gets an edge to the defining file, marked `via_barrel` (confidence 0.7). The edge to the module file stays. Followed: `pub use m::Name;`, `pub use m::{A, B as C};`, `pub use m::*;`, chains through nested modules up to four hops (a longer chain adds no edge), and inside one crate `pub(crate) use` and plain `use` items. Across crates only items with `pub` count. A re-export of a crate outside the project (`pub use std::fmt::Debug;`) is external.
+- A glob import of a module (`use sp_input::*;`) links each name it brings in that the file uses on its own (not after `.` or `::`) to that name's defining file.
+- A path that goes on past a type right below a crate root (`sp_input::Input::new()` with no `use`, `crate::Bundled::ALL`) gets one edge, to the type's definition. Before, it had no edge. It gets no edge to the crate root, so it adds no cycle.
+- On Specula, `dependents crates/specula-input/src/input.rs` went from 2 files to 22 (the `specula-ui`, `specula` and `sepulcra-app` users, examples and tests). The map went from 4523 to 5711 edges; the 37 cycles are the same files as before.
+
+### Changed
+- `update-maps` keeps each Rust file's export entries (its `use` items and item names) in `wk_cache/rust_exports.tsv`. When a parsed file's entries change, the files that name a changed entry are parsed in the same run, and so on through modules that pass the name on, up to four hops. They count in `files_parsed`. An edit that leaves the entries alone parses that file only. On Specula, adding a function to `specula-core/src/lib.rs` parsed 1 file; rewriting the `pub use` lines of `specula-input/src/lib.rs` parsed 36.
+- The parser stamp is `rust-reexports-1`, so the first `update-maps` after the upgrade parses every Rust file once.
+- Fan-in counts the new edges. On Specula, `fan_in` alerts went from 58 to 92: the files that define widely re-exported types now count their users in other crates.
+- `get_dependents`, the `initialize` instructions and the README say which Rust re-exports are followed and which are not. "Resolved like the compiler" is gone.
+
+### Added
+- `modularity.hint` in `health`, `session_bootstrap` and `suggest_next_actions` when there are more than 10 alerts. It names `modularity_max_lines` and/or `modularity_max_fan_in` (only the kinds that alert), the current value, the `WIKIFIER_MODULARITY_*` variable, `.wikifier/config`, and that `0` turns the alert off.
+
+### Not followed
+- Items a macro generates (the edge goes to the module the `use` names), `#[path]` modules, `use` items inside an inline `mod name { ... }`, methods and trait calls. `cfg` is not evaluated: when two `use` items bind one name, the first wins.
+
 ## [5.5.0] - 2026-11-11
 
 From the Specula M5 feedback: wikifier answered from the main checkout while every lane worked in its own git worktree, and agents did not know when it beats grep.
