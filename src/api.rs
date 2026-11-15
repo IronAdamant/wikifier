@@ -533,7 +533,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
     let _ = seed_health_from_map(root);
     // A worktree overlay builds library.md and the folder cards only when something asks
     // for them (session_bootstrap), then keeps them current when an edge changes. Writing
-    // them on every overlay refresh cost 1.5 s on Specula.
+    // them on every overlay refresh cost 1.5 s on a large Rust workspace.
     let write_maps = if crate::worktree::is_overlay(root) {
         (parsed > 0 || !stale.is_empty()) && artifacts::folder_card(root, "").is_some()
     } else {

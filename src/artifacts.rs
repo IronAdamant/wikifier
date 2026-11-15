@@ -422,7 +422,7 @@ pub fn append_journal(
 
 /// Append several `(file, reason)` entries under one action with one durable write.
 /// `check-changes` on a tree with many drifted files used to rewrite and sync the day's
-/// journal once per file (151 times, about 8 seconds, on Specula). Same duplicate rule as
+/// journal once per file (151 times, about 8 seconds, on a large Rust workspace). Same duplicate rule as
 /// [`append_journal`]. Returns how many entries were written.
 pub fn append_journal_many(
     root: &Path,

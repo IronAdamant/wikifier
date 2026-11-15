@@ -522,7 +522,7 @@ fn seed(main: &Path, tree: &Path, dir: &Path) -> Result<(), String> {
 }
 
 /// Copy a cache directory: hard links where the file system allows, else copies. Its
-/// files are small and many (about 2,200 on Specula), so the work runs on several threads.
+/// files are small and many (about 2,200 on a large Rust workspace), so the work runs on several threads.
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     let mut pairs = Vec::new();
     list_tree(from, to, &mut pairs)?;

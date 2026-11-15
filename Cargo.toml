@@ -2,7 +2,7 @@
 name = "wikifier"
 version = "5.6.0"
 edition = "2021"
-description = "Wikifier — zero-dependency agent-to-agent codebase wiki."
+description = "Wikifier: zero-dependency agent-to-agent codebase wiki."
 license = "MIT"
 publish = false
 

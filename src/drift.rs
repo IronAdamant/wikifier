@@ -20,7 +20,7 @@ pub(crate) struct Alert {
 }
 
 /// Alerts listed in a reply unless `full` asks for all of them. `alert_count` and
-/// `by_kind` always give the totals. On Specula the whole list was 215 alerts and 59 KB.
+/// `by_kind` always give the totals. On a large Rust workspace the whole list was 215 alerts and 59 KB.
 pub(crate) const LISTED: usize = 10;
 
 impl Alert {
@@ -234,7 +234,7 @@ fn compute(
 
 /// Files every importer of a package resolves to: a crate root (`use my_crate::X` points
 /// at `lib.rs`), a Python package `__init__.py`, a JS/TS `index` barrel. Their fan-in is
-/// the package's, so a fan-in alert on them is noise (Specula: `specula-core/src/lib.rs`
+/// the package's, so a fan-in alert on them is noise (a large Rust workspace: `crates/core/src/lib.rs`
 /// with 242 dependents). Their line count still alerts.
 fn entry_point(rel: &str) -> bool {
     let name = rel.rsplit('/').next().unwrap_or(rel);

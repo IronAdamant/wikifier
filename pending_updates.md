@@ -18,4 +18,4 @@
 - tests/parity_fixes.rs: LLM/agent edit — Tests for those parity fixes.
 - tests/agent_args.rs: LLM/agent edit — new: agent-style file args, missing args, lean MCP outputs, init roots, CRLF (claude/windows-verify)
 - tests/speed_paths.rs: new: fast paths give the slow paths' answers (claude/windows-verify speed) — refresh the wiki, then mark-green
-- tests/compact_replies.rs: B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/specula-fixes) — refresh the wiki, then mark-green
+- tests/compact_replies.rs: B7 --help prints and runs nothing; compact default MCP replies for big repos (claude/live-test-fixes): refresh the wiki, then mark-green

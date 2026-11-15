@@ -4,7 +4,7 @@
 //! size and mtime still match its index entry, git vouches that its bytes are that entry's
 //! blob. Two checkouts whose entries for a path carry the same blob id hold the same bytes.
 //! A fresh `git worktree add` has new mtimes on every file, so without this the first
-//! overlay call read and hashed the whole tree (7 s of a 10 s call on Specula).
+//! overlay call read and hashed the whole tree (7 s of a 10 s call on a large Rust workspace).
 //!
 //! Anything this reader does not understand (index v4, a split index, a truncated file)
 //! yields `None`, and the caller hashes the files as before.
