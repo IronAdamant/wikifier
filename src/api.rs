@@ -1279,7 +1279,7 @@ fn modularity_summary(root: &Path, alerts: &[crate::drift::Alert], all: bool) ->
     let thresholds = crate::project_config::thresholds(root);
     let count = |kind: &str| alerts.iter().filter(|a| a.kind == kind).count() as i64;
     let shown = listed(alerts, all);
-    Json::obj(vec![
+    let mut fields = vec![
         ("max_lines", Json::Int(thresholds.max_lines as i64)),
         ("max_fan_in", Json::Int(thresholds.max_fan_in as i64)),
         ("alert_count", Json::Int(alerts.len() as i64)),
@@ -1307,7 +1307,31 @@ fn modularity_summary(root: &Path, alerts: &[crate::drift::Alert], all: bool) ->
                     .collect(),
             ),
         ),
-    ])
+    ];
+    if alerts.len() > crate::drift::LISTED {
+        let mut keys = Vec::new();
+        if count("line_count") > 0 {
+            keys.push(format!(
+                "modularity_max_lines (now {}; env WIKIFIER_MODULARITY_MAX_LINES)",
+                thresholds.max_lines
+            ));
+        }
+        if count("fan_in") > 0 {
+            keys.push(format!(
+                "modularity_max_fan_in (now {}; env WIKIFIER_MODULARITY_MAX_FAN_IN)",
+                thresholds.max_fan_in
+            ));
+        }
+        fields.push((
+            "hint",
+            Json::String(format!(
+                "{} alerts. If a limit does not fit this project, set {} in .wikifier/config; 0 turns that alert off. full: true lists every alert.",
+                alerts.len(),
+                keys.join(" or ")
+            )),
+        ));
+    }
+    Json::obj(fields)
 }
 
 pub fn check_changes(root: &Path) -> Json {

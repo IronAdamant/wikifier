@@ -203,3 +203,56 @@ fn short_interval_does_not_run_update_maps_every_tick() {
     let _ = fs::remove_dir_all(&daemon_root);
     let _ = fs::remove_dir_all(&monitor_root);
 }
+
+/// 5.6.0: more alerts than a reply lists come with a `hint` naming the config key (and
+/// its variable) for each kind that alerts, so an agent can change the limit without
+/// reading the source. A few alerts have no hint.
+#[test]
+fn many_alerts_name_the_config_key_that_sets_the_limit() {
+    let root = scratch("hint");
+    fs::create_dir_all(root.join(".wikifier")).unwrap();
+    fs::write(
+        root.join(".wikifier/config"),
+        "modularity_max_lines=10\nmodularity_max_fan_in=0\n",
+    )
+    .unwrap();
+    for i in 0..3 {
+        fs::write(
+            root.join(format!("src/pkg/m{i:02}.py")),
+            "x = 1\n".repeat(11),
+        )
+        .unwrap();
+    }
+    update_maps(&root);
+    let few = api::health(&root);
+    assert!(
+        few.get("modularity").unwrap().get("hint").is_none(),
+        "{few}"
+    );
+    for i in 3..12 {
+        fs::write(
+            root.join(format!("src/pkg/m{i:02}.py")),
+            "x = 1\n".repeat(11),
+        )
+        .unwrap();
+    }
+    update_maps(&root);
+    for reply in [api::health(&root), api::suggest_next_actions(&root)] {
+        let hint = reply
+            .get("modularity")
+            .and_then(|m| m.get("hint"))
+            .and_then(|h| h.as_str())
+            .unwrap_or_else(|| panic!("no hint in {reply}"))
+            .to_string();
+        assert!(hint.starts_with("12 alerts."), "{hint}");
+        for needle in [
+            "modularity_max_lines (now 10; env WIKIFIER_MODULARITY_MAX_LINES)",
+            ".wikifier/config",
+            "0 turns that alert off",
+        ] {
+            assert!(hint.contains(needle), "{needle} not in {hint}");
+        }
+        assert!(!hint.contains("fan_in"), "only kinds that alert: {hint}");
+    }
+    let _ = fs::remove_dir_all(&root);
+}
