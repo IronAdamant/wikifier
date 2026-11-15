@@ -395,7 +395,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         .iter()
         .map(|(path, _, _, _, _)| path.clone())
         .collect();
-    let analysis = if to_parse.is_empty() {
+    let mut analysis = if to_parse.is_empty() {
         crate::parse::Analysis {
             facts: BTreeMap::new(),
             scans: std::collections::HashMap::new(),
@@ -406,6 +406,16 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
     } else {
         crate::parse::analyze_changed(root, &files, &changed_paths)
     };
+    let mut export_sigs = crate::export_sigs::Sigs::load(root);
+    reparse_reexport_importers(
+        root,
+        &files,
+        &seen,
+        &session,
+        &mut export_sigs,
+        &mut analysis,
+        &mut to_parse,
+    );
     let mut warnings = analysis.warnings.clone();
     let mut low_conf_updates = Vec::new();
     for (path, rel, mtime, size, hash) in &to_parse {
@@ -490,6 +500,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         .collect();
     for rel in &stale {
         session.remove(rel);
+        export_sigs.forget(rel);
     }
     crate::low_conf::store_updates(root, &low_conf_updates, &stale);
     let mut edge_pairs: Vec<(String, String)> = Vec::new();
@@ -515,6 +526,9 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             "CacheError"
         };
         return fail_warnings(kind, err, &warnings);
+    }
+    if let Err(err) = export_sigs.save(root) {
+        warnings.push(format!("rust export signatures: {err}"));
     }
     let _ = seed_health_from_map(root);
     // A worktree overlay builds library.md and the folder cards only when something asks
@@ -582,6 +596,54 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             Json::Array(warnings.into_iter().map(Json::String).collect()),
         ),
     ])
+}
+
+/// A Rust file whose `use` items or item names changed can move other files'
+/// `via_barrel` edges: parse its importers again in this run (see `export_sigs`).
+fn reparse_reexport_importers(
+    root: &Path,
+    files: &[PathBuf],
+    seen: &BTreeSet<String>,
+    session: &Session,
+    sigs: &mut crate::export_sigs::Sigs,
+    analysis: &mut crate::parse::Analysis,
+    to_parse: &mut Vec<(PathBuf, String, u128, u64, String)>,
+) {
+    let parsed: BTreeSet<String> = to_parse.iter().map(|(_, rel, ..)| rel.clone()).collect();
+    let changed = sigs.update(
+        parsed
+            .iter()
+            .filter_map(|rel| analysis.scans.get(rel).map(|scan| (rel, scan))),
+    );
+    if changed.is_empty() {
+        return;
+    }
+    let extra = crate::export_sigs::importers_to_reparse(
+        root,
+        changed,
+        |rel| session.importers_of(rel),
+        &parsed,
+        seen,
+    );
+    if extra.is_empty() {
+        return;
+    }
+    let paths: Vec<PathBuf> = files
+        .iter()
+        .filter(|file| extra.contains(&scope::rel_of(root, file)))
+        .cloned()
+        .collect();
+    let more = crate::parse::analyze_changed(root, files, &paths);
+    for path in paths {
+        let rel = scope::rel_of(root, &path);
+        let bytes = fs::read(&path).unwrap_or_default();
+        let (mtime, size) = cache::stat_ns(&path).unwrap_or((0, bytes.len() as u64));
+        to_parse.push((path, rel, mtime, size, content_sha256_prefixed(&bytes)));
+    }
+    sigs.update(more.scans.iter());
+    analysis.facts.extend(more.facts);
+    analysis.scans.extend(more.scans);
+    analysis.warnings.extend(more.warnings);
 }
 
 fn stream_event(stream: bool, value: Json) {

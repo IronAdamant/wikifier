@@ -1,12 +1,15 @@
 //! Import extraction for the languages Wikifier parses.
 //! Unknown suffixes (COBOL, Swift, assembly) are not languages and emit no edges.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::jsonutil::{self, Json};
 use crate::scope::rel_of;
+
+mod rust_reexport;
+pub use rust_reexport::export_entries;
 
 #[derive(Clone, Debug)]
 pub struct RawImport {
@@ -34,6 +37,22 @@ pub struct Scan {
     pub local_exports: Vec<String>,
     /// Rust glob imports (`use super::*;` is `super`) with their inline `mod` depth.
     pub rust_globs: Vec<(String, usize)>,
+    /// Rust `use` items at the top of the file, one per name they bind.
+    pub rust_uses: Vec<RustUse>,
+    /// Rust items at the top of the file (`struct`, `fn`, `const`, ...; not `mod`) and
+    /// whether each carries any `pub`.
+    pub rust_defs: Vec<(String, bool)>,
+}
+
+/// One name a top-level Rust `use` item binds. `pub use input::Input;` is `Input`, path
+/// `input::Input`; `use a::B as C;` is `C`, path `a::B`; `pub use record::*;` is a glob
+/// with path `record` and no name. `public` is any `pub`, including `pub(crate)`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RustUse {
+    pub name: String,
+    pub path: String,
+    pub glob: bool,
+    pub public: bool,
 }
 
 pub fn language(path: &Path) -> Option<&'static str> {
@@ -210,6 +229,16 @@ fn defining_file(
     None
 }
 
+/// Where a Rust path lands: the module file, the name it looks up there, and whether the
+/// path goes on past that name right below a crate root or a `self`/`super` module
+/// (`crate::Bundled::ALL`). Such a path names only the type's definition, so its edge goes
+/// there and not to the module it passed through.
+struct RustTarget {
+    file: String,
+    name: Option<String>,
+    past_type: bool,
+}
+
 struct RustLib {
     names: Vec<String>,
     root_file: String,
@@ -363,11 +392,45 @@ impl Resolver {
         None
     }
 
+    /// A path that goes on past a type right below a module root (`crate::Bundled::ALL`)
+    /// resolves here to nothing, as before 5.6.0: only the import pass, which follows it
+    /// to the type's definition, gives it an edge.
     fn resolve_rust(&self, from_rel: &str, spec: &str, inline_depth: usize) -> Option<String> {
+        self.rust_target(from_rel, spec, inline_depth)
+            .filter(|hit| !hit.past_type)
+            .map(|hit| hit.file)
+    }
+
+    /// The file a Rust path lands in, and the name it looks up there when the path goes on
+    /// past the last module it names: `crate::Input` is the crate root and `Input`,
+    /// `crate::input::Input::new` is `input.rs` and `Input`. A path that ends at a module
+    /// has no name.
+    fn rust_lookup(
+        &self,
+        from_rel: &str,
+        spec: &str,
+        inline_depth: usize,
+    ) -> Option<(String, Option<String>)> {
+        self.rust_target(from_rel, spec, inline_depth)
+            .map(|hit| (hit.file, hit.name))
+    }
+
+    fn rust_target(&self, from_rel: &str, spec: &str, inline_depth: usize) -> Option<RustTarget> {
         if let Some(rest) = spec.strip_prefix("mod:") {
-            return self.resolve_rust_mod(from_rel, rest);
+            return self
+                .resolve_rust_mod(from_rel, rest)
+                .map(|file| RustTarget {
+                    file,
+                    name: None,
+                    past_type: false,
+                });
         }
         self.resolve_rust_path(from_rel, spec, inline_depth)
+    }
+
+    /// Both files belong to one crate, so a path between them may use items without `pub`.
+    fn same_crate(&self, a: &str, b: &str) -> bool {
+        self.file_crate_root(a) == self.file_crate_root(b)
     }
 
     /// `mod` names a file next to the declaring module. Inline `mod` frames are path segments.
@@ -386,7 +449,12 @@ impl Resolver {
         None
     }
 
-    fn resolve_rust_path(&self, from_rel: &str, spec: &str, inline_depth: usize) -> Option<String> {
+    fn resolve_rust_path(
+        &self,
+        from_rel: &str,
+        spec: &str,
+        inline_depth: usize,
+    ) -> Option<RustTarget> {
         let segments: Vec<&str> = spec
             .split("::")
             .map(str::trim)
@@ -464,9 +532,25 @@ impl Resolver {
         None
     }
 
-    fn rust_walk(&self, dir: &Path, parts: &[&str], crate_root: Option<&str>) -> Option<String> {
+    /// Walk module segments from `dir`. The first segment that is not a module ends the
+    /// walk in the module reached so far and becomes the name looked up there: always
+    /// when it is the last segment, and before more segments only when it is written like
+    /// a type (`Input::new`), so a missing lowercase module stays unresolved.
+    fn rust_walk(
+        &self,
+        dir: &Path,
+        parts: &[&str],
+        crate_root: Option<&str>,
+    ) -> Option<RustTarget> {
+        let hit = |file: String, name: Option<&str>, past_type: bool| RustTarget {
+            file,
+            name: name.map(str::to_string),
+            past_type,
+        };
         if parts.is_empty() {
-            return self.module_file_for(dir, crate_root);
+            return self
+                .module_file_for(dir, crate_root)
+                .map(|file| hit(file, None, false));
         }
         let part = parts[0];
         if part == "self" {
@@ -475,15 +559,24 @@ impl Resolver {
         if let Some(found) = self.rust_module_at(dir, part) {
             let next = dir.join(part);
             if parts.len() == 1 {
-                return Some(found);
+                return Some(hit(found, None, false));
             }
-            if let Some(hit) = self.rust_walk(&next, &parts[1..], None) {
-                return Some(hit);
+            if let Some(mut deeper) = self.rust_walk(&next, &parts[1..], None) {
+                // Below a module, a type path lands in the file 5.5.0 already named.
+                deeper.past_type = false;
+                return Some(deeper);
             }
-            return Some(found);
+            return Some(hit(found, Some(parts[1]), false));
         }
         if parts.len() == 1 {
-            return self.module_file_for(dir, crate_root);
+            return self
+                .module_file_for(dir, crate_root)
+                .map(|file| hit(file, Some(part), false));
+        }
+        if part.starts_with(|c: char| c.is_ascii_uppercase()) {
+            return self
+                .module_file_for(dir, crate_root)
+                .map(|file| hit(file, Some(part), true));
         }
         None
     }
@@ -1445,6 +1538,12 @@ fn scan_rust(src: &str) -> Scan {
     let mut brace: i32 = 0;
     let mut inline: Vec<(String, i32)> = Vec::new();
     let mut globs: Vec<(String, usize)> = Vec::new();
+    let mut uses: Vec<RustUse> = Vec::new();
+    let mut defs: Vec<(String, bool)> = Vec::new();
+    // Top-level item names are read once, at the token that starts the item.
+    let mut item_until = 0usize;
+    // Where the `use` of a top-level `pub use` / `pub(crate) use` starts.
+    let mut pub_use_at: Option<usize> = None;
     while i < b.len() {
         if b[i].is_ascii_whitespace() {
             i += 1;
@@ -1475,6 +1574,17 @@ fn scan_rust(src: &str) -> Scan {
             i += 1;
             continue;
         }
+        if brace == 0 && i >= item_until && b[i].is_ascii_alphabetic() {
+            if let Some((name, public, end)) = rust_reexport::item_def(b, i) {
+                defs.push((name, public));
+                item_until = end;
+            } else if starts_word(b, i, "pub") {
+                let after = skip_noise(b, skip_restricted_pub(b, i));
+                if starts_word(b, after, "use") {
+                    pub_use_at = Some(after);
+                }
+            }
+        }
         if starts_word(b, i, "mod") {
             if let Some((name, end, body)) = read_rust_mod(b, i + 3) {
                 if body {
@@ -1494,6 +1604,10 @@ fn scan_rust(src: &str) -> Scan {
         }
         if starts_word(b, i, "use") {
             if let Some((end, paths)) = read_rust_use(b, i + 3) {
+                if brace == 0 {
+                    let public = pub_use_at == Some(i);
+                    uses.extend(rust_reexport::use_entries(b, i + 3, public));
+                }
                 let depth = inline.len();
                 for path in paths {
                     // The spec stays `super` for `use super::*`, as before; the glob is kept apart.
@@ -1540,6 +1654,8 @@ fn scan_rust(src: &str) -> Scan {
         imports,
         local_exports: Vec::new(),
         rust_globs: globs,
+        rust_uses: uses,
+        rust_defs: defs,
     }
 }
 
@@ -3090,7 +3206,7 @@ fn py_parts(spec: &str) -> (String, Vec<String>) {
 
 /// Glob hops followed from a file (`use super::*` in `a/b/c.rs` reaching `a/b.rs`, whose
 /// own `use super::*` reaches `a.rs`, is two).
-const RUST_GLOB_DEPTH: usize = 4;
+pub(crate) const RUST_GLOB_DEPTH: usize = 4;
 
 /// Heads that never name a project module through a glob.
 const RUST_NON_MODULE_HEADS: &[&str] = &["crate", "self", "super", "std", "core", "alloc"];
@@ -3256,6 +3372,49 @@ impl GlobFile {
     }
 }
 
+/// A Rust glob import (`use sp_input::*;`) of a module that passes names on from other
+/// files: each of those names the file uses on its own (not after `.` or `::`) adds an edge
+/// to the file that defines it, marked `via_barrel`. A glob of a module in the same crate
+/// also sees that module's items and `use` items without `pub`.
+fn glob_import_edges(
+    resolver: &Resolver,
+    exports: &mut rust_reexport::Exports,
+    rel: &str,
+    scan: &Scan,
+    text: &str,
+    facts: &mut FileFacts,
+) {
+    let mut idents: Option<HashSet<String>> = None;
+    for (glob, depth) in &scan.rust_globs {
+        let Some((module, None)) = resolver.rust_lookup(rel, glob, *depth) else {
+            continue;
+        };
+        if module == rel {
+            continue;
+        }
+        let private = resolver.same_crate(rel, &module);
+        let offered = exports.offered(&module, private, 0);
+        for (name, def) in offered.iter() {
+            if *def == module || def == rel || facts.dsts.contains(def) {
+                continue;
+            }
+            let used = idents.get_or_insert_with(|| rust_reexport::bare_idents(text));
+            if used.contains(name) {
+                let line = line_of(text, std::slice::from_ref(name));
+                add_edge(
+                    facts,
+                    def.clone(),
+                    line,
+                    vec![name.clone()],
+                    false,
+                    false,
+                    true,
+                );
+            }
+        }
+    }
+}
+
 pub fn analyze_files(root: &Path, files: &[PathBuf]) -> Analysis {
     analyze_files_filtered(root, files, None)
 }
@@ -3313,6 +3472,8 @@ fn analyze_files_filtered(
     let mut sorted_scans: Option<BTreeMap<String, Scan>> = None;
     // Modules reached through Rust globs, scanned once per run, and where heads were found.
     let mut glob_memo = GlobMemo::default();
+    // Rust modules' `use` items and item names, read once per run, and the lookups made.
+    let mut exports = rust_reexport::Exports::new(root, &resolver, &scans);
     let mut out = BTreeMap::new();
     for rel in &rels {
         if only.as_ref().is_some_and(|set| !set.contains(rel)) {
@@ -3367,7 +3528,30 @@ fn analyze_files_filtered(
             // Built on the first path that needs it: this file's glob targets and names.
             let mut glob_file: Option<GlobFile> = None;
             for imp in &scan.imports {
-                let target = resolver.resolve(rel, &imp.spec, lang, imp.inline_depth);
+                // `inner`: the name a Rust path looks up in `target`. `through`: the path
+                // went on past a type (`crate::Bundled::ALL`) and `target` is the type's
+                // definition, reached through a re-export.
+                let (target, inner, through) = if lang == "rust" {
+                    match resolver.rust_target(rel, &imp.spec, imp.inline_depth) {
+                        Some(hit) if hit.past_type => {
+                            let private = resolver.same_crate(rel, &hit.file);
+                            let def = hit
+                                .name
+                                .as_deref()
+                                .and_then(|name| exports.definer(&hit.file, name, private, 0));
+                            let through = def.as_ref().is_some_and(|def| *def != hit.file);
+                            (Some(def.unwrap_or(hit.file)), None, through)
+                        }
+                        Some(hit) => (Some(hit.file), hit.name, false),
+                        None => (None, None, false),
+                    }
+                } else {
+                    (
+                        resolver.resolve(rel, &imp.spec, lang, imp.inline_depth),
+                        None,
+                        false,
+                    )
+                };
                 let line = *lines_seen
                     .entry(imp.spec.as_str())
                     .or_insert_with(|| line_of(&text, std::slice::from_ref(&imp.spec)));
@@ -3381,7 +3565,7 @@ fn analyze_files_filtered(
                             imp.names.clone(),
                             imp.conditional,
                             dynamic,
-                            false,
+                            through,
                         );
                         if lang == "javascript"
                             && (imp.kind == Kind::Import || imp.kind == Kind::ExportFrom)
@@ -3402,6 +3586,22 @@ fn analyze_files_filtered(
                                             true,
                                         );
                                     }
+                                }
+                            }
+                        }
+                        if let Some(name) = inner.as_deref() {
+                            let private = resolver.same_crate(rel, &dst);
+                            if let Some(def) = exports.definer(&dst, name, private, 0) {
+                                if def != *rel && def != dst && !facts.dsts.contains(&def) {
+                                    add_edge(
+                                        &mut facts,
+                                        def,
+                                        line,
+                                        vec![name.to_string()],
+                                        imp.conditional,
+                                        dynamic,
+                                        true,
+                                    );
                                 }
                             }
                         }
@@ -3460,6 +3660,9 @@ fn analyze_files_filtered(
                         }
                     }
                 }
+            }
+            if lang == "rust" && !scan.rust_globs.is_empty() {
+                glob_import_edges(&resolver, &mut exports, rel, &scan, &text, &mut facts);
             }
             if let Some(dsts) = js_edges.get(rel) {
                 for dst in dsts {

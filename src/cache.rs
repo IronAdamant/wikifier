@@ -103,7 +103,7 @@ pub(crate) fn names_marker(root: &Path) -> PathBuf {
 /// Names the parser that wrote the cache. A cache without this stamp (or with another)
 /// parses its `PARSER_RESCAN` files once more on the next `update-maps`. Bump it when a
 /// parser change alters the edges of files that did not change.
-pub(crate) const PARSER_STAMP: &[u8] = b"rust-globs-1\n";
+pub(crate) const PARSER_STAMP: &[u8] = b"rust-reexports-1\n";
 
 /// Files the last parser change affects.
 pub(crate) const PARSER_RESCAN: &[&str] = &[".rs"];
