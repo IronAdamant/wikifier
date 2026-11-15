@@ -193,6 +193,11 @@ impl Session {
         self.rewrite_index = true;
     }
 
+    /// Files whose stored edges point at `rel`.
+    pub fn importers_of(&self, rel: &str) -> BTreeSet<String> {
+        self.rev.get(rel).cloned().unwrap_or_default()
+    }
+
     pub fn rels(&self) -> Vec<String> {
         self.rows.keys().cloned().collect()
     }

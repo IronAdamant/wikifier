@@ -21,11 +21,11 @@ Download a binary from the [GitHub releases](https://github.com/IronAdamant/wiki
 Check `SHA256SUMS`, unpack, and put `wikifier` (`wikifier.exe` on Windows) on your `PATH`:
 
 ```bash
-# Linux x86_64, 5.5.0
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.5.0/SHA256SUMS
-curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.5.0/wikifier-5.5.0-x86_64-unknown-linux-gnu.tar.gz
+# Linux x86_64, 5.6.0
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.6.0/SHA256SUMS
+curl -fsSL -O https://github.com/IronAdamant/wikifier/releases/download/v5.6.0/wikifier-5.6.0-x86_64-unknown-linux-gnu.tar.gz
 sha256sum --check --ignore-missing SHA256SUMS
-tar -xzf wikifier-5.5.0-x86_64-unknown-linux-gnu.tar.gz
+tar -xzf wikifier-5.6.0-x86_64-unknown-linux-gnu.tar.gz
 ./wikifier --version
 ```
 
@@ -110,7 +110,7 @@ wikifier: tools core
 
 | Before you... | Call | Why not grep |
 |---|---|---|
-| change a struct, trait, enum, signature or export | `get_dependents` | every importer as the compiler resolves it: Rust `mod` / `crate::` / `super::` / glob imports, JS/TS barrels and re-exports; no comment hits |
+| change a struct, trait, enum, signature or export | `get_dependents` | every importer from resolved imports: Rust `mod` / `crate::` / `super::` / glob imports and `pub use` re-exports followed to the defining file, JS/TS barrels and re-exports; no comment hits |
 | add an import between two modules | `get_cycles` | cycles are a property of the whole graph |
 | change a file you did not write | `why_file` | the reasons agents recorded, which git log does not keep |
 | commit | `health` or `check_changes` | modularity alerts: a file over the line or fan-in limit |
@@ -149,7 +149,7 @@ A second agent that starts cold runs `session-bootstrap`: files left Yellow come
 
 `check-changes` compares files with their Green baselines. A file that goes Yellow because its bytes changed carries `changed_lines` on that action and on its health entry: 1-based inclusive ranges in the current file, diffed against the snapshot `mark-green` saved. A pure deletion is reported as the surviving line beside the gap. With no snapshot yet, the range is the whole file. This is a review aid for agents, not a linter.
 
-`session-bootstrap`, `suggest-next`, and `health` also report modularity alerts (`review_modularity`, priority 3). A mapped file alerts when it has more physical lines than `modularity_max_lines` (default 800, blanks and comments included) or more dependents than `modularity_max_fan_in` (default 12, from the last map). `0` disables that alert. The keys live in `.wikifier/config`; `WIKIFIER_MODULARITY_MAX_LINES` and `WIKIFIER_MODULARITY_MAX_FAN_IN` override them. Alerts do not split or rewrite the file, and they do not change its health color. A crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.*`) has no fan-in alert: every import of the package resolves to it. Alerts are ranked by how far past the limit they are, with files changed since their mark-green first in `actions[]`; replies list the first 10 (`full` lists all) and give the totals in `modularity.alert_count` and `by_kind`. The same numbers are in `.wikifier_staging/modularity.json`, which `check-changes` refreshes, so a parent agent and its sub-agents read one picture.
+`session-bootstrap`, `suggest-next`, and `health` also report modularity alerts (`review_modularity`, priority 3). A mapped file alerts when it has more physical lines than `modularity_max_lines` (default 800, blanks and comments included) or more dependents than `modularity_max_fan_in` (default 12, from the last map). `0` disables that alert. The keys live in `.wikifier/config`; `WIKIFIER_MODULARITY_MAX_LINES` and `WIKIFIER_MODULARITY_MAX_FAN_IN` override them. Alerts do not split or rewrite the file, and they do not change its health color. A crate root or package entry point (`lib.rs`, `main.rs`, `__init__.py`, `index.*`) has no fan-in alert: every import of the package resolves to it. Alerts are ranked by how far past the limit they are, with files changed since their mark-green first in `actions[]`; replies list the first 10 (`full` lists all) and give the totals in `modularity.alert_count` and `by_kind`. With more than 10 alerts, `modularity.hint` names the key and variable for each kind that alerts, with its current value. The same numbers are in `.wikifier_staging/modularity.json`, which `check-changes` refreshes, so a parent agent and its sub-agents read one picture.
 
 `monitor` repeats that cheap pass. The interval is `health_interval_s` (default 30, minimum 1 second) or `--interval`, and `WIKIFIER_POLL_INTERVAL` overrides the config. `daemon` uses the same interval for the pass and still runs `update-maps` on `maps_interval_s` (default 600; `WIKIFIER_DAEMON_MAPS_INTERVAL` overrides; `0` skips the repeat; `WIKIFIER_DAEMON_MAPS=0` skips the map). A short health interval does not run `update-maps` on every tick.
 
@@ -159,11 +159,23 @@ A second agent that starts cold runs `session-bootstrap`: files left Yellow come
 |---|---|---|
 | Python | `.py` | relative and same-tree absolute imports; an indented import is flagged conditional |
 | JavaScript / TypeScript | `.js` `.ts` `.jsx` `.tsx` `.mjs` `.cjs` `.mts` `.cts` | named re-exports followed to depth 8; `import()` flagged dynamic; reads `tsconfig.json` `paths`, `package.json` `exports`, npm `workspaces` |
-| Rust | `.rs` | `mod`, `crate::`, `self::`, `super::`, crate names from `Cargo.toml` and `[workspace] members`, and module paths a glob (`use super::*;`) brought into scope |
+| Rust | `.rs` | `mod`, `crate::`, `self::`, `super::`, crate names from `Cargo.toml` and `[workspace] members`, module paths a glob (`use super::*;`) brought into scope, and `use` re-exports followed to the file that defines the name (see below) |
 | Go | `.go` | `import` and import blocks |
 | C / C++ | `.c` `.h` `.cpp` `.cc` `.cxx` `.hpp` `.hh` | `#include` |
 | C# | `.cs` | `using` |
 | Java | `.java` | `import`, `import static` |
+
+### Rust re-exports
+
+`use sp_input::Input;` resolves to `sp_input`'s `lib.rs`. When that file re-exports the name, the importer also gets an edge to the file that defines it, marked `via_barrel` (confidence 0.7). The edge to `lib.rs` stays. This works the same for `crate::`, `self::`, `super::` and module paths. What is followed:
+
+- `pub use m::Name;`, `pub use m::{A, B as C};` and `pub use m::*;`, in any module a path ends at.
+- A chain of such modules, up to four hops. A longer chain adds no edge.
+- Inside one crate, `pub(crate) use` and plain `use` items too. Across crates, only items with `pub`.
+- A glob import (`use sp_input::*;`): each name it brings in that the file uses on its own (not after `.` or `::`) gets an edge to its definition.
+- A path that goes on past a type right below a crate root (`sp_input::Input::new()`): one edge, to the type's definition.
+
+What is not followed: items a macro generates (the edge goes to the module the `use` names), `#[path]` modules, `use` items inside an inline `mod name { ... }`, and re-exports of crates outside the project (`pub use std::fmt::Debug;` is external). `cfg` is not evaluated: when two `use` items bind one name, the first wins. Methods and trait calls are not resolved. When a Rust file's `use` items or item names change, the same `update-maps` also parses the importers that name a changed entry.
 
 The scanners are pragmatic regex, not compilers. On a very large tree, list package roots in `map_paths.txt`, or pass `--directory` / `--max-files` (a budgeted run returns `map_complete=false` and the next run resumes). Never point the project root at a folder that holds several repositories.
 
