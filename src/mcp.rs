@@ -291,7 +291,7 @@ fn tool_spec(
             &[],
         ),
         "record_change" => (
-            "Record why one file changed (journal and health). Call after each edit. Main checkout only.",
+            "Record why one file changed (journal and health). Call after each edit. A new or changed source file joins the map too (no update_maps). Main checkout only.",
             &["project_root", "file", "reason"],
             &[],
         ),
@@ -306,7 +306,7 @@ fn tool_spec(
             &["reason"],
         ),
         "record_changes" => (
-            "Record every file git reports changed in one call, with per-file reasons. Main checkout only.",
+            "Record every file git reports changed in one call, with per-file reasons. Other tools' state (.claude, .trammel, .swarmnotes, ...) is skipped. Main checkout only.",
             &["project_root"],
             &[],
         ),
@@ -994,13 +994,15 @@ fn resource_read(msg: &Json) -> Json {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let text = match uri {
         "wikifier://library" => {
-            std::fs::read_to_string(root.join("library.md")).unwrap_or_default()
+            std::fs::read_to_string(crate::layout::path(&root, "library.md")).unwrap_or_default()
         }
         "wikifier://health" => {
-            std::fs::read_to_string(root.join("file_health.md")).unwrap_or_default()
+            std::fs::read_to_string(crate::layout::path(&root, "file_health.md"))
+                .unwrap_or_default()
         }
         "wikifier://pending" => {
-            std::fs::read_to_string(root.join("pending_updates.md")).unwrap_or_default()
+            std::fs::read_to_string(crate::layout::path(&root, "pending_updates.md"))
+                .unwrap_or_default()
         }
         "wikifier://journal" => {
             let entries = api::read_journal(&root, None);

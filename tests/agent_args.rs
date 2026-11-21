@@ -205,7 +205,8 @@ fn init_maps_the_directories_that_hold_source() {
             Some(true),
             "{value}"
         );
-        let text = fs::read_to_string(root.join("map_paths.txt")).unwrap();
+        // A new project keeps its lists under .wikifier/ (the contained layout).
+        let text = fs::read_to_string(root.join(".wikifier/map_paths.txt")).unwrap();
         text.lines()
             .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
             .map(|line| line.to_string())

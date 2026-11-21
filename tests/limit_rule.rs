@@ -19,7 +19,11 @@ fn project() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!("wk-limit-{n}-{}", std::process::id()));
+    // The clock can give two tests the same value (microseconds on macOS), so a counter
+    // keeps each test's project apart.
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!("wk-limit-{n}-{}-{seq}", std::process::id()));
     let pkg = root.join("src/pkg");
     fs::create_dir_all(&pkg).unwrap();
     fs::write(root.join("map_paths.txt"), "src\n").unwrap();
