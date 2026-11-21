@@ -500,7 +500,8 @@ fn the_parser_reads_only_the_first_agent_tools_fence() {
 
 /// The recorded default `initialize` and `tools/list` replies, with this version's number.
 /// The fixture changes only on purpose: 5.3.0 re-recorded it when five tools gained
-/// `limit` / `full` (compact replies). Until then it was the 5.1.0 reply plus
+/// `limit` / `full` (compact replies), and again when `record_change` (maps the file) and
+/// `record_changes` (skips other tools' state) changed their descriptions. Until then it was the 5.1.0 reply plus
 /// `capabilities.tools.listChanged`, the one field the tool-group convention adds.
 fn golden() -> String {
     let text = std::fs::read_to_string(

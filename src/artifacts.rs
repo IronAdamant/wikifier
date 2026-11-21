@@ -311,7 +311,10 @@ pub struct JournalEntry {
 
 pub fn journal_path(root: &Path, stamp: &str) -> PathBuf {
     let (y, m, d) = date_parts(stamp).unwrap_or(("1970".into(), "01".into(), "01".into()));
-    root.join("journal").join(y).join(m).join(format!("{d}.md"))
+    crate::layout::path(root, "journal")
+        .join(y)
+        .join(m)
+        .join(format!("{d}.md"))
 }
 
 pub fn read_journal(root: &Path, date: Option<&str>) -> Vec<JournalEntry> {

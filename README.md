@@ -123,22 +123,26 @@ An agent that works in a git worktree passes `worktree_root` (an absolute path; 
 
 ```bash
 cd /path/to/project
-wikifier init                    # path lists (src/, or the top-level dirs that hold source), empty health and journal
+wikifier init                    # .wikifier/: path lists (src/, or the top-level dirs that hold source), empty health and journal
 wikifier update-maps             # parse imports, write the map and library.md
 wikifier session-bootstrap       # readiness, health counts, next actions[]
 
 wikifier prepare-edit src/api.rs # before an edit: status, wiki, dependencies, dependents
 # ... edit src/api.rs ...
-wikifier record-change src/api.rs "retry on 429 (task-12)"   # the why goes to the journal
+wikifier record-change src/api.rs "retry on 429 (task-12)"   # the why goes to the journal; a new file joins the map
 # ... update src/api.rs.wiki.md ...
 wikifier mark-green src/api.rs   # refused while the wiki misses a public symbol
 ```
+
+`init` on a new project puts everything it writes under `.wikifier/` (the `contained` layout): the path lists, health, pending list, `library.md`, `journal/`, `Logged_issues/`, `index.html`, and the cache in `.wikifier/staging/`. Only the `*.wiki.md` notes sit beside the sources. A project that already has these files in its root (from an older `init`) keeps them there: the layout is the file `.wikifier/layout`, and a project without it uses the root. `init --layout root` gives a new project the root layout. In a git repository `init` also adds a marked `.gitignore` block for the files git neither tracks nor ignores (`--no-gitignore` skips it). Paths in this README use the root names; in a contained project they are under `.wikifier/`.
+
+`record-change` also parses the file into the map when it is a new or changed source in the map scope (one file, reply field `map`), so a hook that records each edit keeps the map current without `update-maps`. `--no-map` or `WIKIFIER_RECORD_MAP=0` turns that off. `record-changes` skips other tools' state directories (`.claude/`, `.swarmnotes/`, `.trammel/`, `.stele-context/`, `.coordinationhub/`, `.chisel/`, `.probatio/`) without asking for reasons. `health` and `check-changes` add a one-line `note` when there is nothing to report.
 
 A second agent that starts cold runs `session-bootstrap`: files left Yellow come back as `actions[]` with the first agent's reason, and `search-journal` / `why-file` return the recorded reasons for any file. The full loop, JSON shapes, and every command are in [`skills/run.md`](skills/run.md).
 
 ## How it works
 
-`update-maps` runs **scan → parse → resolve → cache → artifacts**. It walks the directories in `map_paths.txt`, parses imports with comment-masked scanners, resolves them to project files, and stores edges in a text index under `.wikifier_staging/`. Unchanged files are skipped by size and mtime, so a warm run is fast.
+`update-maps` runs **scan → parse → resolve → cache → artifacts**. It walks the directories in `map_paths.txt`, parses imports with comment-masked scanners, resolves them to project files, and stores edges in a text index under `.wikifier_staging/` (`.wikifier/staging/` in the contained layout). Unchanged files are skipped by size and mtime, so a warm run is fast.
 
 | Artifact | What it holds |
 |---|---|
@@ -237,7 +241,7 @@ Tests: `cargo test` (std-only Rust; accuracy fixtures, cache lookups, and the ag
 
 ![Wikifier dashboard — file tree, health pills, local Run/Stop](https://raw.githubusercontent.com/IronAdamant/wikifier/main/screenshot/front_page_review.png)
 
-`wikifier init` copies one `index.html`. Run `wikifier serve` and open http://localhost:8787/index.html. It is a read-only view of the same artifacts.
+`wikifier init` copies one `index.html` (into `.wikifier/` in the contained layout; `serve` finds it and the files it reads either way). Run `wikifier serve` and open http://localhost:8787/index.html. It is a read-only view of the same artifacts.
 
 ## Documentation
 

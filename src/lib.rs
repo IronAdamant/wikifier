@@ -11,6 +11,7 @@ mod drift;
 mod export_sigs;
 mod git_index;
 pub mod jsonutil;
+mod layout;
 mod legacy_cache;
 mod low_conf;
 pub mod maps_out;

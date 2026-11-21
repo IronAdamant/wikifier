@@ -1,7 +1,8 @@
 //! Worktree overlays. A read tool called with `worktree_root` answers for that git
 //! worktree: main's maps plus the files that differ in the tree.
 //!
-//! The overlay lives in main's `.wikifier_staging/overlays/<fnv of the tree path>/`. It is
+//! The overlay lives in main's staging directory (`.wikifier_staging/` or, in the contained
+//! layout, `.wikifier/staging/`) under `overlays/<fnv of the tree path>/`. It is
 //! seeded once from a copy of main's `wk_cache`, then refreshed on every call by the same
 //! incremental map run `update-maps` uses: size and mtime skip unchanged files, and a file
 //! whose bytes still hash to main's row is not re-parsed. Main's cache, health, journal,
@@ -52,12 +53,12 @@ pub(crate) fn is_overlay(root: &Path) -> bool {
     find(root).is_some()
 }
 
-/// The `.wikifier_staging` directory for `root`: the overlay directory for a registered
-/// worktree, else `root/.wikifier_staging`.
+/// The staging directory for `root`: the overlay directory for a registered worktree, else
+/// the layout's own (`root/.wikifier_staging`, or `root/.wikifier/staging` when contained).
 pub(crate) fn staging(root: &Path) -> PathBuf {
     match find(root) {
         Some(o) => o.dir,
-        None => root.join(".wikifier_staging"),
+        None => crate::layout::staging(root),
     }
 }
 
@@ -66,24 +67,26 @@ pub(crate) fn staging(root: &Path) -> PathBuf {
 /// file, then main's. Main's is returned even when it is missing, so callers see a miss.
 pub(crate) fn state(root: &Path, rel: &str) -> PathBuf {
     let Some(o) = find(root) else {
-        return root.join(rel);
+        return crate::layout::path(root, rel);
     };
     let own = o.dir.join("state").join(rel);
     if own.exists() {
         return own;
     }
-    let tree = o.tree.join(rel);
+    // The tree follows main's layout: a contained `.wikifier/` is not checked out.
+    let contained = crate::layout::contained(&o.main);
+    let tree = crate::layout::join(&o.tree, contained, rel);
     if tree.exists() {
         return tree;
     }
-    o.main.join(rel)
+    crate::layout::join(&o.main, contained, rel)
 }
 
 /// Where to write a root-level state file. For a worktree it is the overlay's `state/`,
 /// with the parent directory created.
 pub(crate) fn state_write(root: &Path, rel: &str) -> PathBuf {
     let Some(o) = find(root) else {
-        return root.join(rel);
+        return crate::layout::path(root, rel);
     };
     let path = o.dir.join("state").join(rel);
     if let Some(parent) = path.parent() {
@@ -96,8 +99,8 @@ pub(crate) fn state_write(root: &Path, rel: &str) -> PathBuf {
 /// the last mark-green on main) and never writes them.
 pub(crate) fn baselines(root: &Path) -> PathBuf {
     match find(root) {
-        Some(o) => o.main.join(".wikifier_staging").join("baselines"),
-        None => root.join(".wikifier_staging").join("baselines"),
+        Some(o) => crate::layout::staging(&o.main).join("baselines"),
+        None => crate::layout::staging(root).join("baselines"),
     }
 }
 
@@ -270,7 +273,8 @@ fn auto(root: &Path, name: &str) -> Option<(PathBuf, PathBuf)> {
 }
 
 fn has_state(dir: &Path) -> bool {
-    dir.join(".wikifier_staging").join("wk_cache").is_dir()
+    crate::layout::contained(dir)
+        || dir.join(".wikifier_staging").join("wk_cache").is_dir()
         || dir.join("map_paths.txt").is_file()
         || dir.join("file_health.json").is_file()
 }
@@ -405,7 +409,7 @@ struct Active {
 }
 
 fn overlays_dir(main: &Path) -> PathBuf {
-    main.join(".wikifier_staging").join("overlays")
+    crate::layout::staging(main).join("overlays")
 }
 
 /// The overlay directory for `tree` under `main`. Stable across runs and processes.
@@ -505,7 +509,7 @@ fn seed(main: &Path, tree: &Path, dir: &Path) -> Result<(), String> {
         fs::remove_dir_all(dir).map_err(|e| format!("reset overlay {}: {e}", dir.display()))?;
     }
     fs::create_dir_all(dir).map_err(|e| format!("create overlay {}: {e}", dir.display()))?;
-    let staging = main.join(".wikifier_staging");
+    let staging = crate::layout::staging(main);
     let cache = staging.join("wk_cache");
     if cache.is_dir() {
         copy_tree(&cache, &dir.join("wk_cache"))?;

@@ -278,6 +278,14 @@ pub fn update_maps_opts(root: &Path, full: bool, quiet: bool) -> Json {
 }
 
 pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
+    update_maps_inner(root, run, None)
+}
+
+/// `only`: parse just these files (when they are in scope and new or changed). The walk
+/// still runs, so their imports resolve against every scoped file and deleted files leave
+/// the map, but no other file is hashed or parsed. `record_change` uses this to put a new
+/// file in the map without a separate `update-maps`.
+fn update_maps_inner(root: &Path, run: &MapRun, only: Option<&BTreeSet<String>>) -> Json {
     let _lock = match lock_or_fail(root) {
         Ok(lock) => lock,
         Err(err) => return err,
@@ -351,6 +359,9 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
     for file in &files {
         let rel = scope::rel_of(root, file);
         seen.insert(rel.clone());
+        if only.is_some_and(|set| !set.contains(&rel)) {
+            continue;
+        }
         let (mtime, size) = cache::stat_ns(file).unwrap_or((0, 0));
         let known = session.known(&rel);
         let reparse = session.needs_parse(&rel);
@@ -401,7 +412,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             scans: std::collections::HashMap::new(),
             warnings: Vec::new(),
         }
-    } else if changed_paths.len() == files.len() {
+    } else if changed_paths.len() == files.len() && only.is_none() {
         crate::parse::analyze_files(root, &files)
     } else {
         crate::parse::analyze_changed(root, &files, &changed_paths)
@@ -556,8 +567,11 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
         ),
         ("parser", Json::String("regex+reexport".into())),
     ]);
-    if let Err(err) = crate::maps_out::write_status(root, &status) {
-        warnings.push(format!("incremental status: {err}"));
+    // A one-file run says nothing about the rest of the map, so it keeps the last status.
+    if only.is_none() {
+        if let Err(err) = crate::maps_out::write_status(root, &status) {
+            warnings.push(format!("incremental status: {err}"));
+        }
     }
     let edge_json = Json::Array(
         edge_pairs
@@ -576,7 +590,7 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             ("files_remaining_dirty", Json::Int(files_remaining_dirty)),
         ]),
     );
-    ok(vec![
+    let mut reply = ok(vec![
         ("map_complete", Json::Bool(map_complete)),
         ("files_remaining_dirty", Json::Int(files_remaining_dirty)),
         ("full_tree", Json::Bool(scope.full_tree)),
@@ -595,7 +609,86 @@ pub fn update_maps_run(root: &Path, run: &MapRun) -> Json {
             "warnings",
             Json::Array(warnings.into_iter().map(Json::String).collect()),
         ),
-    ])
+    ]);
+    if let Some(set) = only {
+        let in_scope: Vec<Json> = set
+            .iter()
+            .filter(|rel| seen.contains(*rel))
+            .map(|rel| Json::String(rel.clone()))
+            .collect();
+        reply.insert("only_in_scope", Json::Array(in_scope));
+    }
+    reply
+}
+
+/// Put `rels` in the map when they are scoped sources that are new or changed: one parse
+/// each, no other file hashed. Returns, per file, `added`, `updated`, `unchanged` or
+/// `out_of_scope`, plus a warning when the map could not be touched (a scope error).
+fn map_recorded(root: &Path, rels: &[String]) -> (Vec<(String, &'static str)>, Option<String>) {
+    let mut out = Vec::new();
+    let sources: BTreeSet<String> = rels
+        .iter()
+        .filter(|rel| scope::is_source(Path::new(rel.as_str())))
+        .cloned()
+        .collect();
+    for rel in rels {
+        if !sources.contains(rel) {
+            out.push((rel.clone(), "out_of_scope"));
+        }
+    }
+    if sources.is_empty() {
+        return (out, None);
+    }
+    let before = cache::index_by_path(root);
+    let run = MapRun {
+        full: false,
+        quiet: true,
+        directory: None,
+        max_files: None,
+        stream: false,
+    };
+    let reply = update_maps_inner(root, &run, Some(&sources));
+    if reply.get("success").and_then(|v| v.as_bool()) != Some(true) {
+        let err = reply
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("map update failed")
+            .to_string();
+        return (out, Some(format!("map not updated: {err}")));
+    }
+    let in_scope: BTreeSet<String> = match reply.get("only_in_scope") {
+        Some(Json::Array(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
+        _ => BTreeSet::new(),
+    };
+    let after = cache::index_by_path(root);
+    for rel in &sources {
+        let state = if !in_scope.contains(rel) {
+            "out_of_scope"
+        } else if !before.contains_key(rel) {
+            "added"
+        } else if before.get(rel).map(|r| &r.2) != after.get(rel).map(|r| &r.2) {
+            "updated"
+        } else {
+            "unchanged"
+        };
+        out.push((rel.clone(), state));
+    }
+    let warning = reply
+        .get("message")
+        .and_then(|v| v.as_str())
+        .map(|m| format!("map not updated: {m}"));
+    (out, warning)
+}
+
+/// `record-change` maps the file unless `--no-map` or `WIKIFIER_RECORD_MAP=0`.
+fn record_map_enabled(flag_off: bool) -> bool {
+    !flag_off
+        && std::env::var("WIKIFIER_RECORD_MAP")
+            .map(|v| v.trim() != "0")
+            .unwrap_or(true)
 }
 
 /// A Rust file whose `use` items or item names changed can move other files'
@@ -1510,6 +1603,7 @@ pub fn check_changes(root: &Path) -> Json {
         let _ = artifacts::write_health(root, &rows);
     }
     let modularity_alerts = crate::drift::refresh(root);
+    let quiet = dirty.is_empty() && modularity_alerts.is_empty() && !truncated;
     let mut value = ok(vec![
         ("dirty_total", Json::Int(dirty.len() as i64)),
         ("changes_detected", Json::Int(dirty.len() as i64)),
@@ -1533,8 +1627,18 @@ pub fn check_changes(root: &Path) -> Json {
             ))]),
         );
     }
+    if quiet {
+        value.insert("note", Json::String(NOTHING_CHANGED.into()));
+    }
     value
 }
+
+/// The one line a reply carries when it has nothing to act on, so a caller can stop
+/// reading there (and need not call again to be sure).
+const NOTHING_CHANGED: &str =
+    "Nothing to report: no file changed since its last mark-green, no modularity alerts.";
+const NOTHING_TRACKED: &str =
+    "Nothing to report: no files in the health matrix yet, no modularity alerts.";
 
 pub fn prepare_edit(root: &Path, file: &str) -> Json {
     let rel = scope::rel_arg(root, file);
@@ -1591,6 +1695,11 @@ pub fn prepare_edit(root: &Path, file: &str) -> Json {
 }
 
 pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
+    record_change_opts(root, file, reason, record_map_enabled(false))
+}
+
+/// `map`: also parse the file into the map when it is a new or changed scoped source.
+pub fn record_change_opts(root: &Path, file: &str, reason: &str, map: bool) -> Json {
     let _lock = match lock_or_fail(root) {
         Ok(lock) => lock,
         Err(err) => return err,
@@ -1619,18 +1728,28 @@ pub fn record_change(root: &Path, file: &str, reason: &str) -> Json {
     if let Err(e) = artifacts::upsert_health_row(root, row) {
         return fail("HealthError", e);
     }
-    let pending = root.join("pending_updates.md");
+    let pending = crate::layout::path(root, "pending_updates.md");
     let text = fs::read_to_string(&pending).unwrap_or_default();
     let text =
         crate::pending_line::append_item(&text, rel, &crate::pending_line::record_message(reason));
     if artifacts::write_durable(&pending, text.as_bytes()).is_err() {
         return fail("PendingError", "could not write pending_updates.md");
     }
-    ok(vec![
+    let mut reply = ok(vec![
         ("file", Json::String(rel.into())),
         ("journaled", Json::Bool(written.journaled)),
         ("duplicate_skipped", Json::Bool(!written.journaled)),
-    ])
+    ]);
+    if map {
+        let (states, warning) = map_recorded(root, &[rel.to_string()]);
+        if let Some((_, state)) = states.first() {
+            reply.insert("map", Json::String((*state).into()));
+        }
+        if let Some(warning) = warning {
+            reply.insert("warning", Json::String(warning));
+        }
+    }
+    reply
 }
 
 pub fn mark_green(root: &Path, file: &str, reason: &str, force: bool) -> Json {
@@ -1876,7 +1995,8 @@ pub fn health_view_with(
     }
     let summary = health_summary_of(&rows);
     let alerts = crate::drift::alerts(root, directory);
-    if format == "summary" {
+    let empty = rows.is_empty() && alerts.is_empty();
+    let mut value = if format == "summary" {
         let mut value = ok(vec![
             ("health_summary", summary),
             ("modularity", modularity_summary(root, &alerts, all_alerts)),
@@ -1884,16 +2004,21 @@ pub fn health_view_with(
         if let Some(dir) = directory {
             value.insert("directory", Json::String(dir.into()));
         }
-        return value;
+        value
+    } else {
+        ok(vec![
+            ("health_summary", summary),
+            ("modularity", modularity_summary(root, &alerts, all_alerts)),
+            (
+                "entries",
+                Json::Array(rows.into_iter().map(health_entry).collect()),
+            ),
+        ])
+    };
+    if empty {
+        value.insert("note", Json::String(NOTHING_TRACKED.into()));
     }
-    ok(vec![
-        ("health_summary", summary),
-        ("modularity", modularity_summary(root, &alerts, all_alerts)),
-        (
-            "entries",
-            Json::Array(rows.into_iter().map(health_entry).collect()),
-        ),
-    ])
+    value
 }
 
 fn health_entry(row: HealthRow) -> Json {
@@ -2307,8 +2432,13 @@ pub fn record_changes_opts(
         })
         .collect();
     let mut selected = Vec::new();
+    let mut skipped_state = Vec::new();
     for change in changes {
         if artifact_path(&change.path) {
+            continue;
+        }
+        if tool_state_path(&change.path) {
+            skipped_state.push(change.path.clone());
             continue;
         }
         if !only_allows(&change.path, only) {
@@ -2362,6 +2492,7 @@ pub fn record_changes_opts(
                 Json::Array(unused.into_iter().map(Json::String).collect()),
             ),
             ("recorded", Json::Int(0)),
+            ("skipped_tool_state", strings(&skipped_state)),
         ]);
     }
     if dry_run {
@@ -2381,6 +2512,7 @@ pub fn record_changes_opts(
                 "unused_reasons",
                 Json::Array(unused.into_iter().map(Json::String).collect()),
             ),
+            ("skipped_tool_state", strings(&skipped_state)),
         ]);
     }
     let _lock = _lock;
@@ -2391,7 +2523,7 @@ pub fn record_changes_opts(
         let res = if change.deleted {
             record_deletion(root, &change.path, why)
         } else {
-            record_change(root, &change.path, why)
+            record_change_opts(root, &change.path, why, false)
         };
         if res.get("success").and_then(|s| s.as_bool()) == Some(true) {
             recorded += 1;
@@ -2420,7 +2552,26 @@ pub fn record_changes_opts(
             }
         }
     }
-    ok(vec![
+    // One map pass for the whole batch: new and changed sources join the map here.
+    let mut map_warning = None;
+    let mut mapped = Vec::new();
+    if record_map_enabled(false) {
+        let live: Vec<String> = planned
+            .iter()
+            .filter(|(c, _)| !c.deleted && files.contains(&c.path))
+            .map(|(c, _)| c.path.clone())
+            .collect();
+        if !live.is_empty() {
+            let (states, warning) = map_recorded(root, &live);
+            map_warning = warning;
+            mapped = states
+                .into_iter()
+                .filter(|(_, state)| matches!(*state, "added" | "updated"))
+                .map(|(rel, _)| rel)
+                .collect();
+        }
+    }
+    let mut reply = ok(vec![
         ("recorded", Json::Int(recorded)),
         (
             "files",
@@ -2432,7 +2583,34 @@ pub fn record_changes_opts(
             Json::Array(unused.into_iter().map(Json::String).collect()),
         ),
         ("green", Json::Bool(green)),
-    ])
+        ("mapped", strings(&mapped)),
+        ("skipped_tool_state", strings(&skipped_state)),
+    ]);
+    if let Some(warning) = map_warning {
+        reply.insert("warning", Json::String(warning));
+    }
+    reply
+}
+
+fn strings(items: &[String]) -> Json {
+    Json::Array(items.iter().cloned().map(Json::String).collect())
+}
+
+/// Directories other agent tools keep their own state in. A change there is the tool's
+/// bookkeeping, not work that needs a reason, so `record_changes` skips it and says so.
+const TOOL_STATE_DIRS: &[&str] = &[
+    ".claude",
+    ".swarmnotes",
+    ".trammel",
+    ".stele-context",
+    ".coordinationhub",
+    ".chisel",
+    ".probatio",
+];
+
+fn tool_state_path(path: &str) -> bool {
+    let first = path.trim_end_matches('/').split('/').next().unwrap_or("");
+    TOOL_STATE_DIRS.contains(&first)
 }
 
 #[derive(Clone)]
@@ -2538,14 +2716,21 @@ fn parse_name_status(text: &str) -> Vec<GitChange> {
     out
 }
 
+/// Wikifier's own generated files: wikis, `.wikifier/` (the whole state directory in the
+/// contained layout), the staging directory and, in the root layout, health, pending, library
+/// and journal. Scope lists and `index.html` in the root stay recordable: a project may
+/// version them (this repository's `index.html` is the dashboard's source). `git status`
+/// lists an untracked directory as `dir/`, so a bare directory name counts too.
 fn artifact_path(path: &str) -> bool {
+    let first = path.split('/').next().unwrap_or("");
     path.ends_with(".wiki.md")
-        || path.starts_with(".wikifier_staging/")
+        || first == crate::layout::STATE_DIR
+        || first == crate::layout::ROOT_STAGING
         || path == "file_health.md"
         || path == "file_health.json"
         || path == "pending_updates.md"
         || path == "library.md"
-        || path.starts_with("journal/")
+        || first == "journal" && path.len() > "journal".len()
 }
 
 fn only_allows(path: &str, only: &[String]) -> bool {
@@ -2656,7 +2841,7 @@ pub fn record_deletion(root: &Path, file: &str, reason: &str) -> Json {
 }
 
 fn drop_pending_line(root: &Path, rel: &str) {
-    let path = root.join("pending_updates.md");
+    let path = crate::layout::path(root, "pending_updates.md");
     let text = fs::read_to_string(&path).unwrap_or_default();
     if text.is_empty()
         || !text
@@ -2733,7 +2918,7 @@ pub fn prune_health_opts(root: &Path, deleted_missing: bool) -> Json {
     let changed = before - kept.len();
     let _ = artifacts::write_health(root, &kept);
     if deleted_missing {
-        let pending = root.join("pending_updates.md");
+        let pending = crate::layout::path(root, "pending_updates.md");
         let text = fs::read_to_string(&pending).unwrap_or_default();
         let mut out = String::new();
         for line in text.lines() {
@@ -2759,7 +2944,7 @@ pub fn prune_pending(root: &Path) -> Json {
     };
     let scope = scope::detect(root);
     let watched = watched_files(root);
-    let path = root.join("pending_updates.md");
+    let path = crate::layout::path(root, "pending_updates.md");
     let text = fs::read_to_string(&path).unwrap_or_default();
     let mut out = String::new();
     let mut changed = 0i64;
@@ -3101,7 +3286,10 @@ pub fn serve_loop(root: &Path, port: u16) -> Json {
     let bound = listener.local_addr().map(|a| a.port()).unwrap_or(port);
     eprintln!("wikifier serve http://127.0.0.1:{bound}/index.html");
     let _ = fs::create_dir_all(crate::worktree::staging(root));
-    let _ = fs::write(root.join(".wikifier_staging/serve.port"), bound.to_string());
+    let _ = fs::write(
+        crate::worktree::staging(root).join("serve.port"),
+        bound.to_string(),
+    );
     let once = std::env::var("WIKIFIER_SERVE_ONCE").ok().as_deref() == Some("1");
     for conn in listener.incoming() {
         let mut sock = match conn {
@@ -3131,7 +3319,7 @@ pub fn serve_loop(root: &Path, port: u16) -> Json {
             break;
         }
     }
-    let _ = fs::remove_file(root.join(".wikifier_staging/serve.port"));
+    let _ = fs::remove_file(crate::worktree::staging(root).join("serve.port"));
     ok(vec![
         ("bound", Json::Bool(true)),
         ("port", Json::Int(bound as i64)),
@@ -3315,7 +3503,18 @@ fn serve_project_file(root: &Path, path: &str) -> (&'static str, &'static str, S
             fail("NotFound", "unknown path").to_string(),
         );
     }
-    let (status, _, body) = serve_file(root, rel);
+    // The dashboard asks for `library.md`, `file_health.json` and `.wikifier_staging/...`
+    // by their root-layout names; a contained project keeps them under `.wikifier/`.
+    let mapped = if !crate::layout::contained(root) {
+        rel.to_string()
+    } else if let Some(rest) = rel.strip_prefix(".wikifier_staging/") {
+        format!("{}/{rest}", crate::layout::CONTAINED_STAGING)
+    } else if crate::layout::is_relocated(rel) {
+        format!("{}/{rel}", crate::layout::STATE_DIR)
+    } else {
+        rel.to_string()
+    };
+    let (status, _, body) = serve_file(root, &mapped);
     if !status.starts_with("200") {
         return (status, "application/json", body);
     }
@@ -3372,7 +3571,7 @@ fn serve_file(root: &Path, rel: &str) -> (&'static str, &'static str, String) {
 }
 
 fn dashboard_html(root: &Path) -> String {
-    let path = root.join("index.html");
+    let path = crate::layout::path(root, "index.html");
     fs::read_to_string(path).unwrap_or_else(|_| INDEX_HTML.to_string())
 }
 
@@ -3843,7 +4042,12 @@ pub(crate) fn dispatch_main(
     };
     match name {
         "check-changes" | "check_changes" => check_changes(root),
-        "record-change" | "record_change" => record_change(root, file, &reason),
+        "record-change" | "record_change" => record_change_opts(
+            root,
+            file,
+            &reason,
+            record_map_enabled(flag_on(flags, "no-map") || flag_on(flags, "no_map")),
+        ),
         "mark-green" | "mark_green" => mark_green(
             root,
             file,
@@ -4092,15 +4296,23 @@ pub(crate) fn dispatch_main(
                 ("scope", scope_json(&scope)),
             ])
         }
-        "init" => init_project(root, flag_on(flags, "no-copy")),
+        "init" => init_project(
+            root,
+            flag_on(flags, "no-copy") || flag_on(flags, "no_copy"),
+            flag_text(flags, "layout"),
+            !(flag_on(flags, "no-gitignore") || flag_on(flags, "no_gitignore")),
+        ),
         "get_project_status" => cap_files(
             session_bootstrap_with(root, flag_text(flags, "directory"), flag_on(flags, "full")),
             flags,
         ),
-        "get_current_project_root" => ok(vec![(
-            "project_root",
-            Json::String(root.display().to_string()),
-        )]),
+        "get_current_project_root" => ok(vec![
+            ("project_root", Json::String(root.display().to_string())),
+            (
+                "layout",
+                Json::String(crate::layout::of(root).name().into()),
+            ),
+        ]),
         "get_file_wiki" => {
             if let Some(err) = unknown_file(root, file) {
                 return err;
@@ -4339,14 +4551,44 @@ fn path_list_has_entries(root: &Path, name: &str) -> bool {
     !scope::read_path_list(root, name).is_empty()
 }
 
-fn init_project(root: &Path, no_copy: bool) -> Json {
+fn init_project(root: &Path, no_copy: bool, layout: Option<&str>, gitignore: bool) -> Json {
+    use crate::layout::Layout;
+    let requested = match layout {
+        None => None,
+        Some(name) => match Layout::parse(name) {
+            Some(layout) => Some(layout),
+            None => {
+                return fail(
+                    "InitError",
+                    format!("unknown layout {name:?}; use contained or root"),
+                )
+            }
+        },
+    };
+    let layout = match crate::layout::init_choice(root, requested) {
+        Ok(layout) => layout,
+        Err(err) => return fail("InitError", err),
+    };
+    // The layout file comes first: the lock below lives in the layout's staging directory.
+    let wrote_layout = match crate::layout::write_layout(root, layout) {
+        Ok(wrote) => wrote,
+        Err(err) => {
+            return fail(
+                "InitError",
+                format!("could not write .wikifier/layout: {err}"),
+            )
+        }
+    };
     let _lock = match lock_or_fail(root) {
         Ok(lock) => lock,
         Err(err) => return err,
     };
     let mut created: Vec<String> = Vec::new();
+    if wrote_layout {
+        created.push(crate::layout::LAYOUT_FILE.to_string());
+    }
     let write_new = |rel: &str, text: &str, created: &mut Vec<String>| -> bool {
-        let path = root.join(rel);
+        let path = crate::layout::path(root, rel);
         if path.exists() {
             return true;
         }
@@ -4358,7 +4600,7 @@ fn init_project(root: &Path, no_copy: bool) -> Json {
         if fs::write(&path, text).is_err() {
             return false;
         }
-        created.push(rel.to_string());
+        created.push(crate::layout::display(root, rel));
         true
     };
     let roots = scope::default_map_roots(root)
@@ -4435,27 +4677,36 @@ modularity_max_fan_in={}
     if !write_new(".wikifier/config", &config, &mut created) {
         return fail("InitError", "could not write .wikifier/config");
     }
-    for dir in ["journal", "Logged_issues", ".wikifier_staging"] {
-        let path = root.join(dir);
+    for dir in ["journal", "Logged_issues"] {
+        let path = crate::layout::path(root, dir);
         if !path.is_dir() {
             if fs::create_dir_all(&path).is_err() {
                 return fail("InitError", format!("could not create {dir}"));
             }
-            created.push(dir.to_string());
+            created.push(crate::layout::display(root, dir));
         }
     }
-    let index = root.join("index.html");
+    let staging = crate::layout::staging(root);
+    if !staging.is_dir() && fs::create_dir_all(&staging).is_err() {
+        return fail("InitError", "could not create the staging directory");
+    }
+    let index = crate::layout::path(root, "index.html");
     let mut copied = false;
     if !no_copy && !index.is_file() {
         if fs::write(&index, INDEX_HTML).is_err() {
             return fail("InitError", "could not write index.html");
         }
         copied = true;
-        created.push("index.html".to_string());
+        created.push(crate::layout::display(root, "index.html"));
     }
     let marker = root.join(".wikifier");
     let _ = fs::create_dir_all(&marker);
     let _ = fs::write(marker.join("marker"), format!("wikifier {VERSION}\n"));
+    let gitignore_note = if gitignore {
+        crate::layout::ensure_gitignore(root, INDEX_HTML)
+    } else {
+        Json::String("skipped".into())
+    };
     let created_json = Json::Array(created.iter().cloned().map(Json::String).collect());
     let seeded_text = if created.is_empty() {
         "kept".to_string()
@@ -4469,9 +4720,50 @@ modularity_max_fan_in={}
         ("index_copied", Json::Bool(copied)),
         ("no_copy", Json::Bool(no_copy)),
         ("marker", Json::String(".wikifier".into())),
+        ("layout", Json::String(layout.name().into())),
+        (
+            "state_dir",
+            Json::String(
+                if layout == Layout::Contained {
+                    ".wikifier"
+                } else {
+                    "."
+                }
+                .into(),
+            ),
+        ),
+        ("gitignore", gitignore_note),
     ])
 }
 
 pub fn ensure_root(root: Option<&Path>) -> Result<PathBuf, Json> {
     root_or_err(root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_dashboard_finds_a_contained_projects_files_by_their_root_names() {
+        let root = std::env::temp_dir().join(format!("wk_serve_contained_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let init = init_project(&root, false, None, false);
+        assert_eq!(
+            init.get("layout"),
+            Some(&Json::String("contained".into())),
+            "{init}"
+        );
+        fs::write(root.join(".wikifier/staging/.last_check"), "now\n").unwrap();
+        let (status, kind, body) = serve_project_file(&root, "/library.md");
+        assert!(status.starts_with("200"), "{status} {body}");
+        assert_eq!(kind, "text/markdown; charset=utf-8");
+        assert!(body.contains("Library"), "{body}");
+        let (status, _, body) = serve_project_file(&root, "/.wikifier_staging/.last_check");
+        assert!(status.starts_with("200"), "{status} {body}");
+        assert!(dashboard_html(&root).contains("<html"), "dashboard");
+        let _ = fs::remove_dir_all(&root);
+    }
 }

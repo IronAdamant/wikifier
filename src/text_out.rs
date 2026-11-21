@@ -20,6 +20,9 @@ pub fn render(command: &str, value: &Json) -> Option<String> {
     }
     match command {
         "check-changes" | "check_changes" => {
+            if let Some(note) = value.get("note").and_then(|v| v.as_str()) {
+                return Some(format!("check_changes: {note}\n"));
+            }
             let n = int_of(value, "dirty_total");
             Some(format!(
                 "check_changes: {n} file(s) newly flagged Yellow.\n"
@@ -32,7 +35,12 @@ pub fn render(command: &str, value: &Json) -> Option<String> {
                     "Recorded change to {file} was already journaled in the last 120 seconds.\n"
                 ))
             } else {
-                Some(format!("Recorded change to {file}: Yellow, pending + journal updated. Refresh its wiki, then mark_green.\n"))
+                let map = match value.get("map").and_then(|v| v.as_str()) {
+                    Some("added") => " Added to the map.",
+                    Some("updated") => " Map updated.",
+                    _ => "",
+                };
+                Some(format!("Recorded change to {file}: Yellow, pending + journal updated.{map} Refresh its wiki, then mark_green.\n"))
             }
         }
         "mark-green" | "mark_green" => {
@@ -68,6 +76,9 @@ pub fn render(command: &str, value: &Json) -> Option<String> {
 }
 
 fn health_text(value: &Json) -> String {
+    if let Some(note) = value.get("note").and_then(|v| v.as_str()) {
+        return format!("{note}\n");
+    }
     if value.get("entries").is_none() {
         if let Some(summary) = value.get("health_summary") {
             return format!("# Health summary\n\n{summary}\n");
@@ -227,8 +238,22 @@ fn init_text(value: &Json) -> String {
     if value.get("index_copied").and_then(|v| v.as_bool()) == Some(false) {
         lines.push("  left index.html uncopied (--no-copy)".into());
     }
+    if let Some(layout) = value.get("layout").and_then(|v| v.as_str()) {
+        lines.push(format!("  layout {layout}"));
+    }
+    if let Some(Json::Array(added)) = value.get("gitignore").and_then(|g| g.get("added")) {
+        let names: Vec<&str> = added.iter().filter_map(|v| v.as_str()).collect();
+        lines.push(format!("  .gitignore += {}", names.join(" ")));
+    }
+    let dir = if value.get("layout").and_then(|v| v.as_str()) == Some("contained") {
+        ".wikifier/"
+    } else {
+        ""
+    };
     lines.push("Next steps:".into());
-    lines.push("  1. Edit monitored_paths.txt and map_paths.txt".into());
+    lines.push(format!(
+        "  1. Edit {dir}monitored_paths.txt and {dir}map_paths.txt"
+    ));
     lines.push("  2. wikifier update-maps".into());
     lines.push("  3. wikifier session-bootstrap".into());
     lines.push(String::new());
