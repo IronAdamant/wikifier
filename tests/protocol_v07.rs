@@ -639,10 +639,10 @@ fn init_positional_directory_is_the_project_root() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let seeded = fs::read_to_string(dest.join("map_paths.txt")).unwrap_or_default();
+    let seeded = fs::read_to_string(dest.join(".wikifier/map_paths.txt")).unwrap_or_default();
     assert!(seeded.contains("src"), "{seeded}");
     assert!(dest.join(".wikifier/marker").is_file());
-    assert!(dest.join("index.html").is_file());
+    assert!(dest.join(".wikifier/index.html").is_file());
     assert_eq!(
         fs::read_to_string(root.join("map_paths.txt")).unwrap(),
         "src\n"

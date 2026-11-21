@@ -24,6 +24,7 @@ const DEFAULT_EXCLUDES: &[&str] = &[
     "target",
     "out",
     ".wikifier_staging",
+    ".wikifier",
     ".venv",
     "venv",
 ];
@@ -106,6 +107,7 @@ fn child_projects(root: &Path) -> (usize, Vec<String>) {
         if path.join(".git").exists()
             || path.join("file_health.json").exists()
             || path.join(".wikifier_staging").is_dir()
+            || path.join(crate::layout::LAYOUT_FILE).is_file()
         {
             n += 1;
             if sample.len() < 8 {

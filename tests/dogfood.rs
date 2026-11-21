@@ -293,6 +293,7 @@ fn prepare_edit_on_this_repo_lists_api_dependents() {
         "tests/contract_gaps.rs",
         "tests/dogfood.rs",
         "tests/drift_alerts.rs",
+        "tests/layout_and_turns.rs",
         "tests/limit_rule.rs",
         "tests/m5_fixes.rs",
         "tests/parity.rs",

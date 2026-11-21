@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+From an A/B run where hooks called `wikifier --target R init`, `record-change FILE WHY` after each edit, and `update-maps` at stop. Each model-side MCP call re-reads the whole context, so calls that report nothing still cost a turn.
+
+### Changed
+- `init` on a new project keeps its state under `.wikifier/` (layout `contained`): `map_paths.txt`, `monitored_paths.txt`, `exclude_patterns.txt`, `file_health.md` / `.json`, `pending_updates.md`, `library.md`, `journal/`, `Logged_issues/`, `index.html`, and the cache, lock and daemon files in `.wikifier/staging/` (was `.wikifier_staging/`). Before, init wrote ten entries into the project root, and other tools indexed `index.html` (about 11k tokens). `*.wiki.md` notes stay beside their sources. The layout is the file `.wikifier/layout`; every command, the MCP server, `serve` and worktree overlays read it. A project without that file keeps the root layout, so existing projects work unchanged.
+- `init` on a project that already has root-layout files (`file_health.md`, `map_paths.txt`, `library.md`, `pending_updates.md`, `journal/`, ...) keeps the root layout. `init --layout root` gives a new project the old layout. Asking an existing project for the other layout fails with `InitError`: init does not move files. A `.wikifier_staging/` left by a command run before `init` does not count as an existing project.
+- `record-change` / MCP `record_change` parses the file into the map when it is a source file in the map scope that is new or changed: one file is hashed and parsed, its imports resolve against the scoped file list, and `library.md` and the folder cards are rewritten when the cache changed. The reply has `map`: `added`, `updated`, `unchanged` or `out_of_scope`. A scope error is a `warning`; the change is still recorded. `--no-map` or `WIKIFIER_RECORD_MAP=0` turns it off. `update-maps` is no longer a separate step after adding a file.
+- `record_changes` maps the files it recorded in one pass at the end (`mapped` lists the ones added or updated).
+- `record_changes` skips other tools' state directories without asking for a reason: `.claude/`, `.swarmnotes/`, `.trammel/`, `.stele-context/`, `.coordinationhub/`, `.chisel/`, `.probatio/`. They are listed in `skipped_tool_state`. Wikifier's own `.wikifier/` and the staging directory are skipped as before, without being listed.
+- The MCP `record_change` and `record_changes` descriptions say this. The recorded `tools/list` fixture changed with them.
+
+### Added
+- `init` adds a marked block to `.gitignore` when the project is a git work tree: `/.wikifier/` in the contained layout; in the root layout, each Wikifier file or directory that git neither tracks nor ignores (a root `index.html` only when it is the dashboard init wrote). The block is written once, between `# >>> wikifier state` and `# <<< wikifier state`. Tracked files are left out. The reply's `gitignore` is the added lines, or `block_present`, `already_ignored`, `not_a_git_repo` or `skipped` (`--no-gitignore`).
+- `init` replies with `layout` and `state_dir`; `get_current_project_root` with `layout`.
+- `health` (also `--summary`) and `check_changes` add `note` when there is nothing to report: no health rows and no modularity alerts, or no changed file and no alerts. `--text` prints only that line.
+- `--no-copy`, `--no-gitignore` and `--no-map` are flags without a value, so `init --no-copy DIR` no longer reads `DIR` as the flag's value.
+
+### Not changed
+- Existing root-layout projects are not migrated. Moving the files under `.wikifier/` by hand and writing `.wikifier/layout` (first line `contained`) switches one; `.wikifier_staging/` becomes `.wikifier/staging/`.
+- A file that imports a module before that module exists keeps its unresolved import until the importer is parsed again. Adding the module does not re-parse its importers (this was already so with `update-maps`).
+
 ## [5.6.0] - 2026-11-15
 
 From M5 feedback on a large Rust workspace: `get_dependents crates/input/src/input.rs` returned two files in the same crate. The real users are in other crates and import through the crate root (`use workspace_input::Input;`), which resolved to `lib.rs` and stopped there.

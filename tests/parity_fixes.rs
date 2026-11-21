@@ -150,14 +150,18 @@ fn init_writes_the_python_files_and_honors_no_copy() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // A new project gets the contained layout: everything under .wikifier/.
+    let state = dest.join(".wikifier");
+    assert!(!state.join("index.html").exists());
     assert!(!dest.join("index.html").exists());
-    assert!(dest.join("exclude_patterns.txt").is_file());
-    assert!(dest.join("file_health.md").is_file());
-    assert!(dest.join("pending_updates.md").is_file());
-    assert!(dest.join("library.md").is_file());
-    assert!(dest.join(".wikifier/config").is_file());
-    assert!(dest.join("journal").is_dir());
-    assert!(dest.join("Logged_issues").is_dir());
+    assert!(state.join("exclude_patterns.txt").is_file());
+    assert!(state.join("file_health.md").is_file());
+    assert!(state.join("pending_updates.md").is_file());
+    assert!(state.join("library.md").is_file());
+    assert!(state.join("config").is_file());
+    assert!(state.join("journal").is_dir());
+    assert!(state.join("Logged_issues").is_dir());
+    assert!(!dest.join("file_health.md").exists());
     let _ = fs::remove_dir_all(&root);
 }
 

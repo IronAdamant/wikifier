@@ -83,6 +83,9 @@ fn main() -> ExitCode {
             || a == "--quiet"
             || a == "--dry-run"
             || a == "--green"
+            || a == "--no-copy"
+            || a == "--no-gitignore"
+            || a == "--no-map"
         {
             flags.insert(a.trim_start_matches('-').to_string(), "true".into());
             i += 1;
@@ -241,7 +244,7 @@ fn print_help() {
 fn command_help(command: &str) -> Option<(&'static str, &'static str)> {
     Some(match command {
         "check-changes" => ("check-changes", "Compare watched files with their Green baselines; mark drifted files Yellow and list them."),
-        "record-change" => ("record-change FILE WHY", "Journal why FILE changed, mark it actionable, and add its pending item."),
+        "record-change" => ("record-change FILE WHY [--no-map]", "Journal why FILE changed, mark it actionable, and add its pending item. A source file in the map scope that is new or changed is also parsed into the map (one file, no update-maps needed); --no-map or WIKIFIER_RECORD_MAP=0 skips that."),
         "mark-green" => ("mark-green FILE [WHY] [--force]", "Check FILE's wiki against its public symbols and mark it Green. --force needs WHY."),
         "record-changes" => ("record-changes [-r PATH=WHY]... [--reasons FILE] [--default WHY] [--only P]... [--since REF] [--green] [--dry-run]", "Record every file git reports as changed, with reasons per path, glob, or dir/."),
         "record-deletion" => ("record-deletion FILE [WHY]", "Journal a removed file, mark it Red, and drop it from the map."),
@@ -274,7 +277,7 @@ fn command_help(command: &str) -> Option<(&'static str, &'static str)> {
         "autonomous-status" => ("autonomous-status", "Readiness and scope; exit 2 on a scope error."),
         "metrics-snapshot" => ("metrics-snapshot", "Write health counts to .wikifier_staging/metrics_latest.json and append them to metrics_history.jsonl."),
         "list-core-tools" => ("list-core-tools", "The daily core tools and the full MCP tool list."),
-        "init" => ("init [DIR] [--no-copy]", "Create the path lists, empty health, pending, library, journal, and index.html in DIR (or --target)."),
+        "init" => ("init [DIR] [--layout contained|root] [--no-copy] [--no-gitignore]", "Create the path lists, empty health, pending, library, journal, and index.html in DIR (or --target). A new project keeps them under .wikifier/ (layout contained); a project that already has them in its root keeps that layout. In a git repo, adds a marked .gitignore block for the files that are neither tracked nor ignored."),
         "monitor" => ("monitor [--interval SECONDS]", "Repeat check-changes and the modularity pass until stopped. Default interval is health_interval_s from .wikifier/config (30s). Does not run update-maps."),
         "serve" => ("serve [PORT]", "Serve the dashboard and its read-only JSON API on 127.0.0.1 (default port 8787)."),
         "daemon" => ("daemon start|stop|status|run", "Background loop. The cheap health and modularity pass uses health_interval_s (or WIKIFIER_POLL_INTERVAL). update-maps stays on maps_interval_s (or WIKIFIER_DAEMON_MAPS_INTERVAL, default 600s)."),
