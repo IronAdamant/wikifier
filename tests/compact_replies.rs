@@ -14,7 +14,11 @@ fn big_project() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!("wk-compact-{n}-{}", std::process::id()));
+    // A counter keeps parallel tests apart: macOS clocks tick in microseconds, so two tests that
+    // start together could share a dir and see each other's files.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let k = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!("wk-compact-{n}-{k}-{}", std::process::id()));
     let pkg = root.join("src/pkg");
     fs::create_dir_all(pkg.join("sub")).unwrap();
     fs::write(root.join("map_paths.txt"), "src\n").unwrap();
